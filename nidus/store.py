@@ -4,6 +4,7 @@ import json
 import sqlite3
 import uuid
 from pathlib import Path
+from .versioning import VaultGit
 
 
 class Store:
@@ -16,22 +17,26 @@ class Store:
         for name in ('state.sqlite3', 'runtime.lock'):
             if (self.system / name).is_symlink():
                 raise ValueError('System files must not be symlinks')
-        self.db = sqlite3.connect(str(self.system / 'state.sqlite3'))
-        self.db.row_factory = sqlite3.Row
-        version = self.db.execute('PRAGMA user_version').fetchone()[0]
-        if version not in (0, 1):
-            raise ValueError('Unsupported vault schema')
-        self.db.executescript('''
-            CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, data TEXT NOT NULL);
-            CREATE TABLE IF NOT EXISTS events (seq INTEGER PRIMARY KEY, task TEXT, kind TEXT, data TEXT);
-            CREATE TABLE IF NOT EXISTS state (key TEXT PRIMARY KEY, data TEXT NOT NULL);
-            PRAGMA user_version=1;
-        ''')
-        self.db.commit()
-        if self.state('home') is None:
-            self.set_state('home', {'employee': 'worker-1', 'group': 'Operations',
-                'role': 'document analyst', 'principles': ['Protect originals', 'Verify before completion'],
-                'task': None})
+        self.versioning = None
+        with self.lock():
+            self.db = sqlite3.connect(str(self.system / 'state.sqlite3'))
+            self.db.row_factory = sqlite3.Row
+            version = self.db.execute('PRAGMA user_version').fetchone()[0]
+            if version not in (0, 1):
+                raise ValueError('Unsupported vault schema')
+            self.db.executescript('''
+                CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, data TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS events (seq INTEGER PRIMARY KEY, task TEXT, kind TEXT, data TEXT);
+                CREATE TABLE IF NOT EXISTS state (key TEXT PRIMARY KEY, data TEXT NOT NULL);
+                PRAGMA user_version=1;
+            ''')
+            self.db.commit()
+            if self.state('home') is None:
+                self.set_state('home', {'employee': 'worker-1', 'group': 'Operations',
+                    'role': 'document analyst', 'principles': ['Protect originals', 'Verify before completion'],
+                    'task': None})
+            self.versioning = VaultGit(self.vault)
+            self.versioning.checkpoint([])
 
     def close(self):
         self.db.close()
@@ -44,7 +49,35 @@ class Store:
             except BlockingIOError:
                 raise ValueError('Another runtime owns this vault')
             try:
+                before = self.db.execute('SELECT COALESCE(MAX(seq),0) FROM events').fetchone()[0] if self.versioning else 0
                 yield
+                if self.versioning:
+                    from .runtime import safe_path
+                    resources = []
+                    rows = self.db.execute("SELECT DISTINCT task FROM events WHERE seq>? AND kind IN ('candidate_written','verified_completed')", (before,))
+                    for row in rows:
+                        task = self.get(row[0])
+                        output = safe_path(self.vault, task['output'])
+                        if output.exists():
+                            resources.append(task['output'])
+                        for name in task['sources']:
+                            if safe_path(self.vault, name).exists():
+                                resources.append(name)
+                    try:
+                        self.versioning.checkpoint(resources)
+                    except ValueError as error:
+                        # Do not leave an unversioned task advertised as success.
+                        affected = list(self.db.execute('SELECT DISTINCT task FROM events WHERE seq>?', (before,)))
+                        for row in affected:
+                            task = self.get(row[0])
+                            task['status'] = 'blocked'
+                            task['error'] = str(error)
+                            task['contract']['result'] = None
+                            self.save(task, 'versioning_failed', {'reason': str(error)})
+                            home = self.state('home')
+                            home['task'] = task['id']
+                            self.set_state('home', home)
+                        raise
             finally:
                 fcntl.flock(lock, fcntl.LOCK_UN)
 
