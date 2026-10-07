@@ -28,7 +28,7 @@ class VaultGit:
         return result.stdout
 
     def checkpoint(self, resources):
-        paths = ['.nidus/state.sqlite3'] + sorted(set(resources))
+        paths = ['.nidus/state.sqlite3', '.nidus/.gitignore'] + sorted(set(resources))
         self.call('add', '--force', '--', *paths)
         changed = self.call('diff', '--cached', '--name-only', '--', *paths)
         if changed.strip():
