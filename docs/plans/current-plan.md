@@ -27,15 +27,25 @@ Requirements: FR-04/05/06; AC-04/05/06 (and AC-03 recovery).
 Changes: Desk history, Home reconciliation, allow/ask/deny, scoped decisions/tests.
 Verification: full unittest suite and approval/restart CLI flows.
 Done when: unsafe paths fail closed and changed approval snapshots wait again.
-Excluded: shell/network/model tools. Commits: see feat/context-security history.
+Excluded: shell/network/model tools. Commits: 68360fe (implementation), b11e873 (evidence).
 Evidence: 14 distinct tests pass, including approval invalidation, checkpoint recovery,
 path denial, native Desk history and Home terminal cleanup; compileall/diff checks pass.
 
 ## Slice 3 — archive and completion evidence
-Status: Pending. Branch: feat/task-archive.
+Status: Complete (offline scope). Branch: feat/task-archive.
 Requirements: FR-08; AC-08 and full regression.
 Changes: vault Git tracking, archive/audit, README, MVP_REPORT and final evidence.
 Verification: full suite; compileall; separate-process primary/approval flows;
 git diff --check; integration status/history review.
 Done when: all offline P0 ACs pass, docs reconcile, clean integration branch.
-Excluded: live generative hypothesis proof. Commits: pending.
+Excluded: live generative hypothesis proof. Commits: 76245f1 (archive/Git),
+ec79653 (clean checkpoints), 5e28e31 (demo/reconciliation).
+Evidence: 18 distinct tests pass; real separate-process demo passes; compileall and
+diff checks pass. Final integration verification is recorded in MVP_REPORT.md.
+
+## Mission reconciliation / safe stop
+Offline AC-01–AC-08 pass; original full mission remains PARTIAL because no actual
+generative Employee is connected. No model runtime/config exists. BLOCKED.md records
+the required human model/data/Secret boundary decision. No AC was removed or relaxed
+to make a failure pass. Completed offline slices are integrated locally; main/develop
+and remotes remain unchanged. Conceptual v2 is unchanged.
