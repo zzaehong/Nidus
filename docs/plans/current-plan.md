@@ -5,19 +5,21 @@ Source workflow/template files and AGENTS.md were absent; follow doc/prompt.md.
 Concept documents remain unchanged. No remote operations or main/develop merges.
 
 ## Slice 0 — shape/design
-Status: In progress. Branch: feat/mvp-design.
+Status: Complete. Branch: feat/mvp-design.
 Requirements: all FR/AC defined; implementation gate passed.
 Changes: PRD, DESIGN, plan. Verification: inspect traceability and git diff --check.
 Done when: documents define bounded flow and testable AC. Excluded: implementation.
-Commits: pending.
+Commits: fe742a8.
 
 ## Slice 1 — durable task lifecycle
-Status: Pending. Branch: feat/task-lifecycle.
+Status: Complete. Branch: feat/task-lifecycle.
 Requirements: FR-01/02/03/07; AC-01/02/03/07.
 Changes: Store, deterministic Workshop, CLI and lifecycle tests.
 Verification: python3 -m unittest discover -s tests -v; compileall.
 Done when: separate-process submit/run/inspect works and failed verification blocks.
-Excluded: overwrite approval, full Desk reconciliation. Commits: pending.
+Excluded: overwrite approval, full Desk reconciliation. Commits: see branch history (persistence + execution).
+Evidence: 6 tests pass; compileall passes with PYTHONPYCACHEPREFIX=/tmp/nidus-pycache.
+Default macOS cache location was sandbox-denied; no product failure.
 
 ## Slice 2 — recovery and permission
 Status: Pending. Branch: feat/context-security.
