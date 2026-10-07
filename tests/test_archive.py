@@ -36,6 +36,7 @@ class ArchiveTests(unittest.TestCase):
         self.assertIn('notes.md', self.git('ls-files'))
         self.assertGreaterEqual(int(self.git('rev-list', '--count', 'HEAD')), 4)
         self.assertEqual(self.git('diff', 'HEAD', '--', '.nidus/state.sqlite3', 'results/brief.md'), '')
+        self.assertEqual(self.git('status', '--porcelain'), '')
 
     def test_separate_process_approval_retains_preimage(self):
         (self.vault / 'brief.md').write_text('original')

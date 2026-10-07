@@ -14,11 +14,14 @@ class Store:
         if self.system.is_symlink():
             raise ValueError('System directory must not be a symlink')
         self.system.mkdir(parents=True, exist_ok=True)
-        for name in ('state.sqlite3', 'runtime.lock'):
+        for name in ('state.sqlite3', 'runtime.lock', '.gitignore'):
             if (self.system / name).is_symlink():
                 raise ValueError('System files must not be symlinks')
         self.versioning = None
         with self.lock():
+            ignore = self.system / '.gitignore'
+            if not ignore.exists():
+                ignore.write_text('runtime.lock\nstate.sqlite3-journal\n', encoding='utf-8')
             self.db = sqlite3.connect(str(self.system / 'state.sqlite3'))
             self.db.row_factory = sqlite3.Row
             version = self.db.execute('PRAGMA user_version').fetchone()[0]
