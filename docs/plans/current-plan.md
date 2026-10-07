@@ -17,17 +17,19 @@ Requirements: FR-01/02/03/07; AC-01/02/03/07.
 Changes: Store, deterministic Workshop, CLI and lifecycle tests.
 Verification: python3 -m unittest discover -s tests -v; compileall.
 Done when: separate-process submit/run/inspect works and failed verification blocks.
-Excluded: overwrite approval, full Desk reconciliation. Commits: see branch history (persistence + execution).
+Excluded: overwrite approval, full Desk reconciliation. Commits: 57852c3 (persistence), aafa4d3 (execution), 7bf61d2 (evidence).
 Evidence: 6 tests pass; compileall passes with PYTHONPYCACHEPREFIX=/tmp/nidus-pycache.
 Default macOS cache location was sandbox-denied; no product failure.
 
 ## Slice 2 — recovery and permission
-Status: Pending. Branch: feat/context-security.
+Status: Complete. Branch: feat/context-security.
 Requirements: FR-04/05/06; AC-04/05/06 (and AC-03 recovery).
 Changes: Desk history, Home reconciliation, allow/ask/deny, scoped decisions/tests.
 Verification: full unittest suite and approval/restart CLI flows.
 Done when: unsafe paths fail closed and changed approval snapshots wait again.
-Excluded: shell/network/model tools. Commits: pending.
+Excluded: shell/network/model tools. Commits: see feat/context-security history.
+Evidence: 14 distinct tests pass, including approval invalidation, checkpoint recovery,
+path denial, native Desk history and Home terminal cleanup; compileall/diff checks pass.
 
 ## Slice 3 — archive and completion evidence
 Status: Pending. Branch: feat/task-archive.
