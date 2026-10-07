@@ -18,6 +18,9 @@ def main():
     run = commands.add_parser('run')
     run.add_argument('task')
     run.add_argument('--execute-only', action='store_true')
+    decide = commands.add_parser('decide')
+    decide.add_argument('task')
+    decide.add_argument('decision', choices=['approve', 'reject'])
     show = commands.add_parser('show')
     show.add_argument('task')
     listing = commands.add_parser('list')
@@ -33,6 +36,8 @@ def main():
                 result = store.submit(args.request, args.source, args.output, args.priority)
         elif args.command == 'run':
             result = Runtime(store).run(args.task, args.execute_only)
+        elif args.command == 'decide':
+            result = Runtime(store).decide(args.task, args.decision)
         elif args.command == 'show':
             result = store.get(args.task)
             result['history'] = store.events(args.task)
