@@ -1,0 +1,58 @@
+# Nidus local MVP PRD
+
+## Purpose and target user
+A single local user delegates a bounded document briefing to one persistent
+Employee and can inspect its permissions, progress, result and verification.
+Validate the runtime portion of the hypothesis in `doc/prompt.md`: request →
+contract → recovery → permitted execution → verified completion → archive.
+Offline evidence does not establish a generative model's autonomous judgment.
+
+## Goals / non-goals
+P0: executable local flow, durable recovery, explicit human decisions, protected
+user originals, observable verification and retained history.
+Non-goals: GUI (including the conceptual Inbox matrix), arbitrary natural-language
+tasks, shell tools, network/model providers, managers, projects, multiple workers,
+daemon, vector search, Red Team, Dream Sequence and deployment. CLI is the MVP
+interface; it does not replace the conceptual long-term Inbox UX.
+
+## Primary scenarios
+1. Submit a note with selected Markdown/text sources and a new output path. Run
+   the worker; inspect an evidence briefing and its archived task.
+2. An existing destination requires human approval before replacement. Rejecting
+   preserves it; approving allows only the exact reviewed input/output snapshot.
+3. Interrupt after execution; restart and verify the persisted candidate without
+   repeating an already recorded write. Bad/missing outputs never pass.
+4. An invalid path or unavailable source blocks the task with a visible reason.
+
+## Functional requirements / P0 acceptance criteria
+| Requirement | Observable acceptance criterion |
+|---|---|
+| FR-01 Inbox and contract | AC-01 Submission retains original request, user priority, worker assignment and a contract with Goal, Scope, Constraints, Acceptance Criteria, Verification, Result. |
+| FR-02 Workshop briefing | AC-02 For UTF-8 sources, output contains the request, source paths, SHA-256 hashes and first three nonempty lines from each source; originals are unchanged. |
+| FR-03 Durable Task Board | AC-03 A fresh process can inspect tasks and resume after candidate execution; concurrent workers cannot both claim the vault. |
+| FR-04 Context Recovery | AC-04 Before execution Home → Desk → Task Board → Library is recorded; stale Desk references reconcile to the Board while native notes persist in checkpoint history. |
+| FR-05 Permission boundary | AC-05 Absolute/traversal/symlink/hidden-system paths are denied; originals cannot be outputs; no shell, deletion, network or Secret tools exist. |
+| FR-06 Human attention | AC-06 Existing output enters Waiting with background, reasons, choices and effects. Approval is bound to input/output hashes; changed files require a new decision. Rejection cancels without writing. |
+| FR-07 Verification | AC-07 Completion requires an independent recomputation of expected bytes and matching source snapshots; tampered/missing candidates become Blocked, never Completed. |
+| FR-08 Archive/audit | AC-08 Completed tasks disappear from active listing; archive retains brief, contract, result, verification, decisions and ordered audit history. Vault changes are locally Git-versioned. |
+
+## Quality / constraints / dependencies
+Python 3.9+ and Git only; no package download, credentials or paid service. One
+vault and worker at a time. Sources: explicit regular UTF-8 `.md`/`.txt` files,
+maximum 1 MiB each, maximum 20 sources. Outputs are regular `.md`/`.txt` files.
+All state is in `.nidus/`; user Library and outputs remain outside it. Failures
+are inspectable and retryable where safe. Vault files may be backed up/moved
+after closing the runtime. The trusted local human controls CLI and vault;
+this is not isolation against an adversarial process modifying the filesystem.
+
+## Open decisions and assumptions
+Use a deterministic evidence briefing, explicitly labelled, rather than fake
+semantic summarization. Real model planning/judgment is a deferred change
+candidate and still needs separate live acceptance evidence. Manual approval
+is explicit CLI input, never inferred from elapsed time. Priority is chosen by
+the user; all four conceptual quadrants are represented as CLI values.
+
+## Implementation gate
+Problem, bounded outcome, primary flow and observable ACs are defined. Ownership,
+permission and recovery decisions are in DESIGN.md. No critical unknown remains
+for this offline scope. Each next slice has commands and completion conditions.
