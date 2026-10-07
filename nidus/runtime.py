@@ -131,6 +131,12 @@ class Runtime:
             if source_hashes != {r['path']: r['hash'] for r in latest} or output_hash(output) != current:
                 raise ValueError('Resources changed before execution; retry to review current snapshot')
             safe_path(self.store.vault, task['output'])
+            # Preserve the reviewed preimage before any approved replacement.
+            if self.store.versioning:
+                resources = list(task['sources'])
+                if current is not None:
+                    resources.append(task['output'])
+                self.store.versioning.checkpoint(resources)
             output.parent.mkdir(parents=True, exist_ok=True)
             if current is None:
                 with output.open('xb') as stream:
