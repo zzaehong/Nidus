@@ -90,3 +90,16 @@ inputs; final integrated offline suite; Git status/history/diff review.
 Done when: real generated summary meets observable contract and completes, or a
 hard blocker is accurately preserved. Excluded: paid fallback or account creation.
 Commits: pending.
+
+
+## MG Slice 1b — installed OmniRoute connection (user steering)
+Status: Complete. Branch: feat/omniroute-connection.
+Requirements: MG-AC-01/03/04/06; actual MG-AC-02 success is not claimed.
+Changes: official global installation, loopback daemon, compatible default policy,
+free-only combo placeholder and installation report.
+Verification: version/help; dashboard 200; unauthenticated model API 401; loopback
+LISTEN; full offline/HTTP regression and syntax checks.
+Done when: installation/server readiness and configured client boundary are verified.
+Excluded: account/payment setup, unknown paid auto routing, client impersonation.
+Verification result: 37 offline tests and 3 HTTP tests pass; compileall/diff checks pass.
+Commits: see feat/omniroute-connection history. Actual model completion remains in MG Slice 2.
