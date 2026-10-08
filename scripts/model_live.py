@@ -35,7 +35,7 @@ def main():
     cli('init')
     task = cli('submit', 'Summarize the supplied Nidus sample in exactly three concise bullet points. '
         'Include the literal phrase Nidus. Use only the supplied facts.', '--source', 'notes.md',
-        '--output', 'results/summary.md', '--mode', 'generative', '--model-policy', args.policy,
+        '--output', 'results/summary.md', '--mode', 'generative', '--workflow', 'legacy', '--model-policy', args.policy,
         '--require', 'Nidus')
     if 'id' not in task:
         print(json.dumps({'status': 'blocked', 'error': task.get('error')}, indent=2))
