@@ -112,7 +112,15 @@ class Store:
         return [dict(row, data=json.loads(row['data'])) for row in self.db.execute(
             'SELECT seq,kind,data FROM events WHERE task=? ORDER BY seq', (task_id,))]
 
-    def submit(self, request, sources, output, priority):
+    def submit(self, request, sources, output, priority, mode='deterministic', model_policy=None, required_phrases=None):
+        from .gateway import reject_credentials, validate_policy
+        if mode not in ('deterministic', 'generative'):
+            raise ValueError('Unknown execution mode')
+        policy = validate_policy(model_policy) if mode == 'generative' else None
+        phrases = required_phrases or []
+        if not isinstance(phrases, list) or len(phrases) > 20 or any(not isinstance(p, str) or not p.strip() or len(p) > 256 for p in phrases):
+            raise ValueError('Provide up to 20 nonempty required phrases')
+        reject_credentials(json.dumps([request, sources, output, phrases]), policy)
         if not request.strip() or not 1 <= len(sources) <= 20 or len(set(sources)) != len(sources):
             raise ValueError('Provide a nonempty request and 1–20 unique sources')
         task = {'id': uuid.uuid4().hex, 'request': request, 'sources': sources,
@@ -123,5 +131,10 @@ class Store:
                                         'Sources unchanged', 'Output independently verified'],
                 'verification': 'Recompute briefing bytes and compare source SHA-256 snapshots',
                 'result': None}}
+        if mode == 'generative':
+            task.update(mode=mode, model_policy=policy, required_phrases=phrases)
+            task['contract']['constraints'] = ['UTF-8 text only', 'Protect originals', 'Exact model transmission approval', 'No model tool execution']
+            task['contract']['acceptance_criteria'] = ['Nonempty untruncated model response', 'All required literal phrases: ' + json.dumps(phrases), 'Sources unchanged', 'Output matches persisted model response and provenance']
+            task['contract']['verification'] = 'Validate response and required phrases, source/prompt snapshot and exact artifact bytes'
         self.save(task, 'submitted')
         return task
