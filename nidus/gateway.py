@@ -137,6 +137,10 @@ def transmission(task, records):
     if len(text.encode('utf-8')) > MAX_PROMPT:
         raise ModelError('prompt_too_large')
     reject_credentials(text, policy)
+    if task.get('manager_policy'):
+        reject_credentials(text, task['manager_policy'])
+    if task.get('worker_policy'):
+        reject_credentials(text, task['worker_policy'])
     return {'action': 'model_transmission', 'prompt_hash': fingerprint(messages),
         'prompt_bytes': len(text.encode('utf-8')), 'request_hash': fingerprint(task['request']),
         'sources': {r['path']: r['hash'] for r in records}, 'policy': policy}
@@ -245,6 +249,10 @@ class Gateway:
                         or not all(candidate_checks(task, result['text'], result.get('finish_reason')).values())):
                     raise ModelError('acceptance_failed')
                 reject_credentials(canonical(result), policy)
+                if task.get('manager_policy'):
+                    reject_credentials(canonical(result), task['manager_policy'])
+                if task.get('worker_policy'):
+                    reject_credentials(canonical(result), task['worker_policy'])
                 audit('model_attempt_succeeded', dict(metadata, finished_at=utc_now(),
                     actual_model=result.get('model'), tokens=result.get('tokens'),
                     estimated_cost_usd=result.get('estimated_cost_usd')))
