@@ -2,6 +2,7 @@ import hashlib
 import os
 import tempfile
 from pathlib import Path
+from .gateway import Gateway, ModelError, candidate_checks, transmission
 
 
 def digest(data):
@@ -48,6 +49,18 @@ def briefing(task, records):
     return ('\n'.join(lines) + '\n').encode('utf-8')
 
 
+
+def generated_briefing(task, records):
+    generation = task['generation']
+    lines = ['# Nidus generated document', '', '## Work request', task['request'], '',
+             '## Model result', generation['text'], '', '## Provenance',
+             'Route: ' + generation['route'], 'Provider: ' + generation['provider'],
+             'Model: ' + generation['model'], 'Prompt SHA-256: ' + generation['snapshot']['prompt_hash']]
+    for record in records:
+        lines.append('Source: ' + record['path'] + ' SHA-256: ' + record['hash'])
+    return ('\n'.join(lines) + '\n').encode('utf-8')
+
+
 def output_hash(path):
     if not path.exists():
         return None
@@ -59,8 +72,9 @@ def output_hash(path):
 
 
 class Runtime:
-    def __init__(self, store):
+    def __init__(self, store, gateway=None):
         self.store = store
+        self.gateway = gateway or Gateway()
 
     def checkpoint(self, task, next_action):
         home = self.store.state('home')
@@ -101,13 +115,18 @@ class Runtime:
         if output in [safe_path(self.store.vault, name) for name in task['sources']]:
             raise ValueError('Output cannot replace a source')
         source_hashes = {r['path']: r['hash'] for r in records}
-        expected = briefing(task, records)
+        generative = task.get('mode') == 'generative'
+        network_snapshot = transmission(task, records) if generative else None
+        generation = task.get('generation')
+        valid_generation = (generation and generation.get('snapshot') == network_snapshot
+            and all(candidate_checks(task, generation['text'], generation.get('finish_reason')).values())) if generative else False
+        expected = generated_briefing(task, records) if valid_generation else (None if generative else briefing(task, records))
         current = output_hash(output)
         snapshot = {'sources': source_hashes, 'output': task['output'], 'output_hash': current}
         intent = task.get('write_intent')
         # Recover a crash after write but before candidate DB transition. Only our
         # recorded intent, source snapshot and exact bytes establish ownership.
-        recovered = (intent and intent['sources'] == source_hashes
+        recovered = (expected is not None and intent and intent['sources'] == source_hashes
                      and intent['expected_hash'] == digest(expected) and current == digest(expected))
         if current is not None and not recovered:
             approved = any(d['decision'] == 'approve' and d['snapshot'] == snapshot for d in task['decisions'])
@@ -121,6 +140,23 @@ class Runtime:
                 self.store.save(task, 'permission_ask', task['attention'])
                 self.checkpoint(task, 'await_human')
                 return False
+        if generative and not valid_generation:
+            approved = any(d['decision'] == 'approve' and d['snapshot'] == network_snapshot for d in task['decisions'])
+            if not approved:
+                task['status'] = 'waiting'
+                task['attention'] = {'subject': 'Transmit selected task data to model routes?',
+                    'background': 'Work request and full selected source text will leave the worker process',
+                    'reason': 'Network/model data transmission needs an exact scoped decision; a local router may forward externally',
+                    'choices': {'approve': 'Allow the specified prompt and routes, including only explicitly allowed paid routes',
+                                'reject': 'Cancel without a model call or output write'}, 'snapshot': network_snapshot}
+                self.store.save(task, 'model_permission_ask', task['attention'])
+                self.checkpoint(task, 'await_human')
+                return False
+            self.store.save(task, 'model_permission_allow', network_snapshot)
+            task['generation'] = self.gateway.generate(task, records,
+                lambda kind, detail: self.store.save(task, kind, detail))
+            self.store.save(task, 'model_candidate_received', {'snapshot': network_snapshot})
+            expected = generated_briefing(task, records)
         self.store.save(task, 'permission_allow', {'employee': task['employee'],
             'resource': task['output'], 'action': 'write', 'risk': 'scoped-local', 'snapshot': snapshot})
         if not recovered:
@@ -177,7 +213,14 @@ class Runtime:
                     if execute_only:
                         return task
                 records = sources_for(self.store, task)
-                expected = briefing(task, records)
+                generative = task.get('mode') == 'generative'
+                if generative:
+                    generation = task.get('generation')
+                    if not generation or generation.get('snapshot') != transmission(task, records):
+                        raise ModelError('candidate_snapshot_changed')
+                    expected = generated_briefing(task, records)
+                else:
+                    expected = briefing(task, records)
                 output_path = safe_path(self.store.vault, task['output'])
                 if output_hash(output_path) is None:
                     raise ValueError('Candidate output missing')
@@ -185,17 +228,24 @@ class Runtime:
                 checks = {'sources_unchanged': task['source_hashes'] == {r['path']: r['hash'] for r in records},
                           'output_matches': output == expected,
                           'candidate_matches': digest(output) == task['candidate_hash']}
+                if generative:
+                    checks.update(candidate_checks(task, generation['text'], generation.get('finish_reason')))
                 task['verification'] = checks
                 if not all(checks.values()):
                     raise ValueError('Verification failed')
                 task['status'] = 'completed'
                 task['contract']['result'] = {'output': task['output'], 'sha256': digest(output),
-                    'verification': checks, 'limitations': ['Deterministic extraction only']}
+                    'verification': checks, 'limitations': ['Literal/structural verification does not prove semantic correctness'] if generative else ['Deterministic extraction only']}
+                if generative:
+                    task['contract']['result']['model'] = {k: task['generation'].get(k) for k in ('route', 'provider', 'model', 'tokens', 'estimated_cost_usd')}
                 self.store.save(task, 'verified_completed')
                 self.checkpoint(task, 'none')
             except (OSError, ValueError) as error:
                 task['status'] = 'blocked'
                 task['error'] = str(error)
+                task['contract']['result'] = None
+                if isinstance(error, ModelError):
+                    task['model_error'] = error.metadata()
                 self.store.save(task, 'blocked', {'reason': str(error)})
                 self.checkpoint(task, 'review_blocker')
             return task
