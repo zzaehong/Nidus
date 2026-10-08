@@ -82,7 +82,7 @@ class GatewayTests(unittest.TestCase):
     def test_unsafe_and_inline_secret_policy_denied(self):
         changes = [{'base_url': 'http://remote.example/v1'}, {'base_url': 'https://user:secret@example.com/v1'},
                    {'base_url': 'https://example.com/v1?key=secret'}, {'api_key': 'inline'},
-                   {'api_key_env': 'HOME'}, {'kind': 'paid'}, {'kind': 'local'},
+                   {'api_key_env': 'HOME'}, {'kind': 'paid'}, {'kind': 'local', 'base_url': 'https://remote.example/v1'},
                    {'cost_per_million_input': float('nan')}]
         for change in changes:
             with self.subTest(change=change):
@@ -104,7 +104,7 @@ class GatewayTests(unittest.TestCase):
             {'text': 'Nidus summary', 'model': 'actual', 'finish_reason': 'stop', 'tokens': None, 'estimated_cost_usd': None}]
         result = Gateway(fake).generate(self.task, self.records, lambda *event: events.append(event))
         self.assertEqual(result['route'], 'second')
-        self.assertEqual([call.args[0]['name'] for call in fake.generate.call_args_list], ['zen-free', 'second'])
+        self.assertEqual([call.args[0]['name'] for call in fake.generate.call_args_list], ['omniroute-free', 'second'])
         self.assertEqual([kind for kind, detail in events], ['model_attempt_started', 'model_attempt_failed',
                          'model_attempt_started', 'model_attempt_succeeded'])
         fake.reset_mock()
