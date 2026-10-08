@@ -127,3 +127,14 @@ explicit retry; exactly-once remote execution is not promised. Git failure keeps
 existing completion failure guard. Provider token counts/cost are used if known;
 otherwise null, not fabricated. A configured zero cost for live free models is a
 policy estimate, not a billing receipt.
+
+
+### User-directed OmniRoute installation — 2026-10-08
+The user explicitly requested installing OmniRoute after direct Zen access failed.
+Installed official npm 3.8.51 on Node 24.21.0; running loopback daemon on 20128.
+Default policy now targets its compatible /v1 endpoint, preserving adapter neutrality.
+The named nidus-free combo must be configured with authorized free providers before
+use; do not default to auto, which could select a paid upstream behind the router.
+Nidus cannot infer/enforce router-internal billing policy. Endpoint key remains an
+environment-only credential. Installation/readiness evidence is in
+OMNIROUTE_INSTALL_REPORT.md; successful real-model acceptance still needs evidence.
