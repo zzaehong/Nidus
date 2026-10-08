@@ -119,3 +119,11 @@ After the human chooses the model/data/Secret boundary, add one real generative
 Employee adapter, preserving the permission checks and completion guard. Test
 mock failures offline, then run a genuinely model-backed work request and record
 its live acceptance evidence before claiming the original hypothesis achieved.
+
+
+## Model Gateway follow-up — 2026-10-08
+The new authorized external boundary is implemented; see MODEL_GATEWAY_REPORT.md.
+Actual generative model execution remains NOT VERIFIED: a real external synthetic
+request was made but access was refused before any generated response. No successful
+model task is claimed. Existing offline P0 criteria still pass. The provider-choice
+architecture blocker is superseded; usable route/auth configuration is now required.
