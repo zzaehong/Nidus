@@ -13,6 +13,8 @@ def main():
     parser.add_argument('--policy', default='model-policy.example.json')
     parser.add_argument('--evidence', default='docs/evidence/model-live.json')
     args = parser.parse_args()
+    if Path(args.evidence).exists():
+        parser.error('Evidence already exists; choose a new path')
     vault = Path(tempfile.mkdtemp(prefix='nidus-model-live-'))
     (vault / 'notes.md').write_text('# Nidus sample\nNidus stores task state in a local vault.\n'
         'A task completes only after verification passes.\n'
