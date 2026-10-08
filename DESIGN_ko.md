@@ -301,3 +301,27 @@ Acceptance Criteria Mapping과 Command는
 - 장기 Knowledge Promotion
 
 이 항목들은 Nidus Conceptual Design v2를 조용히 변경하지 않는다.
+
+
+## Model Gateway 확장 — 2026-10-08
+본문의 오프라인 구조는 유지합니다. 최신 기술 원본은 DESIGN.md의 extension입니다.
+Gateway는 Python urllib 기반 Chat Completions 어댑터이며 OmniRoute 종속성이 없습니다.
+Task JSON에 mode·비밀 없는 Route 정책·필수 문구·전송 승인·응답·시도 이력이 추가됩니다.
+DB Schema 변경 없이 기존 Home/Desk/Board/Archive/Git 구조를 사용합니다.
+
+외부 HTTPS, 명시적 Loopback HTTP만 허용하고 Redirect/환경 Proxy 상속을 막습니다.
+Key는 이름으로 참조한 환경변수에서 HTTP Header에만 사용합니다. 모델 출력은 실행되지
+않는 텍스트입니다. 원문·정책·요청 Snapshot 승인을 받고 승인된 Route 순서만 호출합니다.
+Paid는 별도 정책 opt-in도 필요합니다. 응답을 저장해 재시작 검증 시 재호출하지 않습니다.
+생성형 Verification은 재생성이 아닌 정상 종료·필수 문구·원문 해시·Artifact 바이트 검사입니다.
+Crash 후 응답 저장 이전에는 명시적 Retry가 중복 호출할 수 있으며 exactly-once를 보장하지 않습니다.
+모델 토큰/비용을 알 수 없으면 null로 기록합니다. 실제 무료 모델 호출은 접근 거부로
+미검증이고, 클라이언트 신원을 흉내 내는 우회 기능은 구현하지 않았습니다.
+
+
+### OmniRoute 설치 후 갱신
+사용자 요청에 따라 OmniRoute 3.8.51 설치와 127.0.0.1:20128 서버 실행을 완료했습니다.
+Nidus 기본 정책은 무료 전용 nidus-free Combo를 이 서버에서 사용하도록 설정되어
+있습니다. 실제 Combo/무료 Provider/Endpoint Key 설정과 모델 완료 검증은 남아 있습니다.
+자세한 설치 증거는 OMNIROUTE_INSTALL_REPORT.md, 최신 검증 상태는
+MODEL_GATEWAY_REPORT.md를 참고하세요. 기존 모델 미검증 상태를 성공으로 변경하지 않습니다.

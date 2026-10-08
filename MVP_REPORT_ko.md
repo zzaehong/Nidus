@@ -421,3 +421,19 @@ Live Acceptance Evidence를 기록한다.
 
 이 실제 검증이 끝나기 전에는
 원래의 생성형 AI Employee 가설이 달성되었다고 선언하지 않는다.
+
+
+## 후속 Model Gateway 결과 — 2026-10-08
+이 본문은 2026-10-07 오프라인 MVP 결과를 보존합니다. 최신 후속 보고서는
+MODEL_GATEWAY_REPORT.md입니다. Gateway/전송 승인/생성 결과 저장/검증/실패 분류와
+관측을 구현했고, 기존 18개 테스트를 포함한 오프라인 37개 및 루프백 HTTP 3개가
+통과했습니다. 실제 외부 모델 요청은 접근 거부로 Blocked입니다. 따라서 원래 가설의
+Actual generative model execution은 여전히 NOT VERIFIED이며, 전체 미션은 BLOCKED입니다.
+
+
+### OmniRoute 설치 후 갱신
+사용자 요청에 따라 OmniRoute 3.8.51 설치와 127.0.0.1:20128 서버 실행을 완료했습니다.
+Nidus 기본 정책은 무료 전용 nidus-free Combo를 이 서버에서 사용하도록 설정되어
+있습니다. 실제 Combo/무료 Provider/Endpoint Key 설정과 모델 완료 검증은 남아 있습니다.
+자세한 설치 증거는 OMNIROUTE_INSTALL_REPORT.md, 최신 검증 상태는
+MODEL_GATEWAY_REPORT.md를 참고하세요. 기존 모델 미검증 상태를 성공으로 변경하지 않습니다.
