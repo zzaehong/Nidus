@@ -1,17 +1,18 @@
-# Model Gateway blocker status — 2026-10-08
+# Current blocker — multi-provider validation, 2026-10-08
 
-**RESOLVED.** The user connected GitHub Copilot to the installed OmniRoute.
-Nidus completed a real synthetic work request through gh/gpt-4o-mini, preserving
-scoped transmission approval and completion verification. Active 0 / Archive 1.
-See MODEL_GATEWAY_REPORT.md and docs/evidence/model-live-copilot.json.
+Previous Copilot model gateway slice remains VERIFIED and its evidence is preserved.
+Current Gemini/NVIDIA single-provider acceptance is BLOCKED: selected models returned
+HTTP 404 (Gemini newest candidate: 400) despite source=api catalogs and valid=true
+connection tests. See MODEL_PROVIDER_VALIDATION_REPORT.md and per-provider evidence.
+Provider error bodies/credentials were not read; root cause is not asserted.
 
-Historical failures remain: OpenCode access refusal (model-live.json) and Copilot
-gpt-5-mini HTTP 400 (model-live-copilot-gpt5mini-failed.json). Neither was counted
-as completion. Copilot's static catalog did not prove per-account availability;
-gpt-4o-mini was confirmed through actual inference. No client impersonation used.
+Gateway fallback IS VERIFIED with explicit local 503 fault injection and actual
+NVIDIA 429 → actual Copilot response → Completed/Archive. Two injected failures also
+complete through Copilot. Injected 401 blocks without downstream calls. This does
+not prove standalone Gemini/NVIDIA generation success or a genuine upstream outage.
 
-Nidus key is stored outside Repo/Vault, mode 600, restricted to one model and the
-connected Copilot account. No new payment/billing configuration was introduced.
-Usage/cost beyond observed Task tokens remains unknown; this is not a free-use claim.
-No remaining blocker for this mission. Limits are listed in MODEL_GATEWAY_REPORT.md.
-User doc/prompt.md is uncommitted; no push, PR or main/develop merge.
+No billing/security/account credential changes were made. Temporary restricted
+inference keys were deleted; existing keys and baseline evidence remain intact.
+Needed: an exact Gemini and NVIDIA model that succeeds in the existing OmniRoute
+account, then rerun each synthetic-only policy with a new evidence filename.
+Do not paste secrets or enable new payments to bypass the blocker.
