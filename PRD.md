@@ -4,6 +4,23 @@
 
 ## 한국어
 
+### 관리자·작업자 업무 순환 v1
+
+새 CLI 생성형 작업의 기본 흐름은 Manager 계약 → Worker 실행·자기 점검 → 결정적 검증 → Manager 검토다. 명시 계약 입력을 지원하고 생략 시 관리자 기본 계약을 저장한다. 계획 생성용 추가 모델 호출은 없다. Manager는 자동 책임 종료점이며 검증 전용 AI 객체를 만들지 않는다.
+
+| 기준 | 관찰 가능한 동작 |
+|---|---|
+| MW-AC-01 | 목적·범위·ID별 완료 기준·제약·선택 자료·예상 결과물·사람 판단 조건을 호출 전에 보존하고 Worker 문맥에 전달 |
+| MW-AC-02 | 결과·모든 기준의 자기 점검·한계·질문을 제출; 자기 점검만으로 완료하지 않음 |
+| MW-AC-03 | 원 요청·계약·원문·결과·자기 점검·실행 기록을 별도 Manager 지침으로 검토; APPROVE/REWORK/ESCALATE |
+| MW-AC-04 | 결정적 검사 PASS와 현재 후보에 바인딩된 Manager 승인 또는 명시적 인간 품질 승인 없이는 완료 금지 |
+| MW-AC-05 | 이전 결과·지적·수정 지시 전달, 재작업 이력 보존; 기본 2회, 설정 0–10회; 한도 시 사람 대기 |
+| MW-AC-06 | ESCALATE는 Waiting/품질 안건으로 이동; 인간 승인·재작업·취소는 권한 결정과 분리 |
+| MW-AC-07 | 역할별 정책과 정확한 전송 승인을 유지; 원문·계약·결과·정책 변경 시 이전 승인 재사용 금지 |
+| MW-AC-08 | A–F 결정적 테스트, 기존 회귀 및 실제 공개 합성 작업의 Completed/Archive 증거 |
+
+기존 deterministic 추출과 API의 `workflow=None`, CLI `--workflow legacy`는 이전 계약의 호환 경로다. 기존 작업을 자동으로 새 계약에 편입하지 않는다. 자연어 계획 생성, 전체 조직/Project/GUI/Red Team/JEV/Tool은 여전히 범위 밖이다. Manager의 품질 판단은 의미 정확성의 수학적 증명이 아니다.
+
 ### 목적과 현재 범위
 
 한 명의 로컬 사용자가 한 Employee에게 범위가 정해진 문서 작업을 맡기고, 권한·진행·결과·검증을 확인한다.
@@ -11,7 +28,7 @@
 결정적인 브리핑은 모델의 자율적 판단을 증명하지 않으며, 실제 생성 검증도 임의의 자율 업무 수행 능력을 증명하지 않는다.
 
 P0 목표는 실행 가능한 로컬 흐름, 지속적 복구, 명시적 인간 결정, 원문 보호, 관찰 가능한 검증과 이력이다.
-GUI·자연어 계약 자동 구성·임의 Tool/Shell·Manager/Project 실행·여러 Worker·daemon·vector 검색·Red Team·Dream Sequence·배포는 구현 범위 밖이다.
+GUI·자연어 계약 자동 구성·임의 Tool/Shell·전체 조직/Project 실행·여러 Worker·daemon·vector 검색·Red Team·Dream Sequence·배포는 구현 범위 밖이다.
 개념 설계의 Inbox 매트릭스는 CLI로 대체 완료된 것이 아니라 후속 UX다. 생성형 경로만 명시적 외부 모델 전송을 추가하며 기본 모드는 오프라인이다.
 
 ### 주요 시나리오
@@ -70,6 +87,14 @@ Python 3.9+/Git, 한 Vault·한 Worker, 명시적 일반 UTF-8 `.md`/`.txt` 원�
 
 ## English
 
+### Manager/Worker responsibility loop v1
+
+New CLI generative tasks default to Manager contract → Worker execution/self-check → deterministic checks → independent Manager review. Explicit contracts are accepted; otherwise a default Manager contract is persisted without a planning-model call. Managers terminate automated responsibility; there is no separate AI verifier.
+
+MW-AC-01: persist goal/scope/identified criteria/constraints/materials/deliverable/human-judgment conditions before execution and pass them to Worker. MW-AC-02: require result, criterion-by-criterion self-check, limitations and questions; self-check cannot complete a task. MW-AC-03: Manager independently reviews original request, contract, actual sources/result, self-check and execution records, returning APPROVE/REWORK/ESCALATE. MW-AC-04: require deterministic PASS and approval bound to current content, or explicit human quality approval. MW-AC-05: retain revisions and concrete instructions, with a configurable 0–10 rework limit (default 2), then human attention. MW-AC-06: separate quality approve/rework/cancel from permission decisions. MW-AC-07: independent role policies and exact per-call transmission approval; invalidate changed inputs/content/policy. MW-AC-08: scenarios A–F, regression and real public-synthetic completion/archive evidence.
+
+Deterministic extraction, API `workflow=None` and CLI `--workflow legacy` retain earlier contracts. Do not silently migrate existing tasks. Full organization/project/GUI/Red Team/JEV/tools and natural-language planning remain deferred. Manager judgment is not mathematical proof of semantic correctness.
+
 ### Purpose and current scope
 
 One local user delegates a bounded document task to one persistent Employee and inspects permissions, progress, results and verification.
@@ -77,7 +102,7 @@ Support default offline briefings and optional real-model document generation. T
 Deterministic extraction does not prove model judgment; live generation does not establish arbitrary autonomous work capability.
 
 P0 goals are executable local flow, durable recovery, explicit human decisions, protected originals, observable verification and retained history.
-GUI, natural-language contract formation, arbitrary tools/shell, manager/project execution, multiple workers, daemon, vector search, Red Team, Dream Sequence and deployment are outside implementation scope.
+GUI, natural-language contract formation, arbitrary tools/shell, full organizational/project execution, multiple workers, daemon, vector search, Red Team, Dream Sequence and deployment are outside implementation scope.
 The conceptual Inbox matrix remains future UX, not a completed CLI replacement. Only the opt-in generative path adds external model transmission; default mode is offline.
 
 ### Primary scenarios

@@ -144,7 +144,9 @@ class Store:
             if type(max_reworks) is not int or not 0 <= max_reworks <= 10:
                 raise ValueError('max_reworks must be an integer from 0 to 10')
             contract = completion_contract(request, sources, output, manager_contract)
-            review_policy = validate_policy(manager_policy or policy)
+            policy = validate_policy(dict(policy, response_format='json_object'))
+            task['model_policy'] = policy
+            review_policy = validate_policy(dict(manager_policy or policy, response_format='json_object'))
             reject_credentials(json.dumps([request, sources, output, phrases]), review_policy)
             reject_credentials(json.dumps(contract), policy)
             reject_credentials(json.dumps(contract), review_policy)
