@@ -3,3 +3,8 @@
 __pycache__/
 *.py[cod]
 .nidus/
+
+.env
+.env.*
+!.env.example
+model-policy.local.json
