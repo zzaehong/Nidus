@@ -149,3 +149,11 @@ Nidus 기본 정책은 무료 전용 nidus-free Combo를 이 서버에서 사용
 있습니다. 실제 Combo/무료 Provider/Endpoint Key 설정과 모델 완료 검증은 남아 있습니다.
 자세한 설치 증거는 OMNIROUTE_INSTALL_REPORT.md, 최신 검증 상태는
 MODEL_GATEWAY_REPORT.md를 참고하세요. 기존 모델 미검증 상태를 성공으로 변경하지 않습니다.
+
+
+## Copilot live 검증 후속 — 2026-10-08
+이전 미설정/미검증 상태는 해소됐습니다. 사용자가 연결한 Copilot의
+`gh/gpt-4o-mini`로 승인 → 실제 생성 → 검증 → Completed/Archive를 확인했습니다.
+증거: docs/evidence/model-live-copilot.json. Nidus 전용 키는 저장소 밖 권한 600 파일에
+있으며 모델/연결을 제한했습니다. 무료 보장 없이 별도 Paid 정책을 사용했고 결제 설정은
+변경하지 않았습니다. 상세 범위·테스트·비용 unknown은 MODEL_GATEWAY_REPORT.md 참조.

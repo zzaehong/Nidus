@@ -136,3 +136,16 @@ Current/integration branch: feat/model-gateway after evidence merge. Completed
 implementation/preparation slices integrated; actual model acceptance remains
 blocked. Only uncommitted change is user's doc/prompt.md. No remote operations or
 main/develop merge. Provider Key values were never printed or committed.
+
+
+## MG Slice 2 — completed Copilot acceptance (supersedes blocked state above)
+Status: Complete. Feature: feat/model-live-acceptance. Integration: feat/model-gateway.
+User connected Copilot. Created one restricted Nidus Endpoint Key outside Repo/Vault;
+explicit paid-policy path to gh/gpt-4o-mini, no fallback or billing changes.
+Real synthetic task 879034f98e4b4c11a933e9a8e17e30f6 completed; six checks true;
+Active 0 / Archive 1. Response manually reviewed: exactly three factual bullets.
+Tokens 202/33/235; cost unknown. gpt-5-mini failure preserved separately.
+Evidence: docs/evidence/model-live-copilot.json. MG-AC-02 now PASS.
+37 offline + 3 HTTP regression, compileall, diff, real key Repo/Vault scan pass.
+No remaining mission blocker. Only user doc/prompt.md remains uncommitted after
+integration. No push/PR/main/develop merge. Commit identifiers: feature Git history.
