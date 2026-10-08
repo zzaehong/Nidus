@@ -75,3 +75,55 @@ is required. AC mappings and commands live in docs/plans/current-plan.md.
 Generative model adapter with network/Secret approval, natural-language contract
 formation, matrix GUI, robust OS sandbox and adversarial TOCTOU protection,
 multi-worker execution, long-term knowledge promotion. None changes v2 silently.
+
+## Model Gateway extension (2026-10-08)
+The new prompt explicitly authorizes opt-in external generative execution. Keep
+Home identity, Store schema, file Security, Git, archive and deterministic tests.
+Task JSON adds mode, non-secret policy, literal requirements, transmission
+snapshots, retained generation and attempt metadata. No schema migration needed.
+
+### Options / decisions
+- Vendor SDK vs stdlib HTTP: one Chat Completions JSON adapter uses urllib,
+  replaceable behind `Gateway.generate`; works with a direct compatible API,
+  OmniRoute or a local compatible server. No package/runtime installation.
+- Install OmniRoute vs call a free upstream: use direct OpenCode Zen free model
+  first, avoiding router daemon setup. OmniRoute remains a configurable endpoint,
+  not a dependency. Source: https://github.com/diegosouzapw/OmniRoute and
+  https://opencode.ai/docs/zen/ (researched 2026-10-08).
+- Automatic multi-provider discovery vs explicit route list: JSON policy fixes
+  ordered routes (free/paid/local), model and credential env-var name. No implicit
+  paid fallback. Every allowed route is included in approval. Free classification
+  is an operator assertion, not a billing guarantee from Nidus.
+- Replay model for verification vs retained candidate: save response before file
+  write; independent deterministic verifier checks nonempty content, finish reason,
+  literal requirements, source snapshots and exact generated artifact bytes.
+  Semantic adequacy is reviewed in live evidence, not proven by a hash.
+
+### Network and credentials
+Only `https` remote endpoints; `http` allowed solely for literal loopback hosts.
+No URL credentials/query/fragment, redirects or environment proxy inheritance.
+Credentials are optional named environment values, never config values. Validate
+limits/types before any call. Secret values are rejected from task/source/model
+text; error bodies are discarded. No Secret Store scanning or ambient credential
+reuse. A configured endpoint is trusted; local router may forward externally and
+still requires transmission approval. Known credential matching is defensive,
+not general DLP for arbitrary unknown secrets.
+
+Transmission snapshot covers task request, source paths/hashes, full canonical
+prompt hash/size and complete route policy including costs/paid opt-in. Waiting
+records background, decision choices/effects and scope. Changed input or policy
+needs a new decision. Output replacement permission is obtained first. Only exact
+selected source text plus work request is sent; no native notes, DB or Vault paths.
+Prompt treats source text as data. Model output is inert text, never tool commands.
+
+### Failures, recovery and usage
+One bounded attempt per configured route; fallback only for retryable rate/quota,
+timeout/network/5xx, within the approved list. Auth/config/invalid/truncated output
+fail closed without fallback. No infinite retry; rerun is explicit. Persist each
+attempt start/result with UTC time. A retained generation is reusable only for
+its source/prompt/policy fingerprint and after requirements pass. Verifying never
+calls a provider. Crash before response persistence may require another call on
+explicit retry; exactly-once remote execution is not promised. Git failure keeps
+existing completion failure guard. Provider token counts/cost are used if known;
+otherwise null, not fabricated. A configured zero cost for live free models is a
+policy estimate, not a billing receipt.
