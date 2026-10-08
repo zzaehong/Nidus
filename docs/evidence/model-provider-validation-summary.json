@@ -1,0 +1,382 @@
+{
+  "status": "partial_provider_validation_fallback_verified",
+  "providers": {
+    "copilot": "verified",
+    "gemini": "blocked",
+    "nvidia": "blocked",
+    "fallback": "verified_with_explicit_local_fault_injection"
+  },
+  "observations": [
+    {
+      "evidence": "docs/evidence/model-live-fallback-auth.json",
+      "task": "43f73b41e5724b1b893bf0d06cc435bb",
+      "status": "blocked",
+      "attempts": [
+        {
+          "route": "gemini-injected-fault",
+          "provider": "omniroute/gemini",
+          "requested_model": "gemini/gemini-3.5-flash",
+          "actual_model": null,
+          "started_at": "2026-10-08T05:47:09.985137+00:00",
+          "finished_at": "2026-10-08T05:47:09.987833+00:00",
+          "latency_seconds": 0.002696,
+          "success": false,
+          "error": {
+            "code": "authentication_failed",
+            "retryable": false,
+            "http_status": 401,
+            "next_step": "review_configuration_or_response"
+          },
+          "tokens": null,
+          "estimated_cost_usd": null,
+          "injected_fault": true
+        }
+      ],
+      "verification": null,
+      "active_count": 1,
+      "archive_count": 0,
+      "scenario_checks": {
+        "expected_sequence": true,
+        "expected_state": true,
+        "expected_archive": true
+      }
+    },
+    {
+      "evidence": "docs/evidence/model-live-fallback-two.json",
+      "task": "73b206d050804e37a3b92d21a6140ea6",
+      "status": "completed",
+      "attempts": [
+        {
+          "route": "gemini-injected-fault",
+          "provider": "omniroute/gemini",
+          "requested_model": "gemini/gemini-3.5-flash",
+          "actual_model": null,
+          "started_at": "2026-10-08T05:47:07.246019+00:00",
+          "finished_at": "2026-10-08T05:47:07.248893+00:00",
+          "latency_seconds": 0.002874,
+          "success": false,
+          "error": {
+            "code": "provider_unavailable",
+            "retryable": true,
+            "http_status": 503,
+            "next_step": "explicit_retry"
+          },
+          "tokens": null,
+          "estimated_cost_usd": null,
+          "injected_fault": true
+        },
+        {
+          "route": "nvidia-injected-fault",
+          "provider": "omniroute/nvidia",
+          "requested_model": "nvidia/nvidia/nemotron-nano-3-30b-a3b",
+          "actual_model": null,
+          "started_at": "2026-10-08T05:47:07.249184+00:00",
+          "finished_at": "2026-10-08T05:47:07.249965+00:00",
+          "latency_seconds": 0.000781,
+          "success": false,
+          "error": {
+            "code": "provider_unavailable",
+            "retryable": true,
+            "http_status": 503,
+            "next_step": "explicit_retry"
+          },
+          "tokens": null,
+          "estimated_cost_usd": null,
+          "injected_fault": true
+        },
+        {
+          "route": "copilot-live",
+          "provider": "omniroute/copilot",
+          "requested_model": "gh/gpt-4o-mini",
+          "actual_model": "gpt-4o-mini",
+          "started_at": "2026-10-08T05:47:07.250247+00:00",
+          "finished_at": "2026-10-08T05:47:08.531704+00:00",
+          "latency_seconds": 1.281457,
+          "success": true,
+          "error": null,
+          "tokens": {
+            "prompt_tokens": 202,
+            "completion_tokens": 30,
+            "total_tokens": 232
+          },
+          "estimated_cost_usd": null,
+          "injected_fault": false
+        }
+      ],
+      "verification": {
+        "sources_unchanged": true,
+        "output_matches": true,
+        "candidate_matches": true,
+        "nonempty_response": true,
+        "untruncated_response": true,
+        "required_phrases": true
+      },
+      "active_count": 0,
+      "archive_count": 1,
+      "scenario_checks": {
+        "expected_sequence": true,
+        "expected_state": true,
+        "expected_archive": true
+      }
+    },
+    {
+      "evidence": "docs/evidence/model-live-fallback.json",
+      "task": "5d7ba953e23e4128876565be9ac8372b",
+      "status": "completed",
+      "attempts": [
+        {
+          "route": "gemini-injected-fault",
+          "provider": "omniroute/gemini",
+          "requested_model": "gemini/gemini-3.5-flash",
+          "actual_model": null,
+          "started_at": "2026-10-08T05:47:04.502112+00:00",
+          "finished_at": "2026-10-08T05:47:04.505103+00:00",
+          "latency_seconds": 0.002991,
+          "success": false,
+          "error": {
+            "code": "provider_unavailable",
+            "retryable": true,
+            "http_status": 503,
+            "next_step": "explicit_retry"
+          },
+          "tokens": null,
+          "estimated_cost_usd": null,
+          "injected_fault": true
+        },
+        {
+          "route": "nvidia-live",
+          "provider": "omniroute/nvidia",
+          "requested_model": "nvidia/nvidia/nemotron-nano-3-30b-a3b",
+          "actual_model": null,
+          "started_at": "2026-10-08T05:47:04.505450+00:00",
+          "finished_at": "2026-10-08T05:47:04.511735+00:00",
+          "latency_seconds": 0.006285,
+          "success": false,
+          "error": {
+            "code": "rate_limited",
+            "retryable": true,
+            "http_status": 429,
+            "next_step": "explicit_retry"
+          },
+          "tokens": null,
+          "estimated_cost_usd": null,
+          "injected_fault": false
+        },
+        {
+          "route": "copilot-live",
+          "provider": "omniroute/copilot",
+          "requested_model": "gh/gpt-4o-mini",
+          "actual_model": "gpt-4o-mini",
+          "started_at": "2026-10-08T05:47:04.512151+00:00",
+          "finished_at": "2026-10-08T05:47:05.778415+00:00",
+          "latency_seconds": 1.266264,
+          "success": true,
+          "error": null,
+          "tokens": {
+            "prompt_tokens": 202,
+            "completion_tokens": 30,
+            "total_tokens": 232
+          },
+          "estimated_cost_usd": null,
+          "injected_fault": false
+        }
+      ],
+      "verification": {
+        "sources_unchanged": true,
+        "output_matches": true,
+        "candidate_matches": true,
+        "nonempty_response": true,
+        "untruncated_response": true,
+        "required_phrases": true
+      },
+      "active_count": 0,
+      "archive_count": 1,
+      "scenario_checks": {
+        "expected_sequence": true,
+        "expected_state": true,
+        "expected_archive": true
+      }
+    },
+    {
+      "evidence": "docs/evidence/model-live-gemini-candidate1-failed.json",
+      "task": "8e651279d6f84935b63b7727d72b0766",
+      "status": "blocked",
+      "attempts": [
+        {
+          "route": "gemini",
+          "provider": "omniroute/gemini",
+          "requested_model": "gemini/gemini-2.5-flash-lite",
+          "actual_model": null,
+          "started_at": "2026-10-08T05:45:38.215206+00:00",
+          "finished_at": "2026-10-08T05:45:38.625737+00:00",
+          "latency_seconds": 0.410531,
+          "success": false,
+          "error": {
+            "code": "invalid_request",
+            "retryable": false,
+            "http_status": 404,
+            "next_step": "review_configuration_or_response"
+          },
+          "tokens": null,
+          "estimated_cost_usd": null,
+          "injected_fault": false
+        }
+      ],
+      "verification": null,
+      "active_count": 1,
+      "archive_count": 0,
+      "scenario_checks": null
+    },
+    {
+      "evidence": "docs/evidence/model-live-gemini-candidate2-failed.json",
+      "task": "3c0e198cc6ed48179fa211996b3ee00f",
+      "status": "blocked",
+      "attempts": [
+        {
+          "route": "gemini",
+          "provider": "omniroute/gemini",
+          "requested_model": "gemini/gemini-2.5-flash",
+          "actual_model": null,
+          "started_at": "2026-10-08T05:46:23.749762+00:00",
+          "finished_at": "2026-10-08T05:46:24.170711+00:00",
+          "latency_seconds": 0.420949,
+          "success": false,
+          "error": {
+            "code": "invalid_request",
+            "retryable": false,
+            "http_status": 404,
+            "next_step": "review_configuration_or_response"
+          },
+          "tokens": null,
+          "estimated_cost_usd": null,
+          "injected_fault": false
+        }
+      ],
+      "verification": null,
+      "active_count": 1,
+      "archive_count": 0,
+      "scenario_checks": null
+    },
+    {
+      "evidence": "docs/evidence/model-live-gemini.json",
+      "task": "8ec5ff67999c42ecaccd40c2dcfe0dae",
+      "status": "blocked",
+      "attempts": [
+        {
+          "route": "gemini",
+          "provider": "omniroute/gemini",
+          "requested_model": "gemini/gemini-3.5-flash",
+          "actual_model": null,
+          "started_at": "2026-10-08T05:46:52.831920+00:00",
+          "finished_at": "2026-10-08T05:46:52.841413+00:00",
+          "latency_seconds": 0.009493,
+          "success": false,
+          "error": {
+            "code": "invalid_request",
+            "retryable": false,
+            "http_status": 400,
+            "next_step": "review_configuration_or_response"
+          },
+          "tokens": null,
+          "estimated_cost_usd": null,
+          "injected_fault": false
+        }
+      ],
+      "verification": null,
+      "active_count": 1,
+      "archive_count": 0,
+      "scenario_checks": null
+    },
+    {
+      "evidence": "docs/evidence/model-live-nvidia-candidate1-failed.json",
+      "task": "8531d2c4249b4d9e8d9e57b9c9e81a75",
+      "status": "blocked",
+      "attempts": [
+        {
+          "route": "nvidia",
+          "provider": "omniroute/nvidia",
+          "requested_model": "nvidia/mistralai/mistral-7b-instruct-v0.3",
+          "actual_model": null,
+          "started_at": "2026-10-08T05:45:39.700916+00:00",
+          "finished_at": "2026-10-08T05:45:39.874995+00:00",
+          "latency_seconds": 0.174079,
+          "success": false,
+          "error": {
+            "code": "invalid_request",
+            "retryable": false,
+            "http_status": 404,
+            "next_step": "review_configuration_or_response"
+          },
+          "tokens": null,
+          "estimated_cost_usd": null,
+          "injected_fault": false
+        }
+      ],
+      "verification": null,
+      "active_count": 1,
+      "archive_count": 0,
+      "scenario_checks": null
+    },
+    {
+      "evidence": "docs/evidence/model-live-nvidia-candidate2-failed.json",
+      "task": "7eaa8c702e5e40268cbac874f7551c30",
+      "status": "blocked",
+      "attempts": [
+        {
+          "route": "nvidia",
+          "provider": "omniroute/nvidia",
+          "requested_model": "nvidia/google/gemma-3-4b-it",
+          "actual_model": null,
+          "started_at": "2026-10-08T05:46:25.218383+00:00",
+          "finished_at": "2026-10-08T05:46:25.384425+00:00",
+          "latency_seconds": 0.166042,
+          "success": false,
+          "error": {
+            "code": "invalid_request",
+            "retryable": false,
+            "http_status": 404,
+            "next_step": "review_configuration_or_response"
+          },
+          "tokens": null,
+          "estimated_cost_usd": null,
+          "injected_fault": false
+        }
+      ],
+      "verification": null,
+      "active_count": 1,
+      "archive_count": 0,
+      "scenario_checks": null
+    },
+    {
+      "evidence": "docs/evidence/model-live-nvidia.json",
+      "task": "785d3dfc9f54414bb925e40b5be825a5",
+      "status": "blocked",
+      "attempts": [
+        {
+          "route": "nvidia",
+          "provider": "omniroute/nvidia",
+          "requested_model": "nvidia/nvidia/nemotron-nano-3-30b-a3b",
+          "actual_model": null,
+          "started_at": "2026-10-08T05:46:53.910621+00:00",
+          "finished_at": "2026-10-08T05:46:54.071045+00:00",
+          "latency_seconds": 0.160424,
+          "success": false,
+          "error": {
+            "code": "invalid_request",
+            "retryable": false,
+            "http_status": 404,
+            "next_step": "review_configuration_or_response"
+          },
+          "tokens": null,
+          "estimated_cost_usd": null,
+          "injected_fault": false
+        }
+      ],
+      "verification": null,
+      "active_count": 1,
+      "archive_count": 0,
+      "scenario_checks": null
+    }
+  ],
+  "cost_note": "All unknown costs remain null; token counts are per successful Task, not session-wide billing."
+}

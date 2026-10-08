@@ -1,0 +1,21 @@
+{
+  "observed_at": "2026-10-08T05:58:43.296Z",
+  "records": [
+    {
+      "provider": "gemini",
+      "status": 200,
+      "source": "api",
+      "warning": null,
+      "selected_model_present": true,
+      "selected_model": "gemini-3.5-flash-lite"
+    },
+    {
+      "provider": "nvidia",
+      "status": 200,
+      "source": "api",
+      "warning": null,
+      "selected_model_present": true,
+      "selected_model": "google/gemma-4-31b-it"
+    }
+  ]
+}

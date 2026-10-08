@@ -1,1 +1,11 @@
 .obsidian
+.DS_Store
+
+__pycache__/
+*.py[cod]
+.nidus/
+
+.env
+.env.*
+!.env.example
+model-policy.local.json
