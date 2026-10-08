@@ -1,0 +1,180 @@
+{
+  "status": "blocked",
+  "vault": "/var/folders/0n/vbz_lc2n1d18k68mwhlkx5fm0000gn/T/nidus-model-live-lir0zaup",
+  "task": "3c0e198cc6ed48179fa211996b3ee00f",
+  "source": "# Nidus sample\nNidus stores task state in a local vault.\nA task completes only after verification passes.\nExisting output files require human approval before replacement.\n",
+  "request": "Summarize the supplied Nidus sample in exactly three concise bullet points. Include the literal phrase Nidus. Use only the supplied facts.",
+  "verification": null,
+  "model_error": {
+    "code": "invalid_request",
+    "retryable": false,
+    "http_status": 404,
+    "next_step": "review_configuration_or_response"
+  },
+  "result": null,
+  "generation": null,
+  "model_events": [
+    {
+      "seq": 5,
+      "kind": "model_permission_ask",
+      "data": {
+        "subject": "Transmit selected task data to model routes?",
+        "background": "Work request and full selected source text will leave the worker process",
+        "reason": "Network/model data transmission needs an exact scoped decision; a local router may forward externally",
+        "choices": {
+          "approve": "Allow the specified prompt and routes, including only explicitly allowed paid routes",
+          "reject": "Cancel without a model call or output write"
+        },
+        "snapshot": {
+          "action": "model_transmission",
+          "prompt_hash": "d930a4f0bd5a5db5853bd0109cd687a55ddd2c30b9705d9d12405439cb9565a1",
+          "prompt_bytes": 887,
+          "request_hash": "e74fc591ec31a7de38a5913c4a9baede7e944c78a196f7b2fb7a72f022fe7d62",
+          "sources": {
+            "notes.md": "b6b82e3bb828d9fb3bfb8f9eb26fd105e23f0bc22fcdae8370a2679ab31445b0"
+          },
+          "policy": {
+            "allow_paid": true,
+            "max_tokens": 1024,
+            "routes": [
+              {
+                "api_key_env": "NIDUS_VALIDATION_API_KEY",
+                "base_url": "http://127.0.0.1:20128/v1",
+                "kind": "paid",
+                "model": "gemini/gemini-2.5-flash",
+                "name": "gemini",
+                "provider": "omniroute/gemini"
+              }
+            ],
+            "timeout_seconds": 60
+          }
+        }
+      }
+    },
+    {
+      "seq": 12,
+      "kind": "model_permission_allow",
+      "data": {
+        "action": "model_transmission",
+        "prompt_hash": "d930a4f0bd5a5db5853bd0109cd687a55ddd2c30b9705d9d12405439cb9565a1",
+        "prompt_bytes": 887,
+        "request_hash": "e74fc591ec31a7de38a5913c4a9baede7e944c78a196f7b2fb7a72f022fe7d62",
+        "sources": {
+          "notes.md": "b6b82e3bb828d9fb3bfb8f9eb26fd105e23f0bc22fcdae8370a2679ab31445b0"
+        },
+        "policy": {
+          "allow_paid": true,
+          "max_tokens": 1024,
+          "routes": [
+            {
+              "api_key_env": "NIDUS_VALIDATION_API_KEY",
+              "base_url": "http://127.0.0.1:20128/v1",
+              "kind": "paid",
+              "model": "gemini/gemini-2.5-flash",
+              "name": "gemini",
+              "provider": "omniroute/gemini"
+            }
+          ],
+          "timeout_seconds": 60
+        }
+      }
+    },
+    {
+      "seq": 13,
+      "kind": "model_attempt_started",
+      "data": {
+        "task": "3c0e198cc6ed48179fa211996b3ee00f",
+        "route": "gemini",
+        "kind": "paid",
+        "provider": "omniroute/gemini",
+        "model": "gemini/gemini-2.5-flash",
+        "endpoint": "http://127.0.0.1:20128/v1",
+        "started_at": "2026-10-08T05:46:23.749762+00:00",
+        "prompt_hash": "d930a4f0bd5a5db5853bd0109cd687a55ddd2c30b9705d9d12405439cb9565a1",
+        "prompt_bytes": 887,
+        "sources": {
+          "notes.md": "b6b82e3bb828d9fb3bfb8f9eb26fd105e23f0bc22fcdae8370a2679ab31445b0"
+        }
+      }
+    },
+    {
+      "seq": 14,
+      "kind": "model_attempt_failed",
+      "data": {
+        "task": "3c0e198cc6ed48179fa211996b3ee00f",
+        "route": "gemini",
+        "kind": "paid",
+        "provider": "omniroute/gemini",
+        "model": "gemini/gemini-2.5-flash",
+        "endpoint": "http://127.0.0.1:20128/v1",
+        "started_at": "2026-10-08T05:46:23.749762+00:00",
+        "prompt_hash": "d930a4f0bd5a5db5853bd0109cd687a55ddd2c30b9705d9d12405439cb9565a1",
+        "prompt_bytes": 887,
+        "sources": {
+          "notes.md": "b6b82e3bb828d9fb3bfb8f9eb26fd105e23f0bc22fcdae8370a2679ab31445b0"
+        },
+        "finished_at": "2026-10-08T05:46:24.170711+00:00",
+        "error": {
+          "code": "invalid_request",
+          "retryable": false,
+          "http_status": 404,
+          "next_step": "review_configuration_or_response"
+        },
+        "tokens": null,
+        "estimated_cost_usd": null
+      }
+    }
+  ],
+  "cli": [
+    {
+      "command": [
+        "init"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "submit"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "run"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "decide"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "run"
+      ],
+      "exit_code": 2
+    },
+    {
+      "command": [
+        "show"
+      ],
+      "exit_code": 2
+    },
+    {
+      "command": [
+        "list"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "list"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "active_count": 1,
+  "archive_count": 0
+}

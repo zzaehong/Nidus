@@ -138,3 +138,13 @@ use; do not default to auto, which could select a paid upstream behind the route
 Nidus cannot infer/enforce router-internal billing policy. Endpoint key remains an
 environment-only credential. Installation/readiness evidence is in
 OMNIROUTE_INSTALL_REPORT.md; successful real-model acceptance still needs evidence.
+
+
+### Provider validation scope — 2026-10-08
+The Copilot live slice is verified; subsequent provider results are tracked in
+MODEL_PROVIDER_VALIDATION_REPORT.md. Opt-in model_fallback_live.py uses a local
+503/401 fixture with no credential reference on injected routes, then genuine
+OmniRoute inference on non-injected routes. It proves transport-level fallback
+and fail-closed auth, not actual upstream outage or standalone provider success.
+Error taxonomy is unchanged; 400/404 are nonretryable. Live evidence paths now
+refuse overwriting existing files. No provider/account setting mutation required.

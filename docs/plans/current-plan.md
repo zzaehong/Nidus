@@ -149,3 +149,18 @@ Evidence: docs/evidence/model-live-copilot.json. MG-AC-02 now PASS.
 37 offline + 3 HTTP regression, compileall, diff, real key Repo/Vault scan pass.
 No remaining mission blocker. Only user doc/prompt.md remains uncommitted after
 integration. No push/PR/main/develop merge. Commit identifiers: feature Git history.
+
+
+## Multi-provider live validation — 2026-10-08 (latest scope)
+Feature: feat/model-provider-validation; integration feat/model-gateway.
+Status: Partial / provider blockers recorded; fallback acceptance complete.
+Gemini/NVIDIA real catalogs and valid connections, three individual candidate
+calls each: 404/400 Blocked. Preserve each evidence. No speculative taxonomy change.
+Injected Gemini 503 → actual NVIDIA 429 → real Copilot Completed/Archive; also
+two injected 503 → Copilot complete and injected 401 → stop without fallback.
+Harness exact-sequence expectation broadened for valid NVIDIA retryable failure;
+raw observations preserved. Old Copilot evidence untouched. Expiring temporary
+keys only in memory, deleted; no existing credential reads or account/billing edits.
+37 offline + 3 HTTP tests, compileall, diff checks PASS. Reports list standalone
+blockers and injection limits. No main/develop/remote operations. User prompt and
+pre-existing .DS_Store files remain outside commits. Commits: Feature history.

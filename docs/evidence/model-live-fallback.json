@@ -1,0 +1,442 @@
+{
+  "status": "completed",
+  "vault": "/var/folders/0n/vbz_lc2n1d18k68mwhlkx5fm0000gn/T/nidus-model-live-w86fzzrc",
+  "task": "5d7ba953e23e4128876565be9ac8372b",
+  "source": "# Nidus sample\nNidus stores task state in a local vault.\nA task completes only after verification passes.\nExisting output files require human approval before replacement.\n",
+  "request": "Summarize the supplied Nidus sample in exactly three concise bullet points. Include the literal phrase Nidus. Use only the supplied facts.",
+  "verification": {
+    "sources_unchanged": true,
+    "output_matches": true,
+    "candidate_matches": true,
+    "nonempty_response": true,
+    "untruncated_response": true,
+    "required_phrases": true
+  },
+  "model_error": null,
+  "result": {
+    "output": "results/summary.md",
+    "sha256": "4c2a4b0677abdb498bf4336576009f198dcd8a97d1fd74e988c0e981ec58d920",
+    "verification": {
+      "sources_unchanged": true,
+      "output_matches": true,
+      "candidate_matches": true,
+      "nonempty_response": true,
+      "untruncated_response": true,
+      "required_phrases": true
+    },
+    "limitations": [
+      "Literal/structural verification does not prove semantic correctness"
+    ],
+    "model": {
+      "route": "copilot-live",
+      "provider": "omniroute/copilot",
+      "model": "gpt-4o-mini",
+      "tokens": {
+        "prompt_tokens": 202,
+        "completion_tokens": 30,
+        "total_tokens": 232
+      },
+      "estimated_cost_usd": null
+    }
+  },
+  "generation": {
+    "text": "- Nidus stores task state in a local vault.\n- A task completes only after verification passes.\n- Existing output files require human approval before replacement.",
+    "finish_reason": "stop",
+    "model": "gpt-4o-mini",
+    "tokens": {
+      "prompt_tokens": 202,
+      "completion_tokens": 30,
+      "total_tokens": 232
+    },
+    "estimated_cost_usd": null,
+    "route": "copilot-live",
+    "provider": "omniroute/copilot",
+    "snapshot": {
+      "action": "model_transmission",
+      "prompt_hash": "d930a4f0bd5a5db5853bd0109cd687a55ddd2c30b9705d9d12405439cb9565a1",
+      "prompt_bytes": 887,
+      "request_hash": "e74fc591ec31a7de38a5913c4a9baede7e944c78a196f7b2fb7a72f022fe7d62",
+      "sources": {
+        "notes.md": "b6b82e3bb828d9fb3bfb8f9eb26fd105e23f0bc22fcdae8370a2679ab31445b0"
+      },
+      "policy": {
+        "allow_paid": true,
+        "max_tokens": 1024,
+        "routes": [
+          {
+            "base_url": "http://127.0.0.1:50471/v1",
+            "kind": "paid",
+            "model": "gemini/gemini-3.5-flash",
+            "name": "gemini-injected-fault",
+            "provider": "omniroute/gemini"
+          },
+          {
+            "api_key_env": "NIDUS_VALIDATION_API_KEY",
+            "base_url": "http://127.0.0.1:20128/v1",
+            "kind": "paid",
+            "model": "nvidia/nvidia/nemotron-nano-3-30b-a3b",
+            "name": "nvidia-live",
+            "provider": "omniroute/nvidia"
+          },
+          {
+            "api_key_env": "NIDUS_VALIDATION_API_KEY",
+            "base_url": "http://127.0.0.1:20128/v1",
+            "kind": "paid",
+            "model": "gh/gpt-4o-mini",
+            "name": "copilot-live",
+            "provider": "omniroute/copilot"
+          }
+        ],
+        "timeout_seconds": 60
+      }
+    }
+  },
+  "model_events": [
+    {
+      "seq": 5,
+      "kind": "model_permission_ask",
+      "data": {
+        "subject": "Transmit selected task data to model routes?",
+        "background": "Work request and full selected source text will leave the worker process",
+        "reason": "Network/model data transmission needs an exact scoped decision; a local router may forward externally",
+        "choices": {
+          "approve": "Allow the specified prompt and routes, including only explicitly allowed paid routes",
+          "reject": "Cancel without a model call or output write"
+        },
+        "snapshot": {
+          "action": "model_transmission",
+          "prompt_hash": "d930a4f0bd5a5db5853bd0109cd687a55ddd2c30b9705d9d12405439cb9565a1",
+          "prompt_bytes": 887,
+          "request_hash": "e74fc591ec31a7de38a5913c4a9baede7e944c78a196f7b2fb7a72f022fe7d62",
+          "sources": {
+            "notes.md": "b6b82e3bb828d9fb3bfb8f9eb26fd105e23f0bc22fcdae8370a2679ab31445b0"
+          },
+          "policy": {
+            "allow_paid": true,
+            "max_tokens": 1024,
+            "routes": [
+              {
+                "base_url": "http://127.0.0.1:50471/v1",
+                "kind": "paid",
+                "model": "gemini/gemini-3.5-flash",
+                "name": "gemini-injected-fault",
+                "provider": "omniroute/gemini"
+              },
+              {
+                "api_key_env": "NIDUS_VALIDATION_API_KEY",
+                "base_url": "http://127.0.0.1:20128/v1",
+                "kind": "paid",
+                "model": "nvidia/nvidia/nemotron-nano-3-30b-a3b",
+                "name": "nvidia-live",
+                "provider": "omniroute/nvidia"
+              },
+              {
+                "api_key_env": "NIDUS_VALIDATION_API_KEY",
+                "base_url": "http://127.0.0.1:20128/v1",
+                "kind": "paid",
+                "model": "gh/gpt-4o-mini",
+                "name": "copilot-live",
+                "provider": "omniroute/copilot"
+              }
+            ],
+            "timeout_seconds": 60
+          }
+        }
+      }
+    },
+    {
+      "seq": 12,
+      "kind": "model_permission_allow",
+      "data": {
+        "action": "model_transmission",
+        "prompt_hash": "d930a4f0bd5a5db5853bd0109cd687a55ddd2c30b9705d9d12405439cb9565a1",
+        "prompt_bytes": 887,
+        "request_hash": "e74fc591ec31a7de38a5913c4a9baede7e944c78a196f7b2fb7a72f022fe7d62",
+        "sources": {
+          "notes.md": "b6b82e3bb828d9fb3bfb8f9eb26fd105e23f0bc22fcdae8370a2679ab31445b0"
+        },
+        "policy": {
+          "allow_paid": true,
+          "max_tokens": 1024,
+          "routes": [
+            {
+              "base_url": "http://127.0.0.1:50471/v1",
+              "kind": "paid",
+              "model": "gemini/gemini-3.5-flash",
+              "name": "gemini-injected-fault",
+              "provider": "omniroute/gemini"
+            },
+            {
+              "api_key_env": "NIDUS_VALIDATION_API_KEY",
+              "base_url": "http://127.0.0.1:20128/v1",
+              "kind": "paid",
+              "model": "nvidia/nvidia/nemotron-nano-3-30b-a3b",
+              "name": "nvidia-live",
+              "provider": "omniroute/nvidia"
+            },
+            {
+              "api_key_env": "NIDUS_VALIDATION_API_KEY",
+              "base_url": "http://127.0.0.1:20128/v1",
+              "kind": "paid",
+              "model": "gh/gpt-4o-mini",
+              "name": "copilot-live",
+              "provider": "omniroute/copilot"
+            }
+          ],
+          "timeout_seconds": 60
+        }
+      }
+    },
+    {
+      "seq": 13,
+      "kind": "model_attempt_started",
+      "data": {
+        "task": "5d7ba953e23e4128876565be9ac8372b",
+        "route": "gemini-injected-fault",
+        "kind": "paid",
+        "provider": "omniroute/gemini",
+        "model": "gemini/gemini-3.5-flash",
+        "endpoint": "http://127.0.0.1:50471/v1",
+        "started_at": "2026-10-08T05:47:04.502112+00:00",
+        "prompt_hash": "d930a4f0bd5a5db5853bd0109cd687a55ddd2c30b9705d9d12405439cb9565a1",
+        "prompt_bytes": 887,
+        "sources": {
+          "notes.md": "b6b82e3bb828d9fb3bfb8f9eb26fd105e23f0bc22fcdae8370a2679ab31445b0"
+        }
+      }
+    },
+    {
+      "seq": 14,
+      "kind": "model_attempt_failed",
+      "data": {
+        "task": "5d7ba953e23e4128876565be9ac8372b",
+        "route": "gemini-injected-fault",
+        "kind": "paid",
+        "provider": "omniroute/gemini",
+        "model": "gemini/gemini-3.5-flash",
+        "endpoint": "http://127.0.0.1:50471/v1",
+        "started_at": "2026-10-08T05:47:04.502112+00:00",
+        "prompt_hash": "d930a4f0bd5a5db5853bd0109cd687a55ddd2c30b9705d9d12405439cb9565a1",
+        "prompt_bytes": 887,
+        "sources": {
+          "notes.md": "b6b82e3bb828d9fb3bfb8f9eb26fd105e23f0bc22fcdae8370a2679ab31445b0"
+        },
+        "finished_at": "2026-10-08T05:47:04.505103+00:00",
+        "error": {
+          "code": "provider_unavailable",
+          "retryable": true,
+          "http_status": 503,
+          "next_step": "explicit_retry"
+        },
+        "tokens": null,
+        "estimated_cost_usd": null
+      }
+    },
+    {
+      "seq": 15,
+      "kind": "model_attempt_started",
+      "data": {
+        "task": "5d7ba953e23e4128876565be9ac8372b",
+        "route": "nvidia-live",
+        "kind": "paid",
+        "provider": "omniroute/nvidia",
+        "model": "nvidia/nvidia/nemotron-nano-3-30b-a3b",
+        "endpoint": "http://127.0.0.1:20128/v1",
+        "started_at": "2026-10-08T05:47:04.505450+00:00",
+        "prompt_hash": "d930a4f0bd5a5db5853bd0109cd687a55ddd2c30b9705d9d12405439cb9565a1",
+        "prompt_bytes": 887,
+        "sources": {
+          "notes.md": "b6b82e3bb828d9fb3bfb8f9eb26fd105e23f0bc22fcdae8370a2679ab31445b0"
+        }
+      }
+    },
+    {
+      "seq": 16,
+      "kind": "model_attempt_failed",
+      "data": {
+        "task": "5d7ba953e23e4128876565be9ac8372b",
+        "route": "nvidia-live",
+        "kind": "paid",
+        "provider": "omniroute/nvidia",
+        "model": "nvidia/nvidia/nemotron-nano-3-30b-a3b",
+        "endpoint": "http://127.0.0.1:20128/v1",
+        "started_at": "2026-10-08T05:47:04.505450+00:00",
+        "prompt_hash": "d930a4f0bd5a5db5853bd0109cd687a55ddd2c30b9705d9d12405439cb9565a1",
+        "prompt_bytes": 887,
+        "sources": {
+          "notes.md": "b6b82e3bb828d9fb3bfb8f9eb26fd105e23f0bc22fcdae8370a2679ab31445b0"
+        },
+        "finished_at": "2026-10-08T05:47:04.511735+00:00",
+        "error": {
+          "code": "rate_limited",
+          "retryable": true,
+          "http_status": 429,
+          "next_step": "explicit_retry"
+        },
+        "tokens": null,
+        "estimated_cost_usd": null
+      }
+    },
+    {
+      "seq": 17,
+      "kind": "model_attempt_started",
+      "data": {
+        "task": "5d7ba953e23e4128876565be9ac8372b",
+        "route": "copilot-live",
+        "kind": "paid",
+        "provider": "omniroute/copilot",
+        "model": "gh/gpt-4o-mini",
+        "endpoint": "http://127.0.0.1:20128/v1",
+        "started_at": "2026-10-08T05:47:04.512151+00:00",
+        "prompt_hash": "d930a4f0bd5a5db5853bd0109cd687a55ddd2c30b9705d9d12405439cb9565a1",
+        "prompt_bytes": 887,
+        "sources": {
+          "notes.md": "b6b82e3bb828d9fb3bfb8f9eb26fd105e23f0bc22fcdae8370a2679ab31445b0"
+        }
+      }
+    },
+    {
+      "seq": 18,
+      "kind": "model_attempt_succeeded",
+      "data": {
+        "task": "5d7ba953e23e4128876565be9ac8372b",
+        "route": "copilot-live",
+        "kind": "paid",
+        "provider": "omniroute/copilot",
+        "model": "gh/gpt-4o-mini",
+        "endpoint": "http://127.0.0.1:20128/v1",
+        "started_at": "2026-10-08T05:47:04.512151+00:00",
+        "prompt_hash": "d930a4f0bd5a5db5853bd0109cd687a55ddd2c30b9705d9d12405439cb9565a1",
+        "prompt_bytes": 887,
+        "sources": {
+          "notes.md": "b6b82e3bb828d9fb3bfb8f9eb26fd105e23f0bc22fcdae8370a2679ab31445b0"
+        },
+        "finished_at": "2026-10-08T05:47:05.778415+00:00",
+        "actual_model": "gpt-4o-mini",
+        "tokens": {
+          "prompt_tokens": 202,
+          "completion_tokens": 30,
+          "total_tokens": 232
+        },
+        "estimated_cost_usd": null
+      }
+    },
+    {
+      "seq": 19,
+      "kind": "model_candidate_received",
+      "data": {
+        "snapshot": {
+          "action": "model_transmission",
+          "prompt_hash": "d930a4f0bd5a5db5853bd0109cd687a55ddd2c30b9705d9d12405439cb9565a1",
+          "prompt_bytes": 887,
+          "request_hash": "e74fc591ec31a7de38a5913c4a9baede7e944c78a196f7b2fb7a72f022fe7d62",
+          "sources": {
+            "notes.md": "b6b82e3bb828d9fb3bfb8f9eb26fd105e23f0bc22fcdae8370a2679ab31445b0"
+          },
+          "policy": {
+            "allow_paid": true,
+            "max_tokens": 1024,
+            "routes": [
+              {
+                "base_url": "http://127.0.0.1:50471/v1",
+                "kind": "paid",
+                "model": "gemini/gemini-3.5-flash",
+                "name": "gemini-injected-fault",
+                "provider": "omniroute/gemini"
+              },
+              {
+                "api_key_env": "NIDUS_VALIDATION_API_KEY",
+                "base_url": "http://127.0.0.1:20128/v1",
+                "kind": "paid",
+                "model": "nvidia/nvidia/nemotron-nano-3-30b-a3b",
+                "name": "nvidia-live",
+                "provider": "omniroute/nvidia"
+              },
+              {
+                "api_key_env": "NIDUS_VALIDATION_API_KEY",
+                "base_url": "http://127.0.0.1:20128/v1",
+                "kind": "paid",
+                "model": "gh/gpt-4o-mini",
+                "name": "copilot-live",
+                "provider": "omniroute/copilot"
+              }
+            ],
+            "timeout_seconds": 60
+          }
+        }
+      }
+    }
+  ],
+  "cli": [
+    {
+      "command": [
+        "init"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "submit"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "run"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "decide"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "run"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "show"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "list"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "list"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "active_count": 0,
+  "archive_count": 1,
+  "fault_injection": {
+    "scope": "local transport fixture; no upstream call for injected routes",
+    "http_status": 503,
+    "request_count": 1,
+    "routes": [
+      "gemini-injected-fault"
+    ],
+    "credentials_forwarded_to_fixture": false
+  },
+  "fallback_sequence": [
+    "gemini-injected-fault",
+    "nvidia-live",
+    "copilot-live"
+  ],
+  "scenario_checks": {
+    "expected_sequence": true,
+    "expected_state": true,
+    "expected_archive": true
+  },
+  "scenario_evaluation_correction": "Initial harness expected NVIDIA success only; corrected to also accept retryable NVIDIA failure followed by real Copilot success. Raw model events unchanged."
+}

@@ -82,3 +82,15 @@ URLs. User explicitly selects nonsensitive inputs; approval is not a sensitivity
 classifier. Literal output requirements are observable, not an assertion of
 semantic correctness for arbitrary work. Live acceptance also reviews the actual
 summary. No account/payment/subscription setup; no forced paid fallback.
+
+
+### Multi-provider validation acceptance — 2026-10-08
+PV-AC-01 Record individual real synthetic Gemini/NVIDIA attempts, identifying
+Blocked providers honestly; catalog/auth checks cannot substitute for inference.
+PV-AC-02 An approved retryable transport fault advances through the ordered
+Gemini/NVIDIA/Copilot policy to real inference and Completed/Archive; distinguish
+injected failures from upstream observations. Persist every attempt in order.
+PV-AC-03 Authentication/policy/secret/permission failures stop without fallback.
+PV-AC-04 Preserve old evidence and credentials; no new billing/security changes.
+Record observed tokens, elapsed attempt latency and unknown costs without fabrication.
+Standalone provider success remains a separate target even when fallback passes.

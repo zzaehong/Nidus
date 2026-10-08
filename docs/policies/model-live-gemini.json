@@ -1,0 +1,15 @@
+{
+  "routes": [
+    {
+      "name": "gemini",
+      "kind": "paid",
+      "provider": "omniroute/gemini",
+      "base_url": "http://127.0.0.1:20128/v1",
+      "model": "gemini/gemini-3.5-flash",
+      "api_key_env": "NIDUS_VALIDATION_API_KEY"
+    }
+  ],
+  "allow_paid": true,
+  "timeout_seconds": 60,
+  "max_tokens": 1024
+}

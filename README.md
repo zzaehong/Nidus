@@ -162,3 +162,10 @@ unset NIDUS_MODEL_API_KEY
 
 Live 명령은 새 실제 호출입니다. 단순 증거 열람은
 [기록된 결과](docs/evidence/model-live-copilot.json)를 확인하세요.
+
+
+## 최신 다중 Provider 검증 — 2026-10-08
+Copilot VERIFIED; Gemini/NVIDIA 단독 생성은 404/400으로 BLOCKED. 명시적인 로컬
+503 장애 주입 후 실제 NVIDIA 429 → Copilot 성공으로 Fallback 완료를 확인했습니다.
+401에서는 후속 호출 없이 차단했습니다. 실제 Provider 장애와 주입 장애를 구분합니다.
+MODEL_PROVIDER_VALIDATION_REPORT.md 및 docs/evidence/model-provider-validation-summary.json 참조.
