@@ -1,0 +1,1553 @@
+{
+  "started_at": "2026-10-08T13:59:46.665647+00:00",
+  "finished_at": "2026-10-08T13:59:54.735328+00:00",
+  "scope": "real model calls on public synthetic data; exact transmission approval only",
+  "source": "# Public synthetic Nidus example\nNidus stores task state in a local vault.\nNidus retains completed task history in an archive.\nReplacing an existing output file requires human approval.\n",
+  "request": "Summarize the supplied public synthetic Nidus example in exactly three concise bullet points. Include the literal phrase Nidus and use only the supplied facts.",
+  "vault": "/var/folders/0n/vbz_lc2n1d18k68mwhlkx5fm0000gn/T/nidus-workflow-live-b8o1tuiq",
+  "status": "blocked",
+  "task": {
+    "id": "f63fca03732f485eaa2d42e1c44222c7",
+    "request": "Summarize the supplied public synthetic Nidus example in exactly three concise bullet points. Include the literal phrase Nidus and use only the supplied facts.",
+    "sources": [
+      "notes.md"
+    ],
+    "output": "results/summary.md",
+    "priority": "do-now",
+    "employee": "worker-1",
+    "status": "blocked",
+    "decisions": [
+      {
+        "decision": "approve",
+        "snapshot": {
+          "action": "model_transmission",
+          "prompt_hash": "3a60de89f39c104742d95f926324803f59046cc24271116d5f56c9d3a48d99b1",
+          "prompt_bytes": 2456,
+          "request_hash": "3b254f4920d5ba94c50f44e22469dc800cce5d0516b4be5388d28763c070ec1c",
+          "sources": {
+            "notes.md": "20d66bb2df15639644e7ab774811a430ecb93797f0f2dc9c84c44f4d2d88d089"
+          },
+          "policy": {
+            "allow_paid": true,
+            "max_tokens": 2048,
+            "routes": [
+              {
+                "api_key_env": "NIDUS_POOL_API_KEY",
+                "base_url": "http://127.0.0.1:20128/v1",
+                "kind": "paid",
+                "model": "gh/gpt-4o-mini",
+                "name": "copilot-validated",
+                "provider": "omniroute/copilot"
+              }
+            ],
+            "timeout_seconds": 60
+          }
+        },
+        "kind": "permission"
+      },
+      {
+        "decision": "approve",
+        "snapshot": {
+          "action": "model_transmission",
+          "prompt_hash": "ffe0ffc38d0cafcb5ef66a3825f11dc36799cfa2dfd730a7718797123a8f0716",
+          "prompt_bytes": 4799,
+          "request_hash": "3b254f4920d5ba94c50f44e22469dc800cce5d0516b4be5388d28763c070ec1c",
+          "sources": {
+            "notes.md": "20d66bb2df15639644e7ab774811a430ecb93797f0f2dc9c84c44f4d2d88d089"
+          },
+          "policy": {
+            "allow_paid": true,
+            "max_tokens": 2048,
+            "routes": [
+              {
+                "api_key_env": "NIDUS_POOL_API_KEY",
+                "base_url": "http://127.0.0.1:20128/v1",
+                "kind": "paid",
+                "model": "gh/gpt-4o-mini",
+                "name": "copilot-validated",
+                "provider": "omniroute/copilot"
+              }
+            ],
+            "timeout_seconds": 60
+          }
+        },
+        "kind": "transmission"
+      },
+      {
+        "decision": "approve",
+        "snapshot": {
+          "action": "model_transmission",
+          "prompt_hash": "f8add54ff87bf7bfc75bba557b0a044275d6e122a67e5d90f391a39ea5d33e11",
+          "prompt_bytes": 3379,
+          "request_hash": "3b254f4920d5ba94c50f44e22469dc800cce5d0516b4be5388d28763c070ec1c",
+          "sources": {
+            "notes.md": "20d66bb2df15639644e7ab774811a430ecb93797f0f2dc9c84c44f4d2d88d089"
+          },
+          "policy": {
+            "allow_paid": true,
+            "max_tokens": 2048,
+            "routes": [
+              {
+                "api_key_env": "NIDUS_POOL_API_KEY",
+                "base_url": "http://127.0.0.1:20128/v1",
+                "kind": "paid",
+                "model": "gh/gpt-4o-mini",
+                "name": "copilot-validated",
+                "provider": "omniroute/copilot"
+              }
+            ],
+            "timeout_seconds": 60
+          }
+        },
+        "kind": "permission"
+      }
+    ],
+    "contract": {
+      "goal": "Summarize the supplied public synthetic Nidus example in exactly three concise bullet points. Include the literal phrase Nidus and use only the supplied facts.",
+      "scope": [
+        "notes.md"
+      ],
+      "constraints": [
+        "UTF-8 text only",
+        "Protect originals",
+        "Exact model transmission approval",
+        "No model tool execution"
+      ],
+      "acceptance_criteria": [
+        "Nonempty untruncated model response",
+        "All required literal phrases: [\"Nidus\"]",
+        "Sources unchanged",
+        "Output matches persisted model response and provenance",
+        "Independent Manager APPROVE on the current submission"
+      ],
+      "verification": "Validate response and required phrases, source/prompt snapshot and exact artifact bytes",
+      "result": null
+    },
+    "mode": "generative",
+    "model_policy": {
+      "allow_paid": true,
+      "max_tokens": 2048,
+      "routes": [
+        {
+          "api_key_env": "NIDUS_POOL_API_KEY",
+          "base_url": "http://127.0.0.1:20128/v1",
+          "kind": "paid",
+          "model": "gh/gpt-4o-mini",
+          "name": "copilot-validated",
+          "provider": "omniroute/copilot"
+        }
+      ],
+      "timeout_seconds": 60
+    },
+    "required_phrases": [
+      "Nidus"
+    ],
+    "workflow": "manager",
+    "workflow_stage": "rework",
+    "manager": "manager-1",
+    "manager_contract": {
+      "available_materials": [
+        "notes.md"
+      ],
+      "completion_criteria": [
+        {
+          "description": "Satisfy the original request, including its format and scope",
+          "id": "C1"
+        },
+        {
+          "description": "Ground all factual claims in supplied sources; add no unsupported facts",
+          "id": "C2"
+        },
+        {
+          "description": "State uncertainty and limitations rather than inventing facts",
+          "id": "C3"
+        }
+      ],
+      "constraints": [
+        "Protect original sources",
+        "Use no unapproved external materials",
+        "No tools or credentials"
+      ],
+      "expected_deliverable": "results/summary.md",
+      "goal": "Summarize the supplied public synthetic Nidus example in exactly three concise bullet points. Include the literal phrase Nidus and use only the supplied facts.",
+      "human_judgment_conditions": [
+        "Insufficient evidence or authority",
+        "Human value judgment required"
+      ],
+      "scope": "Produce the requested document from selected sources only"
+    },
+    "manager_policy": {
+      "allow_paid": true,
+      "max_tokens": 2048,
+      "routes": [
+        {
+          "api_key_env": "NIDUS_POOL_API_KEY",
+          "base_url": "http://127.0.0.1:20128/v1",
+          "kind": "paid",
+          "model": "gh/gpt-4o-mini",
+          "name": "copilot-validated",
+          "provider": "omniroute/copilot"
+        }
+      ],
+      "timeout_seconds": 60
+    },
+    "max_reworks": 1,
+    "rework_count": 1,
+    "revisions": [
+      {
+        "iteration": 0,
+        "generation": {
+          "text": "{\"result\":\"- Nidus stores task state in a local vault.\\n- Nidus retains completed task history in an archive.\\n- Replacing an existing output file requires human approval.\",\"self_check\":[{\"criterion_id\":\"C1\",\"status\":\"satisfied\",\"reason\":\"The request to summarize the Nidus example in three bullet points is fulfilled.\"},{\"criterion_id\":\"C2\",\"status\":\"satisfied\",\"reason\":\"All claims about Nidus are grounded in the supplied source notes.md.\"},{\"criterion_id\":\"C3\",\"status\":\"satisfied\",\"reason\":\"No unsupported facts are presented; all information is derived from the source.\"}],\"known_limitations\":[],\"questions\":[]}",
+          "finish_reason": "stop",
+          "model": "gpt-4o-mini",
+          "tokens": {
+            "prompt_tokens": 488,
+            "completion_tokens": 136,
+            "total_tokens": 624
+          },
+          "estimated_cost_usd": null,
+          "route": "copilot-validated",
+          "provider": "omniroute/copilot",
+          "snapshot": {
+            "action": "model_transmission",
+            "prompt_hash": "3a60de89f39c104742d95f926324803f59046cc24271116d5f56c9d3a48d99b1",
+            "prompt_bytes": 2456,
+            "request_hash": "3b254f4920d5ba94c50f44e22469dc800cce5d0516b4be5388d28763c070ec1c",
+            "sources": {
+              "notes.md": "20d66bb2df15639644e7ab774811a430ecb93797f0f2dc9c84c44f4d2d88d089"
+            },
+            "policy": {
+              "allow_paid": true,
+              "max_tokens": 2048,
+              "routes": [
+                {
+                  "api_key_env": "NIDUS_POOL_API_KEY",
+                  "base_url": "http://127.0.0.1:20128/v1",
+                  "kind": "paid",
+                  "model": "gh/gpt-4o-mini",
+                  "name": "copilot-validated",
+                  "provider": "omniroute/copilot"
+                }
+              ],
+              "timeout_seconds": 60
+            }
+          }
+        },
+        "submission": {
+          "result": "- Nidus stores task state in a local vault.\n- Nidus retains completed task history in an archive.\n- Replacing an existing output file requires human approval.",
+          "self_check": [
+            {
+              "criterion_id": "C1",
+              "status": "satisfied",
+              "reason": "The request to summarize the Nidus example in three bullet points is fulfilled."
+            },
+            {
+              "criterion_id": "C2",
+              "status": "satisfied",
+              "reason": "All claims about Nidus are grounded in the supplied source notes.md."
+            },
+            {
+              "criterion_id": "C3",
+              "status": "satisfied",
+              "reason": "No unsupported facts are presented; all information is derived from the source."
+            }
+          ],
+          "known_limitations": [],
+          "questions": []
+        },
+        "review": {
+          "decision": "REWORK",
+          "criteria": [
+            {
+              "criterion_id": "C1",
+              "status": "satisfied",
+              "reason": "The request to summarize the Nidus example in three bullet points is fulfilled."
+            },
+            {
+              "criterion_id": "C2",
+              "status": "satisfied",
+              "reason": "All claims about Nidus are grounded in the supplied source notes.md."
+            },
+            {
+              "criterion_id": "C3",
+              "status": "unsatisfied",
+              "reason": "The worker did not state uncertainties or limitations which is required by the contract."
+            }
+          ],
+          "reason": "While the summarization of the Nidus example meets some criteria, the failure to acknowledge and state uncertainties or limitations means it does not fully comply with the original request's requirements, particularly criterion C3.",
+          "issues": [
+            "Lack of acknowledgment of uncertainties or limitations within the results."
+          ],
+          "instructions": [
+            "Include a statement of uncertainties or limitations based on the content and context of the source material."
+          ],
+          "questions": [
+            "What limitations or uncertainties are relevant to the provided Nidus summary based on the source?"
+          ]
+        },
+        "candidate_hash": "77273715622628a44f985e488a75b83aceb4eb95e62724bb9c00a7a62827202d",
+        "source_hashes": {
+          "notes.md": "20d66bb2df15639644e7ab774811a430ecb93797f0f2dc9c84c44f4d2d88d089"
+        },
+        "output": "results/summary.md",
+        "verification": {
+          "sources_unchanged": true,
+          "output_matches": true,
+          "candidate_matches": true,
+          "nonempty_response": true,
+          "untruncated_response": true,
+          "required_phrases": true
+        },
+        "instructions": [
+          "Include a statement of uncertainties or limitations based on the content and context of the source material."
+        ],
+        "issues": [
+          "Lack of acknowledgment of uncertainties or limitations within the results."
+        ],
+        "authority": "manager"
+      }
+    ],
+    "reviews": [
+      {
+        "binding": "e94388caad1924c343037ab47ec6853f73d267ef47eb824d5a196957aa276f68",
+        "decision": {
+          "decision": "REWORK",
+          "criteria": [
+            {
+              "criterion_id": "C1",
+              "status": "satisfied",
+              "reason": "The request to summarize the Nidus example in three bullet points is fulfilled."
+            },
+            {
+              "criterion_id": "C2",
+              "status": "satisfied",
+              "reason": "All claims about Nidus are grounded in the supplied source notes.md."
+            },
+            {
+              "criterion_id": "C3",
+              "status": "unsatisfied",
+              "reason": "The worker did not state uncertainties or limitations which is required by the contract."
+            }
+          ],
+          "reason": "While the summarization of the Nidus example meets some criteria, the failure to acknowledge and state uncertainties or limitations means it does not fully comply with the original request's requirements, particularly criterion C3.",
+          "issues": [
+            "Lack of acknowledgment of uncertainties or limitations within the results."
+          ],
+          "instructions": [
+            "Include a statement of uncertainties or limitations based on the content and context of the source material."
+          ],
+          "questions": [
+            "What limitations or uncertainties are relevant to the provided Nidus summary based on the source?"
+          ]
+        },
+        "generation": {
+          "text": "{\"decision\":\"REWORK\",\"criteria\":[{\"criterion_id\":\"C1\",\"status\":\"satisfied\",\"reason\":\"The request to summarize the Nidus example in three bullet points is fulfilled.\"},{\"criterion_id\":\"C2\",\"status\":\"satisfied\",\"reason\":\"All claims about Nidus are grounded in the supplied source notes.md.\"},{\"criterion_id\":\"C3\",\"status\":\"unsatisfied\",\"reason\":\"The worker did not state uncertainties or limitations which is required by the contract.\"}],\"reason\":\"While the summarization of the Nidus example meets some criteria, the failure to acknowledge and state uncertainties or limitations means it does not fully comply with the original request's requirements, particularly criterion C3.\",\"issues\":[\"Lack of acknowledgment of uncertainties or limitations within the results.\"],\"instructions\":[\"Include a statement of uncertainties or limitations based on the content and context of the source material.\"],\"questions\":[\"What limitations or uncertainties are relevant to the provided Nidus summary based on the source?\"]}",
+          "finish_reason": "stop",
+          "model": "gpt-4o-mini",
+          "tokens": {
+            "prompt_tokens": 1049,
+            "completion_tokens": 195,
+            "total_tokens": 1244
+          },
+          "estimated_cost_usd": null,
+          "route": "copilot-validated",
+          "provider": "omniroute/copilot",
+          "snapshot": {
+            "action": "model_transmission",
+            "prompt_hash": "ffe0ffc38d0cafcb5ef66a3825f11dc36799cfa2dfd730a7718797123a8f0716",
+            "prompt_bytes": 4799,
+            "request_hash": "3b254f4920d5ba94c50f44e22469dc800cce5d0516b4be5388d28763c070ec1c",
+            "sources": {
+              "notes.md": "20d66bb2df15639644e7ab774811a430ecb93797f0f2dc9c84c44f4d2d88d089"
+            },
+            "policy": {
+              "allow_paid": true,
+              "max_tokens": 2048,
+              "routes": [
+                {
+                  "api_key_env": "NIDUS_POOL_API_KEY",
+                  "base_url": "http://127.0.0.1:20128/v1",
+                  "kind": "paid",
+                  "model": "gh/gpt-4o-mini",
+                  "name": "copilot-validated",
+                  "provider": "omniroute/copilot"
+                }
+              ],
+              "timeout_seconds": 60
+            }
+          }
+        },
+        "iteration": 0
+      }
+    ],
+    "revision_context": {
+      "previous_result": {
+        "result": "- Nidus stores task state in a local vault.\n- Nidus retains completed task history in an archive.\n- Replacing an existing output file requires human approval.",
+        "self_check": [
+          {
+            "criterion_id": "C1",
+            "status": "satisfied",
+            "reason": "The request to summarize the Nidus example in three bullet points is fulfilled."
+          },
+          {
+            "criterion_id": "C2",
+            "status": "satisfied",
+            "reason": "All claims about Nidus are grounded in the supplied source notes.md."
+          },
+          {
+            "criterion_id": "C3",
+            "status": "satisfied",
+            "reason": "No unsupported facts are presented; all information is derived from the source."
+          }
+        ],
+        "known_limitations": [],
+        "questions": []
+      },
+      "issues": [
+        "Lack of acknowledgment of uncertainties or limitations within the results."
+      ],
+      "instructions": [
+        "Include a statement of uncertainties or limitations based on the content and context of the source material."
+      ],
+      "iteration": 1
+    },
+    "attention": {
+      "subject": "Transmit selected task data to model routes?",
+      "background": "Work request and full selected source text will leave the worker process",
+      "reason": "Network/model data transmission needs an exact scoped decision; a local router may forward externally",
+      "choices": {
+        "approve": "Allow the specified prompt and routes, including only explicitly allowed paid routes",
+        "reject": "Cancel without a model call or output write"
+      },
+      "snapshot": {
+        "action": "model_transmission",
+        "prompt_hash": "f8add54ff87bf7bfc75bba557b0a044275d6e122a67e5d90f391a39ea5d33e11",
+        "prompt_bytes": 3379,
+        "request_hash": "3b254f4920d5ba94c50f44e22469dc800cce5d0516b4be5388d28763c070ec1c",
+        "sources": {
+          "notes.md": "20d66bb2df15639644e7ab774811a430ecb93797f0f2dc9c84c44f4d2d88d089"
+        },
+        "policy": {
+          "allow_paid": true,
+          "max_tokens": 2048,
+          "routes": [
+            {
+              "api_key_env": "NIDUS_POOL_API_KEY",
+              "base_url": "http://127.0.0.1:20128/v1",
+              "kind": "paid",
+              "model": "gh/gpt-4o-mini",
+              "name": "copilot-validated",
+              "provider": "omniroute/copilot"
+            }
+          ],
+          "timeout_seconds": 60
+        }
+      }
+    },
+    "generation": {
+      "text": "{\"result\":\"- Nidus stores task state in a local vault.\\n- Nidus retains completed task history in an archive.\\n- Replacing an existing output file requires human approval.\",\"self_check\":[{\"criterion_id\":\"C1\",\"status\":\"satisfied\",\"reason\":\"The request to summarize the Nidus example in three bullet points is fulfilled.\"},{\"criterion_id\":\"C2\",\"status\":\"satisfied\",\"reason\":\"All claims about Nidus are grounded in the supplied source notes.md.\"},{\"criterion_id\":\"C3\",\"status\":\"satisfied\",\"reason\":\"The summary accurately reflects the source material without unsupported facts.\"}],\"known_limitations\":[],\"questions\":[]}}",
+      "finish_reason": "stop",
+      "model": "gpt-4o-mini",
+      "tokens": {
+        "prompt_tokens": 663,
+        "completion_tokens": 133,
+        "total_tokens": 796
+      },
+      "estimated_cost_usd": null,
+      "route": "copilot-validated",
+      "provider": "omniroute/copilot",
+      "snapshot": {
+        "action": "model_transmission",
+        "prompt_hash": "f8add54ff87bf7bfc75bba557b0a044275d6e122a67e5d90f391a39ea5d33e11",
+        "prompt_bytes": 3379,
+        "request_hash": "3b254f4920d5ba94c50f44e22469dc800cce5d0516b4be5388d28763c070ec1c",
+        "sources": {
+          "notes.md": "20d66bb2df15639644e7ab774811a430ecb93797f0f2dc9c84c44f4d2d88d089"
+        },
+        "policy": {
+          "allow_paid": true,
+          "max_tokens": 2048,
+          "routes": [
+            {
+              "api_key_env": "NIDUS_POOL_API_KEY",
+              "base_url": "http://127.0.0.1:20128/v1",
+              "kind": "paid",
+              "model": "gh/gpt-4o-mini",
+              "name": "copilot-validated",
+              "provider": "omniroute/copilot"
+            }
+          ],
+          "timeout_seconds": 60
+        }
+      }
+    },
+    "error": "Model gateway: invalid_workflow_response",
+    "model_error": {
+      "code": "invalid_workflow_response",
+      "retryable": false,
+      "http_status": null,
+      "next_step": "review_configuration_or_response"
+    },
+    "history": [
+      {
+        "seq": 1,
+        "kind": "submitted",
+        "data": {
+          "status": "queued"
+        }
+      },
+      {
+        "seq": 2,
+        "kind": "manager_task_defined",
+        "data": {
+          "manager": "manager-1",
+          "contract": {
+            "available_materials": [
+              "notes.md"
+            ],
+            "completion_criteria": [
+              {
+                "description": "Satisfy the original request, including its format and scope",
+                "id": "C1"
+              },
+              {
+                "description": "Ground all factual claims in supplied sources; add no unsupported facts",
+                "id": "C2"
+              },
+              {
+                "description": "State uncertainty and limitations rather than inventing facts",
+                "id": "C3"
+              }
+            ],
+            "constraints": [
+              "Protect original sources",
+              "Use no unapproved external materials",
+              "No tools or credentials"
+            ],
+            "expected_deliverable": "results/summary.md",
+            "goal": "Summarize the supplied public synthetic Nidus example in exactly three concise bullet points. Include the literal phrase Nidus and use only the supplied facts.",
+            "human_judgment_conditions": [
+              "Insufficient evidence or authority",
+              "Human value judgment required"
+            ],
+            "scope": "Produce the requested document from selected sources only"
+          },
+          "assigned_worker": "worker-1"
+        }
+      },
+      {
+        "seq": 3,
+        "kind": "context_recovered",
+        "data": {
+          "order": [
+            "home",
+            "desk",
+            "task_board",
+            "library"
+          ],
+          "previous_reference": null,
+          "board_status": "queued",
+          "sources": {
+            "notes.md": "20d66bb2df15639644e7ab774811a430ecb93797f0f2dc9c84c44f4d2d88d089"
+          }
+        }
+      },
+      {
+        "seq": 4,
+        "kind": "desk_checkpoint",
+        "data": {
+          "task": "f63fca03732f485eaa2d42e1c44222c7",
+          "board_status": "queued",
+          "library": [
+            "notes.md"
+          ],
+          "next_action": "execute",
+          "native_notes": []
+        }
+      },
+      {
+        "seq": 5,
+        "kind": "claimed",
+        "data": {
+          "status": "running"
+        }
+      },
+      {
+        "seq": 6,
+        "kind": "model_permission_ask",
+        "data": {
+          "subject": "Transmit selected task data to model routes?",
+          "background": "Work request and full selected source text will leave the worker process",
+          "reason": "Network/model data transmission needs an exact scoped decision; a local router may forward externally",
+          "choices": {
+            "approve": "Allow the specified prompt and routes, including only explicitly allowed paid routes",
+            "reject": "Cancel without a model call or output write"
+          },
+          "snapshot": {
+            "action": "model_transmission",
+            "prompt_hash": "3a60de89f39c104742d95f926324803f59046cc24271116d5f56c9d3a48d99b1",
+            "prompt_bytes": 2456,
+            "request_hash": "3b254f4920d5ba94c50f44e22469dc800cce5d0516b4be5388d28763c070ec1c",
+            "sources": {
+              "notes.md": "20d66bb2df15639644e7ab774811a430ecb93797f0f2dc9c84c44f4d2d88d089"
+            },
+            "policy": {
+              "allow_paid": true,
+              "max_tokens": 2048,
+              "routes": [
+                {
+                  "api_key_env": "NIDUS_POOL_API_KEY",
+                  "base_url": "http://127.0.0.1:20128/v1",
+                  "kind": "paid",
+                  "model": "gh/gpt-4o-mini",
+                  "name": "copilot-validated",
+                  "provider": "omniroute/copilot"
+                }
+              ],
+              "timeout_seconds": 60
+            }
+          }
+        }
+      },
+      {
+        "seq": 7,
+        "kind": "desk_checkpoint",
+        "data": {
+          "task": "f63fca03732f485eaa2d42e1c44222c7",
+          "board_status": "waiting",
+          "library": [
+            "notes.md"
+          ],
+          "next_action": "await_human",
+          "native_notes": []
+        }
+      },
+      {
+        "seq": 8,
+        "kind": "human_decision",
+        "data": {
+          "decision": "approve",
+          "snapshot": {
+            "action": "model_transmission",
+            "prompt_hash": "3a60de89f39c104742d95f926324803f59046cc24271116d5f56c9d3a48d99b1",
+            "prompt_bytes": 2456,
+            "request_hash": "3b254f4920d5ba94c50f44e22469dc800cce5d0516b4be5388d28763c070ec1c",
+            "sources": {
+              "notes.md": "20d66bb2df15639644e7ab774811a430ecb93797f0f2dc9c84c44f4d2d88d089"
+            },
+            "policy": {
+              "allow_paid": true,
+              "max_tokens": 2048,
+              "routes": [
+                {
+                  "api_key_env": "NIDUS_POOL_API_KEY",
+                  "base_url": "http://127.0.0.1:20128/v1",
+                  "kind": "paid",
+                  "model": "gh/gpt-4o-mini",
+                  "name": "copilot-validated",
+                  "provider": "omniroute/copilot"
+                }
+              ],
+              "timeout_seconds": 60
+            }
+          },
+          "kind": "permission"
+        }
+      },
+      {
+        "seq": 9,
+        "kind": "desk_checkpoint",
+        "data": {
+          "task": "f63fca03732f485eaa2d42e1c44222c7",
+          "board_status": "queued",
+          "library": [
+            "notes.md"
+          ],
+          "next_action": "recover",
+          "native_notes": []
+        }
+      },
+      {
+        "seq": 10,
+        "kind": "context_recovered",
+        "data": {
+          "order": [
+            "home",
+            "desk",
+            "task_board",
+            "library"
+          ],
+          "previous_reference": "queued",
+          "board_status": "queued",
+          "sources": {
+            "notes.md": "20d66bb2df15639644e7ab774811a430ecb93797f0f2dc9c84c44f4d2d88d089"
+          }
+        }
+      },
+      {
+        "seq": 11,
+        "kind": "desk_checkpoint",
+        "data": {
+          "task": "f63fca03732f485eaa2d42e1c44222c7",
+          "board_status": "queued",
+          "library": [
+            "notes.md"
+          ],
+          "next_action": "execute",
+          "native_notes": []
+        }
+      },
+      {
+        "seq": 12,
+        "kind": "claimed",
+        "data": {
+          "status": "running"
+        }
+      },
+      {
+        "seq": 13,
+        "kind": "model_permission_allow",
+        "data": {
+          "action": "model_transmission",
+          "prompt_hash": "3a60de89f39c104742d95f926324803f59046cc24271116d5f56c9d3a48d99b1",
+          "prompt_bytes": 2456,
+          "request_hash": "3b254f4920d5ba94c50f44e22469dc800cce5d0516b4be5388d28763c070ec1c",
+          "sources": {
+            "notes.md": "20d66bb2df15639644e7ab774811a430ecb93797f0f2dc9c84c44f4d2d88d089"
+          },
+          "policy": {
+            "allow_paid": true,
+            "max_tokens": 2048,
+            "routes": [
+              {
+                "api_key_env": "NIDUS_POOL_API_KEY",
+                "base_url": "http://127.0.0.1:20128/v1",
+                "kind": "paid",
+                "model": "gh/gpt-4o-mini",
+                "name": "copilot-validated",
+                "provider": "omniroute/copilot"
+              }
+            ],
+            "timeout_seconds": 60
+          }
+        }
+      },
+      {
+        "seq": 14,
+        "kind": "model_attempt_started",
+        "data": {
+          "task": "f63fca03732f485eaa2d42e1c44222c7",
+          "route": "copilot-validated",
+          "kind": "paid",
+          "provider": "omniroute/copilot",
+          "model": "gh/gpt-4o-mini",
+          "endpoint": "http://127.0.0.1:20128/v1",
+          "started_at": "2026-10-08T13:59:47.216944+00:00",
+          "prompt_hash": "3a60de89f39c104742d95f926324803f59046cc24271116d5f56c9d3a48d99b1",
+          "prompt_bytes": 2456,
+          "sources": {
+            "notes.md": "20d66bb2df15639644e7ab774811a430ecb93797f0f2dc9c84c44f4d2d88d089"
+          },
+          "role": "worker"
+        }
+      },
+      {
+        "seq": 15,
+        "kind": "model_attempt_succeeded",
+        "data": {
+          "task": "f63fca03732f485eaa2d42e1c44222c7",
+          "route": "copilot-validated",
+          "kind": "paid",
+          "provider": "omniroute/copilot",
+          "model": "gh/gpt-4o-mini",
+          "endpoint": "http://127.0.0.1:20128/v1",
+          "started_at": "2026-10-08T13:59:47.216944+00:00",
+          "prompt_hash": "3a60de89f39c104742d95f926324803f59046cc24271116d5f56c9d3a48d99b1",
+          "prompt_bytes": 2456,
+          "sources": {
+            "notes.md": "20d66bb2df15639644e7ab774811a430ecb93797f0f2dc9c84c44f4d2d88d089"
+          },
+          "role": "worker",
+          "finished_at": "2026-10-08T13:59:48.856202+00:00",
+          "actual_model": "gpt-4o-mini",
+          "tokens": {
+            "prompt_tokens": 488,
+            "completion_tokens": 136,
+            "total_tokens": 624
+          },
+          "estimated_cost_usd": null
+        }
+      },
+      {
+        "seq": 16,
+        "kind": "worker_submitted",
+        "data": {
+          "result": "- Nidus stores task state in a local vault.\n- Nidus retains completed task history in an archive.\n- Replacing an existing output file requires human approval.",
+          "self_check": [
+            {
+              "criterion_id": "C1",
+              "status": "satisfied",
+              "reason": "The request to summarize the Nidus example in three bullet points is fulfilled."
+            },
+            {
+              "criterion_id": "C2",
+              "status": "satisfied",
+              "reason": "All claims about Nidus are grounded in the supplied source notes.md."
+            },
+            {
+              "criterion_id": "C3",
+              "status": "satisfied",
+              "reason": "No unsupported facts are presented; all information is derived from the source."
+            }
+          ],
+          "known_limitations": [],
+          "questions": []
+        }
+      },
+      {
+        "seq": 17,
+        "kind": "model_candidate_received",
+        "data": {
+          "snapshot": {
+            "action": "model_transmission",
+            "prompt_hash": "3a60de89f39c104742d95f926324803f59046cc24271116d5f56c9d3a48d99b1",
+            "prompt_bytes": 2456,
+            "request_hash": "3b254f4920d5ba94c50f44e22469dc800cce5d0516b4be5388d28763c070ec1c",
+            "sources": {
+              "notes.md": "20d66bb2df15639644e7ab774811a430ecb93797f0f2dc9c84c44f4d2d88d089"
+            },
+            "policy": {
+              "allow_paid": true,
+              "max_tokens": 2048,
+              "routes": [
+                {
+                  "api_key_env": "NIDUS_POOL_API_KEY",
+                  "base_url": "http://127.0.0.1:20128/v1",
+                  "kind": "paid",
+                  "model": "gh/gpt-4o-mini",
+                  "name": "copilot-validated",
+                  "provider": "omniroute/copilot"
+                }
+              ],
+              "timeout_seconds": 60
+            }
+          }
+        }
+      },
+      {
+        "seq": 18,
+        "kind": "permission_allow",
+        "data": {
+          "employee": "worker-1",
+          "resource": "results/summary.md",
+          "action": "write",
+          "risk": "scoped-local",
+          "snapshot": {
+            "sources": {
+              "notes.md": "20d66bb2df15639644e7ab774811a430ecb93797f0f2dc9c84c44f4d2d88d089"
+            },
+            "output": "results/summary.md",
+            "output_hash": null
+          }
+        }
+      },
+      {
+        "seq": 19,
+        "kind": "write_intent",
+        "data": {
+          "status": "running"
+        }
+      },
+      {
+        "seq": 20,
+        "kind": "candidate_written",
+        "data": {
+          "recovered_write": false
+        }
+      },
+      {
+        "seq": 21,
+        "kind": "desk_checkpoint",
+        "data": {
+          "task": "f63fca03732f485eaa2d42e1c44222c7",
+          "board_status": "verifying",
+          "library": [
+            "notes.md"
+          ],
+          "next_action": "verify",
+          "native_notes": []
+        }
+      },
+      {
+        "seq": 22,
+        "kind": "model_permission_ask",
+        "data": {
+          "kind": "transmission",
+          "role": "manager",
+          "subject": "Transmit result and selected sources for Manager review?",
+          "background": "Original request, contract, Worker result/self-check, selected sources and execution metadata",
+          "reason": "Manager review is a separate external transmission with an exact prompt/policy scope",
+          "choices": {
+            "approve": "Allow only this review prompt and configured routes",
+            "reject": "Cancel without Manager transmission"
+          },
+          "snapshot": {
+            "action": "model_transmission",
+            "prompt_hash": "ffe0ffc38d0cafcb5ef66a3825f11dc36799cfa2dfd730a7718797123a8f0716",
+            "prompt_bytes": 4799,
+            "request_hash": "3b254f4920d5ba94c50f44e22469dc800cce5d0516b4be5388d28763c070ec1c",
+            "sources": {
+              "notes.md": "20d66bb2df15639644e7ab774811a430ecb93797f0f2dc9c84c44f4d2d88d089"
+            },
+            "policy": {
+              "allow_paid": true,
+              "max_tokens": 2048,
+              "routes": [
+                {
+                  "api_key_env": "NIDUS_POOL_API_KEY",
+                  "base_url": "http://127.0.0.1:20128/v1",
+                  "kind": "paid",
+                  "model": "gh/gpt-4o-mini",
+                  "name": "copilot-validated",
+                  "provider": "omniroute/copilot"
+                }
+              ],
+              "timeout_seconds": 60
+            }
+          },
+          "resume_status": "verifying"
+        }
+      },
+      {
+        "seq": 23,
+        "kind": "desk_checkpoint",
+        "data": {
+          "task": "f63fca03732f485eaa2d42e1c44222c7",
+          "board_status": "waiting",
+          "library": [
+            "notes.md"
+          ],
+          "next_action": "await_manager_transmission_approval",
+          "native_notes": []
+        }
+      },
+      {
+        "seq": 24,
+        "kind": "human_decision",
+        "data": {
+          "decision": "approve",
+          "snapshot": {
+            "action": "model_transmission",
+            "prompt_hash": "ffe0ffc38d0cafcb5ef66a3825f11dc36799cfa2dfd730a7718797123a8f0716",
+            "prompt_bytes": 4799,
+            "request_hash": "3b254f4920d5ba94c50f44e22469dc800cce5d0516b4be5388d28763c070ec1c",
+            "sources": {
+              "notes.md": "20d66bb2df15639644e7ab774811a430ecb93797f0f2dc9c84c44f4d2d88d089"
+            },
+            "policy": {
+              "allow_paid": true,
+              "max_tokens": 2048,
+              "routes": [
+                {
+                  "api_key_env": "NIDUS_POOL_API_KEY",
+                  "base_url": "http://127.0.0.1:20128/v1",
+                  "kind": "paid",
+                  "model": "gh/gpt-4o-mini",
+                  "name": "copilot-validated",
+                  "provider": "omniroute/copilot"
+                }
+              ],
+              "timeout_seconds": 60
+            }
+          },
+          "kind": "transmission"
+        }
+      },
+      {
+        "seq": 25,
+        "kind": "desk_checkpoint",
+        "data": {
+          "task": "f63fca03732f485eaa2d42e1c44222c7",
+          "board_status": "verifying",
+          "library": [
+            "notes.md"
+          ],
+          "next_action": "recover",
+          "native_notes": []
+        }
+      },
+      {
+        "seq": 26,
+        "kind": "context_recovered",
+        "data": {
+          "order": [
+            "home",
+            "desk",
+            "task_board",
+            "library"
+          ],
+          "previous_reference": "verifying",
+          "board_status": "verifying",
+          "sources": {
+            "notes.md": "20d66bb2df15639644e7ab774811a430ecb93797f0f2dc9c84c44f4d2d88d089"
+          }
+        }
+      },
+      {
+        "seq": 27,
+        "kind": "desk_checkpoint",
+        "data": {
+          "task": "f63fca03732f485eaa2d42e1c44222c7",
+          "board_status": "verifying",
+          "library": [
+            "notes.md"
+          ],
+          "next_action": "verify",
+          "native_notes": []
+        }
+      },
+      {
+        "seq": 28,
+        "kind": "model_permission_allow",
+        "data": {
+          "action": "model_transmission",
+          "prompt_hash": "ffe0ffc38d0cafcb5ef66a3825f11dc36799cfa2dfd730a7718797123a8f0716",
+          "prompt_bytes": 4799,
+          "request_hash": "3b254f4920d5ba94c50f44e22469dc800cce5d0516b4be5388d28763c070ec1c",
+          "sources": {
+            "notes.md": "20d66bb2df15639644e7ab774811a430ecb93797f0f2dc9c84c44f4d2d88d089"
+          },
+          "policy": {
+            "allow_paid": true,
+            "max_tokens": 2048,
+            "routes": [
+              {
+                "api_key_env": "NIDUS_POOL_API_KEY",
+                "base_url": "http://127.0.0.1:20128/v1",
+                "kind": "paid",
+                "model": "gh/gpt-4o-mini",
+                "name": "copilot-validated",
+                "provider": "omniroute/copilot"
+              }
+            ],
+            "timeout_seconds": 60
+          }
+        }
+      },
+      {
+        "seq": 29,
+        "kind": "model_attempt_started",
+        "data": {
+          "task": "f63fca03732f485eaa2d42e1c44222c7",
+          "route": "copilot-validated",
+          "kind": "paid",
+          "provider": "omniroute/copilot",
+          "model": "gh/gpt-4o-mini",
+          "endpoint": "http://127.0.0.1:20128/v1",
+          "started_at": "2026-10-08T13:59:49.195682+00:00",
+          "prompt_hash": "ffe0ffc38d0cafcb5ef66a3825f11dc36799cfa2dfd730a7718797123a8f0716",
+          "prompt_bytes": 4799,
+          "sources": {
+            "notes.md": "20d66bb2df15639644e7ab774811a430ecb93797f0f2dc9c84c44f4d2d88d089"
+          },
+          "role": "manager"
+        }
+      },
+      {
+        "seq": 30,
+        "kind": "model_attempt_succeeded",
+        "data": {
+          "task": "f63fca03732f485eaa2d42e1c44222c7",
+          "route": "copilot-validated",
+          "kind": "paid",
+          "provider": "omniroute/copilot",
+          "model": "gh/gpt-4o-mini",
+          "endpoint": "http://127.0.0.1:20128/v1",
+          "started_at": "2026-10-08T13:59:49.195682+00:00",
+          "prompt_hash": "ffe0ffc38d0cafcb5ef66a3825f11dc36799cfa2dfd730a7718797123a8f0716",
+          "prompt_bytes": 4799,
+          "sources": {
+            "notes.md": "20d66bb2df15639644e7ab774811a430ecb93797f0f2dc9c84c44f4d2d88d089"
+          },
+          "role": "manager",
+          "finished_at": "2026-10-08T13:59:52.232009+00:00",
+          "actual_model": "gpt-4o-mini",
+          "tokens": {
+            "prompt_tokens": 1049,
+            "completion_tokens": 195,
+            "total_tokens": 1244
+          },
+          "estimated_cost_usd": null
+        }
+      },
+      {
+        "seq": 31,
+        "kind": "manager_response_received",
+        "data": {
+          "snapshot": {
+            "action": "model_transmission",
+            "prompt_hash": "ffe0ffc38d0cafcb5ef66a3825f11dc36799cfa2dfd730a7718797123a8f0716",
+            "prompt_bytes": 4799,
+            "request_hash": "3b254f4920d5ba94c50f44e22469dc800cce5d0516b4be5388d28763c070ec1c",
+            "sources": {
+              "notes.md": "20d66bb2df15639644e7ab774811a430ecb93797f0f2dc9c84c44f4d2d88d089"
+            },
+            "policy": {
+              "allow_paid": true,
+              "max_tokens": 2048,
+              "routes": [
+                {
+                  "api_key_env": "NIDUS_POOL_API_KEY",
+                  "base_url": "http://127.0.0.1:20128/v1",
+                  "kind": "paid",
+                  "model": "gh/gpt-4o-mini",
+                  "name": "copilot-validated",
+                  "provider": "omniroute/copilot"
+                }
+              ],
+              "timeout_seconds": 60
+            }
+          }
+        }
+      },
+      {
+        "seq": 32,
+        "kind": "manager_reviewed",
+        "data": {
+          "binding": "e94388caad1924c343037ab47ec6853f73d267ef47eb824d5a196957aa276f68",
+          "decision": {
+            "decision": "REWORK",
+            "criteria": [
+              {
+                "criterion_id": "C1",
+                "status": "satisfied",
+                "reason": "The request to summarize the Nidus example in three bullet points is fulfilled."
+              },
+              {
+                "criterion_id": "C2",
+                "status": "satisfied",
+                "reason": "All claims about Nidus are grounded in the supplied source notes.md."
+              },
+              {
+                "criterion_id": "C3",
+                "status": "unsatisfied",
+                "reason": "The worker did not state uncertainties or limitations which is required by the contract."
+              }
+            ],
+            "reason": "While the summarization of the Nidus example meets some criteria, the failure to acknowledge and state uncertainties or limitations means it does not fully comply with the original request's requirements, particularly criterion C3.",
+            "issues": [
+              "Lack of acknowledgment of uncertainties or limitations within the results."
+            ],
+            "instructions": [
+              "Include a statement of uncertainties or limitations based on the content and context of the source material."
+            ],
+            "questions": [
+              "What limitations or uncertainties are relevant to the provided Nidus summary based on the source?"
+            ]
+          },
+          "generation": {
+            "text": "{\"decision\":\"REWORK\",\"criteria\":[{\"criterion_id\":\"C1\",\"status\":\"satisfied\",\"reason\":\"The request to summarize the Nidus example in three bullet points is fulfilled.\"},{\"criterion_id\":\"C2\",\"status\":\"satisfied\",\"reason\":\"All claims about Nidus are grounded in the supplied source notes.md.\"},{\"criterion_id\":\"C3\",\"status\":\"unsatisfied\",\"reason\":\"The worker did not state uncertainties or limitations which is required by the contract.\"}],\"reason\":\"While the summarization of the Nidus example meets some criteria, the failure to acknowledge and state uncertainties or limitations means it does not fully comply with the original request's requirements, particularly criterion C3.\",\"issues\":[\"Lack of acknowledgment of uncertainties or limitations within the results.\"],\"instructions\":[\"Include a statement of uncertainties or limitations based on the content and context of the source material.\"],\"questions\":[\"What limitations or uncertainties are relevant to the provided Nidus summary based on the source?\"]}",
+            "finish_reason": "stop",
+            "model": "gpt-4o-mini",
+            "tokens": {
+              "prompt_tokens": 1049,
+              "completion_tokens": 195,
+              "total_tokens": 1244
+            },
+            "estimated_cost_usd": null,
+            "route": "copilot-validated",
+            "provider": "omniroute/copilot",
+            "snapshot": {
+              "action": "model_transmission",
+              "prompt_hash": "ffe0ffc38d0cafcb5ef66a3825f11dc36799cfa2dfd730a7718797123a8f0716",
+              "prompt_bytes": 4799,
+              "request_hash": "3b254f4920d5ba94c50f44e22469dc800cce5d0516b4be5388d28763c070ec1c",
+              "sources": {
+                "notes.md": "20d66bb2df15639644e7ab774811a430ecb93797f0f2dc9c84c44f4d2d88d089"
+              },
+              "policy": {
+                "allow_paid": true,
+                "max_tokens": 2048,
+                "routes": [
+                  {
+                    "api_key_env": "NIDUS_POOL_API_KEY",
+                    "base_url": "http://127.0.0.1:20128/v1",
+                    "kind": "paid",
+                    "model": "gh/gpt-4o-mini",
+                    "name": "copilot-validated",
+                    "provider": "omniroute/copilot"
+                  }
+                ],
+                "timeout_seconds": 60
+              }
+            }
+          },
+          "iteration": 0
+        }
+      },
+      {
+        "seq": 33,
+        "kind": "rework_requested",
+        "data": {
+          "previous_result": {
+            "result": "- Nidus stores task state in a local vault.\n- Nidus retains completed task history in an archive.\n- Replacing an existing output file requires human approval.",
+            "self_check": [
+              {
+                "criterion_id": "C1",
+                "status": "satisfied",
+                "reason": "The request to summarize the Nidus example in three bullet points is fulfilled."
+              },
+              {
+                "criterion_id": "C2",
+                "status": "satisfied",
+                "reason": "All claims about Nidus are grounded in the supplied source notes.md."
+              },
+              {
+                "criterion_id": "C3",
+                "status": "satisfied",
+                "reason": "No unsupported facts are presented; all information is derived from the source."
+              }
+            ],
+            "known_limitations": [],
+            "questions": []
+          },
+          "issues": [
+            "Lack of acknowledgment of uncertainties or limitations within the results."
+          ],
+          "instructions": [
+            "Include a statement of uncertainties or limitations based on the content and context of the source material."
+          ],
+          "iteration": 1
+        }
+      },
+      {
+        "seq": 34,
+        "kind": "desk_checkpoint",
+        "data": {
+          "task": "f63fca03732f485eaa2d42e1c44222c7",
+          "board_status": "queued",
+          "library": [
+            "notes.md"
+          ],
+          "next_action": "worker_revision",
+          "native_notes": []
+        }
+      },
+      {
+        "seq": 35,
+        "kind": "context_recovered",
+        "data": {
+          "order": [
+            "home",
+            "desk",
+            "task_board",
+            "library"
+          ],
+          "previous_reference": "queued",
+          "board_status": "queued",
+          "sources": {
+            "notes.md": "20d66bb2df15639644e7ab774811a430ecb93797f0f2dc9c84c44f4d2d88d089"
+          }
+        }
+      },
+      {
+        "seq": 36,
+        "kind": "desk_checkpoint",
+        "data": {
+          "task": "f63fca03732f485eaa2d42e1c44222c7",
+          "board_status": "queued",
+          "library": [
+            "notes.md"
+          ],
+          "next_action": "execute",
+          "native_notes": []
+        }
+      },
+      {
+        "seq": 37,
+        "kind": "claimed",
+        "data": {
+          "status": "running"
+        }
+      },
+      {
+        "seq": 38,
+        "kind": "model_permission_ask",
+        "data": {
+          "subject": "Transmit selected task data to model routes?",
+          "background": "Work request and full selected source text will leave the worker process",
+          "reason": "Network/model data transmission needs an exact scoped decision; a local router may forward externally",
+          "choices": {
+            "approve": "Allow the specified prompt and routes, including only explicitly allowed paid routes",
+            "reject": "Cancel without a model call or output write"
+          },
+          "snapshot": {
+            "action": "model_transmission",
+            "prompt_hash": "f8add54ff87bf7bfc75bba557b0a044275d6e122a67e5d90f391a39ea5d33e11",
+            "prompt_bytes": 3379,
+            "request_hash": "3b254f4920d5ba94c50f44e22469dc800cce5d0516b4be5388d28763c070ec1c",
+            "sources": {
+              "notes.md": "20d66bb2df15639644e7ab774811a430ecb93797f0f2dc9c84c44f4d2d88d089"
+            },
+            "policy": {
+              "allow_paid": true,
+              "max_tokens": 2048,
+              "routes": [
+                {
+                  "api_key_env": "NIDUS_POOL_API_KEY",
+                  "base_url": "http://127.0.0.1:20128/v1",
+                  "kind": "paid",
+                  "model": "gh/gpt-4o-mini",
+                  "name": "copilot-validated",
+                  "provider": "omniroute/copilot"
+                }
+              ],
+              "timeout_seconds": 60
+            }
+          }
+        }
+      },
+      {
+        "seq": 39,
+        "kind": "desk_checkpoint",
+        "data": {
+          "task": "f63fca03732f485eaa2d42e1c44222c7",
+          "board_status": "waiting",
+          "library": [
+            "notes.md"
+          ],
+          "next_action": "await_human",
+          "native_notes": []
+        }
+      },
+      {
+        "seq": 40,
+        "kind": "human_decision",
+        "data": {
+          "decision": "approve",
+          "snapshot": {
+            "action": "model_transmission",
+            "prompt_hash": "f8add54ff87bf7bfc75bba557b0a044275d6e122a67e5d90f391a39ea5d33e11",
+            "prompt_bytes": 3379,
+            "request_hash": "3b254f4920d5ba94c50f44e22469dc800cce5d0516b4be5388d28763c070ec1c",
+            "sources": {
+              "notes.md": "20d66bb2df15639644e7ab774811a430ecb93797f0f2dc9c84c44f4d2d88d089"
+            },
+            "policy": {
+              "allow_paid": true,
+              "max_tokens": 2048,
+              "routes": [
+                {
+                  "api_key_env": "NIDUS_POOL_API_KEY",
+                  "base_url": "http://127.0.0.1:20128/v1",
+                  "kind": "paid",
+                  "model": "gh/gpt-4o-mini",
+                  "name": "copilot-validated",
+                  "provider": "omniroute/copilot"
+                }
+              ],
+              "timeout_seconds": 60
+            }
+          },
+          "kind": "permission"
+        }
+      },
+      {
+        "seq": 41,
+        "kind": "desk_checkpoint",
+        "data": {
+          "task": "f63fca03732f485eaa2d42e1c44222c7",
+          "board_status": "queued",
+          "library": [
+            "notes.md"
+          ],
+          "next_action": "recover",
+          "native_notes": []
+        }
+      },
+      {
+        "seq": 42,
+        "kind": "context_recovered",
+        "data": {
+          "order": [
+            "home",
+            "desk",
+            "task_board",
+            "library"
+          ],
+          "previous_reference": "queued",
+          "board_status": "queued",
+          "sources": {
+            "notes.md": "20d66bb2df15639644e7ab774811a430ecb93797f0f2dc9c84c44f4d2d88d089"
+          }
+        }
+      },
+      {
+        "seq": 43,
+        "kind": "desk_checkpoint",
+        "data": {
+          "task": "f63fca03732f485eaa2d42e1c44222c7",
+          "board_status": "queued",
+          "library": [
+            "notes.md"
+          ],
+          "next_action": "execute",
+          "native_notes": []
+        }
+      },
+      {
+        "seq": 44,
+        "kind": "claimed",
+        "data": {
+          "status": "running"
+        }
+      },
+      {
+        "seq": 45,
+        "kind": "model_permission_allow",
+        "data": {
+          "action": "model_transmission",
+          "prompt_hash": "f8add54ff87bf7bfc75bba557b0a044275d6e122a67e5d90f391a39ea5d33e11",
+          "prompt_bytes": 3379,
+          "request_hash": "3b254f4920d5ba94c50f44e22469dc800cce5d0516b4be5388d28763c070ec1c",
+          "sources": {
+            "notes.md": "20d66bb2df15639644e7ab774811a430ecb93797f0f2dc9c84c44f4d2d88d089"
+          },
+          "policy": {
+            "allow_paid": true,
+            "max_tokens": 2048,
+            "routes": [
+              {
+                "api_key_env": "NIDUS_POOL_API_KEY",
+                "base_url": "http://127.0.0.1:20128/v1",
+                "kind": "paid",
+                "model": "gh/gpt-4o-mini",
+                "name": "copilot-validated",
+                "provider": "omniroute/copilot"
+              }
+            ],
+            "timeout_seconds": 60
+          }
+        }
+      },
+      {
+        "seq": 46,
+        "kind": "model_attempt_started",
+        "data": {
+          "task": "f63fca03732f485eaa2d42e1c44222c7",
+          "route": "copilot-validated",
+          "kind": "paid",
+          "provider": "omniroute/copilot",
+          "model": "gh/gpt-4o-mini",
+          "endpoint": "http://127.0.0.1:20128/v1",
+          "started_at": "2026-10-08T13:59:52.694139+00:00",
+          "prompt_hash": "f8add54ff87bf7bfc75bba557b0a044275d6e122a67e5d90f391a39ea5d33e11",
+          "prompt_bytes": 3379,
+          "sources": {
+            "notes.md": "20d66bb2df15639644e7ab774811a430ecb93797f0f2dc9c84c44f4d2d88d089"
+          },
+          "role": "worker"
+        }
+      },
+      {
+        "seq": 47,
+        "kind": "model_attempt_succeeded",
+        "data": {
+          "task": "f63fca03732f485eaa2d42e1c44222c7",
+          "route": "copilot-validated",
+          "kind": "paid",
+          "provider": "omniroute/copilot",
+          "model": "gh/gpt-4o-mini",
+          "endpoint": "http://127.0.0.1:20128/v1",
+          "started_at": "2026-10-08T13:59:52.694139+00:00",
+          "prompt_hash": "f8add54ff87bf7bfc75bba557b0a044275d6e122a67e5d90f391a39ea5d33e11",
+          "prompt_bytes": 3379,
+          "sources": {
+            "notes.md": "20d66bb2df15639644e7ab774811a430ecb93797f0f2dc9c84c44f4d2d88d089"
+          },
+          "role": "worker",
+          "finished_at": "2026-10-08T13:59:54.565971+00:00",
+          "actual_model": "gpt-4o-mini",
+          "tokens": {
+            "prompt_tokens": 663,
+            "completion_tokens": 133,
+            "total_tokens": 796
+          },
+          "estimated_cost_usd": null
+        }
+      },
+      {
+        "seq": 48,
+        "kind": "blocked",
+        "data": {
+          "reason": "Model gateway: invalid_workflow_response"
+        }
+      },
+      {
+        "seq": 49,
+        "kind": "desk_checkpoint",
+        "data": {
+          "task": "f63fca03732f485eaa2d42e1c44222c7",
+          "board_status": "blocked",
+          "library": [
+            "notes.md"
+          ],
+          "next_action": "review_blocker",
+          "native_notes": []
+        }
+      }
+    ]
+  },
+  "cli": [
+    {
+      "command": "submit",
+      "exit_code": 0
+    },
+    {
+      "command": "run",
+      "exit_code": 0
+    },
+    {
+      "command": "decide",
+      "exit_code": 0
+    },
+    {
+      "command": "run",
+      "exit_code": 0
+    },
+    {
+      "command": "decide",
+      "exit_code": 0
+    },
+    {
+      "command": "run",
+      "exit_code": 0
+    },
+    {
+      "command": "run",
+      "exit_code": 0
+    },
+    {
+      "command": "decide",
+      "exit_code": 0
+    },
+    {
+      "command": "run",
+      "exit_code": 2
+    },
+    {
+      "command": "show",
+      "exit_code": 2
+    },
+    {
+      "command": "list",
+      "exit_code": 0
+    },
+    {
+      "command": "list",
+      "exit_code": 0
+    }
+  ],
+  "active_count": 1,
+  "archive_count": 0
+}

@@ -120,3 +120,14 @@ class GatewayTests(unittest.TestCase):
         with self.assertRaisesRegex(ModelError, 'acceptance_failed'):
             Gateway(fake).generate(self.task, self.records, lambda *event: events.append(event))
         self.assertNotIn('model_attempt_succeeded', [kind for kind, detail in events])
+
+    def test_json_mode_is_explicit_in_policy_snapshot_and_transport(self):
+        self.task['model_policy'] = validate_policy(dict(self.policy, response_format='json_object'))
+        approved = transmission(self.task, self.records)
+        self.assertEqual(approved['policy']['response_format'], 'json_object')
+        with patch('urllib.request.OpenerDirector.open', return_value=self.response()) as opened:
+            ChatCompletions().generate(self.route, [], self.task['model_policy'])
+            payload = json.loads(opened.call_args.args[0].data)
+            self.assertEqual(payload['response_format'], {'type':'json_object'})
+        with self.assertRaises(ModelError):
+            validate_policy(dict(self.policy, response_format='anything'))

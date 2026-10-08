@@ -46,12 +46,14 @@ def default_policy():
 
 
 def validate_policy(value):
-    if not isinstance(value, dict) or set(value) - {'routes', 'allow_paid', 'timeout_seconds', 'max_tokens'}:
+    if not isinstance(value, dict) or set(value) - {'routes', 'allow_paid', 'timeout_seconds', 'max_tokens', 'response_format'}:
         raise ModelError('invalid_policy')
     value = dict(value)
     value.setdefault('allow_paid', False)
     value.setdefault('timeout_seconds', 30)
     value.setdefault('max_tokens', 1024)
+    if 'response_format' in value and value['response_format'] != 'json_object':
+        raise ModelError('invalid_policy')
     if type(value['allow_paid']) is not bool:
         raise ModelError('invalid_policy')
     for name, low, high in [('timeout_seconds', 1, 60), ('max_tokens', 1, 4096)]:
@@ -166,6 +168,8 @@ class ChatCompletions:
             headers['Authorization'] = 'Bearer ' + secret
         payload = {'model': route['model'], 'messages': messages,
                    'max_tokens': policy['max_tokens'], 'stream': False}
+        if policy.get('response_format') == 'json_object':
+            payload['response_format'] = {'type':'json_object'}
         request = urllib.request.Request(route['base_url'].rstrip('/') + '/chat/completions',
             data=canonical(payload).encode('utf-8'), headers=headers, method='POST')
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())

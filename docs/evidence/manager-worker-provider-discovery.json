@@ -1,0 +1,14 @@
+{
+  "observed_date": "2026-10-08",
+  "endpoint": "http://127.0.0.1:20128/v1/models",
+  "http_status": 200,
+  "scope": "configured model IDs present in catalog using existing NIDUS_POOL_API_KEY; no credential value recorded",
+  "configured_models_present": [
+    "gh/gpt-4o-mini"
+  ],
+  "configured_models_absent": [
+    "gemini/gemini-3.5-flash-lite",
+    "nvidia/nvidia/nemotron-3.5-lightning-30b-a3b"
+  ],
+  "interpretation": "Catalog presence does not prove generation; separate real Copilot evidence succeeds. Gemini call returned 400; complete cause unconfirmed. NVIDIA not called in this slice."
+}

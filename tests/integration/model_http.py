@@ -22,6 +22,17 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         value = {'model': 'loopback-fake', 'choices': [{'message': {'content': 'Nidus keeps tasks local and verifies completion.'},
                  'finish_reason': 'stop'}], 'usage': {'prompt_tokens': 25, 'completion_tokens': 12, 'total_tokens': 37}}
+        if self.server.managed:
+            items = [{'criterion_id':'C'+str(i), 'status':'satisfied', 'reason':'Checked source and result'}
+                     for i in range(1,4)]
+            manager = 'You are Manager' in self.server.calls[-1]['messages'][0]['content']
+            content = ({'decision':'APPROVE', 'criteria':items, 'reason':'All original requirements met',
+                        'issues':[], 'instructions':[], 'questions':[]} if manager else
+                       {'result':'Nidus keeps tasks local.', 'self_check':items, 'known_limitations':[], 'questions':[]})
+            if manager and self.server.escalate:
+                content.update(decision='ESCALATE', reason='A human must choose the policy',
+                               questions=['Which policy should apply?'])
+            value['choices'][0]['message']['content'] = json.dumps(content)
         if self.server.response_status != 200:
             value = {'error': 'SENSITIVE_TEST_KEY must never be persisted from an error body'}
         self.wfile.write(json.dumps(value).encode())
@@ -37,6 +48,8 @@ class HttpIntegration(unittest.TestCase):
         self.server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
         self.server.calls = []
         self.server.response_status = 200
+        self.server.managed = False
+        self.server.escalate = False
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
         policy = {'routes': [{'name': 'fake-local', 'kind': 'local', 'provider': 'loopback-fake',
@@ -58,7 +71,7 @@ class HttpIntegration(unittest.TestCase):
 
     def prepare(self):
         task = self.cli('submit', 'Summarize Nidus', '--mode', 'generative', '--model-policy', str(self.policy),
-                        '--source', 'notes.md', '--output', 'result.md', '--require', 'Nidus')
+                        '--source', 'notes.md', '--output', 'result.md', '--require', 'Nidus', '--workflow', 'legacy')
         self.assertEqual(self.cli('run', task['id'])['status'], 'waiting')
         self.assertEqual(len(self.server.calls), 0)
         self.cli('decide', task['id'], 'approve')
@@ -92,6 +105,43 @@ class HttpIntegration(unittest.TestCase):
         result = self.cli('run', task['id'], code=2)
         self.assertEqual(result['model_error']['code'], 'redirect_denied')
         self.assertEqual(len(self.server.calls), 1)
+
+    def test_managed_cli_default_review_restart_and_archive(self):
+        self.server.managed = True
+        task = self.cli('submit', 'Summarize Nidus', '--mode','generative', '--model-policy',str(self.policy),
+                        '--source','notes.md','--output','result.md','--require','Nidus')
+        self.assertEqual(task['workflow'], 'manager')
+        self.assertEqual(self.cli('run',task['id'])['status'], 'waiting')
+        self.assertEqual(len(self.server.calls), 0)
+        self.cli('decide',task['id'],'approve')
+        review = self.cli('run',task['id'])
+        self.assertEqual(review['attention']['role'], 'manager')
+        self.assertEqual(len(self.server.calls), 1)
+        self.cli('decide',task['id'],'approve')
+        self.assertEqual(self.cli('run',task['id'],'--review-only')['status'], 'verifying')
+        self.assertEqual(self.cli('run',task['id'])['status'], 'completed')
+        self.assertEqual(len(self.server.calls), 2)
+        self.assertEqual(self.cli('list'), [])
+        self.assertEqual(len(self.cli('list','--archive')), 1)
+        self.assertEqual(self.server.calls[0]['response_format'], {'type':'json_object'})
+
+    def test_quality_decision_cli_is_distinct_from_permission_approval(self):
+        self.server.managed = True
+        self.server.escalate = True
+        task = self.cli('submit','Summarize Nidus','--mode','generative','--model-policy',str(self.policy),
+                        '--source','notes.md','--output','result.md')
+        self.cli('run',task['id'])
+        self.cli('decide',task['id'],'approve')
+        self.cli('run',task['id'])
+        self.cli('decide',task['id'],'approve')
+        waiting = self.cli('run',task['id'])
+        self.assertEqual(waiting['attention']['kind'], 'quality')
+        self.cli('quality-decide',task['id'],'approve','--note','Human selects the current policy')
+        completed = self.cli('run',task['id'])
+        self.assertEqual(completed['status'], 'completed')
+        self.assertEqual(completed['manager_approval']['authority'], 'human')
+        self.assertEqual(completed['manager_review']['decision'], 'ESCALATE')
+        self.assertEqual(len(self.server.calls), 2)
 
 
 if __name__ == '__main__':

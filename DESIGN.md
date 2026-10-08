@@ -4,6 +4,20 @@
 
 ## 한국어
 
+### 핵심 업무 순환 구현
+
+`nidus/workflow.py`는 별도 검증 객체가 아니라 Manager/Worker 계약·지침·업무 전이를 제공한다. `manager-1`과 `worker-1`은 역할 식별자이고 Provider와 독립적이다. `--contract`는 명시 계약 JSON, `--manager-policy`는 검토용 별도 정책이다. 생략하면 기본 계약과 Worker 정책을 사용한다. 기존 SQLite Task JSON을 확장하며 Schema 1과 기존 Task는 유지한다.
+
+Worker는 `result/self_check/known_limitations/questions`, Manager는 `decision/criteria/reason/issues/instructions/questions` JSON을 반환한다. 모든 기준 ID가 정확히 한 번 나타나야 한다. JSON mode(`response_format=json_object`)를 기존 Gateway 정책·전송 Snapshot에 포함하고 Chat Completions payload로 전달한다. 형식/정상 종료/Secret 실패는 차단하며 임의 JSON 수리나 성공 전환을 하지 않는다. Manager APPROVE에는 모든 기준 satisfied, 빈 issues/instructions/questions가 필요하다. REWORK에는 구체적 지적과 수정 지시, ESCALATE에는 질문이 필수다.
+
+결정적 검사 뒤 Manager가 실제 결과를 독립적으로 검토한다. Worker와 Manager의 Prompt·정책은 별도 전송 승인을 받는다. Manager 문맥은 선택 자료/계약/제출/현재 실행 Metadata로 제한하며 Home·전체 Vault를 전송하지 않는다. 양 역할의 알려진 키 문자열을 모든 역할 입력·출력에서 차단한다. JSON mode 미지원 Provider는 오류로 차단될 수 있다.
+
+`workflow_stage`는 worker_execution/manager_review/rework/human_review/done을 사용하고 기존 Board 상태를 재사용한다. REWORK는 한 run을 종료한 뒤 다음 명시적 run으로 재개한다. 이전 응답·자기 점검·검토·해시·수정 지시를 `revisions`와 `reviews`에 보존한다. 동일 경로·원문·바이트로 소유가 확인된 이전 후보만 추가 교체 승인 없이 갱신하며, 사람이 수정했다면 기존 교체 승인을 다시 받는다. 새 재작업 Prompt는 별도로 승인한다.
+
+승인은 요청/계약/원문/결과/자기 점검/정책/검증/후보 해시에 바인딩된다. 검토 후 파일과 원문을 재확인하며 변경 시 승인을 제거하고 Blocked로 둔다. `--review-only`는 승인 후 완료 전 Checkpoint다. 유효한 저장 승인으로 재시작하면 모델을 재호출하지 않는다; 검토 전 Verifying은 Manager 호출이 필요할 수 있다.
+
+ESCALATE/한도는 품질 안건 Waiting이다. `quality-decide`는 이유를 필수로 받아 approve/rework/cancel을 기록하며, 일반 `decide`로 품질 안건을 승인할 수 없다. 인간 approve는 Manager의 ESCALATE/REWORK를 APPROVE로 바꾸지 않고 `authority=human`으로 별도 책임을 기록한 뒤 결정적 검증을 다시 수행한다. 오래된 안건은 승인할 수 없다. 전체 다중 직원 조직/자동 계획/자동 모델 최적화는 구현하지 않았다.
+
 ### 실행 단위와 상태 소유권
 
 한 동기식 Python CLI 프로세스가 선택한 Vault를 운영한다. 지속적인 `worker-1`은 Operations/document analyst이며 Home 정체성에 모델을 배치하지 않는다.
@@ -24,7 +38,7 @@ Running → Waiting → Queued (approve) / Cancelled (reject)
 Error → Blocked → explicit run to retry
 ```
 
-Waiting은 덮어쓰기 또는 모델 전송 판단을 기다린다. 저장된 Running은 실행을, Verifying은 검증을 복구한다.
+Waiting은 덮어쓰기·모델 전송 또는 별도의 업무 품질 판단을 기다린다. 저장된 Running은 실행을, Verifying은 검증을 복구한다.
 `run --execute-only`는 결과 저장 후 검증 전에 체크포인트를 남긴다. 완료/취소는 재실행하지 않는다.
 모든 Task 전이는 DB에 트랜잭션으로 보존하지만 DB·파일시스템·Git 사이에 단일 트랜잭션은 없다.
 
@@ -57,7 +71,7 @@ Secret Store 탐색이나 무관한 Credential 재사용은 하지 않는다. �
 ### 검증·오류·복구·관측
 
 응답을 파일 쓰기 전에 보존한다. 생성형 검증은 비어 있지 않음·정상 종료·필수 문구·원문 Snapshot·보존 응답과 출처를 포함한 정확한 결과 바이트를 확인한다.
-Verifying은 모델을 다시 부르지 않는다. 전송 이후 원문이 바뀌면 쓰기를 차단하고 다음 run에서 재승인한다.
+Legacy Verifying 또는 승인된 Manager 검토를 복구할 때는 모델을 다시 부르지 않는다. 전송 이후 원문이 바뀌면 쓰기를 차단하고 다음 run에서 재승인한다.
 원격 성공 직후 응답 저장 전 crash는 명시적 재시도 시 중복 호출/비용을 유발할 수 있다. exactly-once 실행과 전체 wall-clock deadline은 보장하지 않는다.
 
 | 실패 | 코드/정책 |
@@ -82,6 +96,20 @@ Live harness는 기존 evidence 경로를 덮어쓰지 않는다. 개발 검증 
 
 ## English
 
+### Core responsibility implementation
+
+`nidus/workflow.py` implements Manager/Worker contracts, instructions and transitions, not a verifier object. `manager-1`/`worker-1` role identifiers are independent of providers. `--contract` supplies explicit JSON; `--manager-policy` independently selects review routes. Defaults persist a Manager contract and reuse Worker policy without an extra planning call. Task JSON extends existing schema 1 without migrating legacy tasks.
+
+Worker returns result/self_check/known_limitations/questions; Manager returns decision/criteria/reason/issues/instructions/questions. Every criterion appears exactly once. JSON mode (`response_format=json_object`) is included in the existing Gateway policy, exact transmission snapshot and Chat Completions payload. Reject malformed/truncated/credential-bearing responses without speculative repair. APPROVE requires satisfied criteria and no outstanding issues/instructions/questions; REWORK needs concrete issues/instructions; ESCALATE needs questions. Unsupported JSON-mode providers may fail closed.
+
+Manager independently reviews after deterministic PASS. Approve Worker and Manager transmissions separately; send only selected sources, contract, submission and current execution metadata, never Home or the whole vault. Check both role credential references across inputs and outputs.
+
+Keep existing Board states; workflow_stage is worker_execution/manager_review/rework/human_review/done. Each REWORK returns control, and the next explicit run resumes with prior result/issues/instructions. Preserve response, self-check, review, hashes and instructions in revisions/reviews. Only an unchanged owned candidate at the same path/source hashes may be replaced without another overwrite decision. Human edits require renewed overwrite permission, and revision prompts need new transmission approval.
+
+Bind approval to original request, contract, sources, actual result/self-check, policies, checks and candidate hash. Recheck resources after review; changes invalidate approval and block completion. --review-only checkpoints approval before completion. Restart with valid saved approval makes no new model call; Verifying before review can still need a Manager call.
+
+Escalation/limits produce a quality Waiting agenda. quality-decide records a required reason for approve/rework/cancel; ordinary decide cannot approve quality agendas. Human approval preserves Manager's original ESCALATE/REWORK and records authority=human, followed by deterministic checks. Stale agendas cannot be approved. Full organization, automatic planning/model optimization remain unimplemented.
+
 ### Execution units and state ownership
 
 One synchronous Python CLI process operates a selected vault. Persistent `worker-1` is an Operations/document analyst; its Home identity contains no model assignment.
@@ -102,7 +130,7 @@ Running → Waiting → Queued (approve) / Cancelled (reject)
 Error → Blocked → explicit run to retry
 ```
 
-Waiting requests overwrite or model-transmission decisions. Persisted Running recovers execution; Verifying recovers verification.
+Waiting requests overwrite/model-transmission or separate work-quality decisions. Persisted Running recovers execution; Verifying recovers verification.
 `run --execute-only` checkpoints after writing and before verification. Completed/cancelled tasks are not rerun.
 Task transitions persist transactionally in SQLite, but DB/filesystem/Git do not share one transaction.
 
@@ -135,7 +163,7 @@ Treat source text as untrusted data; model output is inert text. General DLP and
 ### Verification, errors, recovery and observability
 
 Retain the response before writing. Generative verification checks nonempty content, normal finish, literal phrases, source snapshot and exact result bytes including retained response/provenance.
-Verifying never recalls the model. Source changes after transmission block writes and require reapproval on the next run.
+Legacy Verifying and recovery of an already-approved Manager review never recall the model. Source changes after transmission block writes and require reapproval on the next run.
 A crash after remote success but before response persistence can cause duplicate calls/costs on explicit retry. Exactly-once execution and a total wall-clock deadline are not guaranteed.
 
 | Failure | Code/policy |

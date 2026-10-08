@@ -1,0 +1,639 @@
+{
+  "started_at": "2026-10-08T13:57:59.348814+00:00",
+  "finished_at": "2026-10-08T13:58:00.098518+00:00",
+  "scope": "real model calls on public synthetic data; exact transmission approval only",
+  "source": "# Public synthetic Nidus example\nNidus stores task state in a local vault.\nOriginal source documents are protected from replacement.\nCompletion requires deterministic checks and Manager approval or an explicit human quality decision.\n",
+  "request": "Summarize the supplied public synthetic Nidus example in exactly three concise bullet points. Include the literal phrase Nidus and use only the supplied facts.",
+  "vault": "/var/folders/0n/vbz_lc2n1d18k68mwhlkx5fm0000gn/T/nidus-workflow-live-hmsaik4m",
+  "status": "blocked",
+  "task": {
+    "id": "4b5a4d69378b451c9d068521df49ade4",
+    "request": "Summarize the supplied public synthetic Nidus example in exactly three concise bullet points. Include the literal phrase Nidus and use only the supplied facts.",
+    "sources": [
+      "notes.md"
+    ],
+    "output": "results/summary.md",
+    "priority": "do-now",
+    "employee": "worker-1",
+    "status": "blocked",
+    "decisions": [
+      {
+        "decision": "approve",
+        "snapshot": {
+          "action": "model_transmission",
+          "prompt_hash": "6fac247d54ee17a333bef55c9d4f0506138d94015d5596e63c8920b52eb75973",
+          "prompt_bytes": 2354,
+          "request_hash": "3b254f4920d5ba94c50f44e22469dc800cce5d0516b4be5388d28763c070ec1c",
+          "sources": {
+            "notes.md": "1b60432504c1920db9d7dcfadcd1e20d36469abc455c4295a978c516ab80da97"
+          },
+          "policy": {
+            "allow_paid": true,
+            "max_tokens": 1024,
+            "routes": [
+              {
+                "api_key_env": "NIDUS_POOL_API_KEY",
+                "base_url": "http://127.0.0.1:20128/v1",
+                "kind": "paid",
+                "model": "gemini/gemini-3.5-flash-lite",
+                "name": "gemini-validated",
+                "provider": "omniroute/gemini"
+              },
+              {
+                "api_key_env": "NIDUS_POOL_API_KEY",
+                "base_url": "http://127.0.0.1:20128/v1",
+                "kind": "paid",
+                "model": "nvidia/nvidia/nemotron-3.5-lightning-30b-a3b",
+                "name": "nvidia-validated",
+                "provider": "omniroute/nvidia"
+              },
+              {
+                "api_key_env": "NIDUS_POOL_API_KEY",
+                "base_url": "http://127.0.0.1:20128/v1",
+                "kind": "paid",
+                "model": "gh/gpt-4o-mini",
+                "name": "copilot-validated",
+                "provider": "omniroute/copilot"
+              }
+            ],
+            "timeout_seconds": 60
+          }
+        },
+        "kind": "permission"
+      }
+    ],
+    "contract": {
+      "goal": "Summarize the supplied public synthetic Nidus example in exactly three concise bullet points. Include the literal phrase Nidus and use only the supplied facts.",
+      "scope": [
+        "notes.md"
+      ],
+      "constraints": [
+        "UTF-8 text only",
+        "Protect originals",
+        "Exact model transmission approval",
+        "No model tool execution"
+      ],
+      "acceptance_criteria": [
+        "Nonempty untruncated model response",
+        "All required literal phrases: [\"Nidus\"]",
+        "Sources unchanged",
+        "Output matches persisted model response and provenance",
+        "Independent Manager APPROVE on the current submission"
+      ],
+      "verification": "Validate response and required phrases, source/prompt snapshot and exact artifact bytes",
+      "result": null
+    },
+    "mode": "generative",
+    "model_policy": {
+      "allow_paid": true,
+      "max_tokens": 1024,
+      "routes": [
+        {
+          "api_key_env": "NIDUS_POOL_API_KEY",
+          "base_url": "http://127.0.0.1:20128/v1",
+          "kind": "paid",
+          "model": "gemini/gemini-3.5-flash-lite",
+          "name": "gemini-validated",
+          "provider": "omniroute/gemini"
+        },
+        {
+          "api_key_env": "NIDUS_POOL_API_KEY",
+          "base_url": "http://127.0.0.1:20128/v1",
+          "kind": "paid",
+          "model": "nvidia/nvidia/nemotron-3.5-lightning-30b-a3b",
+          "name": "nvidia-validated",
+          "provider": "omniroute/nvidia"
+        },
+        {
+          "api_key_env": "NIDUS_POOL_API_KEY",
+          "base_url": "http://127.0.0.1:20128/v1",
+          "kind": "paid",
+          "model": "gh/gpt-4o-mini",
+          "name": "copilot-validated",
+          "provider": "omniroute/copilot"
+        }
+      ],
+      "timeout_seconds": 60
+    },
+    "required_phrases": [
+      "Nidus"
+    ],
+    "workflow": "manager",
+    "workflow_stage": "worker_execution",
+    "manager": "manager-1",
+    "manager_contract": {
+      "available_materials": [
+        "notes.md"
+      ],
+      "completion_criteria": [
+        {
+          "description": "Satisfy the original request, including its format and scope",
+          "id": "C1"
+        },
+        {
+          "description": "Ground all factual claims in supplied sources; add no unsupported facts",
+          "id": "C2"
+        },
+        {
+          "description": "State uncertainty and limitations rather than inventing facts",
+          "id": "C3"
+        }
+      ],
+      "constraints": [
+        "Protect original sources",
+        "Use no unapproved external materials",
+        "No tools or credentials"
+      ],
+      "expected_deliverable": "results/summary.md",
+      "goal": "Summarize the supplied public synthetic Nidus example in exactly three concise bullet points. Include the literal phrase Nidus and use only the supplied facts.",
+      "human_judgment_conditions": [
+        "Insufficient evidence or authority",
+        "Human value judgment required"
+      ],
+      "scope": "Produce the requested document from selected sources only"
+    },
+    "manager_policy": {
+      "allow_paid": true,
+      "max_tokens": 1024,
+      "routes": [
+        {
+          "api_key_env": "NIDUS_POOL_API_KEY",
+          "base_url": "http://127.0.0.1:20128/v1",
+          "kind": "paid",
+          "model": "gemini/gemini-3.5-flash-lite",
+          "name": "gemini-validated",
+          "provider": "omniroute/gemini"
+        },
+        {
+          "api_key_env": "NIDUS_POOL_API_KEY",
+          "base_url": "http://127.0.0.1:20128/v1",
+          "kind": "paid",
+          "model": "nvidia/nvidia/nemotron-3.5-lightning-30b-a3b",
+          "name": "nvidia-validated",
+          "provider": "omniroute/nvidia"
+        },
+        {
+          "api_key_env": "NIDUS_POOL_API_KEY",
+          "base_url": "http://127.0.0.1:20128/v1",
+          "kind": "paid",
+          "model": "gh/gpt-4o-mini",
+          "name": "copilot-validated",
+          "provider": "omniroute/copilot"
+        }
+      ],
+      "timeout_seconds": 60
+    },
+    "max_reworks": 1,
+    "rework_count": 0,
+    "revisions": [],
+    "reviews": [],
+    "attention": {
+      "subject": "Transmit selected task data to model routes?",
+      "background": "Work request and full selected source text will leave the worker process",
+      "reason": "Network/model data transmission needs an exact scoped decision; a local router may forward externally",
+      "choices": {
+        "approve": "Allow the specified prompt and routes, including only explicitly allowed paid routes",
+        "reject": "Cancel without a model call or output write"
+      },
+      "snapshot": {
+        "action": "model_transmission",
+        "prompt_hash": "6fac247d54ee17a333bef55c9d4f0506138d94015d5596e63c8920b52eb75973",
+        "prompt_bytes": 2354,
+        "request_hash": "3b254f4920d5ba94c50f44e22469dc800cce5d0516b4be5388d28763c070ec1c",
+        "sources": {
+          "notes.md": "1b60432504c1920db9d7dcfadcd1e20d36469abc455c4295a978c516ab80da97"
+        },
+        "policy": {
+          "allow_paid": true,
+          "max_tokens": 1024,
+          "routes": [
+            {
+              "api_key_env": "NIDUS_POOL_API_KEY",
+              "base_url": "http://127.0.0.1:20128/v1",
+              "kind": "paid",
+              "model": "gemini/gemini-3.5-flash-lite",
+              "name": "gemini-validated",
+              "provider": "omniroute/gemini"
+            },
+            {
+              "api_key_env": "NIDUS_POOL_API_KEY",
+              "base_url": "http://127.0.0.1:20128/v1",
+              "kind": "paid",
+              "model": "nvidia/nvidia/nemotron-3.5-lightning-30b-a3b",
+              "name": "nvidia-validated",
+              "provider": "omniroute/nvidia"
+            },
+            {
+              "api_key_env": "NIDUS_POOL_API_KEY",
+              "base_url": "http://127.0.0.1:20128/v1",
+              "kind": "paid",
+              "model": "gh/gpt-4o-mini",
+              "name": "copilot-validated",
+              "provider": "omniroute/copilot"
+            }
+          ],
+          "timeout_seconds": 60
+        }
+      }
+    },
+    "error": "Model gateway: invalid_request",
+    "model_error": {
+      "code": "invalid_request",
+      "retryable": false,
+      "http_status": 400,
+      "next_step": "review_configuration_or_response"
+    },
+    "history": [
+      {
+        "seq": 1,
+        "kind": "submitted",
+        "data": {
+          "status": "queued"
+        }
+      },
+      {
+        "seq": 2,
+        "kind": "manager_task_defined",
+        "data": {
+          "manager": "manager-1",
+          "contract": {
+            "available_materials": [
+              "notes.md"
+            ],
+            "completion_criteria": [
+              {
+                "description": "Satisfy the original request, including its format and scope",
+                "id": "C1"
+              },
+              {
+                "description": "Ground all factual claims in supplied sources; add no unsupported facts",
+                "id": "C2"
+              },
+              {
+                "description": "State uncertainty and limitations rather than inventing facts",
+                "id": "C3"
+              }
+            ],
+            "constraints": [
+              "Protect original sources",
+              "Use no unapproved external materials",
+              "No tools or credentials"
+            ],
+            "expected_deliverable": "results/summary.md",
+            "goal": "Summarize the supplied public synthetic Nidus example in exactly three concise bullet points. Include the literal phrase Nidus and use only the supplied facts.",
+            "human_judgment_conditions": [
+              "Insufficient evidence or authority",
+              "Human value judgment required"
+            ],
+            "scope": "Produce the requested document from selected sources only"
+          },
+          "assigned_worker": "worker-1"
+        }
+      },
+      {
+        "seq": 3,
+        "kind": "context_recovered",
+        "data": {
+          "order": [
+            "home",
+            "desk",
+            "task_board",
+            "library"
+          ],
+          "previous_reference": null,
+          "board_status": "queued",
+          "sources": {
+            "notes.md": "1b60432504c1920db9d7dcfadcd1e20d36469abc455c4295a978c516ab80da97"
+          }
+        }
+      },
+      {
+        "seq": 4,
+        "kind": "desk_checkpoint",
+        "data": {
+          "task": "4b5a4d69378b451c9d068521df49ade4",
+          "board_status": "queued",
+          "library": [
+            "notes.md"
+          ],
+          "next_action": "execute",
+          "native_notes": []
+        }
+      },
+      {
+        "seq": 5,
+        "kind": "claimed",
+        "data": {
+          "status": "running"
+        }
+      },
+      {
+        "seq": 6,
+        "kind": "model_permission_ask",
+        "data": {
+          "subject": "Transmit selected task data to model routes?",
+          "background": "Work request and full selected source text will leave the worker process",
+          "reason": "Network/model data transmission needs an exact scoped decision; a local router may forward externally",
+          "choices": {
+            "approve": "Allow the specified prompt and routes, including only explicitly allowed paid routes",
+            "reject": "Cancel without a model call or output write"
+          },
+          "snapshot": {
+            "action": "model_transmission",
+            "prompt_hash": "6fac247d54ee17a333bef55c9d4f0506138d94015d5596e63c8920b52eb75973",
+            "prompt_bytes": 2354,
+            "request_hash": "3b254f4920d5ba94c50f44e22469dc800cce5d0516b4be5388d28763c070ec1c",
+            "sources": {
+              "notes.md": "1b60432504c1920db9d7dcfadcd1e20d36469abc455c4295a978c516ab80da97"
+            },
+            "policy": {
+              "allow_paid": true,
+              "max_tokens": 1024,
+              "routes": [
+                {
+                  "api_key_env": "NIDUS_POOL_API_KEY",
+                  "base_url": "http://127.0.0.1:20128/v1",
+                  "kind": "paid",
+                  "model": "gemini/gemini-3.5-flash-lite",
+                  "name": "gemini-validated",
+                  "provider": "omniroute/gemini"
+                },
+                {
+                  "api_key_env": "NIDUS_POOL_API_KEY",
+                  "base_url": "http://127.0.0.1:20128/v1",
+                  "kind": "paid",
+                  "model": "nvidia/nvidia/nemotron-3.5-lightning-30b-a3b",
+                  "name": "nvidia-validated",
+                  "provider": "omniroute/nvidia"
+                },
+                {
+                  "api_key_env": "NIDUS_POOL_API_KEY",
+                  "base_url": "http://127.0.0.1:20128/v1",
+                  "kind": "paid",
+                  "model": "gh/gpt-4o-mini",
+                  "name": "copilot-validated",
+                  "provider": "omniroute/copilot"
+                }
+              ],
+              "timeout_seconds": 60
+            }
+          }
+        }
+      },
+      {
+        "seq": 7,
+        "kind": "desk_checkpoint",
+        "data": {
+          "task": "4b5a4d69378b451c9d068521df49ade4",
+          "board_status": "waiting",
+          "library": [
+            "notes.md"
+          ],
+          "next_action": "await_human",
+          "native_notes": []
+        }
+      },
+      {
+        "seq": 8,
+        "kind": "human_decision",
+        "data": {
+          "decision": "approve",
+          "snapshot": {
+            "action": "model_transmission",
+            "prompt_hash": "6fac247d54ee17a333bef55c9d4f0506138d94015d5596e63c8920b52eb75973",
+            "prompt_bytes": 2354,
+            "request_hash": "3b254f4920d5ba94c50f44e22469dc800cce5d0516b4be5388d28763c070ec1c",
+            "sources": {
+              "notes.md": "1b60432504c1920db9d7dcfadcd1e20d36469abc455c4295a978c516ab80da97"
+            },
+            "policy": {
+              "allow_paid": true,
+              "max_tokens": 1024,
+              "routes": [
+                {
+                  "api_key_env": "NIDUS_POOL_API_KEY",
+                  "base_url": "http://127.0.0.1:20128/v1",
+                  "kind": "paid",
+                  "model": "gemini/gemini-3.5-flash-lite",
+                  "name": "gemini-validated",
+                  "provider": "omniroute/gemini"
+                },
+                {
+                  "api_key_env": "NIDUS_POOL_API_KEY",
+                  "base_url": "http://127.0.0.1:20128/v1",
+                  "kind": "paid",
+                  "model": "nvidia/nvidia/nemotron-3.5-lightning-30b-a3b",
+                  "name": "nvidia-validated",
+                  "provider": "omniroute/nvidia"
+                },
+                {
+                  "api_key_env": "NIDUS_POOL_API_KEY",
+                  "base_url": "http://127.0.0.1:20128/v1",
+                  "kind": "paid",
+                  "model": "gh/gpt-4o-mini",
+                  "name": "copilot-validated",
+                  "provider": "omniroute/copilot"
+                }
+              ],
+              "timeout_seconds": 60
+            }
+          },
+          "kind": "permission"
+        }
+      },
+      {
+        "seq": 9,
+        "kind": "desk_checkpoint",
+        "data": {
+          "task": "4b5a4d69378b451c9d068521df49ade4",
+          "board_status": "queued",
+          "library": [
+            "notes.md"
+          ],
+          "next_action": "recover",
+          "native_notes": []
+        }
+      },
+      {
+        "seq": 10,
+        "kind": "context_recovered",
+        "data": {
+          "order": [
+            "home",
+            "desk",
+            "task_board",
+            "library"
+          ],
+          "previous_reference": "queued",
+          "board_status": "queued",
+          "sources": {
+            "notes.md": "1b60432504c1920db9d7dcfadcd1e20d36469abc455c4295a978c516ab80da97"
+          }
+        }
+      },
+      {
+        "seq": 11,
+        "kind": "desk_checkpoint",
+        "data": {
+          "task": "4b5a4d69378b451c9d068521df49ade4",
+          "board_status": "queued",
+          "library": [
+            "notes.md"
+          ],
+          "next_action": "execute",
+          "native_notes": []
+        }
+      },
+      {
+        "seq": 12,
+        "kind": "claimed",
+        "data": {
+          "status": "running"
+        }
+      },
+      {
+        "seq": 13,
+        "kind": "model_permission_allow",
+        "data": {
+          "action": "model_transmission",
+          "prompt_hash": "6fac247d54ee17a333bef55c9d4f0506138d94015d5596e63c8920b52eb75973",
+          "prompt_bytes": 2354,
+          "request_hash": "3b254f4920d5ba94c50f44e22469dc800cce5d0516b4be5388d28763c070ec1c",
+          "sources": {
+            "notes.md": "1b60432504c1920db9d7dcfadcd1e20d36469abc455c4295a978c516ab80da97"
+          },
+          "policy": {
+            "allow_paid": true,
+            "max_tokens": 1024,
+            "routes": [
+              {
+                "api_key_env": "NIDUS_POOL_API_KEY",
+                "base_url": "http://127.0.0.1:20128/v1",
+                "kind": "paid",
+                "model": "gemini/gemini-3.5-flash-lite",
+                "name": "gemini-validated",
+                "provider": "omniroute/gemini"
+              },
+              {
+                "api_key_env": "NIDUS_POOL_API_KEY",
+                "base_url": "http://127.0.0.1:20128/v1",
+                "kind": "paid",
+                "model": "nvidia/nvidia/nemotron-3.5-lightning-30b-a3b",
+                "name": "nvidia-validated",
+                "provider": "omniroute/nvidia"
+              },
+              {
+                "api_key_env": "NIDUS_POOL_API_KEY",
+                "base_url": "http://127.0.0.1:20128/v1",
+                "kind": "paid",
+                "model": "gh/gpt-4o-mini",
+                "name": "copilot-validated",
+                "provider": "omniroute/copilot"
+              }
+            ],
+            "timeout_seconds": 60
+          }
+        }
+      },
+      {
+        "seq": 14,
+        "kind": "model_attempt_started",
+        "data": {
+          "task": "4b5a4d69378b451c9d068521df49ade4",
+          "route": "gemini-validated",
+          "kind": "paid",
+          "provider": "omniroute/gemini",
+          "model": "gemini/gemini-3.5-flash-lite",
+          "endpoint": "http://127.0.0.1:20128/v1",
+          "started_at": "2026-10-08T13:57:59.913040+00:00",
+          "prompt_hash": "6fac247d54ee17a333bef55c9d4f0506138d94015d5596e63c8920b52eb75973",
+          "prompt_bytes": 2354,
+          "sources": {
+            "notes.md": "1b60432504c1920db9d7dcfadcd1e20d36469abc455c4295a978c516ab80da97"
+          },
+          "role": "worker"
+        }
+      },
+      {
+        "seq": 15,
+        "kind": "model_attempt_failed",
+        "data": {
+          "task": "4b5a4d69378b451c9d068521df49ade4",
+          "route": "gemini-validated",
+          "kind": "paid",
+          "provider": "omniroute/gemini",
+          "model": "gemini/gemini-3.5-flash-lite",
+          "endpoint": "http://127.0.0.1:20128/v1",
+          "started_at": "2026-10-08T13:57:59.913040+00:00",
+          "prompt_hash": "6fac247d54ee17a333bef55c9d4f0506138d94015d5596e63c8920b52eb75973",
+          "prompt_bytes": 2354,
+          "sources": {
+            "notes.md": "1b60432504c1920db9d7dcfadcd1e20d36469abc455c4295a978c516ab80da97"
+          },
+          "role": "worker",
+          "finished_at": "2026-10-08T13:57:59.931468+00:00",
+          "error": {
+            "code": "invalid_request",
+            "retryable": false,
+            "http_status": 400,
+            "next_step": "review_configuration_or_response"
+          },
+          "tokens": null,
+          "estimated_cost_usd": null
+        }
+      },
+      {
+        "seq": 16,
+        "kind": "blocked",
+        "data": {
+          "reason": "Model gateway: invalid_request"
+        }
+      },
+      {
+        "seq": 17,
+        "kind": "desk_checkpoint",
+        "data": {
+          "task": "4b5a4d69378b451c9d068521df49ade4",
+          "board_status": "blocked",
+          "library": [
+            "notes.md"
+          ],
+          "next_action": "review_blocker",
+          "native_notes": []
+        }
+      }
+    ]
+  },
+  "cli": [
+    {
+      "command": "submit",
+      "exit_code": 0
+    },
+    {
+      "command": "run",
+      "exit_code": 0
+    },
+    {
+      "command": "decide",
+      "exit_code": 0
+    },
+    {
+      "command": "run",
+      "exit_code": 2
+    },
+    {
+      "command": "show",
+      "exit_code": 2
+    },
+    {
+      "command": "list",
+      "exit_code": 0
+    },
+    {
+      "command": "list",
+      "exit_code": 0
+    }
+  ],
+  "active_count": 1,
+  "archive_count": 0
+}

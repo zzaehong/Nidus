@@ -4,7 +4,29 @@
 
 ## 한국어
 
-### 현재 상태 — 2026-10-08
+### 최신 핵심 업무 순환 검증 — 2026-10-08
+
+**완료**: 공개 합성 원문으로 계약 → Worker 결과/자기 점검 → 결정적 검증 → Manager 독립 검토 APPROVE → Completed → Archive를 실제 통과했다. [성공 증거](evidence/manager-worker-live-copilot-json-mode.json). 원 요청·계약·기준·두 역할의 응답/정책/시도·검토·결정·검증·전체 이력을 JSON에 보존한다. 실제 두 역할은 같은 Copilot `gpt-4o-mini`를 사용했으며 역할 지침은 분리되어 있다. 이 성공 표본의 재작업은 0회다.
+
+- Worker: 입력 488 / 출력 140 / 합계 628 tokens.
+- Manager: 입력 1059 / 출력 190 / 합계 1249 tokens. 두 호출 합계 1877; 실제 비용은 null이다.
+- 결정적 검사 6개 모두 true, Manager APPROVE, Active 0 / Archive 1. 시작/종료는 14:07:50–14:07:54 UTC.
+- 오프라인 테스트 53개, 로컬 HTTP/CLI 통합 5개, compileall, diff 검사를 통과했다. A 정상 완료, B 잘못된 결과 REWORK, C 수정 후 승인, D ESCALATE, E 반복 한도, F 승인 후 결과 변경 차단을 결정적인 Adapter로 검증했다. HTTP 테스트는 모델을 호출하지 않는 loopback fixture다. 실제 REWORK/ESCALATE 판단의 일반적 정확성을 입증한 것은 아니다.
+- 별도 검토 전송 승인, 역할 정책 변경 시 재승인, 승인 후 재시작 시 무호출, 검토 중 원문 변경 차단, 역할 간 알려진 키 문자열 차단, 사람이 수정한 초안 보호, 품질 판단 CLI를 검증했다.
+
+실패도 성공으로 바꾸지 않고 보존한다:
+
+| 증거 | 실제 관측 |
+|---|---|
+| [Pool 첫 실행](evidence/manager-worker-live.json) | Gemini `gemini/gemini-3.5-flash-lite` HTTP 400; nonretryable이므로 후속 경로 없이 Blocked/Archive 0 |
+| [Copilot 첫 실행](evidence/manager-worker-live-copilot.json) | Worker 정상, Manager가 잘못된 JSON을 반환; 형식 검사로 차단. Manager 내용에도 실제 원문과 다른 판단이 있었으며 승인으로 해석하지 않음 |
+| [지침 보강 후](evidence/manager-worker-live-copilot-v2.json) | Worker JSON에 여분의 닫는 괄호; 차단 |
+| [JSON mode 실행](evidence/manager-worker-live-copilot-json-mode.json) | 명시적 JSON mode를 기존 Gateway에 추가한 뒤 두 역할 정상 응답, APPROVE/완료/보관 |
+
+현재 키의 모델 목록(200)에서 기존 설정 모델 중 Copilot만 확인됐다. [발견 기록](evidence/manager-worker-provider-discovery.json). Gemini 400의 전체 원인을 단정하지 않으며 NVIDIA는 이번에 직접 호출하지 않았다. 과거 Gemini/NVIDIA 성공 증거는 그대로 유효한 역사적 관측이지만 현재 가용성의 증명은 아니다. 기존 Pool 파일을 덮어쓰지 않고 [Copilot 검증 정책](policies/workflow-live-copilot.json)을 별도로 추가했다. 비밀 값은 저장하지 않으며 기존 키/연결/결제 설정을 변경하지 않았다. 아래 내용은 이전 Provider 활성화 Slice의 기록이다.
+
+
+### 이전 Provider 활성화 상태 — 2026-10-08
 
 오프라인 Runtime, Model Gateway, Copilot/Gemini/NVIDIA의 실제 문서 생성 → Verification → Completed → Archive를 검증했다.
 명시적인 주입 장애 Fallback과 인증 오류 시 중단도 검증했다. 완료를 막는 현재 Blocker는 없다.
@@ -78,7 +100,7 @@ API discovery와 valid=true 연결 테스트만으로 VERIFIED를 선언하지 �
 - 기존 오프라인 MVP 시점에는 18 tests와 `scripts/demo.py`가 통과했고 이후 37개로 확대됐다.
 - 초기 HTTP 테스트의 Blocked exit 0 예상은 기존 exit 2 동작에 맞게 후속 수정했다. 실패 기대값이 먼저 커밋된 이력은 재작성하지 않았다.
 
-현재 문서 통합은 새 Live 호출을 하지 않는다. 문서의 예시는 사용자 실행 시에만 모델을 호출한다.
+당시 문서 통합은 새 Live 호출을 하지 않았다. 문서의 예시는 사용자 실행 시에만 모델을 호출한다.
 
 ### 설치·Credential·보안
 
@@ -117,6 +139,19 @@ Provider 가용성·계정 quota·비용은 바뀔 수 있다. Vault/Git/파일 
 사용자는 실제 전송할 원문을 검토하고 명시적으로 승인해야 한다. 다음은 공개 가능한 실제 업무의 사용량/지연을 축적하고 별도로 제품 확장 범위를 정하는 것이다.
 
 ## English
+
+### Latest core responsibility validation — 2026-10-08
+
+**Complete**: real public-synthetic contract → Worker result/self-check → deterministic checks → independent Manager APPROVE → Completed → Archive. [Successful evidence](evidence/manager-worker-live-copilot-json-mode.json) retains original request, contract/criteria, both role responses/policies/attempts, decisions, checks and full history. Both roles used Copilot gpt-4o-mini with separate instructions. This live success required zero revisions.
+
+Worker usage: 488 input / 140 output / 628 total. Manager: 1059 / 190 / 1249. Combined 1877 tokens; cost unknown/null. All six checks true, Manager APPROVE, Active 0 / Archive 1; 14:07:50–14:07:54 UTC.
+
+53 offline tests and 5 local HTTP/CLI tests, compileall and diff checks passed. Deterministic adapters cover A normal completion, B erroneous result/rework, C successful revision, D escalation, E bounded iterations and F post-approval tampering. Loopback HTTP fixtures make no external model calls. Tests also cover separate transmission decisions, role-policy invalidation, approved-review restart without calls, sources changed during review, cross-role known credential strings, human-edited drafts and quality-decision CLI. This is not evidence of generally correct live rework/escalation judgment.
+
+Preserved failures: [pool](evidence/manager-worker-live.json), Gemini HTTP 400 stops without fallback; [first Copilot](evidence/manager-worker-live-copilot.json), Worker succeeded but malformed Manager JSON was blocked (its reasoning also misread the actual source); [prompt revision](evidence/manager-worker-live-copilot-v2.json), malformed Worker JSON blocked. [Explicit JSON mode](evidence/manager-worker-live-copilot-json-mode.json) then completed successfully. No speculative JSON repair or relabeling of failures.
+
+The current key's model catalog returned 200 with only Copilot among the configured models; [discovery](evidence/manager-worker-provider-discovery.json). Do not infer a complete Gemini failure cause from 400. NVIDIA was not called in this slice. Earlier Gemini/NVIDIA successes remain historical observations, not current availability guarantees. Added a separate [Copilot policy](policies/workflow-live-copilot.json); preserved existing pool/evidence. No credential values, account/connection/payment changes. The sections below document the earlier activation slice.
+
 
 ### Current status — 2026-10-08
 
