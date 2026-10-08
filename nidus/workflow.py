@@ -145,7 +145,8 @@ def manager_decision(text, contract):
 
 
 def review_task(task):
-    value = dict(task, model_role='manager', model_policy=task['manager_policy'], required_phrases=[])
+    value = dict(task, model_role='manager', worker_policy=task['model_policy'],
+                 model_policy=task['manager_policy'], required_phrases=[])
     value['review_context'] = {'worker_submission': task['submission'],
         'deterministic_verification': task['verification'],
         'execution': {k: task['generation'].get(k) for k in ('route','provider','model','tokens','snapshot')},
@@ -215,5 +216,77 @@ def review(runtime, task, records):
         task['workflow_stage'] = 'manager_review'
         runtime.store.save(task, 'manager_approved', task['manager_approval'])
         return True
-    human_attention(runtime, task, records, decision['reason'], decision['questions'] or decision['issues'])
+    if decision['decision'] == 'REWORK':
+        schedule_rework(runtime, task, records, decision['issues'], decision['instructions'])
+        return False
+    human_attention(runtime, task, records, decision['reason'], decision['questions'])
     return False
+
+
+def schedule_rework(runtime, task, records, issues, instructions, authority='manager'):
+    if task['rework_count'] >= task['max_reworks']:
+        human_attention(runtime, task, records, 'Configured rework limit reached',
+                        ['Approve current result with explicit responsibility, or cancel?'])
+        return False
+    task['revisions'].append({'iteration':task['rework_count'], 'generation':task['generation'],
+        'submission':task['submission'], 'review':task.get('manager_review'),
+        'candidate_hash':task['candidate_hash'], 'source_hashes':task['source_hashes'],
+        'output':task['output'],
+        'verification':task['verification'], 'instructions':instructions, 'issues':issues,
+        'authority':authority})
+    task['revision_context'] = {'previous_result':task['submission'], 'issues':issues,
+        'instructions':instructions, 'iteration':task['rework_count'] + 1}
+    task['rework_count'] += 1
+    for key in ('generation','submission','manager_generation','manager_review','manager_approval',
+                'verification','write_intent','candidate_hash','source_hashes','attention'):
+        task.pop(key, None)
+    task['status'] = 'queued'
+    task['workflow_stage'] = 'rework'
+    task['contract']['result'] = None
+    runtime.store.save(task, 'rework_requested', task['revision_context'])
+    runtime.checkpoint(task, 'worker_revision')
+    return True
+
+
+def quality_decision(runtime, task_id, decision, note, instructions=None):
+    from .gateway import fingerprint, transmission
+    from .runtime import sources_for, safe_path, output_hash
+    with runtime.store.lock():
+        task = runtime.store.get(task_id)
+        if (task['status'] != 'waiting' or task.get('attention', {}).get('kind') != 'quality'
+                or decision not in ('approve','rework','cancel')):
+            raise ValueError('Quality decision requires a human-review Waiting task and approve/rework/cancel')
+        if not isinstance(note, str) or not note.strip():
+            raise ValueError('Quality decisions require an explicit reason')
+        reject_credentials(canonical([note, instructions]), task['model_policy'])
+        reject_credentials(canonical([note, instructions]), task['manager_policy'])
+        if decision != 'cancel':
+            records = sources_for(runtime.store, task)
+            if (review_binding(task, records) != task['attention']['snapshot']
+                    or output_hash(safe_path(runtime.store.vault, task['output'])) != task['candidate_hash']
+                    or task['generation']['snapshot'] != transmission(task, records)
+                    or worker_submission(task) != task['submission']):
+                raise ValueError('Quality decision snapshot changed; cannot approve or rework stale content')
+            if decision == 'rework' and (not strings(instructions, True)
+                                        or task['rework_count'] >= task['max_reworks']):
+                raise ValueError('Rework requires instructions and an unexhausted rework limit')
+        record = {'kind':'quality','decision':decision,'reason':note,
+            'snapshot':task['attention']['snapshot'], 'instructions':instructions or []}
+        task['decisions'].append(record)
+        runtime.store.save(task, 'human_quality_decision', record)
+        if decision == 'cancel':
+            task['status'] = 'cancelled'
+            task['workflow_stage'] = 'done'
+            task['contract']['result'] = None
+            runtime.store.save(task, 'quality_cancelled')
+            runtime.checkpoint(task, 'none')
+        elif decision == 'rework':
+            schedule_rework(runtime, task, records, [note], instructions, authority='human')
+        else:
+            task['manager_approval'] = {'authority':'human', 'binding':review_binding(task, records),
+                'review_hash':fingerprint(task['manager_review']), 'reason':note}
+            task['status'] = 'verifying'
+            task['workflow_stage'] = 'manager_review'
+            runtime.store.save(task, 'human_quality_approved', task['manager_approval'])
+            runtime.checkpoint(task, 'verify_and_complete')
+        return task
