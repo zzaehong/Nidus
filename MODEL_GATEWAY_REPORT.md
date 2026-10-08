@@ -1,6 +1,9 @@
 # Model Gateway 결과 — 2026-10-08
 
-## Status
+> 최신 후속 Slice: **PARTIAL — Fallback VERIFIED; Gemini/NVIDIA 단독 실행 BLOCKED.**
+> 아래 Multi-provider validation 절과 MODEL_PROVIDER_VALIDATION_REPORT.md 참조.
+
+## Status (previous Copilot slice)
 **COMPLETE — 실제 GitHub Copilot 생성 → Verification → Completed → Archive 검증 완료.**
 
 사용자가 OmniRoute에 연결한 Copilot을 사용했습니다. 기존 실패 기록은 보존했습니다.
@@ -84,3 +87,14 @@ streaming, 자연어 계약 자동 구성은 범위 밖입니다. Literal/구조
 Copilot 모델별 가용성은 실제 호출로 확인해야 합니다. 다른 Free/Paid/Local 경로는 정책과
 offline 테스트 수준이며 모든 Provider의 live 검증을 의미하지 않습니다.
 다음은 사용자가 로컬 Integration diff와 보고서를 검토한 후 원하는 배포/PR 범위를 정하는 것입니다.
+
+
+## Multi-provider validation — latest user prompt
+Copilot baseline VERIFIED; Gemini BLOCKED (404/400); NVIDIA NIM BLOCKED (404,
+fallback 실제 호출 429); Gateway Fallback VERIFIED with explicit local transport
+fault injection. 두 성공 Task 모두 real Copilot 응답 → 6개 검증 true → Completed/Archive.
+401에서는 시도 1회 후 Blocked, 후속 Provider 0회. Provider Credential/결제/보안 설정은
+변경하지 않았습니다. 임시 Nidus 키는 메모리 전달 후 삭제했습니다. 비용은 unknown.
+상세: [Provider validation report](MODEL_PROVIDER_VALIDATION_REPORT.md),
+[latency/usage summary](docs/evidence/model-provider-validation-summary.json).
+이후 Gemini/NVIDIA의 실제 생성 성공이 확인되기 전에는 단독 VERIFIED로 표시하지 않습니다.
