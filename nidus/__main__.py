@@ -19,6 +19,11 @@ def main():
     submit.add_argument('--mode', choices=['deterministic', 'generative'], default='deterministic')
     submit.add_argument('--model-policy', help='Non-secret JSON route policy; snapshotted into task')
     submit.add_argument('--require', action='append', default=[], help='Required literal phrase in model response')
+    submit.add_argument('--workflow', choices=['manager', 'legacy'], default='manager',
+                        help='New generative tasks default to Manager review; deterministic mode stays offline')
+    submit.add_argument('--contract', help='Explicit non-secret Manager contract JSON')
+    submit.add_argument('--manager-policy', help='Optional separate Manager route policy')
+    submit.add_argument('--max-reworks', type=int, default=2)
     run = commands.add_parser('run')
     run.add_argument('task')
     run.add_argument('--execute-only', action='store_true')
@@ -36,10 +41,23 @@ def main():
         if args.command == 'init':
             result = store.state('home')
         elif args.command == 'submit':
+            contract = None
+            if args.contract:
+                with open(args.contract, encoding='utf-8') as stream:
+                    raw = stream.read(32769)
+                if len(raw.encode('utf-8')) > 32768:
+                    raise ValueError('Manager contract exceeds 32 KiB')
+                contract = json.loads(raw)
+            managed = args.mode == 'generative' and args.workflow == 'manager'
+            if not managed and (args.contract or args.manager_policy):
+                raise ValueError('Contract/manager policy require the Manager generative workflow')
             with store.lock():
                 result = store.submit(args.request, args.source, args.output, args.priority,
                     mode=args.mode, model_policy=load_policy(args.model_policy) if args.mode == 'generative' else None,
-                    required_phrases=args.require)
+                    required_phrases=args.require, workflow='manager' if managed else None,
+                    manager_contract=contract,
+                    manager_policy=load_policy(args.manager_policy) if args.manager_policy else None,
+                    max_reworks=args.max_reworks)
         elif args.command == 'run':
             result = Runtime(store).run(args.task, args.execute_only)
         elif args.command == 'decide':
