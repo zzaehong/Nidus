@@ -130,6 +130,17 @@ python3 scripts/model_live.py --allow-synthetic-transmission --policy model-poli
 
 각 문서는 한 파일 안에 한국어와 영어를 포함합니다. 원시 Live JSON은 [docs/evidence](docs/evidence)에 보존합니다.
 
+### 개발 흐름
+
+`main`을 유일한 통합 브랜치로 사용합니다. 변경할 때는 최신 `main`에서 짧은 작업 브랜치를 만들고, 검증 후 `main` 대상 PR로 병합합니다. 병합된 작업 브랜치는 로컬과 GitHub에서 삭제합니다. 별도 `develop`이나 상시 통합용 feature 브랜치는 유지하지 않습니다. 과거 계획과 작업 지시의 브랜치 구조는 당시 실행 기록입니다.
+
+```sh
+git switch main
+git pull --ff-only
+git switch -c feat/short-description
+# 작업 및 검증 후 commit/push, main 대상 PR 생성
+```
+
 ## English
 
 A CLI runtime connecting requests, completion contracts, permissions, execution, verification and archive in a local vault.
@@ -257,3 +268,14 @@ python3 scripts/model_live.py --allow-synthetic-transmission --policy model-poli
 | [Current plan](docs/plans/current-plan.md) | Latest completion state and development history |
 
 Each document contains both Korean and English. Raw live JSON remains in [docs/evidence](docs/evidence).
+
+### Development workflow
+
+Use `main` as the only integration branch. Start a short-lived branch from the latest `main`, validate changes, and merge a PR targeting `main`. Delete merged branches locally and on GitHub. Do not maintain a separate `develop` or permanent feature integration branch. Branch structures in historical plans and work instructions describe earlier execution.
+
+```sh
+git switch main
+git pull --ff-only
+git switch -c feat/short-description
+# Implement, validate, commit/push, then open a PR targeting main.
+```
