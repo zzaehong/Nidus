@@ -207,6 +207,7 @@ class Runtime:
                 if task['status'] != 'verifying':
                     task['status'] = 'running'
                     task.pop('error', None)
+                    task.pop('model_error', None)
                     self.store.save(task, 'claimed')
                     if not self.execute(task, records):
                         return task
