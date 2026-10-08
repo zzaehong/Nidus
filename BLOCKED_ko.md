@@ -23,3 +23,20 @@ API Key는 Task Context에 직접 입력하거나 Vault에 Commit해서는 안 �
 어떠한 모델 서비스도 생성되지 않았고,
 외부로 데이터가 전송되지 않았으며,
 Conceptual Design 문서 역시 변경되지 않았다.
+
+
+## 2026-10-08 갱신 — 이전 결정 Blocker는 해소
+새 prompt.md가 외부 모델 경계 구현을 명시적으로 승인해 Gateway와 Permission을
+구현했습니다. 최신 Blocker 원본은 BLOCKED.md입니다. 현재 남은 문제는 정상 접근
+가능한 실제 모델 Route/Credential이 설정되지 않았다는 점입니다. OpenCode 무료
+경로의 실제 합성 문서 요청은 접근 거부로 Blocked가 되었고 완료로 처리하지 않았습니다.
+클라이언트 제한을 우회하지 않았습니다. API Key는 채팅·Vault·Git에 넣지 말고
+프로세스 환경변수로 설정해야 합니다. 결제·계정 생성·민감 데이터 전송은 하지 않습니다.
+
+
+### OmniRoute 설치 후 갱신
+사용자 요청에 따라 OmniRoute 3.8.51 설치와 127.0.0.1:20128 서버 실행을 완료했습니다.
+Nidus 기본 정책은 무료 전용 nidus-free Combo를 이 서버에서 사용하도록 설정되어
+있습니다. 실제 Combo/무료 Provider/Endpoint Key 설정과 모델 완료 검증은 남아 있습니다.
+자세한 설치 증거는 OMNIROUTE_INSTALL_REPORT.md, 최신 검증 상태는
+MODEL_GATEWAY_REPORT.md를 참고하세요. 기존 모델 미검증 상태를 성공으로 변경하지 않습니다.

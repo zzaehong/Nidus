@@ -81,15 +81,21 @@ The failing expectation was inadvertently committed before inspecting the tool
 result; corrected in a follow-up commit without rewriting history.
 
 ## MG Slice 2 — live free-provider acceptance
-Status: Pending. Branch: feat/model-live-acceptance.
+Status: Blocked (actual model completion). Branch: feat/model-live-acceptance.
 Requirements: MG-AC-02 and full mission completion gate.
 Changes: synthetic live script, real evidence, README, reports/blocker reconciliation,
 Korean document addenda reflecting the extension.
 Verification: opt-in live CLI flow against real free external provider; no sensitive
 inputs; final integrated offline suite; Git status/history/diff review.
-Done when: real generated summary meets observable contract and completes, or a
-hard blocker is accurately preserved. Excluded: paid fallback or account creation.
-Commits: pending.
+Done when: real generated summary meets observable contract and completes.
+Excluded: paid fallback, account creation and client impersonation.
+Evidence: actual synthetic OpenCode Zen/big-pickle call returned an access/auth
+refusal; Task Blocked, Result null, Archive empty. Gateway failure evidence is
+retained at docs/evidence/model-live.json. First evidence predates HTTP-status
+hardening and is not rewritten. Actual success remains NOT VERIFIED.
+User requested OmniRoute installation; it is now installed/running, but normal
+free Provider/Combo and Endpoint Key configuration remain necessary.
+Commits: no successful live acceptance commit; see separate evidence slice below.
 
 
 ## MG Slice 1b — installed OmniRoute connection (user steering)
@@ -102,4 +108,31 @@ LISTEN; full offline/HTTP regression and syntax checks.
 Done when: installation/server readiness and configured client boundary are verified.
 Excluded: account/payment setup, unknown paid auto routing, client impersonation.
 Verification result: 37 offline tests and 3 HTTP tests pass; compileall/diff checks pass.
-Commits: see feat/omniroute-connection history. Actual model completion remains in MG Slice 2.
+Commits: 5516660 (default connection), 2161b95 (installation/readiness). Actual model completion remains in MG Slice 2.
+
+
+## MG Slice 1c — failure/retry hardening
+Status: Complete. Branch: feat/model-gateway-hardening.
+Requirements: MG-AC-03/05/06. Commit: fd79649.
+Changes: preserve safe HTTP status, distinguish access denied, clear prior model
+error on explicit retry, block source changes during call and reask next run.
+Verification: 37 offline tests and 3 loopback HTTP tests pass.
+Excluded: provider account or live success. Done when: above regression guards pass.
+
+## MG Slice 2a — live harness / failure evidence / reconciliation
+Status: Complete (evidence preparation, not actual live success).
+Branch: feat/model-live-evidence. Requirements: live observability and accurate
+reporting; MG-AC-02 remains Blocked in MG Slice 2.
+Changes: opt-in synthetic-only script; genuine failed API evidence; README; English
+source-report and Korean addenda; current blocker and installation reconciliation.
+Verification: actual script executed with exit 2 and failure evidence; JSON validates
+Blocked/result-null/archive-0; syntax/diff checks; final integrated offline/HTTP tests.
+Done when: reproducible harness and genuine outcome preserved without fabricated
+success or secrets. Excluded: accepting failed call as success.
+Commits: see feat/model-live-evidence history.
+
+## Final state for current session
+Current/integration branch: feat/model-gateway after evidence merge. Completed
+implementation/preparation slices integrated; actual model acceptance remains
+blocked. Only uncommitted change is user's doc/prompt.md. No remote operations or
+main/develop merge. Provider Key values were never printed or committed.
