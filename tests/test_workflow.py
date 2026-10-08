@@ -125,3 +125,87 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(len(self.store.tasks(True)), 0)
         with self.assertRaises(ValueError):
             runtime.decide(task['id'], 'approve')
+
+    def test_wrong_result_requests_rework_and_retains_history_then_succeeds(self):
+        task = self.submit()
+        runtime, adapter = self.runtime([self.submission('- alpha\n- beta'), self.decision('REWORK'),
+                                         self.submission(), self.decision()])
+        rework = self.advance(runtime, task)
+        self.assertEqual(rework['status'], 'queued')
+        self.assertEqual(rework['rework_count'], 1)
+        self.assertEqual(rework['workflow_stage'], 'rework')
+        self.assertEqual(len(self.store.tasks(True)), 0)
+        result = self.advance(runtime, task)
+        self.assertEqual(result['status'], 'completed')
+        self.assertEqual(len(result['revisions']), 1)
+        self.assertEqual(len(result['reviews']), 2)
+        revised_prompt = adapter.generate.call_args_list[2].args[1][1]['content']
+        self.assertIn('previous_result', revised_prompt)
+        self.assertIn('Write exactly three supported bullets', revised_prompt)
+        self.assertIn('- alpha\\n- beta', revised_prompt)
+
+    def test_rework_limit_escalates_without_extra_call(self):
+        task = self.submit(max_reworks=1)
+        runtime, adapter = self.runtime([self.submission('- alpha'), self.decision('REWORK'),
+                                         self.submission('- beta'), self.decision('REWORK')])
+        self.advance(runtime, task)
+        result = self.advance(runtime, task)
+        self.assertEqual(result['status'], 'waiting')
+        self.assertEqual(result['workflow_stage'], 'human_review')
+        self.assertEqual(result['rework_count'], 1)
+        self.assertIn('limit', result['attention']['reason'])
+        runtime.run(task['id'])
+        self.assertEqual(adapter.generate.call_count, 4)
+        self.assertEqual(len(self.store.tasks(True)), 0)
+        with self.assertRaises(ValueError):
+            runtime.quality_decide(task['id'], 'rework', 'Try again', ['Fix it'])
+
+    def test_human_quality_approval_and_cancel(self):
+        for choice in ('approve','cancel'):
+            with self.subTest(choice=choice):
+                if (self.vault / 'managed.md').exists():
+                    (self.vault / 'managed.md').unlink()
+                task = self.submit()
+                runtime, adapter = self.runtime([self.submission(), self.decision('ESCALATE')])
+                self.advance(runtime, task)
+                runtime.quality_decide(task['id'], choice, 'Human accepts responsibility for this judgment')
+                result = runtime.run(task['id'])
+                self.assertEqual(result['status'], 'completed' if choice == 'approve' else 'cancelled')
+                self.assertEqual(adapter.generate.call_count, 2)
+                if choice == 'approve':
+                    self.assertEqual(result['manager_approval']['authority'], 'human')
+
+    def test_human_rework_and_changed_scope_reject_stale_decision(self):
+        task = self.submit()
+        runtime, adapter = self.runtime([self.submission(), self.decision('ESCALATE'),
+                                         self.submission(), self.decision()])
+        self.advance(runtime, task)
+        runtime.quality_decide(task['id'], 'rework', 'Use clearer wording', ['Clarify third bullet'])
+        result = self.advance(runtime, task)
+        self.assertEqual(result['status'], 'completed')
+        self.assertEqual(result['revisions'][0]['authority'], 'human')
+
+        (self.vault / 'managed.md').unlink()
+        task = self.submit()
+        runtime, adapter = self.runtime([self.submission(), self.decision('ESCALATE')])
+        self.advance(runtime, task)
+        (self.vault / 'notes.md').write_text('changed evidence')
+        with self.assertRaises(ValueError):
+            runtime.quality_decide(task['id'], 'approve', 'stale approval')
+        self.assertEqual(self.store.get(task['id'])['status'], 'waiting')
+        runtime.quality_decide(task['id'], 'cancel', 'Cancel stale task')
+
+    def test_manager_policy_change_reasks_and_never_uses_worker_approval(self):
+        task = self.submit()
+        runtime, adapter = self.runtime([self.submission(), self.decision()])
+        runtime.run(task['id'])
+        runtime.decide(task['id'], 'approve')
+        runtime.run(task['id'])
+        runtime.decide(task['id'], 'approve')
+        changed = self.store.get(task['id'])
+        changed['manager_policy']['routes'][0]['model'] = 'new-manager-model'
+        self.store.save(changed, 'policy_changed')
+        result = runtime.run(task['id'])
+        self.assertEqual(result['status'], 'waiting')
+        self.assertEqual(adapter.generate.call_count, 1)
+        self.assertEqual(result['attention']['role'], 'manager')

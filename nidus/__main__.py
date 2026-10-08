@@ -31,6 +31,11 @@ def main():
     decide = commands.add_parser('decide')
     decide.add_argument('task')
     decide.add_argument('decision', choices=['approve', 'reject'])
+    quality = commands.add_parser('quality-decide', help='Human work-quality judgment, separate from permissions')
+    quality.add_argument('task')
+    quality.add_argument('decision', choices=['approve','rework','cancel'])
+    quality.add_argument('--note', required=True)
+    quality.add_argument('--instruction', action='append', default=[])
     show = commands.add_parser('show')
     show.add_argument('task')
     listing = commands.add_parser('list')
@@ -63,6 +68,8 @@ def main():
             result = Runtime(store).run(args.task, args.execute_only, args.review_only)
         elif args.command == 'decide':
             result = Runtime(store).decide(args.task, args.decision)
+        elif args.command == 'quality-decide':
+            result = Runtime(store).quality_decide(args.task, args.decision, args.note, args.instruction)
         elif args.command == 'show':
             result = store.get(args.task)
             result['history'] = store.events(args.task)

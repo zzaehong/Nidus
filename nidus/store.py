@@ -145,6 +145,7 @@ class Store:
                 raise ValueError('max_reworks must be an integer from 0 to 10')
             contract = completion_contract(request, sources, output, manager_contract)
             review_policy = validate_policy(manager_policy or policy)
+            reject_credentials(json.dumps([request, sources, output, phrases]), review_policy)
             reject_credentials(json.dumps(contract), policy)
             reject_credentials(json.dumps(contract), review_policy)
             task.update(workflow='manager', workflow_stage='worker_execution',

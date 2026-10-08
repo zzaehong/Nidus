@@ -114,6 +114,10 @@ class Runtime:
             self.checkpoint(task, 'recover' if decision == 'approve' else 'none')
             return task
 
+    def quality_decide(self, task_id, decision, note, instructions=None):
+        from .workflow import quality_decision
+        return quality_decision(self, task_id, decision, note, instructions)
+
     def execute(self, task, records):
         output = safe_path(self.store.vault, task['output'])
         if output in [safe_path(self.store.vault, name) for name in task['sources']]:
@@ -135,7 +139,11 @@ class Runtime:
         # recorded intent, source snapshot and exact bytes establish ownership.
         recovered = (expected is not None and intent and intent['sources'] == source_hashes
                      and intent['expected_hash'] == digest(expected) and current == digest(expected))
-        if current is not None and not recovered:
+        revisions = task.get('revisions', [])
+        owned_revision = (revisions and revisions[-1]['candidate_hash'] == current
+                          and revisions[-1]['output'] == task['output']
+                          and revisions[-1]['source_hashes'] == source_hashes)
+        if current is not None and not recovered and not owned_revision:
             approved = any(d['decision'] == 'approve' and d['snapshot'] == snapshot for d in task['decisions'])
             if not approved:
                 task['status'] = 'waiting'
@@ -231,6 +239,10 @@ class Runtime:
                     generation = task.get('generation')
                     if not generation or generation.get('snapshot') != transmission(task, records):
                         raise ModelError('candidate_snapshot_changed')
+                    if task.get('workflow') == 'manager':
+                        from .workflow import worker_submission
+                        if worker_submission(task) != task['submission']:
+                            raise ModelError('worker_submission_changed')
                     expected = generated_briefing(task, records)
                 else:
                     expected = briefing(task, records)
