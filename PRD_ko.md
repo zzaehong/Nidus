@@ -125,3 +125,27 @@ Ownership, Permission, Recovery 관련 결정은 `DESIGN.md`에 정의되어 있
 현재 오프라인 Scope에서는 구현을 막을 Critical Unknown이 남아 있지 않다.
 
 각 다음 Slice에는 실행 Command와 Completion Condition이 존재한다.
+
+
+## Model Gateway 확장 — 2026-10-08
+이 문서 본문은 기존 오프라인 MVP 요구사항입니다. 새 prompt.md에 따른 선택적
+생성형 문서 작성 경로가 추가되며, 기존 AC-01–08은 결정적 경로의 회귀 계약으로
+유지합니다. 최신 요구사항 원본은 PRD.md의 Model Gateway extension입니다.
+
+- MG-AC-01: Free/Paid/Local 순서 정책과 교체 가능한 Chat Completions Gateway.
+- MG-AC-02: 실제 외부 무료 모델이 Runtime을 통해 작업하고 Completed에 도달.
+- MG-AC-03: 요청·원문·Route·Prompt 해시/크기를 묶은 명시적 전송 승인. 변경 시 재승인.
+- MG-AC-04: 환경변수 인증, Key의 Prompt/Task/Git 유출 차단과 안전한 오류 기록.
+- MG-AC-05: 저장된 응답의 정상 종료·필수 문구·원문 불변·결과 바이트 검증.
+- MG-AC-06: 구분되는 실패 코드, 승인된 Route만 Fallback, Usage/시각/비용 관측.
+
+임의 Tool 실행이나 의미적 정확성 전부의 증명은 범위 밖입니다. 실제 모델 완료
+MG-AC-02는 현재 접근 거부로 미검증이며, 가짜 응답을 실제 성공으로 취급하지 않습니다.
+
+
+### OmniRoute 설치 후 갱신
+사용자 요청에 따라 OmniRoute 3.8.51 설치와 127.0.0.1:20128 서버 실행을 완료했습니다.
+Nidus 기본 정책은 무료 전용 nidus-free Combo를 이 서버에서 사용하도록 설정되어
+있습니다. 실제 Combo/무료 Provider/Endpoint Key 설정과 모델 완료 검증은 남아 있습니다.
+자세한 설치 증거는 OMNIROUTE_INSTALL_REPORT.md, 최신 검증 상태는
+MODEL_GATEWAY_REPORT.md를 참고하세요. 기존 모델 미검증 상태를 성공으로 변경하지 않습니다.
