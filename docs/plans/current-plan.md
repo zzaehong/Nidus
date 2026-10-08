@@ -49,3 +49,37 @@ generative Employee is connected. No model runtime/config exists. BLOCKED.md rec
 the required human model/data/Secret boundary decision. No AC was removed or relaxed
 to make a failure pass. Completed offline slices are integrated locally; main/develop
 and remotes remain unchanged. Conceptual v2 is unchanged.
+
+# Model Gateway mission — 2026-10-08
+Base: feat/nidus-mvp c9c0022. User-owned modification: doc/prompt.md; preserve it
+uncommitted and never stage it. New integration: feat/model-gateway.
+Conceptual v2 stays unchanged. New prompt supersedes earlier provider-decision stop.
+
+## MG Slice 0 — design
+Status: In progress. Branch: feat/model-gateway-design.
+Requirements: MG-FR-01–06 / MG-AC-01–06 defined above existing offline contract.
+Changes: PRD/DESIGN extension, execution plan. Excluded: implementation.
+Verification: git diff --check and requirement/permission/ownership review.
+Done when: route boundary, stochastic verification and live evidence defined.
+Commits: pending.
+
+## MG Slice 1 — adapter and runtime execution
+Status: Pending. Branch: feat/generative-execution.
+Requirements: MG-AC-01/03/04/05/06 plus AC-01–08 regression.
+Changes: gateway, route configuration, scoped transmission permission, persisted
+candidate, verification, unit/fake/local HTTP tests and CLI.
+Verification: full unittest suite; compileall; zero-network-before-approval tests;
+separate-process fake-provider E2E and candidate restart.
+Done when: all offline gateway/security/failure criteria pass. Excluded: dashboard,
+autodiscovery, actual payment, arbitrary agent tooling. Commits: pending.
+
+## MG Slice 2 — live free-provider acceptance
+Status: Pending. Branch: feat/model-live-acceptance.
+Requirements: MG-AC-02 and full mission completion gate.
+Changes: synthetic live script, real evidence, README, reports/blocker reconciliation,
+Korean document addenda reflecting the extension.
+Verification: opt-in live CLI flow against real free external provider; no sensitive
+inputs; final integrated offline suite; Git status/history/diff review.
+Done when: real generated summary meets observable contract and completes, or a
+hard blocker is accurately preserved. Excluded: paid fallback or account creation.
+Commits: pending.
