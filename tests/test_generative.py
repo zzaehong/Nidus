@@ -156,3 +156,33 @@ class GenerativeTests(unittest.TestCase):
             self.assertNotIn('SENSITIVE_TEST_KEY', json.dumps(self.store.get(task['id'])))
             self.assertNotIn('SENSITIVE_TEST_KEY', json.dumps(self.store.events(task['id'])))
             self.assertNotIn(b'SENSITIVE_TEST_KEY', (self.vault / '.nidus/state.sqlite3').read_bytes())
+
+    def test_source_change_during_call_blocks_write_and_reasks(self):
+        task = self.submit()
+        fake = self.adapter()
+        response = fake.generate.return_value
+
+        def change_source(*args):
+            (self.vault / 'notes.md').write_text('new facts after transmission')
+            return response
+
+        fake.generate.side_effect = change_source
+        runtime = Runtime(self.store, Gateway(fake))
+        self.approve_network(runtime, task)
+        self.assertEqual(runtime.run(task['id'])['status'], 'blocked')
+        self.assertFalse((self.vault / 'generated.md').exists())
+        fake.reset_mock()
+        self.assertEqual(runtime.run(task['id'])['status'], 'waiting')
+        fake.generate.assert_not_called()
+
+    def test_explicit_retry_clears_old_model_error(self):
+        task = self.submit()
+        fake = self.adapter()
+        response = fake.generate.return_value
+        fake.generate.side_effect = [ModelError('timeout', True), response]
+        runtime = Runtime(self.store, Gateway(fake))
+        self.approve_network(runtime, task)
+        self.assertEqual(runtime.run(task['id'])['status'], 'blocked')
+        completed = runtime.run(task['id'])
+        self.assertEqual(completed['status'], 'completed')
+        self.assertNotIn('model_error', completed)

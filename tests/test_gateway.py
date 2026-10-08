@@ -35,7 +35,7 @@ class GatewayTests(unittest.TestCase):
                 self.assertEqual(result['tokens']['total_tokens'], 15)
 
     def test_http_failure_codes_do_not_echo_error_body(self):
-        cases = [(401, 'authentication_failed', False), (403, 'authentication_failed', False),
+        cases = [(401, 'authentication_failed', False), (403, 'access_denied', False),
                  (402, 'quota_exhausted', True), (429, 'rate_limited', True),
                  (500, 'provider_unavailable', True), (504, 'timeout', True), (302, 'redirect_denied', False)]
         for status, code, retryable in cases:
@@ -47,6 +47,7 @@ class GatewayTests(unittest.TestCase):
                         ChatCompletions().generate(self.route, [], self.policy)
                     self.assertEqual(caught.exception.code, code)
                     self.assertEqual(caught.exception.retryable, retryable)
+                    self.assertEqual(caught.exception.metadata()['http_status'], status)
                     self.assertNotIn('SENSITIVE_TEST_KEY', str(caught.exception))
 
     def test_timeout_and_network_failure(self):

@@ -27,13 +27,14 @@ def fingerprint(value):
 
 
 class ModelError(ValueError):
-    def __init__(self, code, retryable=False):
+    def __init__(self, code, retryable=False, http_status=None):
         self.code = code
         self.retryable = retryable
+        self.http_status = http_status
         super().__init__('Model gateway: ' + code)
 
     def metadata(self):
-        return {'code': self.code, 'retryable': self.retryable,
+        return {'code': self.code, 'retryable': self.retryable, 'http_status': self.http_status,
                 'next_step': 'explicit_retry' if self.retryable else 'review_configuration_or_response'}
 
 
@@ -168,16 +169,16 @@ class ChatCompletions:
             status = error.code
             error.close()  # Never read, log or persist provider error body.
             if status in (401, 403):
-                raise ModelError('authentication_failed') from None
+                raise ModelError('authentication_failed' if status == 401 else 'access_denied', http_status=status) from None
             if status == 402:
-                raise ModelError('quota_exhausted', True) from None
+                raise ModelError('quota_exhausted', True, status) from None
             if status == 429:
-                raise ModelError('rate_limited', True) from None
+                raise ModelError('rate_limited', True, status) from None
             if status in (408, 504):
-                raise ModelError('timeout', True) from None
+                raise ModelError('timeout', True, status) from None
             if status >= 500:
-                raise ModelError('provider_unavailable', True) from None
-            raise ModelError('redirect_denied' if 300 <= status < 400 else 'invalid_request') from None
+                raise ModelError('provider_unavailable', True, status) from None
+            raise ModelError('redirect_denied' if 300 <= status < 400 else 'invalid_request', http_status=status) from None
         except (TimeoutError, socket.timeout):
             raise ModelError('timeout', True) from None
         except urllib.error.URLError as error:
@@ -213,6 +214,8 @@ class ChatCompletions:
                     + tokens['completion_tokens'] * route['cost_per_million_output']) / 1000000
             return {'text': text, 'finish_reason': 'stop', 'model': actual_model, 'tokens': tokens,
                     'estimated_cost_usd': cost}
+        except ModelError:
+            raise
         except (ValueError, KeyError, TypeError, IndexError):
             raise ModelError('invalid_response') from None
 
