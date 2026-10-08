@@ -1,5 +1,10 @@
 # Model Gateway 결과 — 2026-10-08
 
+> 최신 활성화 결과: **Gemini VERIFIED / NVIDIA NIM VERIFIED / Pool ACTIVE**.
+> 이전 Blocked 결과는 당시 기록이며 삭제하지 않았습니다.
+> 최신 모델·증거·사용법은 PROVIDER_ACTIVATION_REPORT.md 참조.
+
+
 > 최신 후속 Slice: **PARTIAL — Fallback VERIFIED; Gemini/NVIDIA 단독 실행 BLOCKED.**
 > 아래 Multi-provider validation 절과 MODEL_PROVIDER_VALIDATION_REPORT.md 참조.
 
@@ -98,3 +103,11 @@ fault injection. 두 성공 Task 모두 real Copilot 응답 → 6개 검증 true
 상세: [Provider validation report](MODEL_PROVIDER_VALIDATION_REPORT.md),
 [latency/usage summary](docs/evidence/model-provider-validation-summary.json).
 이후 Gemini/NVIDIA의 실제 생성 성공이 확인되기 전에는 단독 VERIFIED로 표시하지 않습니다.
+
+
+## Provider activation follow-up — latest
+Gemini gemini-3.5-flash-lite와 NVIDIA nvidia/nemotron-3.5-lightning-30b-a3b 모두
+실제 응답 → 검증 → Completed/Archive 확인. Evidence는 model-live-gemini-success.json /
+model-live-nvidia-success.json. 기존 실패 Evidence는 보존했습니다. 전용 제한 키와
+model-policy.pool.example.json으로 재사용 가능. 과금 무료 보장은 없으며 비용 null.
+상세: PROVIDER_ACTIVATION_REPORT.md.

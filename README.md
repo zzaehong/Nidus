@@ -169,3 +169,12 @@ Copilot VERIFIED; Gemini/NVIDIA 단독 생성은 404/400으로 BLOCKED. 명시�
 503 장애 주입 후 실제 NVIDIA 429 → Copilot 성공으로 Fallback 완료를 확인했습니다.
 401에서는 후속 호출 없이 차단했습니다. 실제 Provider 장애와 주입 장애를 구분합니다.
 MODEL_PROVIDER_VALIDATION_REPORT.md 및 docs/evidence/model-provider-validation-summary.json 참조.
+
+
+## 최신 Provider 활성화 — 2026-10-08
+Gemini `gemini-3.5-flash-lite` / NVIDIA NIM `nvidia/nemotron-3.5-lightning-30b-a3b`
+모두 실제 Nidus Completed/Archive 검증 완료. 이전 Blocked 기록은 당시 상태입니다.
+`model-policy.pool.example.json`으로 Gemini → NVIDIA → Copilot 순서의 검증된 Pool을
+선택할 수 있습니다. 키는 저장소 밖 `~/.config/nidus/provider-pool.env` (600)의
+NIDUS_POOL_API_KEY를 환경변수로 사용합니다. 비용 unknown, 무료 보장 없음, 새 결제 설정 없음.
+사용법/증거/제한: [활성화 보고서](PROVIDER_ACTIVATION_REPORT.md).
