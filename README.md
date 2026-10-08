@@ -4,8 +4,29 @@
 
 ## 한국어
 
+### 관리자 업무 순환 사용
+
+새 `--mode generative` Task는 Manager workflow가 기본입니다. `--contract PATH`로 명시 계약 JSON을 지정하거나 기본 계약을 사용할 수 있습니다. `--manager-policy PATH`로 검토 모델을 분리하고 `--max-reworks 2`로 반복 한도를 정합니다. 계약의 필수 필드는 [설계](DESIGN.md)와 `nidus/workflow.py`의 기본 계약을 참고하세요. 기존 단일 모델 브리핑은 `--workflow legacy`, 오프라인 추출은 기존 명령으로 사용할 수 있습니다.
+
+Worker 전송과 Manager 검토 전송의 attention을 각각 확인하고 승인합니다. REWORK 후에는 다음 run으로 재개하고 새 Prompt를 승인합니다. ESCALATE 또는 반복 한도에서는 품질 안건을 확인한 뒤 다음 중 하나를 실행하세요. 품질 승인은 전송 권한을 대신하지 않습니다.
+
+```sh
+python3 -m nidus --vault "$vault" quality-decide TASK_ID approve --note "검토한 현재 결과를 수용한다"
+python3 -m nidus --vault "$vault" quality-decide TASK_ID rework --note "필수 조건 누락" --instruction "누락된 조건을 보완한다"
+python3 -m nidus --vault "$vault" quality-decide TASK_ID cancel --note "작업 취소"
+# approve 또는 rework 후 run TASK_ID
+```
+
+현재 전체 업무 순환의 실제 검증 정책은 `docs/policies/workflow-live-copilot.json`입니다. 기존 Pool의 Gemini 첫 경로는 이번에 400으로 차단됐습니다. 과거 Provider 성공과 현재 모델 가용성은 구분합니다.
+
+```sh
+python3 scripts/workflow_live.py --allow-synthetic-transmission --policy docs/policies/workflow-live-copilot.json --evidence /tmp/nidus-workflow-new.json
+```
+
+이 명시적 합성 harness는 고정 공개 자료만 전송 승인하며 인간 품질 판단은 자동 승인하지 않습니다. 비용이 발생할 수 있으며 기존 evidence 경로는 덮어쓰지 않습니다.
+
 로컬 Vault에서 요청, 작업 계약, 권한 승인, 실행, 검증과 보관을 연결하는 CLI Runtime입니다.
-기본 모드는 결정적인 문서 브리핑이며, 생성형 모드는 선택한 문서를 실제 모델로 처리합니다.
+기본 오프라인 모드는 결정적인 문서 브리핑입니다. 새 생성형 작업은 관리자 계약 → 작업자 수행·자기 점검 → 결정적 검증 → 관리자 검토 → 승인/재작업/사람 판단을 따릅니다.
 GitHub Copilot, Gemini, NVIDIA NIM의 생성 결과가 Completed → Archive까지 검증됐습니다.
 
 ### 1. 준비와 빠른 체험
@@ -63,22 +84,27 @@ OMNIROUTE_SERVER_HOST=127.0.0.1 omniroute serve --daemon --no-open --no-tray
 set -a
 . "$HOME/.config/nidus/provider-pool.env"
 set +a
-python3 -m nidus --vault "$vault" submit "Summarize the facts in three bullet points; include Nidus" --source notes.md --output results/summary.md --mode generative --model-policy model-policy.pool.example.json --require Nidus
+python3 -m nidus --vault "$vault" submit "Summarize the facts in three bullet points; include Nidus" --source notes.md --output results/summary.md --mode generative --model-policy docs/policies/workflow-live-copilot.json --require Nidus
 python3 -m nidus --vault "$vault" run TASK_ID
 python3 -m nidus --vault "$vault" show TASK_ID
 python3 -m nidus --vault "$vault" decide TASK_ID approve
 python3 -m nidus --vault "$vault" run TASK_ID
+# Review the new Manager transmission attention before approving.
+python3 -m nidus --vault "$vault" show TASK_ID
+python3 -m nidus --vault "$vault" decide TASK_ID approve
+python3 -m nidus --vault "$vault" run TASK_ID
+# If REWORK queues a revision, run again and review each new transmission.
 unset NIDUS_POOL_API_KEY
 ```
 
 첫 run은 `Waiting`에서 멈춥니다. `show`의 attention에서 전송 원문·해시, Prompt 크기·해시, Endpoint와 전체 Route 정책을 검토한 뒤 승인하세요.
 기존 출력 파일이 있으면 덮어쓰기 승인을 먼저 받으므로, 각 결정 후 run하고 추가 attention이 있는지 확인하세요.
-선택한 원문 전체와 요청이 전송됩니다. 로컬 Router도 외부 Provider로 전달할 수 있습니다.
+선택한 원문 전체와 요청·계약이 전송됩니다. Manager 검토에는 결과·자기 점검·실행 정보도 포함되며 별도 전송 승인을 받습니다. 로컬 Router도 외부 Provider로 전달할 수 있습니다.
 키를 원문·Task·정책·Vault·Git에 넣지 마세요. 알려진 키 문자열 차단은 일반적인 민감정보 탐지 기능이 아닙니다.
 
 | 정책 | 용도 |
 |---|---|
-| `model-policy.pool.example.json` | 실제 검증된 세 모델의 순차 Pool; `NIDUS_POOL_API_KEY` 사용 |
+| `model-policy.pool.example.json` | 과거 검증된 세 모델의 순차 Pool; 현재 가용성은 VALIDATION 참조; `NIDUS_POOL_API_KEY` 사용 |
 | `model-policy.copilot.example.json` | Copilot 단독; `NIDUS_MODEL_API_KEY` 사용 |
 | `model-policy.example.json` | 기본 `nidus-free` Combo 예시; 실제 Combo를 구성해야 사용 가능 |
 | `docs/policies/model-active-*.json` | 단독 Live 검증 당시 정책; 임시 `NIDUS_VALIDATION_API_KEY`는 삭제됨 |
@@ -92,8 +118,8 @@ Pool은 무료 사용을 보장하지 않아 `kind=paid`, `allow_paid=true`를 �
 | 상태 | 다음 행동 |
 |---|---|
 | Queued / Running | `run TASK_ID`로 실행 또는 복구 |
-| Waiting | attention 검토 후 `decide TASK_ID approve` 또는 `reject`; 승인 후 run |
-| Verifying | run으로 저장된 결과 검증 재개; 모델 재호출 없음 |
+| Waiting | 권한/전송은 `decide approve/reject`, 품질 안건은 `quality-decide approve/rework/cancel`; 결정 후 run |
+| Verifying | 저장된 후보 검증과 미완료 Manager 검토 재개; 승인된 검토는 모델 재호출 없음 |
 | Blocked | show의 error/model_error/history 확인, 원인 해결 후 명시적으로 run |
 | Completed / Cancelled | 종료 상태; run으로 자동 변경되지 않음 |
 
@@ -113,7 +139,7 @@ PYTHONPYCACHEPREFIX=/tmp/nidus-pycache python3 -m compileall -q nidus tests scri
 git diff --check
 ```
 
-현재 회귀 기준은 오프라인 37개와 로컬 HTTP 3개입니다. HTTP 테스트는 루프백 소켓 권한이 필요하며 외부 모델은 사용하지 않습니다.
+현재 회귀 기준은 오프라인 53개와 로컬 HTTP 5개입니다. HTTP 테스트는 루프백 소켓 권한이 필요하며 외부 모델은 사용하지 않습니다.
 실제 합성 Live 테스트는 키를 환경에 넣은 상태에서 별도로 실행하며 사용량이 발생할 수 있습니다. 새 evidence 경로를 사용하세요.
 
 ```sh
@@ -132,19 +158,39 @@ python3 scripts/model_live.py --allow-synthetic-transmission --policy model-poli
 
 ### 개발 흐름
 
-`main`을 유일한 통합 브랜치로 사용합니다. 변경할 때는 최신 `main`에서 짧은 작업 브랜치를 만들고, 검증 후 `main` 대상 PR로 병합합니다. 병합된 작업 브랜치는 로컬과 GitHub에서 삭제합니다. 별도 `develop`이나 상시 통합용 feature 브랜치는 유지하지 않습니다. 과거 계획과 작업 지시의 브랜치 구조는 당시 실행 기록입니다.
+사용자의 현재 지시에 따라 Git Flow를 사용합니다. `main`은 안정 버전, `develop`은 기능 통합 브랜치입니다. `develop`에서 `feature/*`를 만들고 기능 단위로 구현·검증·커밋한 뒤 `develop`에 병합합니다. 원격 push/PR/릴리스의 main 통합은 해당 작업 범위에 따라 별도로 수행합니다.
 
 ```sh
-git switch main
-git pull --ff-only
-git switch -c feat/short-description
-# 작업 및 검증 후 commit/push, main 대상 PR 생성
+git switch develop
+git switch -c feature/short-description
+# 기능 구현·검증·커밋 후 develop에 병합
 ```
 
 ## English
 
+### Using the Manager workflow
+
+New --mode generative tasks default to Manager workflow. Supply --contract PATH for an explicit contract or use the default; --manager-policy PATH selects separate review routes; --max-reworks 2 bounds revisions. See DESIGN and the default contract in nidus/workflow.py for required fields. --workflow legacy preserves single-generation compatibility; offline extraction retains its existing commands.
+
+Inspect/approve Worker and Manager transmission agendas separately. REWORK resumes on the next run with a new exact prompt approval. ESCALATE/limits require an explicit quality decision, separate from permissions:
+
+```sh
+python3 -m nidus --vault "$vault" quality-decide TASK_ID approve --note "Accept the reviewed current result"
+python3 -m nidus --vault "$vault" quality-decide TASK_ID rework --note "Missing requirement" --instruction "Include the missing requirement"
+python3 -m nidus --vault "$vault" quality-decide TASK_ID cancel --note "Cancel this task"
+# Run TASK_ID after approve/rework.
+```
+
+The current end-to-end verified policy is docs/policies/workflow-live-copilot.json. The historical pool's first Gemini route returned 400 in this run. Historical provider success does not guarantee current availability.
+
+```sh
+python3 scripts/workflow_live.py --allow-synthetic-transmission --policy docs/policies/workflow-live-copilot.json --evidence /tmp/nidus-workflow-new.json
+```
+
+This explicit harness approves only fixed public synthetic transmissions, never human quality judgments. Usage may incur cost; existing evidence cannot be overwritten.
+
 A CLI runtime connecting requests, completion contracts, permissions, execution, verification and archive in a local vault.
-The default mode creates deterministic evidence briefings; optional generative mode processes selected documents with real models.
+Offline mode creates deterministic evidence briefings. New generative tasks follow Manager contract → Worker execution/self-check → deterministic checks → Manager approval/rework/human escalation.
 GitHub Copilot, Gemini and NVIDIA NIM have completed verified model-backed tasks through Completed → Archive.
 
 ### 1. Requirements and quick start
@@ -202,11 +248,16 @@ Use `vault` and `notes.md` from the previous section; replace `TASK_ID` below wi
 set -a
 . "$HOME/.config/nidus/provider-pool.env"
 set +a
-python3 -m nidus --vault "$vault" submit "Summarize the facts in three bullet points; include Nidus" --source notes.md --output results/summary.md --mode generative --model-policy model-policy.pool.example.json --require Nidus
+python3 -m nidus --vault "$vault" submit "Summarize the facts in three bullet points; include Nidus" --source notes.md --output results/summary.md --mode generative --model-policy docs/policies/workflow-live-copilot.json --require Nidus
 python3 -m nidus --vault "$vault" run TASK_ID
 python3 -m nidus --vault "$vault" show TASK_ID
 python3 -m nidus --vault "$vault" decide TASK_ID approve
 python3 -m nidus --vault "$vault" run TASK_ID
+# Review the new Manager transmission attention before approving.
+python3 -m nidus --vault "$vault" show TASK_ID
+python3 -m nidus --vault "$vault" decide TASK_ID approve
+python3 -m nidus --vault "$vault" run TASK_ID
+# If REWORK queues a revision, run again and review each new transmission.
 unset NIDUS_POOL_API_KEY
 ```
 
@@ -231,8 +282,8 @@ Policy is copied into the task at submission; later edits to the example JSON do
 | State | Next action |
 |---|---|
 | Queued / Running | Execute or recover with `run TASK_ID` |
-| Waiting | Review attention, `decide TASK_ID approve` or `reject`; run after approval |
-| Verifying | Run to resume stored-result verification; no model recall |
+| Waiting | Permissions: decide approve/reject; quality agendas: quality-decide approve/rework/cancel; then run |
+| Verifying | Resume candidate checks and pending Manager review; already-approved reviews need no model recall |
 | Blocked | Inspect error/model_error/history, fix the cause, explicitly run again |
 | Completed / Cancelled | Terminal; run does not change them automatically |
 
@@ -252,7 +303,7 @@ PYTHONPYCACHEPREFIX=/tmp/nidus-pycache python3 -m compileall -q nidus tests scri
 git diff --check
 ```
 
-The current regression baseline is 37 offline and 3 local HTTP tests. HTTP tests require loopback socket permission and make no external model calls.
+The current regression baseline is 53 offline and 5 local HTTP tests. HTTP tests require loopback socket permission and make no external model calls.
 Synthetic live acceptance is separate, requires the key in the environment and can consume model usage. Choose a new evidence path.
 
 ```sh
@@ -271,11 +322,10 @@ Each document contains both Korean and English. Raw live JSON remains in [docs/e
 
 ### Development workflow
 
-Use `main` as the only integration branch. Start a short-lived branch from the latest `main`, validate changes, and merge a PR targeting `main`. Delete merged branches locally and on GitHub. Do not maintain a separate `develop` or permanent feature integration branch. Branch structures in historical plans and work instructions describe earlier execution.
+Follow the current user-requested Git Flow: main holds stable releases; develop integrates features. Branch feature/* from develop, implement/validate/commit each feature, then merge into develop. Remote push/PR and release integration into main depend on the scope of each task.
 
 ```sh
-git switch main
-git pull --ff-only
-git switch -c feat/short-description
-# Implement, validate, commit/push, then open a PR targeting main.
+git switch develop
+git switch -c feature/short-description
+# Implement, validate, commit, then merge into develop.
 ```
