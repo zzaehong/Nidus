@@ -1,0 +1,23 @@
+{
+  "results": [
+    {
+      "model": "nvidia/nvidia/nemotron-3.5-lightning-30b-a3b",
+      "http_status": 200,
+      "started_at": "2026-10-08T05:59:28.948Z",
+      "latency_seconds": 2.612,
+      "error_type": null,
+      "error_code": null,
+      "error_hints": [],
+      "actual_model": "nvidia/nemotron-3.5-lightning-30b-a3b",
+      "text": "NIDUS_OK",
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 24,
+        "completion_tokens": 120,
+        "total_tokens": 144
+      }
+    }
+  ],
+  "temporary_key_deleted": true,
+  "error_handling": "Only allowlisted diagnostic hints retained; raw provider error bodies discarded."
+}
