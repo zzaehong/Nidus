@@ -112,7 +112,8 @@ class Store:
         return [dict(row, data=json.loads(row['data'])) for row in self.db.execute(
             'SELECT seq,kind,data FROM events WHERE task=? ORDER BY seq', (task_id,))]
 
-    def submit(self, request, sources, output, priority, mode='deterministic', model_policy=None, required_phrases=None):
+    def submit(self, request, sources, output, priority, mode='deterministic', model_policy=None, required_phrases=None,
+               workflow=None, manager_contract=None, manager_policy=None, max_reworks=2):
         from .gateway import reject_credentials, validate_policy
         if mode not in ('deterministic', 'generative'):
             raise ValueError('Unknown execution mode')
@@ -136,5 +137,22 @@ class Store:
             task['contract']['constraints'] = ['UTF-8 text only', 'Protect originals', 'Exact model transmission approval', 'No model tool execution']
             task['contract']['acceptance_criteria'] = ['Nonempty untruncated model response', 'All required literal phrases: ' + json.dumps(phrases), 'Sources unchanged', 'Output matches persisted model response and provenance']
             task['contract']['verification'] = 'Validate response and required phrases, source/prompt snapshot and exact artifact bytes'
+        if workflow is not None:
+            from .workflow import completion_contract
+            if workflow != 'manager' or mode != 'generative':
+                raise ValueError('Manager workflow requires generative execution')
+            if type(max_reworks) is not int or not 0 <= max_reworks <= 10:
+                raise ValueError('max_reworks must be an integer from 0 to 10')
+            contract = completion_contract(request, sources, output, manager_contract)
+            review_policy = validate_policy(manager_policy or policy)
+            reject_credentials(json.dumps(contract), policy)
+            reject_credentials(json.dumps(contract), review_policy)
+            task.update(workflow='manager', workflow_stage='worker_execution',
+                manager='manager-1', manager_contract=contract, manager_policy=review_policy,
+                max_reworks=max_reworks, rework_count=0, revisions=[], reviews=[])
+            task['contract']['acceptance_criteria'].append('Independent Manager APPROVE on the current submission')
         self.save(task, 'submitted')
+        if workflow:
+            self.save(task, 'manager_task_defined', {'manager': task['manager'], 'contract': contract,
+                'assigned_worker': task['employee']})
         return task
