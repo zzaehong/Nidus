@@ -209,3 +209,68 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(result['status'], 'waiting')
         self.assertEqual(adapter.generate.call_count, 1)
         self.assertEqual(result['attention']['role'], 'manager')
+
+    def test_malformed_worker_and_inconsistent_manager_fail_closed(self):
+        from nidus.workflow import manager_decision
+        invalid = self.decision()
+        invalid['criteria'][0]['status'] = 'unsatisfied'
+        with self.assertRaises(ModelError):
+            manager_decision(json.dumps(invalid), self.submit()['manager_contract'])
+        task = self.submit()
+        runtime, adapter = self.runtime([dict(self.submission(), self_check=[])])
+        result = self.advance(runtime, task)
+        self.assertEqual(result['status'], 'blocked')
+        self.assertEqual(adapter.generate.call_count, 1)
+        self.assertFalse((self.vault / 'managed.md').exists())
+
+    def test_source_change_during_review_invalidates_approval(self):
+        task = self.submit()
+        runtime, adapter = self.runtime([])
+        calls = []
+        def mutate(route, messages, policy):
+            calls.append(messages[0]['content'])
+            if len(calls) == 1:
+                return self.response(self.submission())
+            (self.vault / 'notes.md').write_text('source changed during Manager call')
+            return self.response(self.decision())
+        adapter.generate.side_effect = mutate
+        result = self.advance(runtime, task)
+        self.assertEqual(result['status'], 'blocked')
+        self.assertNotIn('manager_approval', result)
+        self.assertEqual(len(self.store.tasks(True)), 0)
+
+    def test_separate_role_policy_and_cross_role_secret_rejection(self):
+        import os
+        from unittest.mock import patch
+        manager_policy = default_policy()
+        manager_policy['routes'][0]['model'] = 'manager-model'
+        manager_policy['routes'][0]['api_key_env'] = 'MANAGER_API_KEY'
+        with patch.dict(os.environ, {'MANAGER_API_KEY':'MANAGER_SENSITIVE_TEST_KEY',
+                                     'NIDUS_MODEL_API_KEY':'WORKER_SENSITIVE_TEST_KEY'}):
+            task = self.submit(manager_policy=manager_policy)
+            runtime, adapter = self.runtime([self.submission(), self.decision()])
+            self.advance(runtime, task)
+            self.assertEqual(adapter.generate.call_args_list[1].args[0]['model'], 'manager-model')
+            (self.vault / 'managed.md').unlink()
+            task = self.submit(manager_policy=manager_policy)
+            bad = self.submission('MANAGER_SENSITIVE_TEST_KEY')
+            runtime, adapter = self.runtime([bad])
+            self.assertEqual(self.advance(runtime, task)['status'], 'blocked')
+            self.assertNotIn('MANAGER_SENSITIVE_TEST_KEY', json.dumps(self.store.get(task['id'])))
+            task = self.submit(manager_policy=manager_policy)
+            bad_review = self.decision()
+            bad_review['reason'] = 'WORKER_SENSITIVE_TEST_KEY'
+            runtime, adapter = self.runtime([self.submission(), bad_review])
+            self.assertEqual(self.advance(runtime, task)['status'], 'blocked')
+            self.assertNotIn('WORKER_SENSITIVE_TEST_KEY', json.dumps(self.store.get(task['id'])))
+
+    def test_modified_rework_output_requires_replacement_permission(self):
+        task = self.submit()
+        runtime, adapter = self.runtime([self.submission('- alpha'), self.decision('REWORK')])
+        self.advance(runtime, task)
+        (self.vault / 'managed.md').write_text('Human-edited draft')
+        waiting = runtime.run(task['id'])
+        self.assertEqual(waiting['status'], 'waiting')
+        self.assertEqual(waiting['attention']['subject'], 'Replace existing output?')
+        self.assertEqual(adapter.generate.call_count, 2)
+        self.assertEqual((self.vault / 'managed.md').read_text(), 'Human-edited draft')
