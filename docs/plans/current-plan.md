@@ -56,22 +56,29 @@ uncommitted and never stage it. New integration: feat/model-gateway.
 Conceptual v2 stays unchanged. New prompt supersedes earlier provider-decision stop.
 
 ## MG Slice 0 — design
-Status: In progress. Branch: feat/model-gateway-design.
+Status: Complete. Branch: feat/model-gateway-design.
 Requirements: MG-FR-01–06 / MG-AC-01–06 defined above existing offline contract.
 Changes: PRD/DESIGN extension, execution plan. Excluded: implementation.
 Verification: git diff --check and requirement/permission/ownership review.
 Done when: route boundary, stochastic verification and live evidence defined.
-Commits: pending.
+Commits: 762c12e.
 
 ## MG Slice 1 — adapter and runtime execution
-Status: Pending. Branch: feat/generative-execution.
+Status: Complete. Branch: feat/generative-execution.
 Requirements: MG-AC-01/03/04/05/06 plus AC-01–08 regression.
 Changes: gateway, route configuration, scoped transmission permission, persisted
 candidate, verification, unit/fake/local HTTP tests and CLI.
 Verification: full unittest suite; compileall; zero-network-before-approval tests;
 separate-process fake-provider E2E and candidate restart.
 Done when: all offline gateway/security/failure criteria pass. Excluded: dashboard,
-autodiscovery, actual payment, arbitrary agent tooling. Commits: pending.
+autodiscovery, actual payment, arbitrary agent tooling.
+Commits: af13bab (gateway), 97527c2 (runtime), 57d6824 (HTTP tests), plus
+follow-up test fix for existing Blocked inspection exit code 2.
+Evidence: 35 offline tests and 3 separate-process loopback HTTP tests pass; syntax
+and diff checks pass. Loopback sockets require sandbox escalation. An HTTP test
+first assumed show exited 0 for Blocked; corrected to existing exit 2 behavior.
+The failing expectation was inadvertently committed before inspecting the tool
+result; corrected in a follow-up commit without rewriting history.
 
 ## MG Slice 2 — live free-provider acceptance
 Status: Pending. Branch: feat/model-live-acceptance.
