@@ -4,6 +4,20 @@
 
 ## 한국어
 
+### Manager/Worker의 핵심 책임
+
+```text
+Manager → Task Definition → Completion Contract → Assignment
+Worker → Execution → Self Check → Submission
+Manager → Review → APPROVE / REWORK / ESCALATE
+```
+
+Manager가 작업자를 호출하기 전에 목적·범위·완료 기준·제약·자료·결과물·사람 판단 조건을 정한다. Worker는 기준을 보며 수행하고 자기 점검·한계를 제출한다. Manager는 자기 점검을 그대로 신뢰하지 않고 원 요청과 실제 결과/자료를 독립적으로 대조한다. 수정 가능하면 구체적인 지시로 재작업, 판단 불가능하거나 한도에 도달하면 인간에게 올린다. 검토는 업무이며 Manager 책임의 일부다. Manager 검토를 다시 검증하는 전용 AI 계층은 만들지 않는다.
+
+완료는 결정적 안전 확인과 현재 결과에 대한 책임 있는 승인 모두를 요구한다. 인간의 명시적 품질 승인은 Manager 판단을 위조하지 않는 별도 최종 결정이다. 승인 후 결과·자료·계약이 바뀌면 승인은 무효다. 역할 정체성은 실행 모델과 분리한다.
+
+현재 구현은 생성형 문서 Task의 두 역할과 제한된 재작업/사람 판단이다. 기존 결정적 추출은 호환 기능이며 전체 Group/Lead Manager/Project/GUI/Red Team 구조가 구현된 것은 아니다.
+
 ### 문서 지위와 변경 이력
 
 기존 Conceptual System Design v1·v2·v2 changes를 통합한 v2 책임 모델이다. 구현 완료 목록이 아니다.
@@ -83,7 +97,7 @@ Human: Direction / Final Decision
 | Worker | Desk → Next Action → Security → Action Routing/실행 → Result → Desk Update → 필요 시 Board/Library 갱신 → Budget Check. Contract 충족 전 유효 Action 탐색; Action 없음은 성공이 아님. 판단/의존은 Waiting/Blocked/Escalation |
 | Human Attention | Issue → 안건 → Waiting → Human Decision → Desk/Task/필요 제약 갱신 → 재개. 결정 전 대기 유지; 인간 중단 결정이면 재개 대신 종료 절차 |
 | Session / Rest | Budget 이내 작업; Budget/Reset 필요 시 Final Checkpoint와 Rest 후 Recovery. Task는 진행 중이며 세션만 종료. 복구 불가능/상태 불일치는 Blocked/Escalation |
-| Completion | Candidate → Acceptance Criteria → Verification. 실패 시 다음 Action/Blocked/Escalation, 통과 시 Desk Final Update → Result → Completed → Archive → 필요한 장기 지식 → Manager 전달 |
+| Completion | Candidate → Acceptance Criteria → Verification. 실패 시 다음 Action/Blocked/Escalation, 통과 시 Manager Review/승인 → Desk Final Update → Result → Completed → Archive → 필요한 장기 지식 → Manager 전달 |
 | Red Team | 기본적으로 Phase 종료 시 독립 검토. 전제/취약점/실패/반례/대안 검토 → Pass/Revise/Conflict. Manager는 근거로 방어하거나 추가 Task 생성, 중대한 충돌은 인간 판단 |
 | Closure / Knowledge | Final Phase → Result Review → Red Team → Close → Decision/Lesson/Result → Library → Dream Sequence. 만든 것/성공/실패/중요 결정/다음 개선/재사용 지식 검토 |
 
@@ -103,6 +117,20 @@ Decision Engine(JEV 포함)의 구현·인터페이스·적용 범위, Intellige
 Git 기반 버전 관리는 유지한다. 현재 기술 선택과 후속 범위는 DESIGN/PRD가 따로 명시한다.
 
 ## English
+
+### Manager/Worker responsibility boundary
+
+```text
+Manager → Task Definition → Completion Contract → Assignment
+Worker → Execution → Self Check → Submission
+Manager → Review → APPROVE / REWORK / ESCALATE
+```
+
+Before assignment, Manager defines purpose, scope, criteria, constraints, materials, deliverable and human-judgment conditions. Worker executes against those criteria and submits self-check/limitations. Manager independently compares the original request, actual result and source evidence rather than trusting self-check. Repairable issues return with concrete instructions; insufficient authority/evidence and exhausted rework go to humans. Review is work owned by Manager, not a separate verifier hierarchy.
+
+Completion requires deterministic safety checks and accountable approval of current content. Explicit human quality approval is a distinct final decision, preserving the Manager judgment. Changed results/materials/contracts invalidate approval. Role identity remains independent of the execution model.
+
+The implementation covers two roles on generative document tasks, bounded rework and human decisions. Deterministic extraction remains compatible; full Group/Lead Manager/Project/GUI/Red Team organization is still conceptual.
 
 ### Status and revision history
 
@@ -183,7 +211,7 @@ Upper layers convey goals/constraints/state rather than micro-manage actions. Lo
 | Worker | Desk → next action → Security → route/execute → result → Desk update → Board/Library if needed → budget check. Seek valid actions until contract satisfied; no action is not success. Decisions/dependencies mean Waiting/Blocked/Escalation |
 | Human Attention | Issue → agenda → Waiting → human decision → update Desk/task/constraints → resume. Wait until recorded decision; a human stop leads to closure rather than resumption |
 | Session / Rest | Work within budget; budget/reset triggers final checkpoint and Rest/recovery. Task remains in progress while session ends. Unrecoverable errors/inconsistency mean Blocked/Escalation |
-| Completion | Candidate → acceptance criteria → verification. Failure returns to next action/Blocked/Escalation; pass leads to Desk final update → result → Completed → archive → lasting knowledge → Manager report |
+| Completion | Candidate → acceptance criteria → verification. Failure returns to next action/Blocked/Escalation; pass leads to Manager review/approval → Desk final update → result → Completed → archive → lasting knowledge → Manager report |
 | Red Team | Independently review at phase end by default: premises/vulnerabilities/failures/counterexamples/alternatives → Pass/Revise/Conflict. Manager defends with evidence or creates tasks; humans resolve major conflicts |
 | Closure / Knowledge | Final phase → result review → Red Team → close → decisions/lessons/results → Library → Dream Sequence. Review output/success/failure/important decisions/improvements/reusable knowledge |
 
