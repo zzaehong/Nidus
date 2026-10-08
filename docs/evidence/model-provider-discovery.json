@@ -1,0 +1,43 @@
+{
+  "observed_at": "2026-10-08T05:48:02.686Z",
+  "catalogs": [
+    {
+      "provider": "gemini",
+      "status": 200,
+      "source": "api",
+      "warning": null,
+      "selected_models": [
+        {
+          "id": "gemini-2.5-flash",
+          "name": "Gemini 2.5 Flash"
+        },
+        {
+          "id": "gemini-2.5-flash-lite",
+          "name": "Gemini 2.5 Flash-Lite"
+        }
+      ]
+    },
+    {
+      "provider": "nvidia",
+      "status": 200,
+      "source": "api",
+      "warning": null,
+      "selected_models": [
+        {
+          "id": "google/gemma-3-4b-it",
+          "name": null
+        },
+        {
+          "id": "mistralai/mistral-7b-instruct-v0.3",
+          "name": null
+        },
+        {
+          "id": "nvidia/nemotron-nano-3-30b-a3b",
+          "name": null
+        }
+      ]
+    }
+  ],
+  "temporary_keys_remaining": 0,
+  "credential_handling": "Existing provider credentials not read or printed. New expiring restricted endpoint keys passed in memory and deleted."
+}
