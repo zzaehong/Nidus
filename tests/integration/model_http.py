@@ -82,7 +82,7 @@ class HttpIntegration(unittest.TestCase):
         self.server.response_status = 401
         result = self.cli('run', task['id'], code=2)
         self.assertEqual(result['model_error']['code'], 'authentication_failed')
-        self.assertNotIn('SENSITIVE_TEST_KEY', json.dumps(self.cli('show', task['id'])))
+        self.assertNotIn('SENSITIVE_TEST_KEY', json.dumps(self.cli('show', task['id'], code=2)))
         self.assertNotIn(b'SENSITIVE_TEST_KEY', (self.vault / '.nidus/state.sqlite3').read_bytes())
         self.assertFalse((self.vault / 'result.md').exists())
 
