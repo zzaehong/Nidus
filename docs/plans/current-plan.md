@@ -1,181 +1,71 @@
-# MVP execution plan
+# 현재 계획 / Current plan
 
-Base: clean `develop`, e68b29e. Integration: `feat/nidus-mvp`.
-Source workflow/template files and AGENTS.md were absent; follow doc/prompt.md.
-Concept documents remain unchanged. No remote operations or main/develop merges.
+[한국어](#한국어) · [English](#english)
 
-## Slice 0 — shape/design
-Status: Complete. Branch: feat/mvp-design.
-Requirements: all FR/AC defined; implementation gate passed.
-Changes: PRD, DESIGN, plan. Verification: inspect traceability and git diff --check.
-Done when: documents define bounded flow and testable AC. Excluded: implementation.
-Commits: fe742a8.
+## 한국어
 
-## Slice 1 — durable task lifecycle
-Status: Complete. Branch: feat/task-lifecycle.
-Requirements: FR-01/02/03/07; AC-01/02/03/07.
-Changes: Store, deterministic Workshop, CLI and lifecycle tests.
-Verification: python3 -m unittest discover -s tests -v; compileall.
-Done when: separate-process submit/run/inspect works and failed verification blocks.
-Excluded: overwrite approval, full Desk reconciliation. Commits: 57852c3 (persistence), aafa4d3 (execution), 7bf61d2 (evidence).
-Evidence: 6 tests pass; compileall passes with PYTHONPYCACHEPREFIX=/tmp/nidus-pycache.
-Default macOS cache location was sandbox-denied; no product failure.
+### 현재 상태
 
-## Slice 2 — recovery and permission
-Status: Complete. Branch: feat/context-security.
-Requirements: FR-04/05/06; AC-04/05/06 (and AC-03 recovery).
-Changes: Desk history, Home reconciliation, allow/ask/deny, scoped decisions/tests.
-Verification: full unittest suite and approval/restart CLI flows.
-Done when: unsafe paths fail closed and changed approval snapshots wait again.
-Excluded: shell/network/model tools. Commits: 68360fe (implementation), b11e873 (evidence).
-Evidence: 14 distinct tests pass, including approval invalidation, checkpoint recovery,
-path denial, native Desk history and Home terminal cleanup; compileall/diff checks pass.
+Integration: `feat/model-gateway`. 오프라인 MVP, Gateway, Copilot/Gemini/NVIDIA 실제 생성, 주입 장애 Fallback, 활성 Pool은 완료됐다.
+진행 중 제품 구현 Slice나 현재 Blocker는 없다. 무료 청구 검증, 일반 Agent 자율성, 개념 설계의 GUI/Manager 등은 완료로 표시하지 않는다.
+이 파일은 현재 상태와 다음 작업만 관리하고 세부 실행 결과는 [검증 보고서](../VALIDATION.md)를 단일 출처로 사용한다.
 
-## Slice 3 — archive and completion evidence
-Status: Complete (offline scope). Branch: feat/task-archive.
-Requirements: FR-08; AC-08 and full regression.
-Changes: vault Git tracking, archive/audit, README, MVP_REPORT and final evidence.
-Verification: full suite; compileall; separate-process primary/approval flows;
-git diff --check; integration status/history review.
-Done when: all offline P0 ACs pass, docs reconcile, clean integration branch.
-Excluded: live generative hypothesis proof. Commits: 76245f1 (archive/Git),
-ec79653 (clean checkpoints), 5e28e31 (demo/reconciliation).
-Evidence: 18 distinct tests pass; real separate-process demo passes; compileall and
-diff checks pass. Final integration verification is recorded in MVP_REPORT.md.
+### 이번 문서 정리
 
-## Mission reconciliation / safe stop
-Offline AC-01–AC-08 pass; original full mission remains PARTIAL because no actual
-generative Employee is connected. No model runtime/config exists. BLOCKED.md records
-the required human model/data/Secret boundary decision. No AC was removed or relaxed
-to make a failure pass. Completed offline slices are integrated locally; main/develop
-and remotes remain unchanged. Conceptual v2 is unchanged.
+Feature: `docs/consolidate-bilingual`. 완료: 기존 Markdown 18개를 안내 문서 6개 + 작업 지시 1개로 통합했다.
 
-# Model Gateway mission — 2026-10-08
-Base: feat/nidus-mvp c9c0022. User-owned modification: doc/prompt.md; preserve it
-uncommitted and never stage it. New integration: feat/model-gateway.
-Conceptual v2 stays unchanged. New prompt supersedes earlier provider-decision stop.
+| 단일 문서 | 역할 |
+|---|---|
+| README.md | 설치 전제, 빠른 체험, 직접 작업, 모델 연결, 승인·복구, 테스트 |
+| PRD.md | 요구사항·AC-01–08·MG-AC-01–06·PV-AC-01–04 |
+| DESIGN.md | 현재 구현·소유권·상태·보안·복구·모델 경계 |
+| docs/CONCEPT.md | v1/v2/changes의 장기 책임 모델과 미확정 선택 |
+| docs/VALIDATION.md | MVP·Gateway·Provider·설치·Blocker 보고서의 최신 상태와 실패 이력 |
+| docs/plans/current-plan.md | 현재 상태, 이번 변경과 다음 작업 |
 
-## MG Slice 0 — design
-Status: Complete. Branch: feat/model-gateway-design.
-Requirements: MG-FR-01–06 / MG-AC-01–06 defined above existing offline contract.
-Changes: PRD/DESIGN extension, execution plan. Excluded: implementation.
-Verification: git diff --check and requirement/permission/ownership review.
-Done when: route boundary, stochastic verification and live evidence defined.
-Commits: 762c12e.
+모든 문서는 같은 파일에 한국어/영어를 둔다. 사용자 작업 지시 `doc/prompt.md`는 원문을 보존하고 영문을 덧붙이며 사용자의 기존 수정과 함께 미커밋 상태로 둔다.
+JSON 실행 증거·정책·코드·키는 변경하지 않는다. 이전 문서는 Commit `d8ab677`에서 조회한다.
+검증: 상대 링크/앵커 존재, 양언어 절, 오래된 문서 참조, README 오프라인 명령의 임시 Vault 실행, diff 검사.
+링크/앵커·양언어 검사, 오프라인 데모, README 직접 실행과 생성형 승인 대기/거절 검증을 통과했다. 기존 증거/정책/코드 변경은 0건이다.
+문서 정리를 위해 새 모델 호출이나 전체 제품 회귀를 반복하지 않는다. 코드 변경 시 관련 회귀를 따로 실행한다.
 
-## MG Slice 1 — adapter and runtime execution
-Status: Complete. Branch: feat/generative-execution.
-Requirements: MG-AC-01/03/04/05/06 plus AC-01–08 regression.
-Changes: gateway, route configuration, scoped transmission permission, persisted
-candidate, verification, unit/fake/local HTTP tests and CLI.
-Verification: full unittest suite; compileall; zero-network-before-approval tests;
-separate-process fake-provider E2E and candidate restart.
-Done when: all offline gateway/security/failure criteria pass. Excluded: dashboard,
-autodiscovery, actual payment, arbitrary agent tooling.
-Commits: af13bab (gateway), 97527c2 (runtime), 57d6824 (HTTP tests), plus
-follow-up test fix for existing Blocked inspection exit code 2.
-Evidence: 35 offline tests and 3 separate-process loopback HTTP tests pass; syntax
-and diff checks pass. Loopback sockets require sandbox escalation. An HTTP test
-first assumed show exited 0 for Blocked; corrected to existing exit 2 behavior.
-The failing expectation was inadvertently committed before inspecting the tool
-result; corrected in a follow-up commit without rewriting history.
+### 개발 이력과 다음 단계
 
-## MG Slice 2 — live free-provider acceptance
-Status: Blocked (actual model completion). Branch: feat/model-live-acceptance.
-Requirements: MG-AC-02 and full mission completion gate.
-Changes: synthetic live script, real evidence, README, reports/blocker reconciliation,
-Korean document addenda reflecting the extension.
-Verification: opt-in live CLI flow against real free external provider; no sensitive
-inputs; final integrated offline suite; Git status/history/diff review.
-Done when: real generated summary meets observable contract and completes.
-Excluded: paid fallback, account creation and client impersonation.
-Evidence: actual synthetic OpenCode Zen/big-pickle call returned an access/auth
-refusal; Task Blocked, Result null, Archive empty. Gateway failure evidence is
-retained at docs/evidence/model-live.json. First evidence predates HTTP-status
-hardening and is not rewritten. Actual success remains NOT VERIFIED.
-User requested OmniRoute installation; it is now installed/running, but normal
-free Provider/Combo and Endpoint Key configuration remain necessary.
-Commits: no successful live acceptance commit; see separate evidence slice below.
+오프라인 `feat/nidus-mvp` → Gateway 설계/생성형 실행/보강 → OmniRoute 설치 → Copilot Live → 다중 Provider 검증 → Gemini/NVIDIA 활성화 순으로 통합했다.
+주요 Commit/실행 증거는 VALIDATION의 개발 이력 표에 보존한다. 완료된 Slice를 다시 진행 중으로 되돌리지 않는다.
+다음 제품 작업은 사용자가 선택한다. 재사용 시 README의 Pool 정책을 명시적으로 선택하고 자료를 검토한 뒤 전송 승인한다.
+Remote push/PR/main/develop merge는 이번 범위가 아니다. `.DS_Store` 등 무관한 사용자 파일과 prompt 원문을 보존한다.
 
+## English
 
-## MG Slice 1b — installed OmniRoute connection (user steering)
-Status: Complete. Branch: feat/omniroute-connection.
-Requirements: MG-AC-01/03/04/06; actual MG-AC-02 success is not claimed.
-Changes: official global installation, loopback daemon, compatible default policy,
-free-only combo placeholder and installation report.
-Verification: version/help; dashboard 200; unauthenticated model API 401; loopback
-LISTEN; full offline/HTTP regression and syntax checks.
-Done when: installation/server readiness and configured client boundary are verified.
-Excluded: account/payment setup, unknown paid auto routing, client impersonation.
-Verification result: 37 offline tests and 3 HTTP tests pass; compileall/diff checks pass.
-Commits: 5516660 (default connection), 2161b95 (installation/readiness). Actual model completion remains in MG Slice 2.
+### Current status
 
+Integration: `feat/model-gateway`. Offline MVP, Gateway, real Copilot/Gemini/NVIDIA generation, injected-fault fallback and the active pool are complete.
+No product implementation slice or current blocker remains. Free-billing verification, general agent autonomy and conceptual GUI/managers are not marked complete.
+This file owns only current state/next work; [validation](../VALIDATION.md) is the single source for execution details.
 
-## MG Slice 1c — failure/retry hardening
-Status: Complete. Branch: feat/model-gateway-hardening.
-Requirements: MG-AC-03/05/06. Commit: fd79649.
-Changes: preserve safe HTTP status, distinguish access denied, clear prior model
-error on explicit retry, block source changes during call and reask next run.
-Verification: 37 offline tests and 3 loopback HTTP tests pass.
-Excluded: provider account or live success. Done when: above regression guards pass.
+### Documentation consolidation
 
-## MG Slice 2a — live harness / failure evidence / reconciliation
-Status: Complete (evidence preparation, not actual live success).
-Branch: feat/model-live-evidence. Requirements: live observability and accurate
-reporting; MG-AC-02 remains Blocked in MG Slice 2.
-Changes: opt-in synthetic-only script; genuine failed API evidence; README; English
-source-report and Korean addenda; current blocker and installation reconciliation.
-Verification: actual script executed with exit 2 and failure evidence; JSON validates
-Blocked/result-null/archive-0; syntax/diff checks; final integrated offline/HTTP tests.
-Done when: reproducible harness and genuine outcome preserved without fabricated
-success or secrets. Excluded: accepting failed call as success.
-Commits: see feat/model-live-evidence history.
+Feature: `docs/consolidate-bilingual`. Complete: reduced 18 Markdown files to six guides plus one instruction file.
 
-## Final state for current session
-Current/integration branch: feat/model-gateway after evidence merge. Completed
-implementation/preparation slices integrated; actual model acceptance remains
-blocked. Only uncommitted change is user's doc/prompt.md. No remote operations or
-main/develop merge. Provider Key values were never printed or committed.
+| Canonical document | Responsibility |
+|---|---|
+| README.md | Prerequisites, quick start, direct work, models, approval/recovery, tests |
+| PRD.md | Requirements, AC-01–08, MG-AC-01–06, PV-AC-01–04 |
+| DESIGN.md | Implementation, ownership, state, security, recovery, model boundary |
+| docs/CONCEPT.md | v1/v2/changes long-term responsibility model and open decisions |
+| docs/VALIDATION.md | Current status/history from MVP/Gateway/provider/install/blocker reports |
+| docs/plans/current-plan.md | Current status, this change and next work |
 
+Each document contains Korean/English in the same file. Preserve the original user instructions in `doc/prompt.md`, append English, and leave it uncommitted with the user's existing edits.
+Do not change JSON evidence/policies/code/keys. Retrieve earlier documents at commit `d8ab677`.
+Verify relative links/anchors, both language sections, obsolete references, README offline commands in a temporary vault and diff checks.
+Link/anchor/language checks, offline demo, README direct execution and generative wait/reject boundary checks passed. Existing evidence/policy/code changes: zero.
+Do not make new live calls or repeat full product regression for documentation cleanup; run relevant regression separately if code changes.
 
-## MG Slice 2 — completed Copilot acceptance (supersedes blocked state above)
-Status: Complete. Feature: feat/model-live-acceptance. Integration: feat/model-gateway.
-User connected Copilot. Created one restricted Nidus Endpoint Key outside Repo/Vault;
-explicit paid-policy path to gh/gpt-4o-mini, no fallback or billing changes.
-Real synthetic task 879034f98e4b4c11a933e9a8e17e30f6 completed; six checks true;
-Active 0 / Archive 1. Response manually reviewed: exactly three factual bullets.
-Tokens 202/33/235; cost unknown. gpt-5-mini failure preserved separately.
-Evidence: docs/evidence/model-live-copilot.json. MG-AC-02 now PASS.
-37 offline + 3 HTTP regression, compileall, diff, real key Repo/Vault scan pass.
-No remaining mission blocker. Only user doc/prompt.md remains uncommitted after
-integration. No push/PR/main/develop merge. Commit identifiers: feature Git history.
+### History and next steps
 
-
-## Multi-provider live validation — 2026-10-08 (latest scope)
-Feature: feat/model-provider-validation; integration feat/model-gateway.
-Status: Partial / provider blockers recorded; fallback acceptance complete.
-Gemini/NVIDIA real catalogs and valid connections, three individual candidate
-calls each: 404/400 Blocked. Preserve each evidence. No speculative taxonomy change.
-Injected Gemini 503 → actual NVIDIA 429 → real Copilot Completed/Archive; also
-two injected 503 → Copilot complete and injected 401 → stop without fallback.
-Harness exact-sequence expectation broadened for valid NVIDIA retryable failure;
-raw observations preserved. Old Copilot evidence untouched. Expiring temporary
-keys only in memory, deleted; no existing credential reads or account/billing edits.
-37 offline + 3 HTTP tests, compileall, diff checks PASS. Reports list standalone
-blockers and injection limits. No main/develop/remote operations. User prompt and
-pre-existing .DS_Store files remain outside commits. Commits: Feature history.
-
-
-## Provider activation — latest user prompt, 2026-10-08
-Status: Complete. Feature feat/free-provider-activation → integration feat/model-gateway.
-Diagnose: Gemini old Flash blocked by active catalog; new Flash-Lite probe succeeds.
-NVIDIA old candidates 404 unknown cause; current Lightning probe succeeds with 512
-tokens (128 truncated), Gemma timeout preserved. No Gateway code/taxonomy change.
-Gemini/NVIDIA real Nidus tasks Completed/Archive, 6 checks true, semantic manual
-review three bullets. New *-success evidence; previous records untouched.
-Active explicit Gemini/NVIDIA/Copilot Pool, limited durable key outside Repo/Vault;
-transient probe keys deleted. Unknown billing remains null, no free quota guarantees.
-37 offline + 3 HTTP tests, compileall/diff, new key leakage check PASS.
-No remaining blocker; no manufactured natural outage. Prior fallback evidence sufficient.
-User prompt/.DS_Store preserved; no remote/main/develop/history rewrite.
-Commits: feature branch history. Detailed result: PROVIDER_ACTIVATION_REPORT.md.
+Integrated offline `feat/nidus-mvp` → Gateway design/generative execution/hardening → OmniRoute installation → Copilot live → multi-provider validation → Gemini/NVIDIA activation.
+VALIDATION retains important commits/evidence in its history table. Do not reopen completed slices.
+The user selects the next product task. For reuse, explicitly choose the README pool policy, inspect inputs and approve transmission.
+Remote push/PR/main/develop merge is outside this scope. Preserve unrelated `.DS_Store` files and original prompt instructions.
