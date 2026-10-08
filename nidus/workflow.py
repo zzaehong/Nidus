@@ -10,7 +10,9 @@ WORKER_INSTRUCTIONS = (
     'each criterion yourself and report limitations/questions. Return a JSON object only: '
     '{"result":"Markdown text", "self_check":[{"criterion_id":"C1", "status":"satisfied|unsatisfied|uncertain", '
     '"reason":"specific reason"}], "known_limitations":[], "questions":[]}. '
-    'Include every criterion exactly once. Include required literal phrases in result. No tools or credentials.')
+    'Include every criterion exactly once. known_limitations and questions must be arrays of strings, '
+    'empty when absent. Emit strictly valid JSON with balanced braces, no commentary or fences. '
+    'Include required literal phrases in result. No tools or credentials.')
 
 MANAGER_INSTRUCTIONS = (
     'You are Manager, responsible for task definition, scope, completion criteria and final quality review. '
@@ -25,7 +27,11 @@ MANAGER_INSTRUCTIONS = (
     'Return a JSON object only: {"decision":"APPROVE|REWORK|ESCALATE", '
     '"criteria":[{"criterion_id":"C1", "status":"satisfied|unsatisfied|uncertain", "reason":"evidence"}], '
     '"reason":"overall reasoning including original-request omissions", '
-    '"issues":[], "instructions":[], "questions":[]}. Cover every criterion exactly once. No tools or credentials.')
+    '"issues":[], "instructions":[], "questions":[]}. All three arrays must contain strings only, '
+    'never objects. Cover every criterion exactly once. Cite source evidence in criterion reasons. '
+    'Check the actual source text before asserting a claim is absent; paraphrases are allowed unless '
+    'the original request requires literal quotation. Emit strictly valid JSON with balanced braces, '
+    'no commentary, code fences or trailing characters. No tools or credentials.')
 
 
 def strings(value, nonempty=False):
