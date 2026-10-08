@@ -45,3 +45,83 @@ class WorkflowTests(unittest.TestCase):
         for limit in (-1,11,True):
             with self.assertRaises(ValueError):
                 self.submit(max_reworks=limit)
+
+    def decision(self, choice='APPROVE'):
+        return {'decision':choice, 'criteria': self.submission()['self_check'],
+            'reason':'Compared original request and each criterion with actual output and sources',
+            'issues':['Only two bullets'] if choice == 'REWORK' else [],
+            'instructions':['Write exactly three supported bullets'] if choice == 'REWORK' else [],
+            'questions':['Which value should take precedence?'] if choice == 'ESCALATE' else []}
+
+    def runtime(self, values):
+        adapter = Mock()
+        adapter.generate.side_effect = [self.response(value) for value in values]
+        return Runtime(self.store, Gateway(adapter)), adapter
+
+    def advance(self, runtime, task, review_only=False):
+        for _ in range(15):
+            result = runtime.run(task['id'], review_only=review_only)
+            if result['status'] != 'waiting' or result['attention'].get('kind') == 'quality':
+                return result
+            runtime.decide(task['id'], 'approve')
+        self.fail('Unbounded workflow')
+
+    def test_manager_approval_completion_and_role_separation(self):
+        task = self.submit()
+        runtime, adapter = self.runtime([self.submission(), self.decision()])
+        result = self.advance(runtime, task)
+        self.assertEqual(result['status'], 'completed')
+        self.assertEqual(result['workflow_stage'], 'done')
+        self.assertEqual(len(self.store.tasks(True)), 1)
+        self.assertEqual(adapter.generate.call_count, 2)
+        worker = adapter.generate.call_args_list[0].args[1]
+        manager = adapter.generate.call_args_list[1].args[1]
+        self.assertNotEqual(worker[0]['content'], manager[0]['content'])
+        self.assertIn('worker_submission', manager[1]['content'])
+        self.assertIn('original_request', manager[1]['content'])
+        self.assertIn('manager_approved', [e['kind'] for e in self.store.events(task['id'])])
+
+    def test_review_requires_separate_transmission_approval(self):
+        task = self.submit()
+        runtime, adapter = self.runtime([self.submission(), self.decision()])
+        runtime.run(task['id'])
+        runtime.decide(task['id'], 'approve')
+        waiting = runtime.run(task['id'])
+        self.assertEqual(waiting['status'], 'waiting')
+        self.assertEqual(waiting['attention']['role'], 'manager')
+        self.assertEqual(adapter.generate.call_count, 1)
+        runtime.decide(task['id'], 'reject')
+        self.assertEqual(runtime.run(task['id'])['status'], 'cancelled')
+        self.assertEqual(adapter.generate.call_count, 1)
+
+    def test_approved_result_tampering_invalidates_and_blocks(self):
+        task = self.submit()
+        runtime, adapter = self.runtime([self.submission(), self.decision()])
+        result = self.advance(runtime, task, review_only=True)
+        self.assertEqual(result['status'], 'verifying')
+        self.assertIn('manager_approval', result)
+        (self.vault / 'managed.md').write_text('tampered after approval')
+        blocked = runtime.run(task['id'])
+        self.assertEqual(blocked['status'], 'blocked')
+        self.assertNotIn('manager_approval', blocked)
+        self.assertEqual(adapter.generate.call_count, 2)
+
+    def test_review_restart_does_not_repeat_models(self):
+        task = self.submit()
+        runtime, adapter = self.runtime([self.submission(), self.decision()])
+        self.advance(runtime, task, review_only=True)
+        self.store.close()
+        self.store = test_runtime.Store(self.vault)
+        replacement, fake = self.runtime([])
+        self.assertEqual(replacement.run(task['id'])['status'], 'completed')
+        fake.generate.assert_not_called()
+
+    def test_escalation_never_completes_or_uses_permission_decision(self):
+        task = self.submit()
+        runtime, adapter = self.runtime([self.submission(), self.decision('ESCALATE')])
+        result = self.advance(runtime, task)
+        self.assertEqual(result['status'], 'waiting')
+        self.assertEqual(result['workflow_stage'], 'human_review')
+        self.assertEqual(len(self.store.tasks(True)), 0)
+        with self.assertRaises(ValueError):
+            runtime.decide(task['id'], 'approve')

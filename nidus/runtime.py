@@ -105,8 +105,11 @@ class Runtime:
             task = self.store.get(task_id)
             if task['status'] != 'waiting' or decision not in ('approve', 'reject'):
                 raise ValueError('Decision requires a Waiting task and approve/reject')
-            task['decisions'].append({'decision': decision, 'snapshot': task['attention']['snapshot']})
-            task['status'] = 'queued' if decision == 'approve' else 'cancelled'
+            if task['attention'].get('kind') == 'quality':
+                raise ValueError('Use a quality decision for Manager escalation')
+            task['decisions'].append({'decision': decision, 'snapshot': task['attention']['snapshot'],
+                                      'kind': task['attention'].get('kind', 'permission')})
+            task['status'] = task['attention'].get('resume_status', 'queued') if decision == 'approve' else 'cancelled'
             self.store.save(task, 'human_decision', task['decisions'][-1])
             self.checkpoint(task, 'recover' if decision == 'approve' else 'none')
             return task
@@ -206,7 +209,7 @@ class Runtime:
         self.checkpoint(task, 'verify')
         return True
 
-    def run(self, task_id, execute_only=False):
+    def run(self, task_id, execute_only=False, review_only=False):
         with self.store.lock():
             task = self.store.get(task_id)
             if task['status'] in ('completed', 'cancelled', 'waiting'):
@@ -244,7 +247,19 @@ class Runtime:
                 if not all(checks.values()):
                     raise ValueError('Verification failed')
                 if task.get('workflow') == 'manager':
-                    raise ValueError('Manager approval required before completion')
+                    from .workflow import review, review_binding
+                    if not review(self, task, records):
+                        return task
+                    # A model call is not atomic with filesystem writes. Recheck the
+                    # approved bytes and input scope immediately before completion.
+                    latest = sources_for(self.store, task)
+                    if (output_hash(safe_path(self.store.vault, task['output'])) != task['candidate_hash']
+                            or review_binding(task, latest) != task['manager_approval']['binding']):
+                        task.pop('manager_approval', None)
+                        raise ValueError('Manager approval invalidated by changed result or inputs')
+                    if review_only:
+                        return task
+                    task['workflow_stage'] = 'done'
                 task['status'] = 'completed'
                 task['contract']['result'] = {'output': task['output'], 'sha256': digest(output),
                     'verification': checks, 'limitations': ['Literal/structural verification does not prove semantic correctness'] if generative else ['Deterministic extraction only']}
@@ -253,6 +268,7 @@ class Runtime:
                 self.store.save(task, 'verified_completed')
                 self.checkpoint(task, 'none')
             except (OSError, ValueError) as error:
+                task.pop('manager_approval', None)
                 task['status'] = 'blocked'
                 task['error'] = str(error)
                 task['contract']['result'] = None
