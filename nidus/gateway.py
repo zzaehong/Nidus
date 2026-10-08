@@ -39,8 +39,8 @@ class ModelError(ValueError):
 
 
 def default_policy():
-    return {'routes': [{'name': 'zen-free', 'kind': 'free', 'provider': 'opencode-zen',
-        'base_url': 'https://opencode.ai/zen/v1', 'model': 'big-pickle',
+    return {'routes': [{'name': 'omniroute-free', 'kind': 'free', 'provider': 'omniroute',
+        'base_url': 'http://127.0.0.1:20128/v1', 'model': 'nidus-free',
         'api_key_env': 'NIDUS_MODEL_API_KEY', 'cost_per_million_input': 0,
         'cost_per_million_output': 0}], 'allow_paid': False, 'timeout_seconds': 30, 'max_tokens': 1024}
 
