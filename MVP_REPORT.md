@@ -1,5 +1,10 @@
 # MVP Result
 
+> 최신 상태: 실제 Copilot 생성형 실행 VERIFIED, Completed/Archive 확인.
+> 이전 미검증/Blocker 본문은 당시 기록입니다. MODEL_GATEWAY_REPORT.md 및
+> docs/evidence/model-live-copilot.json이 최신 결과입니다.
+
+
 ## Status
 PARTIAL — the offline runtime MVP is implemented and validated. The original
 mission's actual generative AI Employee hypothesis remains unvalidated; do not
@@ -122,8 +127,9 @@ its live acceptance evidence before claiming the original hypothesis achieved.
 
 
 ## Model Gateway follow-up — 2026-10-08
-The new authorized external boundary is implemented; see MODEL_GATEWAY_REPORT.md.
-Actual generative model execution remains NOT VERIFIED: a real external synthetic
-request was made but access was refused before any generated response. No successful
-model task is claimed. Existing offline P0 criteria still pass. The provider-choice
-architecture blocker is superseded; usable route/auth configuration is now required.
+Actual generative model execution: **VERIFIED**. OmniRoute → GitHub Copilot
+`gh/gpt-4o-mini` processed a synthetic Nidus summary through exact transmission
+approval, all six verification checks, Completed and Archive (Active 0 / Archive 1).
+Evidence: docs/evidence/model-live-copilot.json. Tokens 202 input / 33 output;
+cost unknown. See MODEL_GATEWAY_REPORT.md for scope, security and limitations.
+Earlier offline report sections above are historical; the model route blocker is resolved.
