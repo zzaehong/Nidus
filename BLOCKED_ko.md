@@ -53,3 +53,10 @@ MODEL_GATEWAY_REPORT.md를 참고하세요. 기존 모델 미검증 상태를 �
 증거: docs/evidence/model-live-copilot.json. Nidus 전용 키는 저장소 밖 권한 600 파일에
 있으며 모델/연결을 제한했습니다. 무료 보장 없이 별도 Paid 정책을 사용했고 결제 설정은
 변경하지 않았습니다. 상세 범위·테스트·비용 unknown은 MODEL_GATEWAY_REPORT.md 참조.
+
+
+## 최신 다중 Provider 검증 — 2026-10-08
+Copilot VERIFIED; Gemini/NVIDIA 단독 생성은 404/400으로 BLOCKED. 명시적인 로컬
+503 장애 주입 후 실제 NVIDIA 429 → Copilot 성공으로 Fallback 완료를 확인했습니다.
+401에서는 후속 호출 없이 차단했습니다. 실제 Provider 장애와 주입 장애를 구분합니다.
+MODEL_PROVIDER_VALIDATION_REPORT.md 및 docs/evidence/model-provider-validation-summary.json 참조.
