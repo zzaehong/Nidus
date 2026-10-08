@@ -124,3 +124,96 @@ def role_messages(task, records):
         content['revision_context'] = task.get('revision_context')
     return [{'role':'system','content': MANAGER_INSTRUCTIONS if manager else WORKER_INSTRUCTIONS},
             {'role':'user','content': canonical(content)}]
+
+
+def manager_decision(text, contract):
+    value = parse_object(text)
+    if (set(value) != {'decision','criteria','reason','issues','instructions','questions'}
+            or value['decision'] not in ('APPROVE','REWORK','ESCALATE')
+            or not isinstance(value['reason'], str) or not value['reason'].strip()
+            or any(not strings(value[k]) for k in ('issues','instructions','questions'))):
+        raise ModelError('invalid_manager_decision')
+    check_criteria(value['criteria'], contract)
+    if value['decision'] == 'APPROVE' and (value['issues'] or value['instructions'] or value['questions']
+            or any(c['status'] != 'satisfied' for c in value['criteria'])):
+        raise ModelError('inconsistent_manager_approval')
+    if value['decision'] == 'REWORK' and (not value['issues'] or not value['instructions']):
+        raise ModelError('missing_rework_instructions')
+    if value['decision'] == 'ESCALATE' and not value['questions']:
+        raise ModelError('missing_escalation_questions')
+    return value
+
+
+def review_task(task):
+    value = dict(task, model_role='manager', model_policy=task['manager_policy'], required_phrases=[])
+    value['review_context'] = {'worker_submission': task['submission'],
+        'deterministic_verification': task['verification'],
+        'execution': {k: task['generation'].get(k) for k in ('route','provider','model','tokens','snapshot')},
+        'revision_context': task.get('revision_context'), 'rework_count': task['rework_count']}
+    return value
+
+
+def review_binding(task, records):
+    from .gateway import fingerprint, transmission
+    return fingerprint({'transmission': transmission(review_task(task), records),
+        'candidate_hash': task['candidate_hash'], 'worker_response': task['generation'],
+        'submission': task['submission'], 'contract': task['manager_contract'],
+        'verification': task['verification']})
+
+
+def human_attention(runtime, task, records, reason, questions):
+    task['status'] = 'waiting'
+    task['workflow_stage'] = 'human_review'
+    task['attention'] = {'kind':'quality', 'subject':'Human work-quality judgment required',
+        'background': {'original_request': task['request'], 'contract': task['manager_contract'],
+            'current_result': task['submission'], 'manager_review': task.get('manager_review')},
+        'reason':reason, 'questions': questions,
+        'choices': {'approve':'Accept current reviewed result', 'rework':'Return with explicit revision instructions',
+                    'cancel':'Cancel without completing'}, 'snapshot':review_binding(task, records)}
+    runtime.store.save(task, 'quality_escalated', task['attention'])
+    runtime.checkpoint(task, 'await_human_quality_decision')
+
+
+def review(runtime, task, records):
+    from .gateway import transmission, fingerprint
+    binding = review_binding(task, records)
+    approved = task.get('manager_approval')
+    if approved and approved['binding'] == binding:
+        if approved['review_hash'] == fingerprint(task.get('manager_review')):
+            return True
+    task.pop('manager_approval', None)
+    call = review_task(task)
+    snapshot = transmission(call, records)
+    generation = task.get('manager_generation')
+    if not generation or generation.get('snapshot') != snapshot:
+        if not any(d.get('kind') != 'quality' and d['decision'] == 'approve' and d['snapshot'] == snapshot
+                   for d in task['decisions']):
+            task['status'] = 'waiting'
+            task['workflow_stage'] = 'manager_review'
+            task['attention'] = {'kind':'transmission', 'role':'manager',
+                'subject':'Transmit result and selected sources for Manager review?',
+                'background':'Original request, contract, Worker result/self-check, selected sources and execution metadata',
+                'reason':'Manager review is a separate external transmission with an exact prompt/policy scope',
+                'choices': {'approve':'Allow only this review prompt and configured routes',
+                            'reject':'Cancel without Manager transmission'},
+                'snapshot':snapshot, 'resume_status':'verifying'}
+            runtime.store.save(task, 'model_permission_ask', task['attention'])
+            runtime.checkpoint(task, 'await_manager_transmission_approval')
+            return False
+        runtime.store.save(task, 'model_permission_allow', snapshot)
+        task['manager_generation'] = runtime.gateway.generate(call, records,
+            lambda kind, detail: runtime.store.save(task, kind, detail))
+        runtime.store.save(task, 'manager_response_received', {'snapshot':snapshot})
+    decision = manager_decision(task['manager_generation']['text'], task['manager_contract'])
+    task['manager_review'] = decision
+    if not task['reviews'] or task['reviews'][-1]['binding'] != binding:
+        task['reviews'].append({'binding':binding, 'decision':decision,
+            'generation':task['manager_generation'], 'iteration':task['rework_count']})
+        runtime.store.save(task, 'manager_reviewed', task['reviews'][-1])
+    if decision['decision'] == 'APPROVE':
+        task['manager_approval'] = {'binding':binding, 'review_hash':fingerprint(decision), 'authority':'manager'}
+        task['workflow_stage'] = 'manager_review'
+        runtime.store.save(task, 'manager_approved', task['manager_approval'])
+        return True
+    human_attention(runtime, task, records, decision['reason'], decision['questions'] or decision['issues'])
+    return False

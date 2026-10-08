@@ -27,6 +27,7 @@ def main():
     run = commands.add_parser('run')
     run.add_argument('task')
     run.add_argument('--execute-only', action='store_true')
+    run.add_argument('--review-only', action='store_true', help='Checkpoint approved review before final completion')
     decide = commands.add_parser('decide')
     decide.add_argument('task')
     decide.add_argument('decision', choices=['approve', 'reject'])
@@ -59,7 +60,7 @@ def main():
                     manager_policy=load_policy(args.manager_policy) if args.manager_policy else None,
                     max_reworks=args.max_reworks)
         elif args.command == 'run':
-            result = Runtime(store).run(args.task, args.execute_only)
+            result = Runtime(store).run(args.task, args.execute_only, args.review_only)
         elif args.command == 'decide':
             result = Runtime(store).decide(args.task, args.decision)
         elif args.command == 'show':
