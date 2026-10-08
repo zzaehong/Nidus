@@ -1,0 +1,63 @@
+{
+  "status": "verified",
+  "providers": [
+    {
+      "provider": "gemini",
+      "evidence": "docs/evidence/model-live-gemini-success.json",
+      "task": "81d9cf35e7ae4a17ab8f6ae05725da5a",
+      "requested_model": "gemini/gemini-3.5-flash-lite",
+      "actual_model": "gemini-3.5-flash-lite",
+      "started_at": "2026-10-08T05:58:25.718050+00:00",
+      "finished_at": "2026-10-08T05:58:26.727909+00:00",
+      "latency_seconds": 1.009859,
+      "tokens": {
+        "prompt_tokens": 208,
+        "completion_tokens": 32,
+        "total_tokens": 240
+      },
+      "estimated_cost_usd": null,
+      "status": "completed",
+      "verification": {
+        "sources_unchanged": true,
+        "output_matches": true,
+        "candidate_matches": true,
+        "nonempty_response": true,
+        "untruncated_response": true,
+        "required_phrases": true
+      },
+      "active_count": 0,
+      "archive_count": 1,
+      "manual_review": "Exactly three bullets, matching the three synthetic source facts."
+    },
+    {
+      "provider": "nvidia",
+      "evidence": "docs/evidence/model-live-nvidia-success.json",
+      "task": "bf007d0ae1a24d1caaaa044b4a2f48df",
+      "requested_model": "nvidia/nvidia/nemotron-3.5-lightning-30b-a3b",
+      "actual_model": "nvidia/nemotron-3.5-lightning-30b-a3b",
+      "started_at": "2026-10-08T05:59:46.726056+00:00",
+      "finished_at": "2026-10-08T05:59:57.886982+00:00",
+      "latency_seconds": 11.160926,
+      "tokens": {
+        "prompt_tokens": 231,
+        "completion_tokens": 415,
+        "total_tokens": 646
+      },
+      "estimated_cost_usd": null,
+      "status": "completed",
+      "verification": {
+        "sources_unchanged": true,
+        "output_matches": true,
+        "candidate_matches": true,
+        "nonempty_response": true,
+        "untruncated_response": true,
+        "required_phrases": true
+      },
+      "active_count": 0,
+      "archive_count": 1,
+      "manual_review": "Exactly three bullets, matching the three synthetic source facts."
+    }
+  ],
+  "pool_policy": "model-policy.pool.example.json",
+  "pool_cost_note": "Existing connected accounts only. Billing/free quota not attested; paid kind explicitly allowed rather than claiming free usage. Unknown costs remain null."
+}

@@ -1,0 +1,272 @@
+{
+  "status": "completed",
+  "vault": "/var/folders/0n/vbz_lc2n1d18k68mwhlkx5fm0000gn/T/nidus-model-live-o0wdt35q",
+  "task": "81d9cf35e7ae4a17ab8f6ae05725da5a",
+  "source": "# Nidus sample\nNidus stores task state in a local vault.\nA task completes only after verification passes.\nExisting output files require human approval before replacement.\n",
+  "request": "Summarize the supplied Nidus sample in exactly three concise bullet points. Include the literal phrase Nidus. Use only the supplied facts.",
+  "verification": {
+    "sources_unchanged": true,
+    "output_matches": true,
+    "candidate_matches": true,
+    "nonempty_response": true,
+    "untruncated_response": true,
+    "required_phrases": true
+  },
+  "model_error": null,
+  "result": {
+    "output": "results/summary.md",
+    "sha256": "10fdd0c073c599cfee030531ebdeb6e7e5bd337622690dc5de3cc7e9d53075e8",
+    "verification": {
+      "sources_unchanged": true,
+      "output_matches": true,
+      "candidate_matches": true,
+      "nonempty_response": true,
+      "untruncated_response": true,
+      "required_phrases": true
+    },
+    "limitations": [
+      "Literal/structural verification does not prove semantic correctness"
+    ],
+    "model": {
+      "route": "gemini-validated",
+      "provider": "omniroute/gemini",
+      "model": "gemini-3.5-flash-lite",
+      "tokens": {
+        "prompt_tokens": 208,
+        "completion_tokens": 32,
+        "total_tokens": 240
+      },
+      "estimated_cost_usd": null
+    }
+  },
+  "generation": {
+    "text": "* Nidus stores task state in a local vault.\n* A task completes only after verification passes.\n* Existing output files require human approval before replacement.",
+    "finish_reason": "stop",
+    "model": "gemini-3.5-flash-lite",
+    "tokens": {
+      "prompt_tokens": 208,
+      "completion_tokens": 32,
+      "total_tokens": 240
+    },
+    "estimated_cost_usd": null,
+    "route": "gemini-validated",
+    "provider": "omniroute/gemini",
+    "snapshot": {
+      "action": "model_transmission",
+      "prompt_hash": "d930a4f0bd5a5db5853bd0109cd687a55ddd2c30b9705d9d12405439cb9565a1",
+      "prompt_bytes": 887,
+      "request_hash": "e74fc591ec31a7de38a5913c4a9baede7e944c78a196f7b2fb7a72f022fe7d62",
+      "sources": {
+        "notes.md": "b6b82e3bb828d9fb3bfb8f9eb26fd105e23f0bc22fcdae8370a2679ab31445b0"
+      },
+      "policy": {
+        "allow_paid": true,
+        "max_tokens": 1024,
+        "routes": [
+          {
+            "api_key_env": "NIDUS_VALIDATION_API_KEY",
+            "base_url": "http://127.0.0.1:20128/v1",
+            "kind": "paid",
+            "model": "gemini/gemini-3.5-flash-lite",
+            "name": "gemini-validated",
+            "provider": "omniroute/gemini"
+          }
+        ],
+        "timeout_seconds": 60
+      }
+    }
+  },
+  "model_events": [
+    {
+      "seq": 5,
+      "kind": "model_permission_ask",
+      "data": {
+        "subject": "Transmit selected task data to model routes?",
+        "background": "Work request and full selected source text will leave the worker process",
+        "reason": "Network/model data transmission needs an exact scoped decision; a local router may forward externally",
+        "choices": {
+          "approve": "Allow the specified prompt and routes, including only explicitly allowed paid routes",
+          "reject": "Cancel without a model call or output write"
+        },
+        "snapshot": {
+          "action": "model_transmission",
+          "prompt_hash": "d930a4f0bd5a5db5853bd0109cd687a55ddd2c30b9705d9d12405439cb9565a1",
+          "prompt_bytes": 887,
+          "request_hash": "e74fc591ec31a7de38a5913c4a9baede7e944c78a196f7b2fb7a72f022fe7d62",
+          "sources": {
+            "notes.md": "b6b82e3bb828d9fb3bfb8f9eb26fd105e23f0bc22fcdae8370a2679ab31445b0"
+          },
+          "policy": {
+            "allow_paid": true,
+            "max_tokens": 1024,
+            "routes": [
+              {
+                "api_key_env": "NIDUS_VALIDATION_API_KEY",
+                "base_url": "http://127.0.0.1:20128/v1",
+                "kind": "paid",
+                "model": "gemini/gemini-3.5-flash-lite",
+                "name": "gemini-validated",
+                "provider": "omniroute/gemini"
+              }
+            ],
+            "timeout_seconds": 60
+          }
+        }
+      }
+    },
+    {
+      "seq": 12,
+      "kind": "model_permission_allow",
+      "data": {
+        "action": "model_transmission",
+        "prompt_hash": "d930a4f0bd5a5db5853bd0109cd687a55ddd2c30b9705d9d12405439cb9565a1",
+        "prompt_bytes": 887,
+        "request_hash": "e74fc591ec31a7de38a5913c4a9baede7e944c78a196f7b2fb7a72f022fe7d62",
+        "sources": {
+          "notes.md": "b6b82e3bb828d9fb3bfb8f9eb26fd105e23f0bc22fcdae8370a2679ab31445b0"
+        },
+        "policy": {
+          "allow_paid": true,
+          "max_tokens": 1024,
+          "routes": [
+            {
+              "api_key_env": "NIDUS_VALIDATION_API_KEY",
+              "base_url": "http://127.0.0.1:20128/v1",
+              "kind": "paid",
+              "model": "gemini/gemini-3.5-flash-lite",
+              "name": "gemini-validated",
+              "provider": "omniroute/gemini"
+            }
+          ],
+          "timeout_seconds": 60
+        }
+      }
+    },
+    {
+      "seq": 13,
+      "kind": "model_attempt_started",
+      "data": {
+        "task": "81d9cf35e7ae4a17ab8f6ae05725da5a",
+        "route": "gemini-validated",
+        "kind": "paid",
+        "provider": "omniroute/gemini",
+        "model": "gemini/gemini-3.5-flash-lite",
+        "endpoint": "http://127.0.0.1:20128/v1",
+        "started_at": "2026-10-08T05:58:25.718050+00:00",
+        "prompt_hash": "d930a4f0bd5a5db5853bd0109cd687a55ddd2c30b9705d9d12405439cb9565a1",
+        "prompt_bytes": 887,
+        "sources": {
+          "notes.md": "b6b82e3bb828d9fb3bfb8f9eb26fd105e23f0bc22fcdae8370a2679ab31445b0"
+        }
+      }
+    },
+    {
+      "seq": 14,
+      "kind": "model_attempt_succeeded",
+      "data": {
+        "task": "81d9cf35e7ae4a17ab8f6ae05725da5a",
+        "route": "gemini-validated",
+        "kind": "paid",
+        "provider": "omniroute/gemini",
+        "model": "gemini/gemini-3.5-flash-lite",
+        "endpoint": "http://127.0.0.1:20128/v1",
+        "started_at": "2026-10-08T05:58:25.718050+00:00",
+        "prompt_hash": "d930a4f0bd5a5db5853bd0109cd687a55ddd2c30b9705d9d12405439cb9565a1",
+        "prompt_bytes": 887,
+        "sources": {
+          "notes.md": "b6b82e3bb828d9fb3bfb8f9eb26fd105e23f0bc22fcdae8370a2679ab31445b0"
+        },
+        "finished_at": "2026-10-08T05:58:26.727909+00:00",
+        "actual_model": "gemini-3.5-flash-lite",
+        "tokens": {
+          "prompt_tokens": 208,
+          "completion_tokens": 32,
+          "total_tokens": 240
+        },
+        "estimated_cost_usd": null
+      }
+    },
+    {
+      "seq": 15,
+      "kind": "model_candidate_received",
+      "data": {
+        "snapshot": {
+          "action": "model_transmission",
+          "prompt_hash": "d930a4f0bd5a5db5853bd0109cd687a55ddd2c30b9705d9d12405439cb9565a1",
+          "prompt_bytes": 887,
+          "request_hash": "e74fc591ec31a7de38a5913c4a9baede7e944c78a196f7b2fb7a72f022fe7d62",
+          "sources": {
+            "notes.md": "b6b82e3bb828d9fb3bfb8f9eb26fd105e23f0bc22fcdae8370a2679ab31445b0"
+          },
+          "policy": {
+            "allow_paid": true,
+            "max_tokens": 1024,
+            "routes": [
+              {
+                "api_key_env": "NIDUS_VALIDATION_API_KEY",
+                "base_url": "http://127.0.0.1:20128/v1",
+                "kind": "paid",
+                "model": "gemini/gemini-3.5-flash-lite",
+                "name": "gemini-validated",
+                "provider": "omniroute/gemini"
+              }
+            ],
+            "timeout_seconds": 60
+          }
+        }
+      }
+    }
+  ],
+  "cli": [
+    {
+      "command": [
+        "init"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "submit"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "run"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "decide"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "run"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "show"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "list"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "list"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "active_count": 0,
+  "archive_count": 1
+}

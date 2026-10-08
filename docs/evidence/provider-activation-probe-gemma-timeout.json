@@ -1,0 +1,14 @@
+{
+  "results": [
+    {
+      "model": "nvidia/google/gemma-4-31b-it",
+      "http_status": null,
+      "error_type": "timeout",
+      "timeout_seconds": 60,
+      "text": null,
+      "usage": null
+    }
+  ],
+  "temporary_key_deleted": true,
+  "error_handling": "Only allowlisted diagnostic hints retained; raw provider error bodies discarded."
+}
