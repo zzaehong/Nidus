@@ -1,5 +1,10 @@
 # OmniRoute 설치 결과 — 2026-10-08
 
+> 최신 상태: 실제 Copilot 생성형 실행 VERIFIED, Completed/Archive 확인.
+> 이전 미검증/Blocker 본문은 당시 기록입니다. MODEL_GATEWAY_REPORT.md 및
+> docs/evidence/model-live-copilot.json이 최신 결과입니다.
+
+
 상태: **설치 및 로컬 서버 실행 완료**. 실제 생성형 Task의 완료 검증은 별도입니다.
 
 - 공식 npm 패키지 `omniroute@3.8.51` 설치.
@@ -41,3 +46,11 @@ python3 scripts/model_live.py --allow-synthetic-transmission --policy model-poli
 
 모델 실행 전 Nidus의 정확한 전송 승인·검증 경계는 그대로 적용됩니다.
 전체 Model Gateway 상태와 남은 Live 검증은 MODEL_GATEWAY_REPORT.md에 기록합니다.
+
+
+## Copilot live 검증 후속 — 2026-10-08
+이전 미설정/미검증 상태는 해소됐습니다. 사용자가 연결한 Copilot의
+`gh/gpt-4o-mini`로 승인 → 실제 생성 → 검증 → Completed/Archive를 확인했습니다.
+증거: docs/evidence/model-live-copilot.json. Nidus 전용 키는 저장소 밖 권한 600 파일에
+있으며 모델/연결을 제한했습니다. 무료 보장 없이 별도 Paid 정책을 사용했고 결제 설정은
+변경하지 않았습니다. 상세 범위·테스트·비용 unknown은 MODEL_GATEWAY_REPORT.md 참조.
