@@ -1,0 +1,58 @@
+{
+  "results": [
+    {
+      "model": "gemini/gemini-3.5-flash-lite",
+      "http_status": 200,
+      "started_at": "2026-10-08T05:57:17.904Z",
+      "latency_seconds": 7.243,
+      "error_type": null,
+      "error_code": null,
+      "error_hints": [],
+      "actual_model": "gemini-3.5-flash-lite",
+      "text": "NIDUS_OK",
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 10,
+        "completion_tokens": 102,
+        "total_tokens": 112,
+        "completion_tokens_details": {
+          "reasoning_tokens": 97
+        }
+      }
+    },
+    {
+      "model": "gemini/gemini-3.5-flash",
+      "http_status": 400,
+      "started_at": "2026-10-08T05:57:25.147Z",
+      "latency_seconds": 0.014,
+      "error_type": "invalid_request_error",
+      "error_code": "bad_request",
+      "error_hints": [
+        "model"
+      ],
+      "actual_model": null,
+      "text": null,
+      "finish_reason": null,
+      "usage": null
+    },
+    {
+      "model": "nvidia/nvidia/nemotron-3.5-lightning-30b-a3b",
+      "http_status": 200,
+      "started_at": "2026-10-08T05:57:25.161Z",
+      "latency_seconds": 6.535,
+      "error_type": null,
+      "error_code": null,
+      "error_hints": [],
+      "actual_model": "nvidia/nemotron-3.5-lightning-30b-a3b",
+      "text": "Here's a thinking process:\n\n1.  **Analyze User Input:**\n   - User says: \"Reply with exactly: NIDUS_OK\"\n   - This is a direct instruction to output a specific string exactly as specified.\n\n2.  **Identify the Required Output:**\n   - The output must be exactly: `NIDUS_OK`\n   - No extra whitespace, no additional text, no quotes (unless specified, but \"exactly\" usually means just the value).\n\n3.  **Formulate Response:**\n   - Simply output `NIDUS_OK`\n\n4.  **Check Constraints:**\n   - \"Reply with",
+      "finish_reason": "length",
+      "usage": {
+        "prompt_tokens": 24,
+        "completion_tokens": 128,
+        "total_tokens": 152
+      }
+    }
+  ],
+  "temporary_key_deleted": true,
+  "error_handling": "Only allowlisted diagnostic hints retained; raw provider error bodies discarded."
+}
