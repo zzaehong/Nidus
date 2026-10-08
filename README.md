@@ -1,12 +1,12 @@
 # Nidus
 
 로컬 Agent Vault 안에서 요청·작업 계약·문맥 복구·권한 검사·실행·검증·보관을
-연결하는 최소 Runtime입니다. 현재 Worker는 문서의 첫 세 비어 있지 않은 줄과
-SHA-256을 추출하는 **결정적 evidence briefing**을 수행합니다. 생성형 AI 요약이나
-임의의 Tool 실행은 지원하지 않습니다. 선택적인 생성형 문서 작성 경로는 구현되어
-있으며, 실제 외부 모델 완료는 아직 미검증입니다. 현재 Live 시도는 접근 거부로 Blocked입니다.
+연결하는 최소 Runtime입니다. 기본 Worker는 결정적인 evidence briefing을 만들며,
+선택적인 생성형 경로는 실제 OmniRoute → GitHub Copilot `gpt-4o-mini`로
+생성·검증·Completed/Archive까지 확인했습니다. 임의의 Tool 실행은 지원하지 않습니다.
 
-Python 3.9 이상과 Git이 필요합니다. 별도 패키지 설치나 API Key는 필요하지 않습니다.
+Python 3.9 이상과 Git이 필요합니다. 오프라인 실행은 추가 패키지/API Key 없이 가능하고,
+생성형 실행에는 명시적인 모델 정책과 Credential이 필요합니다.
 macOS/Linux에서 저장소 루트의 터미널로 실행합니다.
 
 ```sh
@@ -124,16 +124,15 @@ Live Acceptance는 공개용 합성 문서만 새 임시 Vault에서 전송합�
 python3 scripts/model_live.py --allow-synthetic-transmission --policy model-policy.local.json --evidence /tmp/nidus-live-result.json
 ```
 
-[Model Gateway 보고서](MODEL_GATEWAY_REPORT.md)와 [실제 실패 증거](docs/evidence/model-live.json)에
-현재 검증 범위와 남은 설정을 기록했습니다.
+[Model Gateway 보고서](MODEL_GATEWAY_REPORT.md)와 [실제 성공 증거](docs/evidence/model-live-copilot.json)에
+현재 검증 범위를 기록했습니다. 이전 실패 증거도 보존했습니다.
 
 
 ## 설치된 OmniRoute
 OmniRoute `3.8.51`을 현재 사용자 Node `v24.21.0` 환경에 설치했습니다. 서버는
 `127.0.0.1:20128`에서 실행 중이고 대시보드는 [여기](http://127.0.0.1:20128)입니다.
 모델 API는 인증이 필요합니다. Dashboard에서 정상 무료 Provider/Combo와 Endpoint Key를
-설정한 뒤 Key를 `NIDUS_MODEL_API_KEY` 환경변수로 제공하세요. 현재 실제 모델 완료는
-아직 검증되지 않았습니다. [설치 결과](OMNIROUTE_INSTALL_REPORT.md)를 참고하세요.
+설정한 뒤 Key를 `NIDUS_MODEL_API_KEY` 환경변수로 제공하세요. 현재 Copilot 모델의 실제 생성·검증·완료를 확인했습니다. [설치 결과](OMNIROUTE_INSTALL_REPORT.md)를 참고하세요.
 
 ```sh
 # 종료됐다면 다시 시작 (외부 공개 없이 Loopback만 사용)
@@ -141,3 +140,25 @@ OMNIROUTE_SERVER_HOST=127.0.0.1 omniroute serve --daemon --no-open --no-tray
 # 종료
 omniroute stop
 ```
+
+
+## 검증된 GitHub Copilot 경로
+사용자가 연결한 Copilot의 `gh/gpt-4o-mini`로 실제 Nidus Task가 Completed/Archive에
+도달했습니다. `model-policy.copilot.example.json`을 명시적으로 선택하세요. 이 경로는
+무료가 보장되지 않아 `kind=paid`, `allow_paid=true`이며 다른 경로 fallback은 없습니다.
+추가 과금 설정은 변경하지 않았고 실제 청구/남은 quota는 Copilot에서 확인해야 합니다.
+기본 무료 Combo 정책은 자동으로 이 정책으로 변경되지 않습니다.
+
+이 컴퓨터의 Nidus 전용 키는 저장소 밖 `~/.config/nidus/model-gateway.env` (600)에 있으며
+단일 모델/연결로 제한했습니다. 다음 명령은 키를 출력하지 않고 실행 환경에 넣습니다.
+
+```sh
+set -a
+. "$HOME/.config/nidus/model-gateway.env"
+set +a
+python3 scripts/model_live.py --allow-synthetic-transmission --policy model-policy.copilot.example.json --evidence /tmp/nidus-copilot-live.json
+unset NIDUS_MODEL_API_KEY
+```
+
+Live 명령은 새 실제 호출입니다. 단순 증거 열람은
+[기록된 결과](docs/evidence/model-live-copilot.json)를 확인하세요.
