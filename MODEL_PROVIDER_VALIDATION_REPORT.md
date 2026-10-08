@@ -1,5 +1,10 @@
 # Multi-provider live validation — 2026-10-08
 
+> 최신 활성화 결과: **Gemini VERIFIED / NVIDIA NIM VERIFIED / Pool ACTIVE**.
+> 이전 Blocked 결과는 당시 기록이며 삭제하지 않았습니다.
+> 최신 모델·증거·사용법은 PROVIDER_ACTIVATION_REPORT.md 참조.
+
+
 ## Status
 **PARTIAL: 실제 Fallback VERIFIED; Gemini 및 NVIDIA NIM 단독 실행 BLOCKED.**
 기존 Copilot 성공 증거는 변경하지 않았습니다. 신규 결제/구독 없이 가능한 Live 검증을
@@ -109,3 +114,11 @@ python3 scripts/model_fallback_live.py --allow-synthetic-transmission --scenario
 
 이 명령은 실제 모델 사용량을 소비할 수 있습니다. 이번 검증용 임시 키는 모두 삭제돼
 있으며 기존 Copilot 전용 키는 Gemini/NVIDIA용으로 확장하지 않았습니다.
+
+
+## Provider activation follow-up — latest
+Gemini gemini-3.5-flash-lite와 NVIDIA nvidia/nemotron-3.5-lightning-30b-a3b 모두
+실제 응답 → 검증 → Completed/Archive 확인. Evidence는 model-live-gemini-success.json /
+model-live-nvidia-success.json. 기존 실패 Evidence는 보존했습니다. 전용 제한 키와
+model-policy.pool.example.json으로 재사용 가능. 과금 무료 보장은 없으며 비용 null.
+상세: PROVIDER_ACTIVATION_REPORT.md.

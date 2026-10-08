@@ -164,3 +164,18 @@ keys only in memory, deleted; no existing credential reads or account/billing ed
 37 offline + 3 HTTP tests, compileall, diff checks PASS. Reports list standalone
 blockers and injection limits. No main/develop/remote operations. User prompt and
 pre-existing .DS_Store files remain outside commits. Commits: Feature history.
+
+
+## Provider activation — latest user prompt, 2026-10-08
+Status: Complete. Feature feat/free-provider-activation → integration feat/model-gateway.
+Diagnose: Gemini old Flash blocked by active catalog; new Flash-Lite probe succeeds.
+NVIDIA old candidates 404 unknown cause; current Lightning probe succeeds with 512
+tokens (128 truncated), Gemma timeout preserved. No Gateway code/taxonomy change.
+Gemini/NVIDIA real Nidus tasks Completed/Archive, 6 checks true, semantic manual
+review three bullets. New *-success evidence; previous records untouched.
+Active explicit Gemini/NVIDIA/Copilot Pool, limited durable key outside Repo/Vault;
+transient probe keys deleted. Unknown billing remains null, no free quota guarantees.
+37 offline + 3 HTTP tests, compileall/diff, new key leakage check PASS.
+No remaining blocker; no manufactured natural outage. Prior fallback evidence sufficient.
+User prompt/.DS_Store preserved; no remote/main/develop/history rewrite.
+Commits: feature branch history. Detailed result: PROVIDER_ACTIVATION_REPORT.md.
