@@ -52,8 +52,9 @@ def briefing(task, records):
 
 def generated_briefing(task, records):
     generation = task['generation']
+    text = task['submission']['result'] if task.get('workflow') == 'manager' else generation['text']
     lines = ['# Nidus generated document', '', '## Work request', task['request'], '',
-             '## Model result', generation['text'], '', '## Provenance',
+             '## Model result', text, '', '## Provenance',
              'Route: ' + generation['route'], 'Provider: ' + generation['provider'],
              'Model: ' + generation['model'], 'Prompt SHA-256: ' + generation['snapshot']['prompt_hash']]
     for record in records:
@@ -120,6 +121,9 @@ class Runtime:
         generation = task.get('generation')
         valid_generation = (generation and generation.get('snapshot') == network_snapshot
             and all(candidate_checks(task, generation['text'], generation.get('finish_reason')).values())) if generative else False
+        if valid_generation and task.get('workflow') == 'manager':
+            from .workflow import worker_submission
+            task['submission'] = worker_submission(task)
         expected = generated_briefing(task, records) if valid_generation else (None if generative else briefing(task, records))
         current = output_hash(output)
         snapshot = {'sources': source_hashes, 'output': task['output'], 'output_hash': current}
@@ -155,6 +159,11 @@ class Runtime:
             self.store.save(task, 'model_permission_allow', network_snapshot)
             task['generation'] = self.gateway.generate(task, records,
                 lambda kind, detail: self.store.save(task, kind, detail))
+            if task.get('workflow') == 'manager':
+                from .workflow import worker_submission
+                task['submission'] = worker_submission(task)
+                task['workflow_stage'] = 'manager_review'
+                self.store.save(task, 'worker_submitted', task['submission'])
             self.store.save(task, 'model_candidate_received', {'snapshot': network_snapshot})
             expected = generated_briefing(task, records)
         self.store.save(task, 'permission_allow', {'employee': task['employee'],
@@ -234,6 +243,8 @@ class Runtime:
                 task['verification'] = checks
                 if not all(checks.values()):
                     raise ValueError('Verification failed')
+                if task.get('workflow') == 'manager':
+                    raise ValueError('Manager approval required before completion')
                 task['status'] = 'completed'
                 task['contract']['result'] = {'output': task['output'], 'sha256': digest(output),
                     'verification': checks, 'limitations': ['Literal/structural verification does not prove semantic correctness'] if generative else ['Deterministic extraction only']}

@@ -1,71 +1,24 @@
 # 현재 계획 / Current plan
 
-[한국어](#한국어) · [English](#english)
-
 ## 한국어
 
-### 현재 상태
+통합 브랜치: `develop`. 안정 버전: `main`. 사용자 요청에 따라 Git Flow를 사용한다. 각 기능은 `develop`에서 만든 `feature/*`에서 구현·검증·커밋한 뒤 `develop`에 병합한다. 이번 작업은 원격 push/PR/main 병합을 포함하지 않는다. 사용자가 수정한 `doc/prompt.md`를 실행 기준으로 보존한다.
 
-Integration: `feat/model-gateway`. 오프라인 MVP, Gateway, Copilot/Gemini/NVIDIA 실제 생성, 주입 장애 Fallback, 활성 Pool은 완료됐다.
-진행 중 제품 구현 Slice나 현재 Blocker는 없다. 무료 청구 검증, 일반 Agent 자율성, 개념 설계의 GUI/Manager 등은 완료로 표시하지 않는다.
-이 파일은 현재 상태와 다음 작업만 관리하고 세부 실행 결과는 [검증 보고서](../VALIDATION.md)를 단일 출처로 사용한다.
+목표: Manager 계약 → Worker 실행/자기 점검 → 결정적 검증 → Manager APPROVE/REWORK/ESCALATE → 완료/재작업/사람 판단. 검토는 Manager 책임이며 별도 Verifier를 만들지 않는다.
 
-### 이번 문서 정리
+| 기능 브랜치 | 범위 | 완료 조건 | 상태 |
+|---|---|---|---|
+| feature/workflow-contract | 계약, 역할 지침, 구조화된 제출, 역할별 정책 | 명시 계약 저장, 작업자에게 전달, 자기 점검 형식 검증 | 진행 중 |
+| feature/manager-review | 독립 검토, 승인 바인딩, 완료 gate | APPROVE 없으면 완료 금지, 변경 시 무효 | 대기 |
+| feature/rework-human-review | 재작업 이력/한도, 품질 판단 CLI | 재작업 재개, 한도/ESCALATE 사람 대기, 승인/재작업/취소 | 대기 |
+| feature/workflow-validation | A–F/보안/회귀, 실제 합성 증거, 문서 | 기존 37+3, 추가 테스트, compileall/diff, live 결과의 사실적 보고 | 대기 |
 
-Feature: `docs/consolidate-bilingual`. 완료: 기존 Markdown 18개를 안내 문서 6개 + 작업 지시 1개로 통합했다.
+명시 계약 입력과 기본 계약을 사용하며 계획 생성용 모델 호출은 추가하지 않는다. 기존 deterministic 브리핑과 legacy 작업은 호환 모드로 유지한다. 새 CLI generative 작업은 manager workflow가 기본이다. 역할은 Manager/Worker 두 책임이며 모델 선택과 분리한다. 전송은 작업자와 관리자 각각 정확한 prompt/policy snapshot 승인을 받는다. 변경된 재작업 prompt는 새 승인을 받는다.
 
-| 단일 문서 | 역할 |
-|---|---|
-| README.md | 설치 전제, 빠른 체험, 직접 작업, 모델 연결, 승인·복구, 테스트 |
-| PRD.md | 요구사항·AC-01–08·MG-AC-01–06·PV-AC-01–04 |
-| DESIGN.md | 현재 구현·소유권·상태·보안·복구·모델 경계 |
-| docs/CONCEPT.md | v1/v2/changes의 장기 책임 모델과 미확정 선택 |
-| docs/VALIDATION.md | MVP·Gateway·Provider·설치·Blocker 보고서의 최신 상태와 실패 이력 |
-| docs/plans/current-plan.md | 현재 상태, 이번 변경과 다음 작업 |
-
-모든 문서는 같은 파일에 한국어/영어를 둔다. 사용자 작업 지시 `doc/prompt.md`는 원문을 보존하고 영문을 덧붙이며 사용자의 기존 수정과 함께 미커밋 상태로 둔다.
-JSON 실행 증거·정책·코드·키는 변경하지 않는다. 이전 문서는 Commit `d8ab677`에서 조회한다.
-검증: 상대 링크/앵커 존재, 양언어 절, 오래된 문서 참조, README 오프라인 명령의 임시 Vault 실행, diff 검사.
-링크/앵커·양언어 검사, 오프라인 데모, README 직접 실행과 생성형 승인 대기/거절 검증을 통과했다. 기존 증거/정책/코드 변경은 0건이다.
-문서 정리를 위해 새 모델 호출이나 전체 제품 회귀를 반복하지 않는다. 코드 변경 시 관련 회귀를 따로 실행한다.
-
-### 개발 이력과 다음 단계
-
-오프라인 `feat/nidus-mvp` → Gateway 설계/생성형 실행/보강 → OmniRoute 설치 → Copilot Live → 다중 Provider 검증 → Gemini/NVIDIA 활성화 순으로 통합했다.
-주요 Commit/실행 증거는 VALIDATION의 개발 이력 표에 보존한다. 완료된 Slice를 다시 진행 중으로 되돌리지 않는다.
-다음 제품 작업은 사용자가 선택한다. 재사용 시 README의 Pool 정책을 명시적으로 선택하고 자료를 검토한 뒤 전송 승인한다.
-Remote push/PR/main/develop merge는 이번 범위가 아니다. `.DS_Store` 등 무관한 사용자 파일과 prompt 원문을 보존한다.
+검증: `python3 -m unittest discover -s tests -q`, `python3 tests/integration/model_http.py -v`, compileall, diff 검사. 공개 합성 자료의 실제 호출은 기존 연결과 명명된 환경 키만 사용하며 과거 evidence를 덮어쓰지 않는다. live 불가능 시 차단 근거를 보존하고 완료라고 주장하지 않는다.
 
 ## English
 
-### Current status
+Integration: `develop`; stable: `main`. The user's current Git Flow request overrides historical main-only instructions. Implement each feature on `feature/*`, validate/commit, then merge into develop. No remote push/PR/main merge in this task.
 
-Integration: `feat/model-gateway`. Offline MVP, Gateway, real Copilot/Gemini/NVIDIA generation, injected-fault fallback and the active pool are complete.
-No product implementation slice or current blocker remains. Free-billing verification, general agent autonomy and conceptual GUI/managers are not marked complete.
-This file owns only current state/next work; [validation](../VALIDATION.md) is the single source for execution details.
-
-### Documentation consolidation
-
-Feature: `docs/consolidate-bilingual`. Complete: reduced 18 Markdown files to six guides plus one instruction file.
-
-| Canonical document | Responsibility |
-|---|---|
-| README.md | Prerequisites, quick start, direct work, models, approval/recovery, tests |
-| PRD.md | Requirements, AC-01–08, MG-AC-01–06, PV-AC-01–04 |
-| DESIGN.md | Implementation, ownership, state, security, recovery, model boundary |
-| docs/CONCEPT.md | v1/v2/changes long-term responsibility model and open decisions |
-| docs/VALIDATION.md | Current status/history from MVP/Gateway/provider/install/blocker reports |
-| docs/plans/current-plan.md | Current status, this change and next work |
-
-Each document contains Korean/English in the same file. Preserve the original user instructions in `doc/prompt.md`, append English, and leave it uncommitted with the user's existing edits.
-Do not change JSON evidence/policies/code/keys. Retrieve earlier documents at commit `d8ab677`.
-Verify relative links/anchors, both language sections, obsolete references, README offline commands in a temporary vault and diff checks.
-Link/anchor/language checks, offline demo, README direct execution and generative wait/reject boundary checks passed. Existing evidence/policy/code changes: zero.
-Do not make new live calls or repeat full product regression for documentation cleanup; run relevant regression separately if code changes.
-
-### History and next steps
-
-Integrated offline `feat/nidus-mvp` → Gateway design/generative execution/hardening → OmniRoute installation → Copilot live → multi-provider validation → Gemini/NVIDIA activation.
-VALIDATION retains important commits/evidence in its history table. Do not reopen completed slices.
-The user selects the next product task. For reuse, explicitly choose the README pool policy, inspect inputs and approve transmission.
-Remote push/PR/main/develop merge is outside this scope. Preserve unrelated `.DS_Store` files and original prompt instructions.
+Slices: contract/role prompts/submission → manager review/completion binding → bounded rework/human decisions → regression/live evidence/documentation. Managers own review; no separate verifier. Explicit/default contracts avoid an unnecessary planning model call. New CLI generative tasks use the managed workflow; deterministic extraction and legacy tasks remain compatible. Exact per-call transmission approval applies independently to worker, manager and revisions. Preserve historical live evidence and report blockers accurately.
