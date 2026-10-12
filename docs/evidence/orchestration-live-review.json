@@ -1,0 +1,25 @@
+{
+  "evidence": "orchestration-live-attempt1.json",
+  "runtime_status": "completed",
+  "manual_acceptance": "passed",
+  "scope": "Public synthetic four-fact report only; not general semantic accuracy",
+  "four_factual_bullets": true,
+  "artifact_checks": {
+    "T1": {
+      "output_exists": true,
+      "hash_matches_approved": true,
+      "all_runtime_checks": true,
+      "manager_approved": true
+    },
+    "T2": {
+      "output_exists": true,
+      "hash_matches_approved": true,
+      "all_runtime_checks": true,
+      "manager_approved": true
+    }
+  },
+  "dependency_artifact_hash_bound": true,
+  "runtime_code_unchanged_during_run": true,
+  "plan_archive_count": 1,
+  "task_archive_count": 2
+}
