@@ -50,6 +50,7 @@ class ConnectionRegistry:
         return [c for c in self.list() if c['status']=='ready']
 
     def list_available_models(self, ident):
+        if self.get(ident)['status'] not in ('ready','degraded'): return []
         return [m for m in self.catalog(ident) if m['availability']=='available']
 
     def _catalog_save(self, model):
@@ -81,7 +82,11 @@ class ConnectionRegistry:
         with self.store.lock():
             conn=self.get(ident); ref=conn['credential_ref']
             if base_url is not None: base_url=endpoint(base_url)
-            current=self._backend(ref).get(ref)
+            try:
+                current=self._backend(ref).get(ref)
+            except ModelError as error:
+                if error.code != 'credential_missing' or secret is None: raise
+                current=''
             if secret is not None: validate_secret(secret)
             if any(s and s in (base_url or conn['base_url'])+conn['name'] for s in (current,secret)):
                 raise ModelError('credential_in_content')
@@ -95,7 +100,8 @@ class ConnectionRegistry:
                 if ref.startswith('env:'):
                     newref='cred_'+uuid.uuid4().hex; self._backend().put(newref,secret)
                     conn['credential_ref']=newref; self._save(conn)
-                else: self._backend(ref).replace(ref,secret)
+                elif self._backend(ref).exists(ref): self._backend(ref).replace(ref,secret)
+                else: self._backend(ref).put(ref,secret)
             return conn
 
     def delete(self, ident):
@@ -116,12 +122,12 @@ class ConnectionRegistry:
             conn.update(status='probing',last_probe_at=utc_now(),last_error=None,probe={'generation':'not_run','structured_output':'not_run'})
             self._save(conn)
             try:
-                secret=self._backend(conn['credential_ref']).get(conn['credential_ref']); validate_secret(secret)
                 # Previously discovered IDs are the only fallback when discovery fails.
                 old={m['model_id']:m for m in self.catalog(ident)}
                 for m in old.values():
                     m.update(availability='unknown',capabilities={'chat':'unknown','structured_output':'unknown'})
                     self._catalog_save(m)
+                secret=self._backend(conn['credential_ref']).get(conn['credential_ref']); validate_secret(secret)
                 try:
                     models=self.adapter.discover_models(conn,secret)
                     conn['discovery']={'supported':True,'status':'success','count':len(models)}
@@ -152,6 +158,7 @@ class ConnectionRegistry:
                             try: passed=json.loads(structured['text'])=={'status':'READY'}
                             except (ValueError,TypeError): passed=False
                             if not passed: raise ModelError('structured_output_unsupported')
+                            record.pop('structured_error',None)
                             record['capabilities']['structured_output']='verified'
                             conn['probe']['structured_output']='passed'
                         except ModelError as error:

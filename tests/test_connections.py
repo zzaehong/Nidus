@@ -5,6 +5,8 @@ import logging
 import os
 import tempfile
 import threading
+import uuid
+import subprocess
 import unittest
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -55,7 +57,7 @@ class ConnectionTests(unittest.TestCase):
         self.server=HTTPServer(('127.0.0.1',0),FakeProvider)
         self.server.discovery=200; self.server.generation=200; self.server.structured=200
         self.server.model='synthetic-model'; self.server.output='{"status":"READY"}'; self.server.plain='READY'
-        self.server.secret='test-secret-7abf13b'; self.server.calls=[]
+        self.server.secret='test-secret-'+uuid.uuid4().hex; self.server.calls=[]
         self.thread=threading.Thread(target=self.server.serve_forever,daemon=True); self.thread.start()
         self.url='http://127.0.0.1:'+str(self.server.server_port)+'/v1'
     def tearDown(self):
@@ -72,6 +74,8 @@ class ConnectionTests(unittest.TestCase):
         self.assertEqual(result['connection']['status'],'ready')
         self.assertEqual(result['models'][0]['capabilities'],{'chat':'verified','structured_output':'verified'})
         self.assertIsNone(result['models'][0]['price'])
+        diff=subprocess.run(['git','diff','HEAD'],capture_output=True,check=True).stdout
+        self.assertNotIn(self.server.secret.encode(),diff)
         self.assertEqual(len(self.registry.list_ready_connections()),1)
         self.assertEqual(len(self.registry.list_available_models(c['id'])),1)
         self.assertNotIn(self.server.secret,json.dumps(result)+output.getvalue()+json.dumps(self.server.calls))
@@ -142,6 +146,26 @@ class ConnectionTests(unittest.TestCase):
             self.registry.delete(c['id']); self.assertEqual(os.environ['NIDUS_TEST_API_KEY'],self.server.secret)
         with self.assertRaises(ModelError): EnvironmentCredentialProvider().get('env:PATH')
 
+    def test_probing_observed_and_missing_credential_repair(self):
+        c=self.create(); generate=self.registry.adapter.generate
+        def observed(*args,**kwargs):
+            self.assertEqual(self.registry.get(c['id'])['status'],'probing')
+            return generate(*args,**kwargs)
+        with patch.object(self.registry.adapter,'generate',side_effect=observed):
+            self.assertEqual(self.registry.probe(c['id'])['connection']['status'],'ready')
+        self.keys.delete(c['credential_ref'])
+        self.assertEqual(self.registry.probe(c['id'])['connection']['last_error']['code'],'credential_missing')
+        self.assertEqual(self.registry.list_available_models(c['id']),[])
+        self.registry.update(c['id'],secret=self.server.secret)
+        self.assertEqual(self.registry.probe(c['id'])['connection']['status'],'ready')
+
+    def test_redirect_and_removed_model(self):
+        c=self.create(); self.registry.probe(c['id']); self.server.model='replacement-model'
+        result=self.registry.probe(c['id'])
+        self.assertEqual(next(m for m in result['models'] if m['model_id']=='synthetic-model')['availability'],'unknown')
+        self.server.generation=302
+        self.assertEqual(self.registry.probe(c['id'])['connection']['last_error']['code'],'redirect_denied')
+
     def test_manifest_and_endpoints(self):
         manifests=ProviderRegistry().list(); self.assertEqual(len(manifests),2)
         for values in [manifests+[manifests[0]], [dict(manifests[0],auth_type='oauth')], [dict(manifests[0],protocol='native')]]:
@@ -153,3 +177,39 @@ class ConnectionTests(unittest.TestCase):
 
 
 if __name__=='__main__': unittest.main()
+
+
+class ConnectionGUItests(unittest.TestCase):
+    def setUp(self):
+        from nidus.gui import GUIServer
+        ConnectionTests.setUp(self)
+        self.gui=GUIServer(self.tmp.name,0); self.gui.credential_store=self.keys
+        self.gui_thread=threading.Thread(target=self.gui.serve_forever,daemon=True); self.gui_thread.start()
+    def tearDown(self):
+        self.gui.shutdown(); self.gui.server_close(); self.gui_thread.join(); ConnectionTests.tearDown(self)
+    def request(self,path,data=None,trusted=True):
+        import urllib.request
+        headers={'Content-Type':'application/json'}
+        if trusted: headers.update({'Origin':self.gui.origin,'X-Nidus-Token':self.gui.token})
+        req=urllib.request.Request(self.gui.origin+'/api/connections'+path,
+            data=json.dumps(data).encode() if data is not None else None,headers=headers)
+        with urllib.request.urlopen(req,timeout=10) as response: return json.load(response)
+    def test_gui_crud_probe_and_origin(self):
+        import urllib.error
+        self.assertEqual(len(self.request('')['providers']),2)
+        data={'provider':'omniroute','base_url':self.url,'secret':self.server.secret}
+        with self.assertRaises(urllib.error.HTTPError) as error: self.request('',data,False)
+        self.assertEqual(error.exception.code,403)
+        c=self.request('',data); ident=c['id']
+        self.assertNotIn(self.server.secret,json.dumps(c))
+        self.assertEqual(self.request('/'+ident+'/probe',{})['connection']['status'],'ready')
+        updated=self.request('/'+ident+'/update',{'secret':'updated-key'})
+        self.assertEqual(updated['status'],'configured')
+        self.assertEqual(self.request('')['connections'][0]['models'],[])
+        self.request('/'+ident+'/delete',{}); self.assertEqual(self.request('')['connections'],[])
+    def test_backend_diagnostics_never_reflected(self):
+        import urllib.error
+        with patch.object(self.keys,'put',side_effect=ValueError(self.server.secret)):
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                self.request('',{'provider':'omniroute','base_url':self.url,'secret':self.server.secret})
+        self.assertNotIn(self.server.secret,error.exception.read().decode())

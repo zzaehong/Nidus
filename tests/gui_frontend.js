@@ -16,7 +16,7 @@ const context = vm.createContext({document:{querySelector:node,querySelectorAll:
  location:{hash:''},window:{addEventListener(){}},FormData:class{},
  fetch:async(path, options)=>{
   if(options?.method==='POST')posts++;
-  return {ok:true,json:async()=>path.endsWith('/session')?{token:'test-only'}:state};
+  return {ok:true,json:async()=>path.endsWith('/session')?{token:'test-only'}:path.endsWith('/connections')?{providers:[],connections:[]}:state};
  }});
 vm.runInContext(fs.readFileSync('nidus/web/app.js','utf8'),context);
 (async()=>{
@@ -34,5 +34,10 @@ vm.runInContext(fs.readFileSync('nidus/web/app.js','utf8'),context);
  posts=0;
  await vm.runInContext("Promise.all([mutate('plans/test/run',{}),mutate('plans/test/run',{})])",context);
  assert.equal(posts,1,'In-flight duplicate clicks are suppressed');
- console.log('6 frontend checks passed');
+ vm.runInContext("connections={providers:[{id:'omniroute',name:'OmniRoute',credential_label:'Endpoint Key',default_base_url:'http://127.0.0.1:20128/v1'}],connections:[]};render()",context);
+ assert.match(node('#content').innerHTML,/AI 연결/);
+ assert.match(node('#content').innerHTML,/type="password"/);
+ assert.doesNotMatch(node('#content').innerHTML,/name="model"|name="policy"/);
+ assert.match(vm.runInContext("connectionSummary({discovery:{status:'failed'},probe:{generation:'passed',structured_output:'failed'}})",context),/검증 실패/);
+ console.log('10 frontend checks passed');
 })().catch(error=>{console.error(error);process.exitCode=1;});

@@ -7,6 +7,7 @@ const badge = (status, ready=false) => `<span class="badge" data-status="${esc(r
 const date = value => value ? String(value).replace(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2}).*$/, '$1.$2.$3 $4:$5:$6 UTC') : '—';
 const types = {transmission:'외부 모델 전송 승인',overwrite:'출력 덮어쓰기 승인',task_quality:'Task 품질 판단 · ESCALATE',plan_escalate:'Plan Final ESCALATE',plan_resume:'Plan 재개 필요'};
 const actions = {approve:'승인',reject:'거부',rework:'재작업',cancel:'취소',resume:'계속'};
+let connections={providers:[],connections:[]};
 let state, token, busy=false, selected, tab='tasks';
 const navItems = [['home','⌂','홈'],['plans','▤','Plans'],['tasks','☷','Tasks'],['attention','◈','사람 판단함'],['archive','▣','Archive'],['settings','⚙','설정']];
 $('#nav').innerHTML = navItems.map(([key,icon,label])=>`<a href="#${key}" data-nav="${key}">${icon} &nbsp; ${label}</a>`).join('');
@@ -18,7 +19,7 @@ async function api(path, data) {
  return body;
 }
 function notice(message='', error=false) { $('#notice').className = error?'error':''; $('#notice').textContent=message; }
-async function refresh() { state = await api('overview'); $('#vault').textContent=state.settings.vault; render(); }
+async function refresh() { state = await api('overview'); connections = await api('connections'); $('#vault').textContent=state.settings.vault; render(); }
 function planCard(p) {return `<button class="plan-card ${p.id===selected?'selected':''}" data-select="${esc(p.id)}">${badge(p.status)}<p>${esc(p.goal||p.original_request)}</p><div class="meta">${p.progress.completed} / ${p.progress.total} Tasks · v${p.plan_version}<br>${esc(p.manager)} · ${esc(date(p.created_at))}${p.human_attention?'<br>◈ 사람 판단 필요':''}</div></button>`;}
 function taskTable(p) {return `<div class="table-wrap"><table><thead><tr><th>Task</th><th>제목</th><th>상태</th><th>의존성</th><th>담당</th><th>Ready</th><th>완료 / 실행 기록</th></tr></thead><tbody>${p.board.map(t=>{
  const full=state.tasks.find(x=>x.id===t.id); const event=full?.history?.filter(x=>['verified_completed','claimed'].includes(x.kind)).slice(-1)[0];
@@ -51,7 +52,7 @@ function render(){
  else if(view==='task'){const t=state.tasks.find(x=>x.id===id);html=t?taskDetail(t):'<div class="empty">Task를 찾을 수 없습니다.</div>';}
  else if(view==='attention')html=`<div class="grid-list">${state.attentions.map(attentionCard).join('')||'<div class="empty">판단 요청이 없습니다.</div>'}</div>`;
  else if(view==='archive')html=`<h2>완료된 Plans</h2><div class="grid-list">${state.archived_plans.map(p=>`<div class="panel">${planCard(p)}<a href="#plan/${esc(p.id)}">Final Review / 결과 보기 →</a><div class="meta">${esc(date(p.result?.archived_at))}</div></div>`).join('')||'<p class="muted">완료된 Plan이 없습니다.</p>'}</div><h2 class="archive-tasks">완료된 Tasks</h2>${recentTasks()}<div class="grid-list">${state.tasks.filter(t=>t.status==='completed').map(t=>`<div class="panel"><a href="#task/${esc(t.id)}">${esc(t.title||t.request)}</a>${json(t.contract?.result)}</div>`).join('')}</div>`;
- else if(view==='settings')html=`<div class="panel"><h2>Local workspace · Read only</h2>${json(state.settings)}</div>`;
+ else if(view==='settings')html=connectionSettings()+`<details class="panel"><summary>Local workspace · Read only</summary>${json(state.settings)}</details>`;
  $('#content').innerHTML=html;
  if(busy) document.querySelectorAll('button').forEach(b=>b.disabled=true);
 }
@@ -69,3 +70,41 @@ $('#new-plan').onclick=()=>{$('#create').showModal();};$('#close-create').onclic
 $('#create-form').onsubmit=async event=>{event.preventDefault();try{const form=new FormData(event.target);const data={request:form.get('request'),sources:form.get('sources').split('\n').map(x=>x.trim()).filter(Boolean),policy:JSON.parse(form.get('policy')),limits:{}};['initial_tasks','total_tasks','revisions'].forEach(k=>data.limits[k]=Number(form.get(k)));['worker','review','final'].forEach(k=>{if(form.get(k+'_policy').trim())data[k+'_policy']=JSON.parse(form.get(k+'_policy'));});$('#create').close();const r=await mutate('plans',data);if(r)location.hash='plan/'+r.id;}catch(e){notice('입력 확인: '+e.message,true);}};
 window.addEventListener('hashchange',()=>{tab='tasks';if(state)render();});
 (async()=>{try{token=(await api('session')).token;await refresh();Object.entries(state.settings.limits).forEach(([k,v])=>{$(`[name="${k}"]`).value=v;});}catch(e){notice(e.message,true);}})();
+
+
+function connectionSettings(){
+ const labels={configured:'설정됨 · 검증 필요',probing:'검사 중',ready:'정상',degraded:'일부 기능 확인 필요',blocked:'연결 차단'};
+ return `<div class="panel"><h2>AI 연결</h2><p>공개 테스트 문구로 실제 응답과 구조화 응답을 확인합니다. Provider에 따라 호출 요금이 발생할 수 있습니다.</p><form id="connection-add"><label>Provider<select name="provider">${connections.providers.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></label><label>이름 · 선택<input name="name" maxlength="128"></label><label>Endpoint<input name="base_url" required value="${esc(connections.providers[0]?.default_base_url||'')}"></label><label><span id="credential-label">${esc(connections.providers[0]?.credential_label||'API Key')}</span><input name="secret" type="password" autocomplete="new-password" maxlength="8192"></label><small>인증이 없는 로컬 서버는 Key를 비워 둘 수 있습니다. 입력한 Key는 macOS Keychain에 보관합니다.</small><p><button class="primary">연결 확인</button></p></form></div><div class="grid-list">${connections.connections.map(c=>`<article class="panel" data-connection="${esc(c.id)}"><h2>${esc(c.name)} · ${esc(labels[c.status]||c.status)}</h2><p>${esc(c.base_url)}</p><p>사용 가능 모델 ${c.models.filter(m=>m.availability==='available').length}개</p>${connectionSummary(c)}<button data-connection-action="probe">연결 테스트</button><details><summary>관리 및 상세 정보</summary><form data-connection-update><label>Endpoint<input name="base_url" required value="${esc(c.base_url)}"></label><label>Key · 등록됨 · 새 값 입력 시 교체<input name="secret" type="password" autocomplete="new-password" maxlength="8192"></label><label><input name="replace_secret" type="checkbox"> Key 교체 (빈 값으로 바꾸려면 선택)</label><button>설정 저장</button></form><button data-connection-action="delete">연결 삭제</button><small>연결·Key·모델 목록을 삭제합니다. 과거 업무 기록은 유지됩니다.</small><details><summary>기술 세부 정보</summary>${json(c)}</details></details></article>`).join('')}</div>`;
+}
+function connectionSummary(c){
+ const p=c.probe||{};
+ return `<div class="meta">모델 탐색: ${c.discovery.status==='success'?c.discovery.count+'개':c.discovery.status==='failed'?'실패 · 이전 후보만 사용':'미실행'}<br>실제 응답: ${p.generation==='passed'?'성공':'미확인'}<br>구조화 응답: ${p.structured_output==='passed'?'지원 확인':p.structured_output==='failed'?'검증 실패':'미확인'}${c.last_error?'<br>오류: '+esc(c.last_error.code):''}</div>`;
+}
+async function connectionAction(work){
+ if(busy)return; busy=true; document.querySelectorAll('button').forEach(b=>b.disabled=true); notice('AI 연결 확인 중...');
+ try{const result=await work(); await refresh();const c=result.connection||result;notice(c.status==='ready'?'AI 연결이 준비되었습니다.':c.status==='degraded'||c.status==='blocked'?'검증을 완료하지 못했습니다. 연결 상태를 확인해 주세요.':'연결 설정을 저장했습니다.',c.status==='blocked'||c.status==='degraded');}
+ catch(e){notice(e.message,true);try{await refresh();}catch(_){}}
+ finally{busy=false;render();document.querySelectorAll('button').forEach(b=>b.disabled=false);}
+}
+$('#content').addEventListener('change',event=>{
+ if(event.target.matches('#connection-add [name="provider"]')){const p=connections.providers.find(p=>p.id===event.target.value);$('#connection-add [name="base_url"]').value=p.default_base_url;$('#credential-label').textContent=p.credential_label;}
+});
+$('#content').addEventListener('submit',async event=>{
+ const f=event.target;if(f.id!=='connection-add'&&!f.matches('[data-connection-update]'))return;
+ event.preventDefault();if(busy)return;
+ const values=new FormData(f); const data={base_url:values.get('base_url')};
+ if(f.id==='connection-add'){
+  Object.assign(data,{provider:values.get('provider'),name:values.get('name'),secret:values.get('secret')});
+  f.querySelector('[name="secret"]').value='';
+  await connectionAction(async()=>{const c=await api('connections',data);data.secret='';return api(`connections/${c.id}/probe`,{});});
+ }else{
+  if(values.get('secret')||values.get('replace_secret'))data.secret=values.get('secret');
+  f.querySelector('[name="secret"]').value='';const id=f.closest('[data-connection]').dataset.connection;
+  await connectionAction(()=>api(`connections/${id}/update`,data));
+ }
+ data.secret='';
+});
+$('#content').addEventListener('click',async event=>{
+ const b=event.target.closest('[data-connection-action]');if(!b||busy)return;
+ const id=b.closest('[data-connection]').dataset.connection;await connectionAction(()=>api(`connections/${id}/${b.dataset.connectionAction}`,{}));
+});
