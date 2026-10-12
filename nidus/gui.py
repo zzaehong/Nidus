@@ -21,6 +21,10 @@ class GUIServer(HTTPServer):
 
 
 class Handler(BaseHTTPRequestHandler):
+    def setup(self):
+        super().setup()
+        self.connection.settimeout(30)
+
     def log_message(self, format, *args):
         # Do not log request bodies, URLs, session tokens or model material.
         pass
@@ -76,7 +80,12 @@ class Handler(BaseHTTPRequestHandler):
                 length = int(self.headers.get('Content-Length', '0'))
                 if not 0 < length <= 262144:
                     raise ValueError('INVALID_REQUEST: Request size invalid')
-                data = json.loads(self.rfile.read(length))
+                raw = self.rfile.read(length)
+                if self.server.token.encode() in raw:
+                    raise ValueError('INVALID_REQUEST: Session material cannot enter Runtime data')
+                data = json.loads(raw)
+                if self.server.token in json.dumps(data):
+                    raise ValueError('INVALID_REQUEST: Session material cannot enter Runtime data')
                 if not isinstance(data, dict):
                     raise ValueError('INVALID_REQUEST: JSON object required')
             parts = self.path.strip('/').split('/')
@@ -97,6 +106,8 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, KeyError, TypeError, OSError) as error:
             message = str(error)
             code = message.split(':',1)[0] if ':' in message and message.split(':',1)[0].isupper() else 'INVALID_REQUEST'
+            if mutation and self.path.endswith(('/decision','/quality')) and code == 'INVALID_REQUEST':
+                code = 'INVALID_DECISION'
             logging.getLogger(__name__).debug('GUI request failed', exc_info=True)
             self.reply(409 if code == 'STALE_STATE' else 400, {'error':code,'message':message,'details':{}})
         except Exception:

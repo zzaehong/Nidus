@@ -96,7 +96,7 @@ class PlanRuntime:
         if generation and generation['snapshot'] == scope:
             return strict_object(generation['text']), scope
         if not any(d['decision'] == 'approve' and d['snapshot'] == scope for d in plan['decisions']):
-            plan.update(status='waiting', attention={'kind':'transmission', 'role':'manager',
+            plan.update(status='waiting', attention={'requested_at':now(), 'kind':'transmission', 'role':'manager',
                 'purpose':purpose, 'snapshot':scope, 'choices':['approve','reject']})
             self.store.save_plan(plan, 'plan_permission_ask', plan['attention'])
             return None, scope
@@ -361,7 +361,7 @@ class PlanRuntime:
         else:
             if not value['questions'] or value['change'] is not None:
                 raise ValueError('ESCALATE requires questions and no changes')
-            plan.update(status='waiting', attention={'kind':'quality','reason':value['reason'],
+            plan.update(status='waiting', attention={'requested_at':now(), 'kind':'quality','reason':value['reason'],
                 'questions':value['questions'],'snapshot':binding,'choices':['resume','cancel']})
             self.store.save_plan(plan, 'plan_escalated', plan['attention'])
 
@@ -433,7 +433,7 @@ class PlanRuntime:
                         plan.update(status='final_review', adjustment_reason='Task blocked: '+result.get('error',''))
                         self.store.save_plan(plan, 'plan_adjustment_needed')
                     if result['status'] == 'waiting' and result.get('attention',{}).get('kind') == 'quality':
-                        plan.update(status='waiting', attention={'kind':'task_quality', 'task':task['id'],
+                        plan.update(status='waiting', attention={'requested_at':now(), 'kind':'task_quality', 'task':task['id'],
                             'reason':'Assigned Task requires human quality judgment',
                             'snapshot':snapshot(self.store,plan), 'choices':['resume','cancel']})
                         self.store.save_plan(plan, 'plan_escalated', plan['attention'])

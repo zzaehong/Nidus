@@ -1,21 +1,21 @@
 # 현재 계획 / Current plan
 
-2026-10-12: 다중 Task 조정 v1 구현·회귀·실제 합성 검증 완료. 최종 문서/증거 feature를 develop에 통합하고 전체 회귀를 다시 확인한다. main/Release/원격 push는 범위 밖이다.
+2026-10-12: Local GUI v1 구현, 자동 회귀, 실제 Chrome workflow 및 CLI 서버 재시작 검증 완료. 마지막 문서/evidence feature를 develop에 병합하고 전체 회귀·clean 상태를 확인한다. 최종 merge/HEAD는 완료 응답에 기록한다. main/release/원격 push/PR은 변경하지 않는다.
 
-시작 develop: `4d8c854` (작업 시작 시 origin/develop fetch 확인).
+시작 develop: `fcd97115d02a50336922ede8722ffaeb539ab1ce` (fetch한 원격 develop `4d8c854`를 포함한 검증 완료 로컬 develop). 사용자 GUI 요구사항은 `6578da8`에 별도 보존했다.
 
-| 실제 feature branch | 범위 | develop 통합 |
+| 실제 feature branch | 기능 / 검증 | develop 통합 |
 |---|---|---|
-| feature/plan-model | 사용자 요구사항, Plan 영속 저장, 추적 ID, DAG/Ready, Schema 1 호환/완료 이력 | 4499a50 |
-| feature/plan-runtime | 역할 지침 분리, 기존 Task 순환 조정, 5개 변경 연산, 전체 검토, CLI/보안/복구 | 3e48dd6 |
-| feature/multi-task-evidence | bounded 공개 합성 harness, 실제 모델 evidence, 문서 | 최종 통합 단계 |
+| feature/gui-foundation | loopback server, Application projection, Runtime guard, CLI, 7 GUI tests; 기존 104+7 통과 | `22834e2` |
+| feature/gui-dashboard | default-light Dashboard/Plan/Task/Attention/Archive/Settings 및 생성/실행/판단; 111 discovery 회귀 | `5406723` |
+| feature/gui-evidence | 실제 HTTP workflow·보안·복구, 브라우저 검증과 수정, 정확한 시각, 문서; 119+7 및 Frontend 6 검증 | 최종 통합 단계 |
 
-브랜치 전환 전 git status와 관련 테스트를 확인했고, 각 feature의 실제 기능 커밋/검증/develop 병합 후 다음 branch를 생성했다. 이력을 사후 재작성하지 않았다. 사용자 prompt는 fc37060으로 작업 기준에 보존했다.
+브랜치 이동 전 git status를 확인했고 feature commit → 테스트 → develop merge → 전체 discovery 회귀 뒤 다음 branch를 생성했다. 사후 이력 재작성은 없다. GUI는 Store를 직접 수정하지 않고 PlanRuntime/Runtime을 호출한다. task ready는 Runtime 값, 결정적 권한·완료·의존성·snapshot은 기존 Runtime 책임이다. 한 클릭은 한 bounded step이며 Scheduler/Worker 병렬 실행을 추가하지 않았다.
 
-검증: Unit 104 / HTTP·CLI 7, compileall, diff 검사. 실제 Manager Planning → 2 dependency Tasks → 두 APPROVE → Final COMPLETE → Plan Archive. 재작업 0 / 호출 6 / 9,127 tokens. 보고서의 네 사실과 물리 artifact 해시를 직접 검토했다. [VALIDATION](../VALIDATION.md), [전체 보고](../MULTI_TASK_REPORT.md), [설계](../../DESIGN.md).
+[GUI 보고서](../GUI_REPORT.md), [검증](../VALIDATION.md), [브라우저 증거](../evidence/gui-browser-review.json), [설계](../../DESIGN.md).
 
-책임: AI가 의미를 판단하고 Runtime이 ID/상태/무결성/권한/한도/이력을 강제한다. 완료 Task 이력은 수정하지 않는다. 한 Manager/Worker와 순차 실행만 구현했다.
+이전 다중 Task 조정은 `4499a50` / `3e48dd6` / `fcd9711` 병합으로 완료됐다. 기존 외부 모델 성공과 사용량은 [다중 Task 보고서](../MULTI_TASK_REPORT.md)에 보존한다. GUI 검증은 공개 합성/로컬 모델로 한정했다.
 
-다음 단계: 공개 가능한 실제 업무에서 계획 품질·재작업·사람 판단의 빈도와 비용을 측정한다. 모델 오류에 대한 명시적 재시도 UX와 구조화 출력 지원을 별도 개선한다. 다중 Worker/병렬성/Project 전체를 이번 범위에 추가하지 않는다.
+다음 권장 단계는 공개 가능한 실제 업무를 GUI에서 수행하며 usability·오류 설명·사람 판단 빈도를 측정하는 것이다. Pixel Office/직원 공간 표현은 같은 상태 모델 위의 별도 표현 계층으로 검토한다.
 
-English: The implementation, deterministic regressions and a real public-synthetic two-task acceptance have passed. Feature branches were created from validated develop in real development order. Integrate final evidence/docs, validate develop, and report its actual HEAD. No main changes or remote push.
+English: Local GUI v1 is implemented over the existing Runtime, with actual Chrome workflow and restart validation. Final integration rechecks 119 discovery + 7 HTTP/CLI tests, six frontend checks and compile/diff. Main and remotes are unchanged. Exact final HEAD and clean tree are reported at delivery.
