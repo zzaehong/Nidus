@@ -101,6 +101,10 @@ class GUIServerTests(unittest.TestCase):
         with self.request('/') as response:
             self.assertIn(b'NIDUS', response.read())
             self.assertIn('frame-ancestors', response.headers['Content-Security-Policy'])
+        for asset in ('app.js', 'style.css'):
+            with self.request('/'+asset) as response:
+                self.assertEqual(response.status,200)
+                self.assertTrue(response.read())
         with self.request('/api/session') as response:
             self.assertEqual(json.load(response)['token'],self.server.token)
         for host in ('0.0.0.0','localhost','::1'):
