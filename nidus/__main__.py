@@ -40,12 +40,46 @@ def main():
     show.add_argument('task')
     listing = commands.add_parser('list')
     listing.add_argument('--archive', action='store_true')
+    plan_submit = commands.add_parser('plan-submit', help='Register a goal for Manager planning')
+    plan_submit.add_argument('request')
+    plan_submit.add_argument('--source', action='append', required=True)
+    plan_submit.add_argument('--model-policy', required=True)
+    plan_submit.add_argument('--worker-policy')
+    plan_submit.add_argument('--review-policy')
+    plan_submit.add_argument('--final-policy')
+    plan_submit.add_argument('--initial-tasks', type=int, default=10)
+    plan_submit.add_argument('--total-tasks', type=int, default=20)
+    plan_submit.add_argument('--revisions', type=int, default=5)
+    for name in ('plan-run','plan-show'):
+        commands.add_parser(name).add_argument('plan')
+    commands.add_parser('plan-list').add_argument('--archive', action='store_true')
+    plan_decide = commands.add_parser('plan-decide')
+    plan_decide.add_argument('plan')
+    plan_decide.add_argument('decision', choices=['approve','reject','resume','cancel'])
+    plan_decide.add_argument('--note', default='')
     args = parser.parse_args()
     store = None
     try:
         store = Store(args.vault)
         if args.command == 'init':
             result = store.state('home')
+        elif args.command.startswith('plan-'):
+            from .planning import PlanRuntime
+            planner = PlanRuntime(store)
+            if args.command == 'plan-submit':
+                result = planner.submit(args.request, args.source, load_policy(args.model_policy),
+                    load_policy(args.worker_policy) if args.worker_policy else None,
+                    load_policy(args.review_policy) if args.review_policy else None,
+                    {'initial_tasks':args.initial_tasks,'total_tasks':args.total_tasks,'revisions':args.revisions},
+                    load_policy(args.final_policy) if args.final_policy else None)
+            elif args.command == 'plan-run':
+                result = planner.run(args.plan)
+            elif args.command == 'plan-show':
+                result = planner.board(args.plan)
+            elif args.command == 'plan-list':
+                result = store.plans(args.archive)
+            else:
+                result = planner.decide(args.plan, args.decision, args.note)
         elif args.command == 'submit':
             contract = None
             if args.contract:
