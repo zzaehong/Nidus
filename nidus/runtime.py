@@ -111,9 +111,11 @@ class Runtime:
         self.checkpoint(task, 'verify' if task['status'] == 'verifying' else 'execute')
         return records
 
-    def decide(self, task_id, decision):
+    def decide(self, task_id, decision, expected_state=None):
         with self.store.lock():
             task = self.store.get(task_id)
+            from .application import check_revision
+            check_revision(self.store, task, expected_state)
             if task['status'] != 'waiting' or decision not in ('approve', 'reject'):
                 raise ValueError('Decision requires a Waiting task and approve/reject')
             if task['attention'].get('kind') == 'quality':
@@ -125,9 +127,9 @@ class Runtime:
             self.checkpoint(task, 'recover' if decision == 'approve' else 'none')
             return task
 
-    def quality_decide(self, task_id, decision, note, instructions=None):
+    def quality_decide(self, task_id, decision, note, instructions=None, expected_state=None):
         from .workflow import quality_decision
-        return quality_decision(self, task_id, decision, note, instructions)
+        return quality_decision(self, task_id, decision, note, instructions, expected_state)
 
     def execute(self, task, records):
         output = safe_path(self.store.vault, task['output'])

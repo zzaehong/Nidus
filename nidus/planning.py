@@ -365,9 +365,11 @@ class PlanRuntime:
                 'questions':value['questions'],'snapshot':binding,'choices':['resume','cancel']})
             self.store.save_plan(plan, 'plan_escalated', plan['attention'])
 
-    def decide(self, plan_id, decision, note=''):
+    def decide(self, plan_id, decision, note='', expected_state=None):
         with self.store.lock():
             plan = self.store.get_plan(plan_id)
+            from .application import check_revision
+            check_revision(self.store, plan, expected_state)
             if plan['status'] != 'waiting':
                 raise ValueError('Plan is not waiting')
             attention = plan['attention']
@@ -394,10 +396,12 @@ class PlanRuntime:
             self.store.save_plan(plan, 'plan_human_decision', plan['decisions'][-1])
             return plan
 
-    def run(self, plan_id):
+    def run(self, plan_id, expected_state=None):
         # One explicitly resumable step; never an unbounded model loop.
         with self.store.lock():
             plan = self.store.get_plan(plan_id)
+            from .application import check_revision
+            check_revision(self.store, plan, expected_state)
             if plan['status'] in ('completed','cancelled','waiting'):
                 return plan
             try:
