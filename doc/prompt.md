@@ -1,1027 +1,937 @@
 # 목표
 
-현재 Nidus 저장소에 **관리자 → 작업자 → 관리자 검토 → 완료/재작업/사람 판단**으로 이어지는 핵심 업무 순환을 구현하라.
+현재 Nidus `develop` 브랜치를 기준으로 **다중 작업 조정 v1**을 구현하라.
 
-이번 작업의 목적은 새로운 “검증 전용 객체”를 만드는 것이 아니다.
-
-Nidus에서 검토 역시 하나의 업무이며,
-**관리자가 작업의 완료 기준을 정의하고, 작업자는 그 기준을 보며 수행하고, 관리자가 최종적으로 그 결과를 검토하는 조직적 책임 구조**를 구현하는 것이 목표다.
-
-현재까지 구현된 Runtime, Model Gateway, 권한 승인, 결정적 검증, Archive, Git, Gemini/NVIDIA/Copilot Provider Pool을 최대한 재사용하라.
-
----
-
-# 핵심 원칙
-
-Nidus의 기본 업무 흐름을 다음과 같이 만든다.
+현재 Nidus는 하나의 Task에 대해 다음 순환을 지원한다.
 
 ```text
 사용자 요청
-↓
-관리자
-↓
-작업 정의
-+ 완료 기준 작성
-+ 제약 정의
-↓
-작업자에게 배정
-↓
-작업자 작업 수행
-↓
-작업자 자기 점검
-↓
-결과 제출
-↓
-기존 결정적 검증
-↓
-관리자 검토
-├─ 승인
-├─ 재작업 요청
-└─ 사람 판단 요청
+→ Manager가 Completion Contract 정의
+→ Worker 실행 + 자기 점검
+→ 결정적 검증
+→ Manager 검토
+→ APPROVE / REWORK / ESCALATE
+→ Completed / Human Review
 ```
 
-승인된 경우에만 최종적으로:
+이번 구현에서는 이 구조를 변경하지 않는다.
+
+그 위에 다음 상위 흐름을 추가한다.
 
 ```text
-Completed
-→ Archive
+사용자의 상위 목표
+→ Manager가 전체 목표와 완료 기준 정의
+→ 여러 Task로 분해
+→ Task 간 의존 관계 구성
+→ Task Board 저장
+→ 실행 가능한 Task 선택
+→ 기존 단일 Task 업무 순환 실행
+→ Task 완료 및 의존 관계 갱신
+→ 다음 Task
+→ 모든 필요한 Task 완료
+→ Manager 전체 결과 검토
+→ COMPLETE / ADD_TASKS / ESCALATE
 ```
 
-된다.
+핵심 목표는:
+
+> **하나의 큰 목표를 Manager가 여러 Task로 계획하고, Runtime이 계획의 무결성과 진행을 관리하며, 기존 Worker 업무 순환을 반복 사용하여 목표를 끝까지 완료하는 구조를 만드는 것**
+
+이다.
 
 ---
 
-# 중요한 설계 원칙
+# 1. 핵심 설계 원칙
 
-## 1. 별도의 검증 객체를 만들지 않는다
+이번 구현에서는 **프롬프트의 책임과 프로그램의 책임을 명확히 분리**한다.
 
-다음과 같은 구조를 만들지 마라.
+## AI / Prompt 책임
 
-```text
-Worker
-→ Verifier
-→ Verifier of Verifier
-→ ...
-```
-
-검토는 관리자 역할의 일부다.
-
-관리자는 자신의 검토 결과를 또 다른 자동 검토 객체에게 전달하지 않는다.
-
-관리자의 책임 경계는 다음과 같다.
+AI가 의미를 해석해야 하는 영역:
 
 ```text
-검토 가능
-→ 승인 또는 재작업
-
-판단 불가능
-→ 사람에게 전달
+목표 해석
+전체 완료 기준 작성
+Task 분해
+의미적 의존 관계 판단
+새 Task 필요성 판단
+Plan 변경 이유 판단
+Worker 작업 수행
+개별 Task 품질 검토
+전체 목표 완료 판단
+사람 판단 필요성 판단
 ```
 
-이 지점이 자동 업무 흐름의 책임 종료점이다.
+## Runtime / Program 책임
+
+결정적으로 검증하거나 강제할 수 있는 영역:
+
+```text
+Plan / Task ID 생성
+영속 저장
+Task-Plan 관계
+Dependency graph
+Cycle / invalid reference 검사
+Ready Task 계산
+상태 전이
+Task / Plan 수정 한도
+Completed history 보호
+Approval snapshot / hash
+권한 / Secret / Git / Recovery / Audit
+```
+
+원칙:
+
+```text
+AI 판단
+→ 구조화된 제안
+→ Runtime 검증
+→ 상태 변경
+```
+
+AI가 시스템 상태를 직접 변경하게 하지 않는다.
 
 ---
 
-# 2. 결정적 검증은 기존대로 유지한다
+# 2. 기존 단일 Task Runtime 재사용
 
-기존 Nidus가 코드로 확실하게 확인할 수 있는 검증은 제거하지 않는다.
+다중 작업을 위해 새로운 Task 실행기를 만들지 않는다.
 
-예:
-
-```text
-원문 변경 여부
-결과 파일 존재 여부
-후보 결과와 파일 일치 여부
-해시 일치
-응답 정상 종료
-필수 문자열
-권한 승인
-전송 승인
-```
-
-이러한 검증은 인공지능 판단이 아니라 프로그램의 결정적 확인이다.
-
-따라서 새로운 관리자 검토와 별도로 유지한다.
-
-전체 구조는:
+각 Task는 계속 기존 구조를 따른다.
 
 ```text
-결정적 안전 확인
-+
-관리자의 업무 품질 검토
-```
-
-가 된다.
-
----
-
-# 3. 완료 기준은 작업 생성 시점에 만들어진다
-
-관리자는 작업자를 호출하기 전에 반드시 작업 계약을 만든다.
-
-최소한 다음을 포함한다.
-
-```text
-작업 목적
-
-작업 범위
-
-완료 기준 목록
-
-제약 조건
-
-사용 가능한 자료
-
-예상 결과물
-
-사람의 판단이 필요한 조건
-```
-
-예:
-
-```json
-{
-  "goal": "주어진 문서를 세 개의 핵심 항목으로 요약한다.",
-  "completion_criteria": [
-    {
-      "id": "C1",
-      "description": "정확히 세 개의 핵심 항목을 작성한다."
-    },
-    {
-      "id": "C2",
-      "description": "모든 사실은 제공된 자료에 근거해야 한다."
-    },
-    {
-      "id": "C3",
-      "description": "제공되지 않은 새로운 사실을 추가하지 않는다."
-    }
-  ],
-  "constraints": [
-    "원본 자료를 수정하지 않는다.",
-    "승인되지 않은 외부 자료를 사용하지 않는다."
-  ]
-}
-```
-
-구체적인 저장 구조와 자료형은 현재 코드 구조를 보고 적절하게 결정하라.
-
----
-
-# 4. v1에서는 완료 기준을 임의로 복잡하게 자동 생성하지 않는다
-
-이번 구현의 핵심은 업무 순환이다.
-
-거대한 계획 생성 체계를 새로 만들지 마라.
-
-관리자가 생성형 모델을 이용해 완료 기준을 만들 수는 있지만,
-결과는 명시적인 작업 계약으로 저장되어야 한다.
-
-필요하다면 사용자 요청과 간단한 기본 원칙을 바탕으로 관리자가 완료 기준을 작성하게 하라.
-
-현재 구조상 자동 생성이 너무 큰 변경이라면
-테스트와 명시적 입력을 통해 계약을 제공할 수 있도록 먼저 구현해도 된다.
-
-다만 최종 업무 흐름에서는 작업자가 반드시 완료 기준을 전달받아야 한다.
-
----
-
-# 5. 작업자는 완료 기준을 보고 작업한다
-
-작업자에게 전달되는 작업 문맥에는 최소한 다음이 포함되어야 한다.
-
-```text
-사용자의 원래 요청
-작업 목적
-완료 기준
-제약 조건
-선택된 자료
-```
-
-작업자의 지침에는 다음 원칙을 포함한다.
-
-```text
-완료 기준을 작업 시작 전에 읽는다.
-
-결과를 만들 때 완료 기준을 계속 참고한다.
-
-기준을 충족할 수 없는 경우 사실을 만들어내지 않는다.
-
-확실하지 않은 내용은 확실한 것처럼 표현하지 않는다.
-
-완료했다고 주장하기 전에 각 완료 기준을 스스로 점검한다.
-```
-
----
-
-# 6. 작업자 제출에는 자기 점검을 포함한다
-
-작업자는 단순히 결과 텍스트만 반환해서는 안 된다.
-
-개념적으로 다음과 같은 제출 구조를 만든다.
-
-```json
-{
-  "result": "...",
-  "self_check": [
-    {
-      "criterion_id": "C1",
-      "status": "satisfied",
-      "reason": "..."
-    },
-    {
-      "criterion_id": "C2",
-      "status": "satisfied",
-      "reason": "..."
-    }
-  ],
-  "known_limitations": [],
-  "questions": []
-}
-```
-
-실제 자료형은 현재 구현과 잘 맞도록 변경할 수 있다.
-
-작업자의 자기 점검은 참고 자료일 뿐,
-최종 완료 판정으로 사용하지 않는다.
-
----
-
-# 7. 관리자가 결과를 검토한다
-
-관리자에게 다음 정보를 제공한다.
-
-```text
-사용자의 원래 요청
-작업 계약
-완료 기준
-작업 결과
-작업자의 자기 점검
-사용된 자료
-필요한 실행 기록
-```
-
-관리자의 검토 지침은 최소한 다음 내용을 포함해야 한다.
-
-```text
-1. 완료 기준을 하나씩 확인한다.
-
-2. 작업자의 자기 점검을 그대로 신뢰하지 않는다.
-
-3. 작업 결과가 완료 기준을 실제로 충족하는지 독립적으로 판단한다.
-
-4. 사용자의 원래 요청을 다시 읽고,
-   완료 기준에 명시되지 않았지만 중요한 요구가 빠지지 않았는지 확인한다.
-
-5. 잘못된 가정, 누락, 모순, 불필요한 추가 내용,
-   요청과 다른 결과가 없는지 확인한다.
-
-6. 문제가 있다면 무엇이 문제인지 구체적으로 작성한다.
-
-7. 불확실하거나 사람의 가치 판단이 필요한 문제를 임의로 결정하지 않는다.
-```
-
----
-
-# 8. 관리자 판정
-
-관리자의 최종 판정은 세 가지로 제한한다.
-
-```text
-APPROVE
-REWORK
-ESCALATE
-```
-
-내부 이름은 현재 코드 규칙에 맞게 정할 수 있다.
-
-의미는 다음과 같다.
-
-### APPROVE
-
-```text
-모든 중요한 완료 조건을 충족했다.
-추가적인 중대한 누락도 발견되지 않았다.
-```
-
-→ 최종 완료 가능.
-
-### REWORK
-
-```text
-수정 가능한 문제가 존재한다.
-```
-
-반드시 구체적인 수정 지시를 포함한다.
-
-예:
-
-```json
-{
-  "decision": "rework",
-  "issues": [
-    "두 번째 항목은 원문 근거가 부족하다.",
-    "사용자가 요구한 세 번째 조건이 누락되었다."
-  ],
-  "instructions": [
-    "두 번째 항목을 원문 근거에 맞게 수정한다.",
-    "누락된 조건을 추가한다."
-  ]
-}
-```
-
-### ESCALATE
-
-```text
-현재 정보나 권한만으로 관리자가 책임 있게 판단할 수 없다.
-사람의 판단이 필요하다.
-```
-
-사람에게 전달할 질문과 이유를 포함한다.
-
----
-
-# 9. 재작업 순환
-
-REWORK가 나오면 Task를 실패로 종료하지 않는다.
-
-다시 작업자에게 돌려보낸다.
-
-```text
-Worker
-↓
-Manager Review
-↓
-REWORK
-↓
-Worker
-↓
-Manager Review
-↓
-...
-```
-
-작업자에게는 이전 결과와 관리자의 수정 지시를 전달한다.
-
-기존 결과를 무시하고 처음부터 무작정 다시 생성하게 하지 말고,
-가능하면 다음 정보를 활용한다.
-
-```text
-기존 결과
-관리자 지적 사항
-수정 지시
-완료 기준
-원래 요청
-```
-
-재작업 횟수도 기록한다.
-
-무한 반복을 방지하기 위해 명시적인 최대 반복 횟수를 둔다.
-
-초기값은 코드와 테스트에 적절한 작은 값으로 설정하되
-정책 또는 설정으로 변경 가능하게 만드는 것을 우선한다.
-
-반복 한도를 넘으면:
-
-```text
-ESCALATE
-```
-
-또는 명확한 사람 판단 대기 상태로 전환한다.
-
-자동으로 Completed 처리하지 않는다.
-
----
-
-# 10. 사람 판단
-
-관리자가 ESCALATE를 선택하거나 재작업 한도를 초과하면
-기존 Meeting Room / Waiting 개념을 활용한다.
-
-사람에게 최소한 다음을 보여준다.
-
-```text
-원래 요청
-현재 결과
-완료 기준
-작업자의 자기 점검
-관리자의 판단
-관리자가 판단하지 못한 이유
-선택 가능한 행동
-```
-
-가능한 사람 결정의 최소 형태:
-
-```text
-승인
-재작업
-취소
-```
-
-현재 CLI 구조와 기존 decide 명령을 최대한 재사용하되,
-기존 권한 승인과 업무 품질 판단이 혼동되지 않도록
-결정 종류 또는 문맥을 명확히 구분한다.
-
----
-
-# 11. 상태 폭증을 피한다
-
-새로운 상태를 무분별하게 추가하지 마라.
-
-가능하면 현재 상태 체계를 유지한다.
-
-```text
-Queued
-Running
-Waiting
-Verifying
-Blocked
-Completed
-Cancelled
-```
-
-대신 Task 내부에 현재 업무 단계를 명시할 수 있다.
-
-예:
-
-```text
-workflow_stage:
-- manager_planning
-- worker_execution
-- worker_self_check
-- manager_review
-- rework
-- human_review
-- done
-```
-
-구체적인 이름과 저장 방식은 현재 코드와 테스트를 검토해서 결정하라.
-
-상태와 업무 단계를 혼동하지 않도록 설계한다.
-
----
-
-# 12. 역할과 정체성
-
-이번 v1에서는 완전한 다중 직원 조직을 만들 필요가 없다.
-
-최소한 두 책임을 구분할 수 있으면 된다.
-
-```text
-Manager
-Worker
-```
-
-직원 정체성과 실제 사용 모델은 분리한다.
-
-예를 들어:
-
-```text
-Manager
-→ Gemini 사용 가능
-
-Worker
-→ Gemini 사용 가능
-```
-
-하더라도 둘은 다른 역할이다.
-
-반대로 정책상 가능하다면:
-
-```text
-Worker → Gemini
-Manager → NVIDIA
-```
-
-처럼 다른 모델을 사용할 수도 있다.
-
-하지만 특정 Provider를 코드에 고정하지 마라.
-
-역할과 모델 선택은 분리한다.
-
----
-
-# 13. 시스템 지침
-
-이번 구조의 핵심은 역할별 지침이다.
-
-관리자 지침과 작업자 지침을 코드에서 명시적으로 분리하라.
-
-## 관리자 지침의 책임
-
-```text
-작업 정의
-완료 기준 작성
-업무 범위 설정
-결과 검토
-누락 탐색
-재작업 지시
-사람 판단 요청
-최종 승인 책임
-```
-
-## 작업자 지침의 책임
-
-```text
-주어진 작업 수행
-완료 기준 준수
-제약 준수
-자료 기반 작업
-자기 점검
-한계 보고
-```
-
-관리자와 작업자가 동일한 지침을 공유하는 구조로 만들지 마라.
-
----
-
-# 14. 기존 Model Gateway 재사용
-
-새로운 외부 모델 계층을 만들지 않는다.
-
-현재 구현된 Provider-neutral Model Gateway를 재사용한다.
-
-역할마다 다른 호출 문맥과 정책을 사용할 수 있도록 필요한 최소 확장만 한다.
-
-기존:
-
-```text
-Gemini
-NVIDIA NIM
-Copilot
-Fallback
-```
-
-지원과 안전 경계를 깨지 마라.
-
-Provider 호출 오류 정책도 그대로 유지한다.
-
----
-
-# 15. 전송 승인
-
-작업자 호출과 관리자 검토가 외부 모델을 사용한다면
-둘 다 외부 데이터 전송이라는 사실을 고려한다.
-
-기존 Security 경계를 우회하지 않는다.
-
-다만 동일 Task의 같은 자료에 대해
-불필요하게 반복 승인을 요구하지 않는 안전한 방법이 현재 구조와 잘 맞는다면
-정확한 승인 범위 안에서 재사용할 수 있다.
-
-승인 범위가 달라지거나 새로운 자료가 추가되면
-기존 승인 무효화 원칙을 유지한다.
-
----
-
-# 16. 완료 판정
-
-최종 Completed 조건을 명확하게 한다.
-
-최소한:
-
-```text
-작업자 결과 존재
-
-작업자 자기 점검 존재
-
-기존 결정적 검증 PASS
-
-관리자 최종 판정 APPROVE
-
-현재 결과가 관리자 승인 당시의 결과와 동일함
-```
-
-이 모두 충족되어야 Completed가 가능하다.
-
-관리자가 승인한 뒤 결과가 바뀌었다면 승인은 무효다.
-
----
-
-# 17. 관리자 판단 자체를 또 검증하지 않는다
-
-다음 구조를 절대 만들지 않는다.
-
-```text
-Manager Review
-→ Review Verifier
-→ Review Review Verifier
-```
-
-관리자는 조직상의 책임 종료점이다.
-
-관리자가 확신하지 못하면 사람에게 올린다.
-
-```text
-Manager
-├─ 책임 있게 승인 가능 → APPROVE
-├─ 수정 가능 → REWORK
-└─ 책임 있게 판단 불가 → ESCALATE
-```
-
-이 원칙을 문서와 코드에 명확하게 남긴다.
-
----
-
-# 18. 핵심 실험 시나리오
-
-이번 Slice에서는 실제 업무 순환을 검증해야 한다.
-
-최소 다음 시나리오를 테스트한다.
-
-## 시나리오 A — 정상 완료
-
-```text
-Manager
-→ 완료 기준 생성
-
-Worker
-→ 정확한 결과
-→ 자기 점검
-
-Manager
-→ APPROVE
-
-Deterministic checks
-→ PASS
-
-Completed
-→ Archive
-```
-
----
-
-## 시나리오 B — 작업자 결과 오류
-
-의도적으로 완료 기준 하나를 위반하는 결과를 만든다.
-
-예:
-
-```text
-세 항목 요청
-→ 작업자가 두 항목만 제출
-```
-
-기대:
-
-```text
-Manager
-→ REWORK
-```
-
-Completed가 되어서는 안 된다.
-
----
-
-## 시나리오 C — 재작업 성공
-
-```text
-첫 결과
-→ REWORK
-
-수정 지시
+Task
+→ Completion Contract
 → Worker
-
-두 번째 결과
-→ Manager APPROVE
-
-Completed
+→ Self Check
+→ Deterministic Verification
+→ Manager Review
+→ APPROVE / REWORK / ESCALATE
 ```
 
-재작업 이력 전체가 남아야 한다.
+새 기능은 이 Task들을 **계획하고 연결하고 순서대로 실행하는 상위 조정 계층**이다.
+
+이번 단계에서는 Project / Phase / 여러 Worker / 병렬 실행까지 구현하지 않는다.
+
+범위는:
+
+```text
+Manager 1
+Worker 1
+Multiple Tasks
+```
+
+이다.
 
 ---
 
-## 시나리오 D — 관리자 판단 불가능
+# 3. Execution Plan
 
-불충분한 자료 또는 사람의 가치 판단이 필요한 테스트를 만든다.
+상위 목표마다 별도의 영속 `Execution Plan`을 둔다.
 
-기대:
+Execution Plan은 새로운 Employee나 조직 계층이 아니라:
+
+> Manager가 현재 목표를 달성하기 위해 유지하는 변경 가능한 Task 지도
+
+다.
+
+Task JSON 안에 전체 Plan을 억지로 넣지 말고 별도 영속 객체로 관리한다.
+
+최소 데이터:
 
 ```text
-Manager
-→ ESCALATE
-→ Waiting for human
+plan_id
+original_request
+goal
+top-level completion contract
+manager
+created_at
+status
+version
+task references
+change history
+final review
+result
 ```
 
-Completed가 되어서는 안 된다.
+구체적인 SQLite 구조는 기존 Store를 분석한 뒤 가장 자연스러운 방식으로 구현한다.
+
+기존 Task와 호환성을 불필요하게 깨뜨리지 않는다.
 
 ---
 
-## 시나리오 E — 반복 한도
+# 4. Manager 역할
 
-반복적으로 기준을 충족하지 않는 작업을 만든다.
+별도의 Planner Employee를 만들지 않는다.
 
-기대:
+기존 `manager-1`이 상황에 따라 세 가지 책임을 수행한다.
 
 ```text
-REWORK
-→ REWORK
-→ ...
-→ limit
-→ human review
+Planning
+→ 전체 목표와 Task 계획
+
+Task Review
+→ 개별 Worker 결과 검토
+
+Final Review
+→ 전체 목표 완료 여부 판단
 ```
 
-무한 호출이 발생하면 안 된다.
+Employee Identity와 모델 호출 목적은 분리한다.
+
+Prompt도 다음 책임을 명확히 분리한다.
+
+```text
+Common Principles
+Manager Planning
+Manager Task Review
+Manager Final Review
+Worker Execution
+```
+
+현재 `workflow.py`에 프롬프트가 섞여 있다면 유지보수하기 좋은 구조로 분리한다.
+
+프롬프트는 단순 문자열이 아니라 **Nidus의 조직 운영 규정**으로 취급한다.
 
 ---
 
-## 시나리오 F — 승인 후 결과 변경
+# 5. Manager Planning 원칙
 
-관리자가 승인한 결과를 완료 전에 변경한다.
+Manager는 계획 시 다음 원칙을 따른다.
 
-기대:
+1. 사용자의 최종 목표와 전체 완료 기준을 먼저 정의한다.
+2. 목표 달성에 필요한 **최소한의 충분한 Task**로 분해한다.
+3. 각 Task에는 명확한 목적과 완료 기준이 있어야 한다.
+4. Task 간 결과 의존성이 있으면 명시한다.
+5. Worker가 결정할 Action 수준까지 과도하게 세분화하지 않는다.
+6. 불필요한 Task를 만들지 않는다.
+7. 완료된 Task를 수정하지 않는다. 추가 작업이 필요하면 새 Task를 제안한다.
+8. 현재 정보로 알 수 없는 것을 임의로 가정하지 않는다.
+9. Plan은 고정 절차가 아니라 변경 가능한 작업 지도다.
+10. 사람이 판단해야 하는 문제는 사람에게 올린다.
+
+---
+
+# 6. 구조화된 Plan Proposal
+
+Manager는 자연어 계획을 직접 실행하지 않고 구조화된 Proposal을 반환한다.
+
+예:
+
+```json
+{
+  "goal": "...",
+  "completion_criteria": ["..."],
+  "tasks": [
+    {
+      "local_key": "T1",
+      "title": "...",
+      "goal": "...",
+      "priority": 1,
+      "depends_on": [],
+      "sources": ["..."],
+      "completion_criteria": ["..."],
+      "expected_output": "..."
+    }
+  ],
+  "planning_reason": "..."
+}
+```
+
+Malformed 응답을 임의로 복구하거나 추정하지 않는다.
+
+Runtime은 Proposal을 검증한 뒤에만 Plan과 Task를 생성한다.
+
+---
+
+# 7. Plan / Task ID
+
+AI는 영구 ID를 만들지 않는다.
+
+Manager는 Plan 내부에서:
 
 ```text
-Manager approval invalidated
-→ Completed 금지
+T1
+T2
+T3
 ```
+
+같은 `local_key`만 사용한다.
+
+영구 ID는 Runtime이 생성한다.
+
+Task ID에는 추적 가능한 정보를 포함한다.
+
+```text
+객체 종류
+생성 시각
+Plan 식별자
+생성 당시 Manager
+Plan 내부 순번
+짧은 충돌 방지 값
+```
+
+예:
+
+```text
+tsk_20261012T080301Z_A7K2_mgr01_003_3F8C
+```
+
+Plan도 동일한 원칙으로 ID를 가진다.
+
+```text
+pln_20261012T080250Z_mgr01_A7K2
+```
+
+원칙:
+
+- ID는 생성 후 변경하지 않는다.
+- ID의 Manager는 **생성 당시 Manager**다.
+- 현재 담당 Manager/Worker는 별도 필드다.
+- 문자열 규칙만 믿지 말고 DB 고유성 제약 또는 동등한 검사를 둔다.
+- `local_key ↔ permanent task_id` 매핑을 보존한다.
+
+---
+
+# 8. Dependency Graph
+
+Runtime은 다음을 결정적으로 검사한다.
+
+```text
+local_key 중복
+존재하지 않는 dependency
+self dependency
+cycle
+빈 goal
+없는 completion criteria
+invalid source
+output collision
+잘못된 priority
+Task/Plan ID 중복
+Task 수 제한
+```
+
+Task 실행 가능 여부도 모델에게 묻지 않는다.
+
+```text
+Task.status == queued
+AND
+모든 depends_on Task == completed
+```
+
+이면 Ready 상태로 본다.
+
+Ready Task가 여러 개면 결정적으로:
+
+```text
+priority
+→ plan sequence
+→ created_at
+→ stable ID
+```
+
+순으로 하나를 선택한다.
+
+v1에서는 병렬 실행하지 않는다.
+
+---
+
+# 9. 선행 Task 결과 전달
+
+Dependency는 단순 순서가 아니라 결과 전달도 의미한다.
+
+후속 Task는 승인된 선행 Task 결과를 입력으로 사용할 수 있어야 한다.
+
+최소 Result Reference:
+
+```text
+task_id
+plan_id
+output/result reference
+output hash
+completion state
+approval/review reference
+```
+
+후속 Task가 **어떤 버전의 선행 결과를 사용했는지** 추적 가능해야 한다.
+
+과거 실행이 조용히 최신 파일을 참조하도록 만들지 않는다.
+
+---
+
+# 10. Worker의 Plan 권한
+
+Worker는 현재 배정된 Task만 책임진다.
+
+Worker Prompt에 다음을 포함한다.
+
+```text
+전체 Plan을 변경하지 않는다.
+Task를 직접 추가/삭제/취소하지 않는다.
+다른 Task의 책임을 대신 수행하지 않는다.
+새 Task가 필요하면 Manager에게 보고한다.
+현재 Completion Contract를 기준으로 작업한다.
+선행 Task 결과를 참고할 수 있지만 무조건 사실로 간주하지 않는다.
+Task 밖의 문제는 limitations/questions/follow-up 제안으로 보고한다.
+```
+
+새 Task 생성 흐름:
+
+```text
+Worker 보고
+→ Manager 판단
+→ Plan Change Proposal
+→ Runtime 검증
+→ Task 생성
+```
+
+---
+
+# 11. Completed Task 보호
+
+Completed Task의 다음 정보는 과거 기록으로 보호한다.
+
+```text
+goal
+completion contract
+approved result
+historical dependencies
+manager approval
+worker submission
+```
+
+새로운 검토가 필요하면 기존 Task를 수정하지 말고 새 Task를 만든다.
+
+모든 의미 있는 Plan 변경은 Event와 Version history로 남긴다.
+
+---
+
+# 12. 동적 Plan 변경
+
+Manager는 작업 중 필요하면 Plan Change Proposal을 반환할 수 있다.
+
+v1에서 최소 지원할 작업:
+
+```text
+add_task
+cancel_unstarted_task
+modify_unstarted_task
+add_dependency
+remove_dependency
+```
+
+Runtime은 변경 후 전체 Graph를 다시 검증한다.
+
+Cycle이나 invalid reference가 발생하면 적용하지 않는다.
+
+각 변경에는 최소:
+
+```text
+version
+timestamp
+authority
+reason
+operations
+affected_tasks
+previous_plan_hash
+new_plan_hash
+```
+
+를 기록한다.
+
+---
+
+# 13. 폭주 방지
+
+무한 Task 생성과 계획 수정을 막는다.
+
+초기 기본값 예:
+
+```text
+Initial Tasks <= 10
+Total Tasks <= 20
+Plan revisions <= 5
+```
+
+설정 가능하게 만드는 것을 선호한다.
+
+한도를 초과하면 자동 확장하지 말고 Human Review 또는 명확한 제한 상태로 전환한다.
+
+---
+
+# 14. Manager를 다시 부르는 시점
+
+Task가 하나 끝날 때마다 Planning Manager를 호출하지 않는다.
+
+정상 진행은 Runtime이 처리한다.
+
+```text
+Task Completed
+→ Dependency 갱신
+→ Ready Task 계산
+→ 다음 Task 실행
+```
+
+Manager의 추가 판단은 최소 다음 경우에만 필요하다.
+
+```text
+Worker가 추가 Task 필요성을 보고
+Task가 Blocked
+Ready Task가 없는데 Plan 미완료
+모든 계획 Task 완료
+현재 Plan으로 전체 목표 달성 여부 판단 필요
+```
+
+불필요한 모델 호출을 줄인다.
+
+---
+
+# 15. Final Review
+
+모든 필수 Task가 완료돼도 Plan을 자동 완료하지 않는다.
+
+Manager가 마지막으로 다음을 검토한다.
+
+```text
+Original Request
+Top-level Completion Contract
+Current Plan
+Plan Change History
+Completed Task results
+Approved outputs
+Limitations / Questions
+```
+
+원칙:
+
+1. 모든 Task가 완료됐다는 이유만으로 전체 목표를 완료 처리하지 않는다.
+2. 원래 요청과 전체 완료 기준을 다시 확인한다.
+3. Task 결과 간 누락·모순·공백을 확인한다.
+4. 부족하면 필요한 최소 Task를 추가한다.
+5. 충분하면 완료를 승인한다.
+6. 책임 있게 판단할 수 없으면 사람에게 올린다.
+
+판정은:
+
+```text
+COMPLETE
+ADD_TASKS
+ESCALATE
+```
+
+세 가지로 제한한다.
+
+`ADD_TASKS`는 Plan Change Proposal로 연결한다.
+
+`ESCALATE`는 기존 Waiting / Human Review 구조를 재사용한다.
+
+---
+
+# 16. Security / Gateway
+
+Planning과 Final Review도 외부 모델 전송이다.
+
+기존 Security/Gateway 규칙을 우회하지 않는다.
+
+각 호출은 필요한 최소 문맥만 보낸다.
+
+```text
+role
+prompt
+selected sources/results
+policy
+snapshot
+```
+
+불필요한 Home/전체 Vault를 전송하지 않는다.
+
+Secret은 Prompt, Plan, Task 결과에 들어가지 않는다.
+
+특정 Provider를 코드에 고정하지 않는다.
+
+---
+
+# 17. CLI / Recovery
+
+현재 CLI 스타일을 최대한 유지한다.
+
+필요하면 다음과 비슷한 명령을 추가한다.
+
+```text
+plan-submit
+plan-run
+plan-show
+plan-list
+plan-decide
+```
+
+정확한 이름은 기존 CLI 구조에 맞춰 결정한다.
+
+지원해야 하는 흐름:
+
+```text
+상위 요청 등록
+→ Planning 승인
+→ Plan 생성
+→ Plan 실행
+→ Task별 기존 업무 순환
+→ 중단
+→ 재시작
+→ 정확한 Next Task 복구
+→ Final Review
+→ Completed / Human Review
+```
+
+하나의 `plan-run`에서 무제한 모델 호출을 반복하지 않는다.
+
+---
+
+# 18. 핵심 테스트
+
+최소 다음을 검증한다.
+
+### 정상 흐름
+
+```text
+T1 → T2 → T3 → Final Review → COMPLETE → Archive
+```
+
+### Dependency
+
+- 선행 Task 미완료 시 후속 Task 실행 금지
+- 여러 Ready Task 중 결정적 순서 선택
+- Cycle 거부
+- 없는 dependency 거부
+
+### 기존 Task Workflow 재사용
+
+- Worker REWORK 후 완료
+- Worker ESCALATE 시 dependent Task 중단
+- 기존 Manager/Worker 테스트 유지
+
+### 동적 계획
+
+```text
+Task 결과
+→ ADD_TASK 필요
+→ Plan 수정
+→ 새 Task
+→ 다시 실행
+```
+
+### Final Review
+
+```text
+모든 Task 완료
+→ ADD_TASKS
+→ 추가 실행
+→ COMPLETE
+```
+
+및:
+
+```text
+Final Review → ESCALATE → Human Review
+```
+
+### 안전성
+
+- Total Task limit
+- Plan revision limit
+- Completed Task mutation 거부
+- 중단 후 Recovery
+- dependency result snapshot 보존
 
 ---
 
 # 19. 실제 모델 검증
 
-오프라인/가짜 Adapter 테스트와 실제 모델 테스트를 구분한다.
-
-먼저 결정적인 테스트로 업무 순환을 충분히 검증한다.
-
-그 이후 합성 공개 자료를 이용해 실제 Provider Pool로 최소 하나의 전체 흐름을 검증한다.
+결정적 테스트 후 공개 합성 자료로 실제 Model Gateway 전체 흐름을 최소 한 번 수행한다.
 
 예:
 
 ```text
-Manager → Gemini
+Manager Planning
+→ 2~3 Tasks
 
-Worker → Gemini 또는 NVIDIA
+Task 1
+→ Worker
+→ Manager Review
 
-Manager Review → Gemini 또는 NVIDIA
+Task 2
+→ Worker
+→ Manager Review
+
+Final Review
+→ COMPLETE
+
+Plan
+→ Archive
 ```
-
-특정 조합을 강제하지 않는다.
-
-현재 실제 접근 가능한 모델과 비용/안전 범위를 보고 선택한다.
 
 실제 개인 자료를 사용하지 않는다.
 
----
+현재 호출 가능한 Provider를 사용하고 특정 Provider 성공을 하드코딩하지 않는다.
 
-# 20. 실행 증거
+실패를 성공으로 재해석하지 않는다.
 
-기존 `docs/evidence/` 방식을 재사용한다.
-
-실제 전체 업무 순환 증거에는 최소 다음이 남아야 한다.
-
-```text
-원래 요청
-
-완료 기준
-
-관리자 작업 정의
-
-작업자 결과
-
-작업자 자기 점검
-
-관리자 검토
-
-관리자 판정
-
-재작업 이력
-
-사용한 모델/경로
-
-결정적 검증 결과
-
-최종 상태
-
-Active / Archive
-```
-
-Secret은 기록하지 않는다.
+Evidence는 기존 `docs/evidence/`에 보존한다.
 
 ---
 
-# 21. Git 작업 흐름
+# 20. 회귀 / 문서
 
-현재 저장소의 최신 정책을 따른다.
+현재 `develop`의 실제 테스트 기준을 먼저 확인한다.
 
-`main`을 유일한 통합 브랜치로 사용한다.
-
-최신 main에서 짧은 작업 브랜치를 만든다.
-
-권장:
+기존:
 
 ```text
-feat/core-workflow
+Manager/Worker workflow
+Gateway
+Security
+Archive
+Git
+Recovery
 ```
 
-또는 의미가 더 분명하다면:
+관련 회귀를 모두 유지한다.
+
+최소:
 
 ```text
-feat/manager-worker-loop
-```
-
-중 하나를 선택한다.
-
-불필요한 장기 통합 브랜치를 만들지 않는다.
-
-작은 논리 단위로 Commit한다.
-
-예:
-
-```text
-feat: persist completion checklist and workflow stage
-
-feat: add worker self-check submission
-
-feat: add manager review decisions
-
-feat: implement bounded rework loop
-
-test: verify manager-worker lifecycle
-
-docs: document core Nidus workflow
-```
-
-작업 완료 후에도 Remote push 또는 PR은 사용자 요청 없이 수행하지 않는다.
-
----
-
-# 22. 기존 회귀 유지
-
-현재 회귀 기준을 깨뜨리지 않는다.
-
-최소한 기존:
-
-```text
-37 offline tests
-3 local HTTP integration tests
+전체 unit tests
+local integration tests
 compileall
 git diff --check
 ```
 
-가 모두 통과해야 한다.
+를 통과한다.
 
-새로운 핵심 업무 순환 테스트도 추가한다.
-
-기존 Copilot/Gemini/NVIDIA Live Evidence는 수정하지 않는다.
-
----
-
-# 23. 문서 갱신
-
-이번 구현은 Nidus의 핵심 개념을 실제로 코드화하는 중요한 단계다.
-
-따라서 최소한 다음을 갱신한다.
+다음 문서를 실제 구현과 일치하도록 갱신한다.
 
 ```text
+README.md
 PRD.md
 DESIGN.md
 docs/CONCEPT.md
 docs/VALIDATION.md
 docs/plans/current-plan.md
-README.md
 ```
 
-특히 `docs/CONCEPT.md`에는 다음 책임 구조가 명확하게 표현되어야 한다.
+특히 DESIGN에는 **Prompt 책임 / Runtime 책임 경계**를 명확히 기록한다.
+
+---
+
+# 21. Git Flow — 반드시 실제 작업 과정에서 적용
+
+이번 작업은 `main`에서 수행하지 않는다.
 
 ```text
-Manager
-→ Task Definition
-→ Completion Contract
-→ Assignment
+main
+→ 안정 버전
 
-Worker
-→ Execution
-→ Self Check
-→ Submission
+develop
+→ 기능 통합
 
-Manager
-→ Review
-→ Approve / Rework / Escalate
+feature/*
+→ 기능 개발
 ```
 
-단, 장기 개념 설계 전체가 구현됐다고 과장하지 않는다.
+최신 `develop`에서 시작한다.
+
+기능 규모가 크므로 필요에 따라 논리적 단위의 feature branch로 나눈다.
+
+권장 예:
+
+```text
+feature/plan-model
+feature/task-identity
+feature/task-dependency
+feature/manager-planning
+feature/plan-runtime
+feature/final-review
+feature/multi-task-evidence
+```
+
+브랜치 수를 억지로 늘릴 필요는 없지만 **하나의 거대한 변경으로 처리하지 않는다.**
+
+기본 반복:
+
+```text
+develop
+→ feature branch 생성
+→ 기능 구현
+→ 관련 테스트
+→ 논리 단위 commit
+→ 전체 관련 회귀 확인
+→ develop merge
+→ develop 검증
+→ 최신 develop에서 다음 feature branch 생성
+```
+
+각 기능이 완성될 때마다 중간 커밋한다.
+
+예:
+
+```text
+feat: persist execution plans
+feat: generate traceable task identifiers
+feat: validate dependency graphs
+feat: add manager planning contract
+feat: orchestrate sequential plan execution
+feat: add final plan review
+test: verify multi-task lifecycle
+docs: document orchestration responsibilities
+```
+
+브랜치를 바꾸기 전에는 반드시:
+
+```text
+git status
+미커밋 변경 확인
+관련 테스트 확인
+```
+
+을 수행한다.
+
+미완성 변경을 다른 feature branch로 들고 가지 않는다.
+
+기능 branch를 `develop`에 병합한 뒤 전체 회귀를 확인하고 다음 branch를 만든다.
+
+`main`, `release/*`, `hotfix/*`는 이번 작업에서 변경하지 않는다.
+
+원격 push / PR / main merge는 사용자가 별도로 요청하지 않는 한 수행하지 않는다.
+
+Git 이력을 마지막에 사후 조작하지 말고 **실제 개발 순서가 브랜치와 커밋 기록에 드러나도록 작업한다.**
 
 ---
 
 # 범위 밖
 
-이번 Slice에서 다음을 구현하지 마라.
+이번 Slice에서는 다음을 구현하지 않는다.
 
 ```text
-완전한 다중 Worker 조직
-Group Manager 계층 전체
-Lead Manager
+Multiple Workers
+Parallel Execution
+Group / Lead Manager
+Project / Phase 전체
 Red Team
-JEV
-자동 역할 생성
-복잡한 장기 계획
-Tool execution
-Browser automation
+JEV / Decision Engine
+Tool / Shell / Browser execution
 GUI
-Streaming
-Responses API 전환
-여러 검토자의 다수결
-검증 전용 객체
-무한 자기 수정
+Daemon / Scheduler
+Vector DB
+자동 Employee 생성
+자동 Model 최적화
+무한 자율 실행
 ```
-
-필요한 기반 인터페이스 정도는 열어둘 수 있지만
-이번 완료 조건에는 포함하지 않는다.
 
 ---
 
-# 완료 기준
+# 완료 조건
 
-이번 작업은 다음을 모두 충족할 때 완료로 선언한다.
+다음이 모두 충족되어야 한다.
 
-1. 관리자가 작업 계약과 완료 기준을 정의할 수 있다.
-2. 작업자가 완료 기준을 전달받고 작업한다.
-3. 작업자가 결과와 자기 점검을 제출한다.
-4. 기존 결정적 검증이 유지된다.
-5. 관리자가 결과를 독립적으로 검토한다.
-6. 관리자가 APPROVE / REWORK / ESCALATE 중 하나를 반환한다.
-7. APPROVE 전에는 Completed가 불가능하다.
-8. REWORK 시 수정 지시와 함께 작업자에게 다시 전달된다.
-9. 재작업 이력이 보존된다.
-10. 무한 재작업을 막는 한도가 있다.
-11. ESCALATE 시 사람 판단 대기로 이동한다.
-12. 관리자 승인 이후 결과 변경 시 승인이 무효화된다.
-13. 정상 흐름이 Completed → Archive까지 실제 통과한다.
-14. 기존 Security / Gateway / Archive / Git 경계를 유지한다.
-15. 기존 회귀와 새 테스트가 모두 통과한다.
-16. 실제 공개용 합성 자료를 이용한 전체 업무 순환 증거가 최소 하나 있다.
-17. 문서와 실제 코드가 같은 구조를 설명한다.
+1. Manager가 하나의 상위 요청을 여러 Task로 분해한다.
+2. 상위 Completion Contract와 Execution Plan이 영속 저장된다.
+3. Plan/Task 영구 ID는 Runtime이 생성하고 고유성이 보장된다.
+4. Dependency graph와 Ready Task 계산이 결정적으로 동작한다.
+5. 각 Task는 기존 Manager/Worker workflow를 사용한다.
+6. 승인된 선행 Task 결과를 후속 Task가 명시적으로 참조한다.
+7. Worker는 Plan을 직접 수정하지 못한다.
+8. Manager의 Plan Change Proposal을 Runtime이 검증 후 적용한다.
+9. Plan version/history와 Completed Task history가 보존된다.
+10. Task/Plan 확장 한도가 존재한다.
+11. 모든 Task 완료 후 Manager Final Review를 수행한다.
+12. COMPLETE / ADD_TASKS / ESCALATE가 실제 동작한다.
+13. 중단 후 정확히 복구된다.
+14. 기존 Security/Gateway/Git/Archive 경계를 유지한다.
+15. 기존 회귀 + 새 multi-task 테스트가 모두 통과한다.
+16. 실제 공개 합성 multi-task 실행이 최소 한 번 성공한다.
+17. 문서와 실제 구현이 동일한 책임 구조를 설명한다.
+18. Git Flow를 실제 작업 과정에서 지키고 기능 단위 커밋/병합 이력을 남긴다.
 
 ---
 
 # 최종 보고
 
-작업 완료 후 다음을 정리한다.
+작업 완료 후 다음을 보고한다.
 
 ```text
 Status
 
 Architecture changes
 
-Manager responsibility
+Prompt vs Runtime responsibility
 
-Worker responsibility
+Execution Plan / Task ID design
 
-Completion Contract structure
+Dependency / scheduling
 
-Worker self-check structure
+Manager Planning
 
-Manager review structure
+Worker integration
 
-Rework loop
+Dynamic Plan changes
 
-Human escalation
+Final Review
 
-State / workflow-stage changes
+Security / Recovery
 
-Security implications
-
-Model usage
-
-Actual end-to-end evidence
-
-Regression tests
-
-Git commits
+Tests / Live evidence
 
 Known limitations
+
+Git Flow
+- starting develop commit
+- feature branches
+- 주요 commits
+- develop merge commits
+- final develop HEAD
+- main unchanged 여부
+- working tree 상태
 
 Recommended next step
 ```
 
 ---
 
-# 가장 중요한 원칙
-
-이번 구현의 핵심은 다음 문장이다.
-
-> Nidus에서 완료란 인공지능이 결과를 생성한 순간이 아니라,
-> 관리자가 사전에 정의된 완료 기준과 사용자의 원래 요청을 기준으로
-> 작업자의 결과를 검토하고 승인한 순간이다.
-
-검증 전용 인공지능 객체를 만들지 마라.
-
-대신 조직의 책임을 코드로 구현하라.
+# 핵심 원칙
 
 ```text
-관리자가 정의한다.
-작업자가 수행한다.
-작업자가 스스로 점검한다.
-관리자가 검토한다.
-문제가 있으면 다시 수행한다.
-관리자도 판단할 수 없으면 사람에게 묻는다.
-승인된 결과만 완료된다.
+Manager
+→ 무엇을 해야 하는지 판단
+
+Worker
+→ 배정된 Task를 어떻게 수행할지 판단
+
+Runtime
+→ 무엇이 유효하고 허용되며 실행 가능한지 강제
 ```
 
-이 흐름이 Nidus의 기본 업무 순환이 되도록 구현하라.
+Nidus는 AI의 판단을 전부 코드로 대체하지 않는다.
 
-계획만 작성하고 멈추지 말고,
-현재 저장소를 먼저 분석한 뒤
-설계 → 구현 → 결정적 테스트 → 실제 합성 작업 검증 → 문서화 → Commit까지
-안전하게 수행하라.
+동시에 상태 무결성과 안전성을 AI의 프롬프트 준수에만 의존하지 않는다.
+
+이번 구현은:
+
+> **Manager의 계획 능력과 Runtime의 결정적 통제를 결합하여, 하나의 상위 목표를 여러 Task로 분해하고 기존 단일 Task 업무 순환을 반복 사용해 끝까지 완료하는 Nidus 최초의 다중 Task 조정 구조를 만드는 것**
+
+이다.
+
+현재 저장소를 먼저 분석하고 기존 구조를 최대한 재사용하라.
+
+계획만 작성하고 멈추지 말고:
+
+```text
+분석
+→ 설계
+→ feature 단위 구현/테스트/커밋
+→ develop 통합
+→ 전체 회귀
+→ 실제 합성 multi-task 검증
+→ 문서화
+→ 최종 develop 검증
+```
+
+까지 완료하라.
