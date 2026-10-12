@@ -4,6 +4,31 @@
 
 ## 한국어
 
+### 다중 Task 조정 v1
+
+하나의 상위 요청을 `Execution Plan`으로 등록하면 manager-1이 상위 완료 계약과 의존 Task들을 제안합니다. Runtime은 구조를 검사하고 한 번에 하나의 Task를 기존 Worker/Manager 순환으로 실행합니다. 전체 Task가 끝나도 Manager Final Review의 COMPLETE 승인 전에는 Plan을 완료하지 않습니다.
+
+```sh
+python3 -m nidus --vault "$vault" plan-submit "선택 자료를 조사하고 짧은 보고서를 작성한다" --source notes.md --model-policy docs/policies/workflow-live-copilot.json
+python3 -m nidus --vault "$vault" plan-run PLAN_ID
+python3 -m nidus --vault "$vault" plan-show PLAN_ID
+# attention의 정확한 전송 범위를 검토한 뒤 승인
+python3 -m nidus --vault "$vault" plan-decide PLAN_ID approve
+python3 -m nidus --vault "$vault" plan-run PLAN_ID
+# current_task의 Worker/Manager 전송은 기존 decide로 각각 승인
+python3 -m nidus --vault "$vault" decide TASK_ID approve
+python3 -m nidus --vault "$vault" plan-run PLAN_ID
+python3 -m nidus --vault "$vault" plan-list --archive
+```
+
+각 `plan-run`은 계획 호출, 선택된 Task의 기존 실행 단계, 또는 전체 검토 한 단계만 처리합니다. 반복은 사용자가 명시적으로 재개합니다. Planning은 `--model-policy`, Worker는 `--worker-policy`, Task 검토는 `--review-policy`, Final/Adjustment는 `--final-policy`로 분리할 수 있으며 생략한 정책은 Planning 정책을 따릅니다. 기본 한도는 초기 10 / 전체 20 Task / 변경 5회입니다. `--initial-tasks`, `--total-tasks`, `--revisions`로 지정합니다.
+
+Plan이 task_quality 대기라면 먼저 해당 Task의 기존 `quality-decide`를 해결하고 `plan-decide PLAN_ID resume --note "해결 근거"`로 재개합니다. 전체 목표의 ESCALATE도 `resume --note` 또는 `cancel --note`로 처리합니다. 사람 판단으로 전체 목표의 COMPLETE 검토를 생략하지 않습니다.
+
+Manager 변경 제안은 추가·미시작 취소·미시작 내용 수정·의존성 추가·제거를 지원합니다. 이미 한 번이라도 실행된 Task와 완료 이력은 변경할 수 없습니다. cancelled/blocked/waiting dependency는 완료로 취급하지 않습니다. 후속 Task는 선택 원본 또는 직접 dependency의 승인 출력만 source로 사용할 수 있습니다. 승인 출력이 변조되면 실행을 차단하므로 승인된 Git 버전을 복원하거나 새 Plan으로 재검토합니다.
+
+실제 합성 검증은 저장소 루트에서 `PYTHONPATH=. python3 scripts/plan_live.py --allow-synthetic-transmission --policy docs/policies/workflow-live-copilot.json --evidence /tmp/new-plan-evidence.json`으로 실행합니다. 필요한 키는 정책의 환경 변수에 준비합니다. 선택적인 `--credential-env-file PATH`는 NIDUS_*_API_KEY 할당만 메모리에 읽습니다. 증거 파일은 덮어쓰지 않고 품질 판단을 자동 승인하지 않습니다. [설계](DESIGN.md), [검증](docs/VALIDATION.md)을 참고하세요.
+
 ### 관리자 업무 순환 사용
 
 새 `--mode generative` Task는 Manager workflow가 기본입니다. `--contract PATH`로 명시 계약 JSON을 지정하거나 기본 계약을 사용할 수 있습니다. `--manager-policy PATH`로 검토 모델을 분리하고 `--max-reworks 2`로 반복 한도를 정합니다. 계약의 필수 필드는 [설계](DESIGN.md)와 `nidus/workflow.py`의 기본 계약을 참고하세요. 기존 단일 모델 브리핑은 `--workflow legacy`, 오프라인 추출은 기존 명령으로 사용할 수 있습니다.
@@ -135,11 +160,12 @@ Vault 상태는 `.nidus/state.sqlite3`, 원문과 결과는 `.nidus/` 밖에 있
 ```sh
 python3 -m unittest discover -s tests -q
 python3 tests/integration/model_http.py -v
+python3 tests/integration/plan_http.py -v
 PYTHONPYCACHEPREFIX=/tmp/nidus-pycache python3 -m compileall -q nidus tests scripts
 git diff --check
 ```
 
-현재 회귀 기준은 오프라인 53개와 로컬 HTTP 5개입니다. HTTP 테스트는 루프백 소켓 권한이 필요하며 외부 모델은 사용하지 않습니다.
+현재 회귀 기준은 오프라인 104개와 로컬 HTTP/CLI 7개(기존 5 + Plan 2)입니다. HTTP 테스트는 루프백 소켓 권한이 필요하며 외부 모델은 사용하지 않습니다.
 실제 합성 Live 테스트는 키를 환경에 넣은 상태에서 별도로 실행하며 사용량이 발생할 수 있습니다. 새 evidence 경로를 사용하세요.
 
 ```sh
@@ -167,6 +193,12 @@ git switch -c feature/short-description
 ```
 
 ## English
+
+### Multi-task orchestration v1
+
+`plan-submit` registers an upper goal and selected sources; manager-1 proposes its contract and dependent Tasks. `plan-run` advances one bounded step through the existing Task runtime. Inspect `plan-show`, approve each exact Plan transmission with `plan-decide approve`, and each Task transmission with the existing `decide`. Final COMPLETE is required before Plan Archive. Worker, Task Review and Final/Adjustment routes can be selected independently with --worker-policy, --review-policy and --final-policy.
+
+Five validated change operations support additions, never-started cancellation/modification, and dependency additions/removals. Completed and started history is protected. Approved predecessor content/hash/review references are frozen; changed artifacts block downstream execution. Default limits are 10 initial / 20 total Tasks / 5 revisions. Task quality escalation uses quality-decide first, then Plan resume with an explicit note. Plan escalation supports resume/cancel, not a forced completion override. See [design](DESIGN.md) and [live validation](docs/VALIDATION.md).
 
 ### Using the Manager workflow
 
@@ -299,11 +331,12 @@ Traversal, hidden paths, symlinks and source overwrite are denied. Arbitrary she
 ```sh
 python3 -m unittest discover -s tests -q
 python3 tests/integration/model_http.py -v
+python3 tests/integration/plan_http.py -v
 PYTHONPYCACHEPREFIX=/tmp/nidus-pycache python3 -m compileall -q nidus tests scripts
 git diff --check
 ```
 
-The current regression baseline is 53 offline and 5 local HTTP tests. HTTP tests require loopback socket permission and make no external model calls.
+The current regression baseline is 104 offline and 7 local HTTP/CLI tests (5 existing + 2 Plan tests). HTTP tests require loopback socket permission and make no external model calls.
 Synthetic live acceptance is separate, requires the key in the environment and can consume model usage. Choose a new evidence path.
 
 ```sh
