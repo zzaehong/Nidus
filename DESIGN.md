@@ -4,6 +4,30 @@
 
 ## 한국어
 
+### Local GUI / Application 경계
+
+```text
+Browser (default-light HTML/CSS/JS)
+  → loopback GUIServer / structured HTTP API
+  → Application projection / thin commands
+  → PlanRuntime / Runtime
+  → Store / Security / Gateway / Git
+```
+
+`nidus/gui.py`의 표준 라이브러리 HTTPServer는 단일 요청을 동기 처리하며 127.0.0.1에만 bind한다. 모델 실행 중 HTTP 요청을 유지하며 Frontend는 실행 중 상태로 중복 버튼을 잠근다. 별도 scheduler·Thread worker·자동 plan-run loop는 없다. 요청별 Store/SQLite connection을 열고 닫으며 업무 상태를 직접 쓰지 않는다. CLI와 GUI는 동일한 Runtime 메서드를 호출한다. `Application`은 Store를 읽어 상태·진행도·attention·allowed_actions를 투영하고 Plan 생성·실행·판단을 위임한다. task ready는 PlanRuntime.board/ready의 값이며 Dashboard 합계는 실행 액션을 허용하는 Plan의 ready Task 수다. 완료·승인·한도·DAG 판단은 Runtime에서 유지한다.
+
+API는 GET `/api/overview`, `/api/plans/ID`, `/api/tasks/ID`, `/api/session`과 POST `/api/plans`, `/api/plans/ID/run`, `/api/plans/ID/decision`, `/api/tasks/ID/decision`, `/api/tasks/ID/quality`다. Overview에 활성/Archive Plan, Task, Attention, 설정을 함께 제공하여 별도 목록 endpoint를 늘리지 않는다. 정책은 non-secret JSON object이며 호스트 파일 경로를 API로 열지 않는다. Source는 기존 safe_path/sources_for를 통한다.
+
+모든 mutation에 정확한 Host·Origin·서버 세션 token과 JSON Content-Type을 요구한다. cross-site fetch를 거부하고 CORS를 열지 않는다. token은 메모리에만 있고 no-store session endpoint를 통해 동일 Origin에 전달한다. Task/Prompt에 token을 복사하는 요청도 거부하며 요청 body/URL/token을 로그하지 않는다. CSP는 self-only script/style/connect와 frame/base/form 제한을 설정하고, 모든 모델/사용자 값은 textContent 또는 HTML escaping으로 표시한다. 임의 정적 파일 경로 대신 세 asset만 허용한다. body 256 KiB, socket timeout 30초로 제한한다. 이는 외부 사용자 인증이나 악성 로컬 프로세스 방어를 대신하지 않는다.
+
+실행·판단 요청에는 객체와 source/output 파일 해시에서 얻은 revision을 전달한다. Runtime의 기존 vault lock 안에서 revision을 다시 검사한 뒤 기존 전이를 수행한다. 상태·파일 변경은 STALE_STATE이며 Frontend가 새 상태를 읽는다. 기존 transmission/quality/final approval 검증도 그대로 실행한다. CLI의 expected_state 기본값은 None으로 하위 호환하며 기존 snapshot 경계를 유지한다. Graph/완료 상태를 Frontend에서 계산하거나 DB를 직접 UPDATE하지 않는다.
+
+Permission과 Quality는 별도 API/카드이며 allowed_actions는 현재 attention과 Runtime 선택지를 바탕으로 제공한다. Task quality가 남아 있으면 Plan resume는 노출하지 않고 Runtime도 거부한다. 오류는 `{error,message,details}`이며 INVALID_DECISION/STALE_STATE/PERMISSION_DENIED 등 HTTP 오류와 Runtime의 waiting/blocked/model_error를 보존한다. Python traceback은 응답에 넣지 않고 개발 로그에 남긴다. 모델/구조화 결과 실패는 Runtime의 원래 진단을 표시하며 자동 수리하지 않는다.
+
+새 attention에는 requested_at, Task 실행/완료에는 last_run_at/completed_at을 기록한다. 기존 데이터는 migration이나 과거 이력 수정 없이 그대로 읽고, 없는 시각은 미기록 또는 실제 event sequence로 표시한다. 손상되거나 접근 불가한 source도 projection 자체를 차단하지 않으며 실행 시 Runtime이 거부한다.
+
+Theme는 업무 데이터의 status/ready/type/allowed_actions와 분리한 CSS 변수로 표현한다. default-light만 구현하며 Runtime 변경 없이 CSS/표현 계층을 교체할 수 있다. Pixel Office plugin system·캐릭터·공간 상태는 만들지 않는다. 데스크톱 우선이며 좁은 화면에서 판단함이 아래로, Plan 목록이 위로 이동한다.
+
 ### 다중 Task 조정 v1 — 2026-10-12
 
 `PlanRuntime`은 기존 `Runtime.run` 위의 조정 계층이다. 별도 Task 실행기/Planner Employee를 만들지 않는다. `plan_model.py`는 ID·strict Proposal·DAG·Ready 계산, `planning.py`는 Manager 호출/Plan 변경/Task 조정/전체 검토를 담당한다. 프롬프트는 prompts/common, manager_planning, manager_review, manager_completion, worker로 책임별 분리한다.
@@ -124,7 +148,7 @@ Route당 한 번만 시도하고 무한 재시도는 없다. 시작/종료 UTC �
 
 ### 검증 환경과 선택 근거
 
-SQLite는 외부 의존성 없이 트랜잭션/정렬된 감사를 제공한다. CLI와 동기 실행은 GUI/Queue/daemon 없이 복구 가능한 작은 Slice를 만든다.
+SQLite는 외부 의존성 없이 트랜잭션/정렬된 감사를 제공한다. CLI와 동기 실행은 Queue/daemon 없이 복구 가능한 작은 Slice를 만든다.
 제한된 파일 작업만 제공하므로 현재 Docker 설치는 필수가 아니다. 향후 코드/Shell Tool 추가 전 격리를 재검토해야 한다.
 실제 설치된 OmniRoute는 교체 가능한 실행 수단이며 설치·Provider 선택 이력은 [검증 보고서](docs/VALIDATION.md)에 통합했다.
 `scripts/model_fallback_live.py`는 Credential 없는 별도 Loopback fixture로 503/401을 주입하고 나머지 경로만 실제 호출한다. 이는 실제 Provider 장애를 재현했다는 주장이 아니다.
@@ -132,9 +156,13 @@ Live harness는 기존 evidence 경로를 덮어쓰지 않는다. 개발 검증 
 
 ## English
 
+### Local GUI boundary
+
+A standard-library loopback HTTP server delegates all commands through Application to the same PlanRuntime/Runtime used by CLI. The adapter projects Store data and Runtime readiness; it never updates business state directly. Each explicit click runs one bounded step. Exact Host/Origin, a memory-only session token, CSP, escaped content, strict IDs/paths and under-lock state/resource revisions protect localhost mutations. Completed history, scoped permissions, quality judgments and recovery retain Runtime semantics. CSS tokens implement default-light independently of status/action data; Pixel Office and autonomous scheduling remain deferred.
+
 ### Multi-task orchestration v1
 
-Schema 2 adds separate plans without rewriting legacy Tasks. PlanRuntime calls the existing Runtime under one vault lock. Runtime owns traceable IDs, strict proposal validation, DAG integrity, stable readiness, atomic five-operation changes, limits, frozen completed history and snapshot-bound completion. Prompts own goal interpretation, minimum decomposition, semantic dependencies, Task quality and final-goal judgment. Final decisions are COMPLETE/ADD_TASKS/ESCALATE; unfinished-plan Adjustment also permits CONTINUE and CHANGE_PLAN. Source selection is restricted to original selected paths or declared direct dependency outputs, with approved artifact hashes checked before reads. Dependency source text is the approved result, with separate artifact/text hashes. Each role has exact transmission approval and all role credentials are screened. Restart reuses stored generations and approvals. No multiple workers, parallel execution, tools, GUI or daemon.
+Schema 2 adds separate plans without rewriting legacy Tasks. PlanRuntime calls the existing Runtime under one vault lock. Runtime owns traceable IDs, strict proposal validation, DAG integrity, stable readiness, atomic five-operation changes, limits, frozen completed history and snapshot-bound completion. Prompts own goal interpretation, minimum decomposition, semantic dependencies, Task quality and final-goal judgment. Final decisions are COMPLETE/ADD_TASKS/ESCALATE; unfinished-plan Adjustment also permits CONTINUE and CHANGE_PLAN. Source selection is restricted to original selected paths or declared direct dependency outputs, with approved artifact hashes checked before reads. Dependency source text is the approved result, with separate artifact/text hashes. Each role has exact transmission approval and all role credentials are screened. Restart reuses stored generations and approvals. No multiple workers, parallel execution, tools or daemon.
 
 ### Core responsibility implementation
 
@@ -220,7 +248,7 @@ Unknown values remain null; configured zero rates are policy estimates, not bill
 
 ### Verification environment and decisions
 
-SQLite provides transactions/ordered audits without external dependencies. CLI and synchronous execution create a small recoverable slice without GUI/queue/daemon.
+SQLite provides transactions/ordered audits without external dependencies. CLI and synchronous execution create a small recoverable slice without a queue/daemon.
 Restricted file operations do not require Docker today. Revisit isolation before introducing code/shell tools.
 Installed OmniRoute remains replaceable; installation/provider-selection history is consolidated in [validation](docs/VALIDATION.md).
 `scripts/model_fallback_live.py` injects 503/401 through a separate credential-free loopback fixture and calls only non-injected routes for real. It does not establish actual provider outages.

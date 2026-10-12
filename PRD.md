@@ -4,6 +4,10 @@
 
 ## 한국어
 
+### Local GUI v1
+
+기존 Runtime 위에 Observe/Decide/Run을 제공하는 로컬 웹 인터페이스를 구현한다. Dashboard, Plan/Task 상세, Permission/Quality 판단함, 새 Plan, bounded one-step run, Archive, read-only 설정을 제공한다. 127.0.0.1만 bind하며 Origin/session token과 잠금 안의 stale revision 검사로 mutation을 보호한다. Frontend build/CDN/새 Python dependency는 없다. Runtime 규칙을 복제하거나 상태를 직접 수정하지 않는다. Pixel Office/원격 접속/계정/자동 실행은 범위 밖이다. GUI 수용 검증은 [GUI 보고서](docs/GUI_REPORT.md)에 기록한다.
+
 ### 다중 Task 조정 v1
 
 상위 요청을 동일 manager-1이 상위 Completion Contract와 최소 충분한 Task 계획으로 분해한다. Runtime이 구조화 Proposal을 검증하고 별도 Execution Plan/Task Board로 저장한다. 기존 단일 Task 순환을 한 번에 하나씩 재사용하며 전체 목표는 독립적인 Final Review를 통과해야 완료된다.
@@ -20,7 +24,7 @@
 | MP-AC-08 | 재시작 시 Next Task/승인 generation/version/history 복구, 불필요한 호출 없음 |
 | MP-AC-09 | 기존 회귀와 다중 Task tests, 실제 공개 합성 흐름 증거 및 실패 이력 보존 |
 
-의미적 판단은 Prompt, ID/무결성/권한/상태/한도/복구는 Runtime 책임이다. Manager 1/Worker 1/순차 다중 Task 범위다. Project/Phase 전체, 다중 Worker/병렬성, GUI/daemon/scheduler/tool 실행/자동 모델 최적화/무제한 반복은 구현하지 않는다. 기존 단일 submit은 기본/명시 계약을 사용하고 상위 plan-submit만 Planning 호출을 추가한다.
+의미적 판단은 Prompt, ID/무결성/권한/상태/한도/복구는 Runtime 책임이다. Manager 1/Worker 1/순차 다중 Task 범위다. Project/Phase 전체, 다중 Worker/병렬성, Pixel Office/daemon/scheduler/tool 실행/자동 모델 최적화/무제한 반복은 구현하지 않는다. 기존 단일 submit은 기본/명시 계약을 사용하고 상위 plan-submit만 Planning 호출을 추가한다.
 
 ### 관리자·작업자 업무 순환 v1
 
@@ -37,7 +41,7 @@
 | MW-AC-07 | 역할별 정책과 정확한 전송 승인을 유지; 원문·계약·결과·정책 변경 시 이전 승인 재사용 금지 |
 | MW-AC-08 | A–F 결정적 테스트, 기존 회귀 및 실제 공개 합성 작업의 Completed/Archive 증거 |
 
-기존 deterministic 추출과 API의 `workflow=None`, CLI `--workflow legacy`는 이전 계약의 호환 경로다. 기존 작업을 자동으로 새 계약에 편입하지 않는다. 전체 조직/Project/GUI/Red Team/JEV/Tool은 여전히 범위 밖이다. 상위 목표 계획은 별도 Plan 기능이다. Manager의 품질 판단은 의미 정확성의 수학적 증명이 아니다.
+기존 deterministic 추출과 API의 `workflow=None`, CLI `--workflow legacy`는 이전 계약의 호환 경로다. 기존 작업을 자동으로 새 계약에 편입하지 않는다. 전체 조직/Project/Pixel Office/Red Team/JEV/Tool은 여전히 범위 밖이다. 상위 목표 계획은 별도 Plan 기능이다. Manager의 품질 판단은 의미 정확성의 수학적 증명이 아니다.
 
 ### 목적과 현재 범위
 
@@ -46,7 +50,7 @@
 결정적인 브리핑은 모델의 자율적 판단을 증명하지 않으며, 실제 생성 검증도 임의의 자율 업무 수행 능력을 증명하지 않는다.
 
 P0 목표는 실행 가능한 로컬 흐름, 지속적 복구, 명시적 인간 결정, 원문 보호, 관찰 가능한 검증과 이력이다.
-GUI·자연어 계약 자동 구성·임의 Tool/Shell·전체 조직/Project 실행·여러 Worker·daemon·vector 검색·Red Team·Dream Sequence·배포는 구현 범위 밖이다.
+Pixel Office·자연어 계약 자동 구성·임의 Tool/Shell·전체 조직/Project 실행·여러 Worker·daemon·vector 검색·Red Team·Dream Sequence·배포는 구현 범위 밖이다.
 개념 설계의 Inbox 매트릭스는 CLI로 대체 완료된 것이 아니라 후속 UX다. 생성형 경로만 명시적 외부 모델 전송을 추가하며 기본 모드는 오프라인이다.
 
 ### 주요 시나리오
@@ -115,7 +119,7 @@ New CLI generative tasks default to Manager contract → Worker execution/self-c
 
 MW-AC-01: persist goal/scope/identified criteria/constraints/materials/deliverable/human-judgment conditions before execution and pass them to Worker. MW-AC-02: require result, criterion-by-criterion self-check, limitations and questions; self-check cannot complete a task. MW-AC-03: Manager independently reviews original request, contract, actual sources/result, self-check and execution records, returning APPROVE/REWORK/ESCALATE. MW-AC-04: require deterministic PASS and approval bound to current content, or explicit human quality approval. MW-AC-05: retain revisions and concrete instructions, with a configurable 0–10 rework limit (default 2), then human attention. MW-AC-06: separate quality approve/rework/cancel from permission decisions. MW-AC-07: independent role policies and exact per-call transmission approval; invalidate changed inputs/content/policy. MW-AC-08: scenarios A–F, regression and real public-synthetic completion/archive evidence.
 
-Deterministic extraction, API `workflow=None` and CLI `--workflow legacy` retain earlier contracts. Do not silently migrate existing tasks. Full organization/project/GUI/Red Team/JEV/tools remain deferred; upper-goal planning is supported by the separate Plan feature. Manager judgment is not mathematical proof of semantic correctness.
+Deterministic extraction, API `workflow=None` and CLI `--workflow legacy` retain earlier contracts. Do not silently migrate existing tasks. Full organization/project/Pixel Office/Red Team/JEV/tools remain deferred; upper-goal planning is supported by the separate Plan feature. Manager judgment is not mathematical proof of semantic correctness.
 
 ### Purpose and current scope
 
@@ -124,7 +128,7 @@ Support default offline briefings and optional real-model document generation. T
 Deterministic extraction does not prove model judgment; live generation does not establish arbitrary autonomous work capability.
 
 P0 goals are executable local flow, durable recovery, explicit human decisions, protected originals, observable verification and retained history.
-GUI, natural-language contract formation, arbitrary tools/shell, full organizational/project execution, multiple workers, daemon, vector search, Red Team, Dream Sequence and deployment are outside implementation scope.
+Pixel Office, natural-language contract formation, arbitrary tools/shell, full organizational/project execution, multiple workers, daemon, vector search, Red Team, Dream Sequence and deployment are outside implementation scope.
 The conceptual Inbox matrix remains future UX, not a completed CLI replacement. Only the opt-in generative path adds external model transmission; default mode is offline.
 
 ### Primary scenarios

@@ -4,6 +4,26 @@
 
 ## 한국어
 
+### Local GUI v1 검증 — 2026-10-12
+
+시작 develop `fcd97115d02a50336922ede8722ffaeb539ab1ce`. 시작 기준 104 unit / 7 local HTTP·CLI를 실제로 다시 실행해 통과했고, GUI 기반 feature → develop 병합/111 회귀 → Dashboard feature → develop 병합/111 회귀 → evidence feature 순서로 진행했다. 사용자 수정 prompt는 `6578da8`에 보존했다.
+
+최종 기준:
+
+- `python3 -m unittest discover -s tests -q`: 119 PASS (기존 104 + GUI 15). GUI discovery에 실제 loopback HTTP 테스트가 포함되어 소켓 권한이 필요하다.
+- `python3 tests/integration/model_http.py -q`: 기존 5 PASS.
+- `python3 tests/integration/plan_http.py -q`: 기존 2 PASS.
+- `node tests/gui_frontend.js`: 6 PASS (첫 진입/빈 Vault, read-only 화면, escaping, 한 mutation, busy 복구, 중복 클릭 억제). Node는 개발 검증에만 필요하다.
+- compileall, `node --check nidus/web/app.js`, `git diff --check`: PASS.
+
+GUI 15개는 서버 bind/페이지/assets/Host-Origin-token 방어, 실제 Store summary·ready·dependency·할당·progress, 기존 permission/overwrite/quality/Plan decision 위임, 모델 호출 제한을 포함한 bounded step, stale source/ID/path 거부, Completed history 불변, 서버 재시작 상태 보존과 token 비영속화를 검증한다. 실제 HTTP 테스트는 GUI API → PlanRuntime → Gateway → 가짜 모델 loopback HTTP → Store/Git 전체 경로를 사용한다. 품질 판단 테스트는 기존 Runtime의 Task cancel → Plan resume 및 Final ESCALATE cancel을 통과한다.
+
+**실제 브라우저 검증:** Chrome 네이티브 접근성/스크린샷 도구로 새 Plan 모달 입력 → 다음 단계 → Planning 전송 범위 펼치기/승인 → Planning → Worker 승인/실행 → Manager 전송 승인/검토 → Task 완료 → Final 전송 승인/실행 → Archive를 직접 클릭했다. Task 상세에서 결과·self-check·결정적 검사·Manager APPROVE·출력 해시를 확인했다. Task Quality ESCALATE에서 재작업 이유/지시를 입력한 뒤 Plan resume, 별도 Plan Final ESCALATE cancel도 클릭했다. CLI GUI 재시작 후 Dashboard의 active 1 / attention 0 / ready 1 / archived 1을 다시 확인했다. 오른쪽 판단함이 아래로 이동하는 좁은 데스크톱 배치도 실제 스크린샷으로 확인했다.
+
+[브라우저 검토 및 영속 결과](evidence/gui-browser-review.json)에 실제 ID/Review/사람 결정/물리 결과 해시와 검증 범위를 보존했다. 스크린샷은 도구에서 직접 관찰했으며 파일로 보존하지 않았다. [재현 fixture](../scripts/gui_fixture.py)는 새 disposable Vault와 가짜 로컬 모델만 사용하고 외부 호출/실제 비용은 없다. 사용자 Vault나 credentials는 사용하지 않았다. 새 외부 모델 품질 검증을 했다는 의미가 아니며 기존 실제 모델 evidence는 보존했다.
+
+브라우저에서 발견한 첫 URL의 빈 Dashboard와 실행 중 문구 잔류는 수정하고 Frontend 검증에 반영했다. 과거 attention/run/completion 시각은 원래 없으므로 수정·추정하지 않고 미기록/event sequence로 표시한다. 새 요청부터 Runtime이 정확한 시각을 저장한다. 현 대화에 기준 Dashboard 이미지 첨부가 없어 문서의 시각 지침을 사용했다. [최종 GUI 보고서](GUI_REPORT.md).
+
 ### 다중 Task 조정 v1 검증 — 2026-10-12
 
 구현 및 공개 합성 전체 흐름 PASS. 시작 develop은 `4d8c854`이며 Plan 모델과 Runtime을 순차 feature branch에서 구현·테스트·커밋·develop 병합했다. 통합 후 회귀를 재검증했다. 원격 push/main 변경은 수행하지 않는다.
@@ -159,12 +179,16 @@ OMNIROUTE_INSTALL_REPORT, BLOCKED(+ko)를 통합한다. 과거 문서 원문은 
 
 ### 남은 제한과 다음 단계
 
-텍스트 Chat Completions만 지원하며 streaming/Responses/tool 실행·자연어 계약·GUI·다중 Worker는 없다.
+텍스트 Chat Completions만 지원하며 streaming/Responses/tool 실행·자연어 계약·Pixel Office·다중 Worker는 없다.
 문자/구조·바이트 검증은 일반적인 의미적 정확성을 증명하지 않는다. 모델 저장 전 crash는 중복 호출할 수 있고 socket timeout은 전체 실행 deadline이 아니다.
 Provider 가용성·계정 quota·비용은 바뀔 수 있다. Vault/Git/파일 전체가 하나의 원자적 트랜잭션은 아니고 적대적 OS 프로세스를 격리하지 않는다.
 사용자는 실제 전송할 원문을 검토하고 명시적으로 승인해야 한다. 다음은 공개 가능한 실제 업무의 사용량/지연을 축적하고 별도로 제품 확장 범위를 정하는 것이다.
 
 ## English
+
+### Local GUI v1 validation
+
+119 discovery tests (104 existing + 15 GUI), the existing 7 HTTP/CLI tests, six dependency-free frontend checks, compileall, JS syntax and diff checks pass. Actual Chrome actions verified creation, scoped permissions, explicit step execution, Task completion, Final Review, Archive, Task rework followed by Plan resume, Final ESCALATE cancel, and persisted state after CLI GUI restart. All new model calls were synthetic loopback fixtures, with no external API/cost. See [browser evidence](evidence/gui-browser-review.json) and [GUI report](GUI_REPORT.md).
 
 ### Multi-task orchestration v1 validation — 2026-10-12
 
