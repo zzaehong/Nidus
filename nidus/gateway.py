@@ -163,9 +163,38 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
+def request_bytes(request, timeout):
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+    try:
+        with opener.open(request, timeout=timeout) as response:
+            raw = response.read(MAX_RESPONSE + 1)
+    except urllib.error.HTTPError as error:
+        status = error.code
+        error.close()  # Never read, log or persist provider error body.
+        if status in (401, 403):
+            raise ModelError('authentication_failed' if status == 401 else 'access_denied', http_status=status) from None
+        if status == 402:
+            raise ModelError('quota_exhausted', True, status) from None
+        if status == 429:
+            raise ModelError('rate_limited', True, status) from None
+        if status in (408, 504):
+            raise ModelError('timeout', True, status) from None
+        if status >= 500:
+            raise ModelError('provider_unavailable', True, status) from None
+        raise ModelError('redirect_denied' if 300 <= status < 400 else 'invalid_request', http_status=status) from None
+    except (TimeoutError, socket.timeout):
+        raise ModelError('timeout', True) from None
+    except urllib.error.URLError as error:
+        code = 'timeout' if isinstance(error.reason, (TimeoutError, socket.timeout)) else 'network_failure'
+        raise ModelError(code, True) from None
+    except OSError:
+        raise ModelError('network_failure', True) from None
+    return raw
+
+
 class ChatCompletions:
-    def generate(self, route, messages, policy):
-        secret = os.environ.get(route.get('api_key_env', ''), '')
+    def generate(self, route, messages, policy, secret=None):
+        secret = secret if secret is not None else os.environ.get(route.get('api_key_env', ''), '')
         if '\r' in secret or '\n' in secret:
             raise ModelError('invalid_credential')
         headers = {'Content-Type': 'application/json', 'User-Agent': 'Nidus/0.2'}
@@ -177,31 +206,7 @@ class ChatCompletions:
             payload['response_format'] = {'type':'json_object'}
         request = urllib.request.Request(route['base_url'].rstrip('/') + '/chat/completions',
             data=canonical(payload).encode('utf-8'), headers=headers, method='POST')
-        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
-        try:
-            with opener.open(request, timeout=policy['timeout_seconds']) as response:
-                raw = response.read(MAX_RESPONSE + 1)
-        except urllib.error.HTTPError as error:
-            status = error.code
-            error.close()  # Never read, log or persist provider error body.
-            if status in (401, 403):
-                raise ModelError('authentication_failed' if status == 401 else 'access_denied', http_status=status) from None
-            if status == 402:
-                raise ModelError('quota_exhausted', True, status) from None
-            if status == 429:
-                raise ModelError('rate_limited', True, status) from None
-            if status in (408, 504):
-                raise ModelError('timeout', True, status) from None
-            if status >= 500:
-                raise ModelError('provider_unavailable', True, status) from None
-            raise ModelError('redirect_denied' if 300 <= status < 400 else 'invalid_request', http_status=status) from None
-        except (TimeoutError, socket.timeout):
-            raise ModelError('timeout', True) from None
-        except urllib.error.URLError as error:
-            code = 'timeout' if isinstance(error.reason, (TimeoutError, socket.timeout)) else 'network_failure'
-            raise ModelError(code, True) from None
-        except OSError:
-            raise ModelError('network_failure', True) from None
+        raw = request_bytes(request, policy['timeout_seconds'])
         try:
             if len(raw) > MAX_RESPONSE:
                 raise ModelError('response_too_large')
@@ -215,6 +220,8 @@ class ChatCompletions:
             actual_model = value.get('model', route['model'])
             if not isinstance(actual_model, str) or len(actual_model) > 256:
                 raise ModelError('invalid_response')
+            if secret and secret in text + actual_model:
+                raise ModelError('credential_in_content')
             reject_credentials(text + actual_model, {'routes': [route]})
             usage = value.get('usage') or {}
             if not isinstance(usage, dict):
