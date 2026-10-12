@@ -18,6 +18,7 @@ class Store:
             if (self.system / name).is_symlink():
                 raise ValueError('System files must not be symlinks')
         self.versioning = None
+        self._atomic = False
         with self.lock():
             ignore = self.system / '.gitignore'
             if not ignore.exists():
@@ -25,13 +26,14 @@ class Store:
             self.db = sqlite3.connect(str(self.system / 'state.sqlite3'))
             self.db.row_factory = sqlite3.Row
             version = self.db.execute('PRAGMA user_version').fetchone()[0]
-            if version not in (0, 1):
+            if version not in (0, 1, 2):
                 raise ValueError('Unsupported vault schema')
             self.db.executescript('''
                 CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, data TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS events (seq INTEGER PRIMARY KEY, task TEXT, kind TEXT, data TEXT);
                 CREATE TABLE IF NOT EXISTS state (key TEXT PRIMARY KEY, data TEXT NOT NULL);
-                PRAGMA user_version=1;
+                CREATE TABLE IF NOT EXISTS plans (id TEXT PRIMARY KEY, data TEXT NOT NULL);
+                PRAGMA user_version=2;
             ''')
             self.db.commit()
             if self.state('home') is None:
@@ -72,7 +74,16 @@ class Store:
                         # Do not leave an unversioned task advertised as success.
                         affected = list(self.db.execute('SELECT DISTINCT task FROM events WHERE seq>?', (before,)))
                         for row in affected:
+                            if not self.db.execute('SELECT 1 FROM tasks WHERE id=?', (row[0],)).fetchone():
+                                plan = self.get_plan(row[0])
+                                if plan['status'] == 'completed':
+                                    plan['invalidated_completion'] = json.loads(json.dumps(plan))
+                                plan.update(status='blocked', error=str(error), result=None)
+                                self.save_plan(plan, 'versioning_failed')
+                                continue
                             task = self.get(row[0])
+                            if task['status'] == 'completed':
+                                task['invalidated_completion'] = json.loads(json.dumps(task))
                             task['status'] = 'blocked'
                             task['error'] = str(error)
                             task['contract']['result'] = None
@@ -89,14 +100,64 @@ class Store:
         return json.loads(row[0]) if row else None
 
     def set_state(self, key, value):
-        self.db.execute('INSERT OR REPLACE INTO state VALUES (?,?)', (key, json.dumps(value)))
-        self.db.commit()
+        with self.transaction():
+            self.db.execute('INSERT OR REPLACE INTO state VALUES (?,?)', (key, json.dumps(value)))
 
     def save(self, task, kind, detail=None):
-        with self.db:
+        old = self.db.execute('SELECT data FROM tasks WHERE id=?', (task['id'],)).fetchone()
+        if old and json.loads(old[0])['status'] == 'completed' and json.loads(old[0]) != task:
+            previous = json.loads(old[0])
+            allowed = json.loads(old[0])
+            allowed.update(status='blocked', error=task.get('error'), invalidated_completion=previous)
+            allowed['contract']['result'] = None
+            if kind != 'versioning_failed' or task != allowed:
+                raise ValueError('Completed task history is immutable')
+        if old:
+            previous = json.loads(old[0])
+            for key in ('plan_id', 'local_key', 'created_manager', 'sequence', 'created_at'):
+                if previous.get(key) != task.get(key):
+                    raise ValueError('Task identity is immutable')
+        with self.transaction():
             self.db.execute('INSERT OR REPLACE INTO tasks VALUES (?,?)', (task['id'], json.dumps(task)))
             self.db.execute('INSERT INTO events(task,kind,data) VALUES (?,?,?)',
                 (task['id'], kind, json.dumps(detail if detail is not None else {'status': task['status']})))
+
+    @contextlib.contextmanager
+    def transaction(self):
+        if self._atomic:
+            yield
+            return
+        self._atomic = True
+        try:
+            with self.db:
+                yield
+        finally:
+            self._atomic = False
+
+    def get_plan(self, plan_id):
+        row = self.db.execute('SELECT data FROM plans WHERE id=?', (plan_id,)).fetchone()
+        if not row:
+            raise ValueError('Unknown plan: ' + plan_id)
+        return json.loads(row[0])
+
+    def save_plan(self, plan, kind, detail=None, create=False):
+        old = self.db.execute('SELECT data FROM plans WHERE id=?', (plan['id'],)).fetchone()
+        if old and create:
+            raise ValueError('Duplicate plan ID')
+        if old and json.loads(old[0])['status'] == 'completed' and json.loads(old[0]) != plan:
+            previous = json.loads(old[0])
+            allowed = json.loads(old[0])
+            allowed.update(status='blocked', error=plan.get('error'), result=None, invalidated_completion=previous)
+            if kind != 'versioning_failed' or plan != allowed:
+                raise ValueError('Completed plan is immutable')
+        with self.transaction():
+            self.db.execute('INSERT OR REPLACE INTO plans VALUES (?,?)', (plan['id'], json.dumps(plan)))
+            self.db.execute('INSERT INTO events(task,kind,data) VALUES (?,?,?)',
+                (plan['id'], kind, json.dumps(detail if detail is not None else {'status': plan['status']})))
+
+    def plans(self, archive=False):
+        values = [json.loads(r[0]) for r in self.db.execute('SELECT data FROM plans ORDER BY rowid')]
+        return [p for p in values if (p['status'] == 'completed') == archive]
 
     def get(self, task_id):
         row = self.db.execute('SELECT data FROM tasks WHERE id=?', (task_id,)).fetchone()
@@ -113,7 +174,7 @@ class Store:
             'SELECT seq,kind,data FROM events WHERE task=? ORDER BY seq', (task_id,))]
 
     def submit(self, request, sources, output, priority, mode='deterministic', model_policy=None, required_phrases=None,
-               workflow=None, manager_contract=None, manager_policy=None, max_reworks=2):
+               workflow=None, manager_contract=None, manager_policy=None, max_reworks=2, identity=None):
         from .gateway import reject_credentials, validate_policy
         if mode not in ('deterministic', 'generative'):
             raise ValueError('Unknown execution mode')
@@ -154,6 +215,10 @@ class Store:
                 manager='manager-1', manager_contract=contract, manager_policy=review_policy,
                 max_reworks=max_reworks, rework_count=0, revisions=[], reviews=[])
             task['contract']['acceptance_criteria'].append('Independent Manager APPROVE on the current submission')
+        if identity:
+            task.update(identity)
+        if self.db.execute('SELECT 1 FROM tasks WHERE id=?', (task['id'],)).fetchone():
+            raise ValueError('Duplicate task ID')
         self.save(task, 'submitted')
         if workflow:
             self.save(task, 'manager_task_defined', {'manager': task['manager'], 'contract': contract,

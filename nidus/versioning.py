@@ -18,6 +18,7 @@ class VaultGit:
         try:
             result = subprocess.run(['git', '-c', 'core.hooksPath=/dev/null',
                 '-c', 'core.fsmonitor=false', '-c', 'commit.gpgsign=false',
+                '-c', 'gc.auto=0', '-c', 'maintenance.auto=false',
                 '-c', 'user.name=Nidus Local Runtime', '-c', 'user.email=nidus@localhost',
                 '-C', str(self.vault), *arguments], stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE, text=True, timeout=30)
