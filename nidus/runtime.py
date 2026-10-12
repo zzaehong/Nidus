@@ -1,6 +1,7 @@
 import hashlib
 import os
 import tempfile
+from contextlib import nullcontext
 from pathlib import Path
 from .gateway import Gateway, ModelError, candidate_checks, transmission
 
@@ -35,7 +36,17 @@ def sources_for(store, task):
             data = stream.read(1024 * 1024 + 1)
         if len(data) > 1024 * 1024:
             raise ValueError('Source exceeds 1 MiB limit')
-        records.append({'path': name, 'hash': digest(data), 'text': data.decode('utf-8')})
+        record = {'path': name, 'hash': digest(data), 'text': data.decode('utf-8')}
+        references = [r for r in task.get('dependency_results', []) if r['output'] == name]
+        if references:
+            reference = references[0]
+            if reference['output_hash'] != record['hash']:
+                raise ValueError('Approved dependency artifact changed')
+            # The artifact envelope contains old requests and provenance, not
+            # additional source facts. Transmit the explicitly approved result.
+            record.update(text=reference['result'], representation='approved_dependency_result',
+                          text_hash=digest(reference['result'].encode('utf-8')))
+        records.append(record)
     return records
 
 
@@ -217,12 +228,18 @@ class Runtime:
         self.checkpoint(task, 'verify')
         return True
 
-    def run(self, task_id, execute_only=False, review_only=False):
-        with self.store.lock():
+    def run(self, task_id, execute_only=False, review_only=False, lock_owned=False):
+        with nullcontext() if lock_owned else self.store.lock():
             task = self.store.get(task_id)
             if task['status'] in ('completed', 'cancelled', 'waiting'):
                 return task
             try:
+                if task.get('plan_id'):
+                    from .planning import PlanRuntime
+                    plan = self.store.get_plan(task['plan_id'])
+                    if plan['status'] != 'active' or plan.get('current_task') != task['id']:
+                        raise ValueError('Plan task must be selected by its active orchestrator')
+                    PlanRuntime(self.store, self.gateway).references(plan, task)
                 records = self.recover(task)
                 if task['status'] != 'verifying':
                     task['status'] = 'running'

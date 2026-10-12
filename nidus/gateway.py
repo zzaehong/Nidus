@@ -120,6 +120,9 @@ def reject_credentials(text, policy=None):
 
 
 def messages_for(task, records):
+    if task.get('plan_context'):
+        from .planning import plan_messages
+        return plan_messages(task, records)
     if task.get('workflow') == 'manager':
         from .workflow import role_messages
         return role_messages(task, records)
@@ -143,6 +146,8 @@ def transmission(task, records):
         reject_credentials(text, task['manager_policy'])
     if task.get('worker_policy'):
         reject_credentials(text, task['worker_policy'])
+    for extra_policy in task.get('additional_policies', []):
+        reject_credentials(text, extra_policy)
     return {'action': 'model_transmission', 'prompt_hash': fingerprint(messages),
         'prompt_bytes': len(text.encode('utf-8')), 'request_hash': fingerprint(task['request']),
         'sources': {r['path']: r['hash'] for r in records}, 'policy': policy}
@@ -246,6 +251,8 @@ class Gateway:
                 'prompt_bytes': snapshot['prompt_bytes'], 'sources': snapshot['sources']}
             if task.get('workflow') == 'manager':
                 metadata['role'] = task.get('model_role', 'worker')
+            if task.get('plan_context'):
+                metadata.update(role='manager', purpose=task['plan_context'])
             audit('model_attempt_started', metadata)
             try:
                 result = self.adapter.generate(route, messages, policy)
@@ -257,6 +264,8 @@ class Gateway:
                     reject_credentials(canonical(result), task['manager_policy'])
                 if task.get('worker_policy'):
                     reject_credentials(canonical(result), task['worker_policy'])
+                for extra_policy in task.get('additional_policies', []):
+                    reject_credentials(canonical(result), extra_policy)
                 audit('model_attempt_succeeded', dict(metadata, finished_at=utc_now(),
                     actual_model=result.get('model'), tokens=result.get('tokens'),
                     estimated_cost_usd=result.get('estimated_cost_usd')))
