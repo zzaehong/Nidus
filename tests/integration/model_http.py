@@ -35,6 +35,8 @@ class Handler(BaseHTTPRequestHandler):
             value['choices'][0]['message']['content'] = json.dumps(content)
         if self.server.response_status != 200:
             value = {'error': 'SENSITIVE_TEST_KEY must never be persisted from an error body'}
+        if self.server.response_status == 200 and getattr(self.server,'plan_responses',None):
+            value['choices'][0]['message']['content'] = self.server.plan_responses.pop(0)
         self.wfile.write(json.dumps(value).encode())
 
 
