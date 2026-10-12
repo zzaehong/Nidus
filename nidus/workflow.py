@@ -155,7 +155,8 @@ def review_binding(task, records):
 def human_attention(runtime, task, records, reason, questions):
     task['status'] = 'waiting'
     task['workflow_stage'] = 'human_review'
-    task['attention'] = {'kind':'quality', 'subject':'Human work-quality judgment required',
+    from .runtime import utc_timestamp
+    task['attention'] = {'requested_at':utc_timestamp(), 'kind':'quality', 'subject':'Human work-quality judgment required',
         'background': {'original_request': task['request'], 'contract': task['manager_contract'],
             'current_result': task['submission'], 'manager_review': task.get('manager_review')},
         'reason':reason, 'questions': questions,
@@ -181,7 +182,8 @@ def review(runtime, task, records):
                    for d in task['decisions']):
             task['status'] = 'waiting'
             task['workflow_stage'] = 'manager_review'
-            task['attention'] = {'kind':'transmission', 'role':'manager',
+            from .runtime import utc_timestamp
+            task['attention'] = {'requested_at':utc_timestamp(), 'kind':'transmission', 'role':'manager',
                 'subject':'Transmit result and selected sources for Manager review?',
                 'background':'Original request, contract, Worker result/self-check, selected sources and execution metadata',
                 'reason':'Manager review is a separate external transmission with an exact prompt/policy scope',

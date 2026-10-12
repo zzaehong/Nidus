@@ -8,10 +8,14 @@ from .plan_model import DEFAULT_LIMITS
 
 
 def revision(store, entity):
-    resources = {name: output_hash(safe_path(store.vault, name))
-                 for name in entity.get('sources', [])}
+    def resource_hash(name):
+        try:
+            return output_hash(safe_path(store.vault, name))
+        except (ValueError, OSError) as error:
+            return {'unavailable':str(error)}
+    resources = {name: resource_hash(name) for name in entity.get('sources', [])}
     if entity.get('output'):
-        resources[entity['output']] = output_hash(safe_path(store.vault, entity['output']))
+        resources[entity['output']] = resource_hash(entity['output'])
     if entity['id'].startswith('pln_'):
         resources['tasks'] = [revision(store, store.get(i)) for i in entity['tasks']]
     return hashlib.sha256(json.dumps([entity, resources], sort_keys=True).encode()).hexdigest()
@@ -51,7 +55,7 @@ class Application:
         return {'id':entity['id'], 'entity':kind, 'plan_id':entity.get('plan_id'),
                 'type':category, 'group':'quality' if quality else 'permission',
                 'role':a.get('role', 'manager' if quality else 'worker'),
-                'created_at':entity.get('created_at'), 'event_sequence':events[-1].get('seq') if events else None,
+                'created_at':a.get('requested_at'), 'entity_created_at':entity.get('created_at'), 'event_sequence':events[-1].get('seq') if events else None,
                 'reason':a.get('reason', a.get('subject', 'Human decision required')),
                 'scope':a, 'allowed_actions':actions, 'runtime_choices':choices,
                 'revision':revision(self.store, entity)}
@@ -73,7 +77,7 @@ class Application:
         attentions = [e['human_attention'] for e in plans + tasks if e['human_attention']]
         return {'plans':plans, 'archived_plans':archived, 'tasks':tasks, 'attentions':attentions,
                 'summary':{'active_plans':sum(p['status']!='cancelled' for p in plans),
-                'human_attentions':len(attentions), 'ready_tasks':sum(t['ready'] for p in plans for t in p['board']),
+                'human_attentions':len(attentions), 'ready_tasks':sum(t['ready'] for p in plans if 'run' in p['allowed_actions'] for t in p['board']),
                 'completed_plans':len(archived)},
                 'settings':{'vault':str(self.store.vault), 'version':'Local GUI v1 / schema 2',
                 'bind':'127.0.0.1', 'limits':DEFAULT_LIMITS, 'theme':'default-light',

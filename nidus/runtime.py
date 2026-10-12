@@ -1,9 +1,14 @@
 import hashlib
 import os
 import tempfile
+from datetime import datetime, timezone
 from contextlib import nullcontext
 from pathlib import Path
 from .gateway import Gateway, ModelError, candidate_checks, transmission
+
+
+def utc_timestamp():
+    return datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
 
 
 def digest(data):
@@ -160,7 +165,7 @@ class Runtime:
             approved = any(d['decision'] == 'approve' and d['snapshot'] == snapshot for d in task['decisions'])
             if not approved:
                 task['status'] = 'waiting'
-                task['attention'] = {'subject': 'Replace existing output?',
+                task['attention'] = {'requested_at':utc_timestamp(), 'subject': 'Replace existing output?',
                     'background': 'A file already exists at ' + task['output'],
                     'reason': 'Replacing user content requires an exact scoped decision',
                     'choices': {'approve': 'Replace only this file at the reviewed snapshot',
@@ -172,7 +177,7 @@ class Runtime:
             approved = any(d['decision'] == 'approve' and d['snapshot'] == network_snapshot for d in task['decisions'])
             if not approved:
                 task['status'] = 'waiting'
-                task['attention'] = {'subject': 'Transmit selected task data to model routes?',
+                task['attention'] = {'requested_at':utc_timestamp(), 'subject': 'Transmit selected task data to model routes?',
                     'background': 'Work request and full selected source text will leave the worker process',
                     'reason': 'Network/model data transmission needs an exact scoped decision; a local router may forward externally',
                     'choices': {'approve': 'Allow the specified prompt and routes, including only explicitly allowed paid routes',
@@ -245,6 +250,7 @@ class Runtime:
                 records = self.recover(task)
                 if task['status'] != 'verifying':
                     task['status'] = 'running'
+                    task['last_run_at'] = utc_timestamp()
                     task.pop('error', None)
                     task.pop('model_error', None)
                     self.store.save(task, 'claimed')
@@ -292,6 +298,7 @@ class Runtime:
                         return task
                     task['workflow_stage'] = 'done'
                 task['status'] = 'completed'
+                task['completed_at'] = utc_timestamp()
                 task['contract']['result'] = {'output': task['output'], 'sha256': digest(output),
                     'verification': checks, 'limitations': ['Literal/structural verification does not prove semantic correctness'] if generative else ['Deterministic extraction only']}
                 if generative:
