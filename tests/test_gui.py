@@ -108,6 +108,9 @@ class GUIServerTests(unittest.TestCase):
                 self.assertTrue(response.read())
         with self.request('/api/session') as response:
             self.assertEqual(json.load(response)['token'],self.server.token)
+        with self.assertRaises(HTTPError) as error:
+            self.request('/api/session',headers={'Host':'evil.example'})
+        self.assertEqual(error.exception.code,403)
         for host in ('0.0.0.0','localhost','::1'):
             with self.assertRaises(ValueError):
                 GUIServer(self.temp.name,0,host)
@@ -279,6 +282,7 @@ class GUIHttpWorkflowTests(GUIServerTests):
             before=self.get('/api/overview')
             self.assertEqual(before['summary']['completed_plans'],1)
             # A new server token does not affect persisted Runtime state.
+            old_token=self.server.token
             self.server.shutdown(); self.server.server_close(); self.thread.join()
             self.server=GUIServer(self.temp.name,0)
             self.base=self.server.origin
@@ -286,6 +290,7 @@ class GUIHttpWorkflowTests(GUIServerTests):
             self.assertEqual(self.get('/api/overview'),before)
             database=(Path(self.temp.name)/'.nidus/state.sqlite3').read_bytes()
             self.assertNotIn(self.server.token.encode(),database)
+            self.assertNotIn(old_token.encode(),database)
         finally:
             model.shutdown();model.server_close();thread.join()
 
