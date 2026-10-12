@@ -238,11 +238,13 @@ def schedule_rework(runtime, task, records, issues, instructions, authority='man
     return True
 
 
-def quality_decision(runtime, task_id, decision, note, instructions=None):
+def quality_decision(runtime, task_id, decision, note, instructions=None, expected_state=None):
     from .gateway import fingerprint, transmission
     from .runtime import sources_for, safe_path, output_hash
     with runtime.store.lock():
         task = runtime.store.get(task_id)
+        from .application import check_revision
+        check_revision(runtime.store, task, expected_state)
         if (task['status'] != 'waiting' or task.get('attention', {}).get('kind') != 'quality'
                 or decision not in ('approve','rework','cancel')):
             raise ValueError('Quality decision requires a human-review Waiting task and approve/rework/cancel')

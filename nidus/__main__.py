@@ -11,6 +11,8 @@ def main():
     parser.add_argument('--vault', required=True)
     commands = parser.add_subparsers(dest='command', required=True)
     commands.add_parser('init')
+    gui = commands.add_parser('gui', help='Loopback-only local dashboard')
+    gui.add_argument('--port', type=int, default=8765)
     submit = commands.add_parser('submit')
     submit.add_argument('request')
     submit.add_argument('--source', action='append', required=True)
@@ -60,6 +62,10 @@ def main():
     args = parser.parse_args()
     store = None
     try:
+        if args.command == 'gui':
+            from .gui import serve
+            serve(args.vault, args.port)
+            return 0
         store = Store(args.vault)
         if args.command == 'init':
             result = store.state('home')
