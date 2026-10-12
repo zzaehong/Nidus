@@ -91,7 +91,7 @@ class ConnectionRegistry:
             if any(s and s in (base_url or conn['base_url'])+conn['name'] for s in (current,secret)):
                 raise ModelError('credential_in_content')
             # Invalidate observations before changing the credential: failure cannot preserve ready.
-            conn.update(status='configured',last_error=None,last_probe_at=None,
+            conn.update(status='configured',last_error=None,last_probe_at=None,probe={'generation':'not_run','structured_output':'not_run'},
                         discovery={'supported':True,'status':'not_run'})
             if base_url is not None: conn['base_url']=base_url
             self._save(conn)

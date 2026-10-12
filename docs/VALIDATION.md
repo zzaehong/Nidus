@@ -4,6 +4,19 @@
 
 ## 한국어
 
+### Provider Connection Foundation v1 — 2026-10-13
+
+시작 로컬 develop `7ef6a4d` / fetch 원격 develop `11a36f39df42c7e9272c68237a1061bfe00d737a`. 사용자 지시문은 `61490cc`로 보존했다. 기반 기능 129개 회귀 후 `07afc91`, UI/장애 복구 133개 회귀 후 `7026e6a`로 로컬 develop에 통합했다. 증거/문서 브랜치에서 설정 변경의 이전 Probe 표시 초기화도 검증했다.
+
+- Python discovery: **133 PASS** (기존 119 + Provider/Connection/GUI 14).
+- 기존 HTTP 통합: **5 Gateway + 2 Plan PASS**.
+- Frontend: **10 PASS**. manifest-driven 폼, password 입력, 모델/policy 입력 없음, 실패 표시, 기존 escaping/중복 클릭 방어 포함.
+- 실제 macOS Keychain: **PASS**, 임시 합성 credential CRUD/exists/missing, 정리 완료.
+- 실제 OmniRoute: **PASS**, 모델 2개 발견, `gh/gpt-4o-mini` → `gpt-4o-mini`, 일반 READY/구조화 JSON 검증. 1,152ms / 14 tokens는 일반 generation 결과다.
+- 실제 Chrome: 합성 fixture의 Settings/재검사/관리 화면 확인. API CRUD 및 CSRF/오류 redaction은 HTTP 테스트로 검증했다.
+
+[연결 설계/한계](CONNECTIONS.md), [OmniRoute evidence](evidence/connection-omniroute-live.json), [Keychain evidence](evidence/connection-keychain.json), [브라우저 evidence](evidence/connection-gui-review.json). 최초 sandbox 내 endpoint 확인은 NOT RUN으로 끝나 외부 권한으로 재확인한 실제 PASS evidence만 최종 보존했다. 개인 Vault 자료는 전송하지 않았다.
+
 ### Local GUI v1 검증 — 2026-10-12
 
 시작 develop `fcd97115d02a50336922ede8722ffaeb539ab1ce`. 시작 기준 104 unit / 7 local HTTP·CLI를 실제로 다시 실행해 통과했고, GUI 기반 feature → develop 병합/111 회귀 → Dashboard feature → develop 병합/111 회귀 → evidence feature 순서로 진행했다. 사용자 수정 prompt는 `6578da8`에 보존했다.

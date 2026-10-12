@@ -4,6 +4,12 @@
 
 ## 한국어
 
+### Provider Connection Foundation v1
+
+**설정 → AI 연결**에서 OmniRoute 또는 OpenAI-compatible API를 선택하고 Endpoint/Key를 입력해 연결을 검증합니다. Key는 macOS Keychain에 보관하며, 실제 일반·구조화 응답을 검증해야 READY가 됩니다. 모델 탐색/Catalog/상태는 재시작 후 복구됩니다. 키 교체·주소 수정·재검사·삭제를 지원하고 연결 과정에서 모델 ID/Policy JSON을 요구하지 않습니다.
+
+기존 Plan/Task policy와 전송 승인은 그대로 유지합니다. 자동 라우팅과 GUI v2는 다음 단계입니다. [연결 방법·보안·검증 범위](docs/CONNECTIONS.md), [실제 OmniRoute 증거](docs/evidence/connection-omniroute-live.json).
+
 ### Local GUI v1
 
 ```sh
@@ -16,7 +22,7 @@ Dashboard에서 Plan/Task 상태와 사람 판단 요청을 확인합니다. **�
 
 **다음 단계 실행 → 사람 판단함에서 정확한 범위 검토·승인 → 다음 단계 실행** 순서로 진행합니다. 한 클릭은 기존 `plan-run` 한 bounded step이며 Plan 전체를 자동 실행하지 않습니다. Worker/Manager/Final 전송 승인은 각각 처리합니다. Permission 카드와 Quality 카드는 구분되며, 품질 판단에는 이유가 필요하고 재작업에는 지시를 적습니다. Task 품질 판단을 먼저 해결한 뒤 Plan을 별도로 재개합니다. Plan Final ESCALATE는 이유와 함께 계속/취소합니다.
 
-Plans의 상세에는 작업 목록·의존 관계·전체 정보·실행 기록이 있고, Task 상세에는 계약·제출·검증·Manager Review·재작업·결과 해시가 있습니다. Archive는 완료된 Plan/Task의 읽기 전용 조회이며 설정도 읽기 전용입니다. 화면은 요청 완료나 **새로고침** 시 갱신하며 다른 CLI/브라우저 변경이 있으면 stale 요청을 거부하고 최신 상태를 다시 불러옵니다. 이전 기록에 없는 시각은 만들어 표시하지 않습니다. GUI 세션 토큰은 서버 재시작 때 교체됩니다.
+Plans의 상세에는 작업 목록·의존 관계·전체 정보·실행 기록이 있고, Task 상세에는 계약·제출·검증·Manager Review·재작업·결과 해시가 있습니다. Archive는 완료된 Plan/Task의 읽기 전용 조회이며 설정의 AI 연결에서는 Provider를 등록·검사·관리합니다. 화면은 요청 완료나 **새로고침** 시 갱신하며 다른 CLI/브라우저 변경이 있으면 stale 요청을 거부하고 최신 상태를 다시 불러옵니다. 이전 기록에 없는 시각은 만들어 표시하지 않습니다. GUI 세션 토큰은 서버 재시작 때 교체됩니다.
 
 로컬 GUI는 같은 컴퓨터의 신뢰할 수 있는 사용자용입니다. 원격 접속, 계정, 파일 업로드, 정책 파일 시스템 탐색, Pixel Office, 자동 실행, 실시간 streaming은 지원하지 않습니다. [GUI 보고서](docs/GUI_REPORT.md)와 [브라우저 검증](docs/evidence/gui-browser-review.json)을 참조하세요.
 
@@ -215,7 +221,7 @@ git switch -c feature/short-description
 
 Run `python3 -m nidus --vault "$vault" gui`, then open `http://127.0.0.1:8765`. Use `gui --port 8766` for another port; Ctrl-C stops the server. No dependencies, frontend build or CDN are required.
 
-Create a Plan with a request, vault-relative .md/.txt sources (one per line) and non-secret planning policy JSON. Optional role policies inherit the CLI defaults; task/revision limits are 10/20/5. Observe the Dashboard, explicitly run one bounded step, review exact scopes in Human Attention, decide, then run the next step. Permission and Quality actions use separate Runtime methods. Resolve Task quality first, then resume its Plan with a reason. Completed archives and settings are read-only. Refresh to observe changes from another CLI/browser; stale mutations are rejected under the Runtime lock. The GUI adds no autonomous scheduler. See [GUI report](docs/GUI_REPORT.md).
+Create a Plan with a request, vault-relative .md/.txt sources (one per line) and non-secret planning policy JSON. Optional role policies inherit the CLI defaults; task/revision limits are 10/20/5. Observe the Dashboard, explicitly run one bounded step, review exact scopes in Human Attention, decide, then run the next step. Permission and Quality actions use separate Runtime methods. Resolve Task quality first, then resume its Plan with a reason. Completed archives and workspace metadata are read-only; AI connections can be managed in Settings. Refresh to observe changes from another CLI/browser; stale mutations are rejected under the Runtime lock. The GUI adds no autonomous scheduler. See [GUI report](docs/GUI_REPORT.md).
 
 ### Multi-task orchestration v1
 
