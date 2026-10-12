@@ -16,7 +16,7 @@ class CredentialStore(Protocol):
 
 
 def validate_secret(secret):
-    if not isinstance(secret, str) or len(secret) > 8192 or any(ord(c) < 32 for c in secret):
+    if not isinstance(secret, str) or len(secret) > 8192 or any(ord(c) < 32 or ord(c) > 126 for c in secret):
         raise ModelError('invalid_credential')
 
 

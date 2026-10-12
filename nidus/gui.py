@@ -6,6 +6,8 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from .application import Application
 from .store import Store
+from .connections import ConnectionRegistry
+from .gateway import ModelError
 
 ASSETS = Path(__file__).with_name('web')
 
@@ -91,6 +93,8 @@ class Handler(BaseHTTPRequestHandler):
             parts = self.path.strip('/').split('/')
             # Each request owns its SQLite connection. No autonomous worker/scheduler.
             store = Store(self.server.vault)
+            if parts[:2] == ['api', 'connections']:
+                return self.connection_request(store, parts, mutation, data)
             app = Application(store)
             if not mutation and self.path == '/api/overview':
                 result = app.overview()
@@ -116,6 +120,33 @@ class Handler(BaseHTTPRequestHandler):
         finally:
             if store:
                 store.close()
+
+    def connection_request(self, store, parts, mutation, data):
+        # Never reflect arbitrary input/backend diagnostics into the GUI or its logs.
+        try:
+            registry = ConnectionRegistry(store, getattr(self.server, 'credential_store', None))
+            if not mutation and len(parts) == 2:
+                result = {'providers': registry.providers.list(), 'connections': [
+                    dict(c, models=registry.catalog(c['id'])) for c in registry.list()]}
+            elif mutation and len(parts) == 2 and set(data) <= {'provider','base_url','secret','name'}:
+                result = registry.create(**data)
+            elif mutation and len(parts) == 4:
+                ident, action = parts[2:]
+                if action == 'probe' and not data:
+                    result = registry.probe(ident)
+                elif action == 'update' and set(data) <= {'base_url','secret'} and data:
+                    result = registry.update(ident, **data)
+                elif action == 'delete' and not data:
+                    result = registry.delete(ident)
+                else:
+                    raise ModelError('invalid_request')
+            else:
+                raise ModelError('invalid_request')
+            self.reply(200, result)
+        except ModelError as error:
+            self.reply(400, {'error':error.code,'message':'연결 설정 또는 상태를 확인해 주세요.','details':{}})
+        except Exception:
+            self.reply(400, {'error':'connection_operation_failed','message':'연결 작업을 완료하지 못했습니다.','details':{}})
 
 
 def serve(vault, port=8765):
