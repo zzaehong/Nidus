@@ -1,4 +1,4 @@
-"""Provider-neutral, bounded Chat Completions transport. Secrets stay in env."""
+"""Provider-neutral, bounded Chat Completions transport. Secrets remain out of policy."""
 import datetime
 import hashlib
 import json

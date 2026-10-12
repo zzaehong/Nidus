@@ -93,6 +93,7 @@ class ConnectionTests(unittest.TestCase):
         self.registry.probe(c['id']); self.registry.update(c['id'],base_url=self.url,secret='replacement')
         self.assertEqual(self.keys.get(c['credential_ref']),'replacement')
         self.assertEqual(self.registry.get(c['id'])['status'],'configured'); self.assertEqual(self.registry.catalog(c['id']),[])
+        self.assertEqual(self.registry.get(c['id'])['probe']['generation'],'not_run')
         self.registry.delete(c['id']); self.assertFalse(self.keys.exists(c['credential_ref']))
         with self.assertRaises(ModelError): self.registry.get(c['id'])
         with self.assertRaises(ModelError): self.keys.get(c['credential_ref'])
