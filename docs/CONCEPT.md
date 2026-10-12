@@ -4,6 +4,20 @@
 
 ## 한국어
 
+### 실제화된 Execution Plan / Task Board
+
+```text
+Human → Manager → Execution Plan / Task Board → Task → Worker
+      → Manager Task Review → Next Task → … → Manager Final Review
+      → Complete / Add Tasks / Human
+```
+
+Execution Plan은 새 조직 계층이나 Employee가 아니라 상위 목표를 위한 변경 가능한 Task 지도다. manager-1은 Planning/Task Review/Final Review에서 같은 정체성을 유지한다. Worker는 배정된 한 Task만 수행하며 Plan을 수정하지 않는다. 파일 저장은 Runtime 책임이다.
+
+Prompt는 목표 해석·완료 기준·최소 분해·의미적 dependency·추가 필요·품질·사람 판단을 맡는다. Runtime은 ID·DAG·권한·상태·한도·snapshot/hash·완료 이력·복구·감사를 강제한다. AI 판단 → 구조화 제안 → Runtime 검증 → 상태 변경 경계를 지킨다.
+
+실제화: 별도 영속 Plan, 순차 다중 Task, 승인 결과 reference, 동적 5개 변경 연산, version/history, 전체 목표 검토, CLI/Archive. 개념 단계: Project/Phase 조직 계층 전체, Group/Lead Manager, 다중 Worker/병렬 실행, JEV/Decision Engine, 자연어 조직 생성, GUI/daemon/scheduler, 자동 모델 최적화. 테스트 통과나 특정 실제 표본은 일반적인 의미적 판단 정확성을 보장하지 않는다.
+
 ### Manager/Worker의 핵심 책임
 
 ```text
@@ -117,6 +131,10 @@ Decision Engine(JEV 포함)의 구현·인터페이스·적용 범위, Intellige
 Git 기반 버전 관리는 유지한다. 현재 기술 선택과 후속 범위는 DESIGN/PRD가 따로 명시한다.
 
 ## English
+
+### Implemented Execution Plan and Task Board
+
+Human → Manager → Plan/Board → Task → Worker → Manager Task Review → next Task → Manager Final Review → Complete / Add Tasks / Human. This is a mutable goal map, not a new employee or the full Project/Phase hierarchy. AI owns semantic judgment; Runtime owns deterministic state, permissions and integrity. One Manager/Worker, sequential Tasks, approved-result references, five bounded change operations and final-goal review are implemented. Multiple workers, parallelism, group hierarchy, decision engines, tools and automatic model optimization remain conceptual.
 
 ### Manager/Worker responsibility boundary
 

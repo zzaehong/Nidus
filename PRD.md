@@ -4,9 +4,27 @@
 
 ## 한국어
 
+### 다중 Task 조정 v1
+
+상위 요청을 동일 manager-1이 상위 Completion Contract와 최소 충분한 Task 계획으로 분해한다. Runtime이 구조화 Proposal을 검증하고 별도 Execution Plan/Task Board로 저장한다. 기존 단일 Task 순환을 한 번에 하나씩 재사용하며 전체 목표는 독립적인 Final Review를 통과해야 완료된다.
+
+| 기준 | 관찰 가능한 동작 |
+|---|---|
+| MP-AC-01 | 원 요청/상위 contract/Plan/version/history와 local-key↔Runtime ID를 저장 |
+| MP-AC-02 | 잘못된 DAG/source/output/priority/빈 기준/한도 초과를 저장 전 거부 |
+| MP-AC-03 | 모든 dependency가 완료인 queued Task만 결정적 순서로 선택 |
+| MP-AC-04 | 기존 Worker/self-check/검증/Manager APPROVE·REWORK·ESCALATE와 승인 경계 재사용 |
+| MP-AC-05 | 승인 선행 result/hash/review를 고정 입력으로 전달하고 완료 이력 보호 |
+| MP-AC-06 | 추가·미시작 취소·미시작 수정·의존 추가·제거를 원자적으로 검증/적용 |
+| MP-AC-07 | 최종 COMPLETE/ADD_TASKS/ESCALATE, snapshot에 바인딩된 COMPLETE만 Archive |
+| MP-AC-08 | 재시작 시 Next Task/승인 generation/version/history 복구, 불필요한 호출 없음 |
+| MP-AC-09 | 기존 회귀와 다중 Task tests, 실제 공개 합성 흐름 증거 및 실패 이력 보존 |
+
+의미적 판단은 Prompt, ID/무결성/권한/상태/한도/복구는 Runtime 책임이다. Manager 1/Worker 1/순차 다중 Task 범위다. Project/Phase 전체, 다중 Worker/병렬성, GUI/daemon/scheduler/tool 실행/자동 모델 최적화/무제한 반복은 구현하지 않는다. 기존 단일 submit은 기본/명시 계약을 사용하고 상위 plan-submit만 Planning 호출을 추가한다.
+
 ### 관리자·작업자 업무 순환 v1
 
-새 CLI 생성형 작업의 기본 흐름은 Manager 계약 → Worker 실행·자기 점검 → 결정적 검증 → Manager 검토다. 명시 계약 입력을 지원하고 생략 시 관리자 기본 계약을 저장한다. 계획 생성용 추가 모델 호출은 없다. Manager는 자동 책임 종료점이며 검증 전용 AI 객체를 만들지 않는다.
+새 CLI 생성형 작업의 기본 흐름은 Manager 계약 → Worker 실행·자기 점검 → 결정적 검증 → Manager 검토다. 명시 계약 입력을 지원하고 생략 시 관리자 기본 계약을 저장한다. 단일 Task submit에는 계획 생성용 추가 모델 호출이 없다. Manager는 자동 책임 종료점이며 검증 전용 AI 객체를 만들지 않는다.
 
 | 기준 | 관찰 가능한 동작 |
 |---|---|
@@ -19,7 +37,7 @@
 | MW-AC-07 | 역할별 정책과 정확한 전송 승인을 유지; 원문·계약·결과·정책 변경 시 이전 승인 재사용 금지 |
 | MW-AC-08 | A–F 결정적 테스트, 기존 회귀 및 실제 공개 합성 작업의 Completed/Archive 증거 |
 
-기존 deterministic 추출과 API의 `workflow=None`, CLI `--workflow legacy`는 이전 계약의 호환 경로다. 기존 작업을 자동으로 새 계약에 편입하지 않는다. 자연어 계획 생성, 전체 조직/Project/GUI/Red Team/JEV/Tool은 여전히 범위 밖이다. Manager의 품질 판단은 의미 정확성의 수학적 증명이 아니다.
+기존 deterministic 추출과 API의 `workflow=None`, CLI `--workflow legacy`는 이전 계약의 호환 경로다. 기존 작업을 자동으로 새 계약에 편입하지 않는다. 전체 조직/Project/GUI/Red Team/JEV/Tool은 여전히 범위 밖이다. 상위 목표 계획은 별도 Plan 기능이다. Manager의 품질 판단은 의미 정확성의 수학적 증명이 아니다.
 
 ### 목적과 현재 범위
 
@@ -87,13 +105,17 @@ Python 3.9+/Git, 한 Vault·한 Worker, 명시적 일반 UTF-8 `.md`/`.txt` 원�
 
 ## English
 
+### Multi-task orchestration v1
+
+An upper request receives a persisted Manager completion contract and Execution Plan. Runtime generates IDs, validates the full DAG and dispatches one ready Task at a time through the established responsibility loop. Approved dependency results are explicit frozen inputs. Manager proposals may add, cancel/modify never-started Tasks and add/remove dependencies, under transactional validation, limits and version history. Final COMPLETE/ADD_TASKS/ESCALATE is distinct from Task approval. Recovery and per-role permission/security boundaries remain enforced. Requirements MP-AC-01–09 above are validated by unit/HTTP tests and public-synthetic real-model evidence.
+
 ### Manager/Worker responsibility loop v1
 
 New CLI generative tasks default to Manager contract → Worker execution/self-check → deterministic checks → independent Manager review. Explicit contracts are accepted; otherwise a default Manager contract is persisted without a planning-model call. Managers terminate automated responsibility; there is no separate AI verifier.
 
 MW-AC-01: persist goal/scope/identified criteria/constraints/materials/deliverable/human-judgment conditions before execution and pass them to Worker. MW-AC-02: require result, criterion-by-criterion self-check, limitations and questions; self-check cannot complete a task. MW-AC-03: Manager independently reviews original request, contract, actual sources/result, self-check and execution records, returning APPROVE/REWORK/ESCALATE. MW-AC-04: require deterministic PASS and approval bound to current content, or explicit human quality approval. MW-AC-05: retain revisions and concrete instructions, with a configurable 0–10 rework limit (default 2), then human attention. MW-AC-06: separate quality approve/rework/cancel from permission decisions. MW-AC-07: independent role policies and exact per-call transmission approval; invalidate changed inputs/content/policy. MW-AC-08: scenarios A–F, regression and real public-synthetic completion/archive evidence.
 
-Deterministic extraction, API `workflow=None` and CLI `--workflow legacy` retain earlier contracts. Do not silently migrate existing tasks. Full organization/project/GUI/Red Team/JEV/tools and natural-language planning remain deferred. Manager judgment is not mathematical proof of semantic correctness.
+Deterministic extraction, API `workflow=None` and CLI `--workflow legacy` retain earlier contracts. Do not silently migrate existing tasks. Full organization/project/GUI/Red Team/JEV/tools remain deferred; upper-goal planning is supported by the separate Plan feature. Manager judgment is not mathematical proof of semantic correctness.
 
 ### Purpose and current scope
 

@@ -4,6 +4,32 @@
 
 ## 한국어
 
+### 다중 Task 조정 v1 검증 — 2026-10-12
+
+구현 및 공개 합성 전체 흐름 PASS. 시작 develop은 `4d8c854`이며 Plan 모델과 Runtime을 순차 feature branch에서 구현·테스트·커밋·develop 병합했다. 통합 후 회귀를 재검증했다. 원격 push/main 변경은 수행하지 않는다.
+
+- Unit: 104 PASS (기존 53 + Plan 모델 7 + 다중 Task 44).
+- HTTP/CLI: 기존 `tests/integration/model_http.py` 5 PASS + `tests/integration/plan_http.py` 2 PASS, 합계 7. 외부 모델 없는 loopback fixtures.
+- compileall 및 git diff --check PASS.
+- 정상 3-Task 체인/우선순위/모든 dependency 잠금/cycle·invalid reference/REWORK·ESCALATE/동적 추가·수정·취소·dependency 추가·제거/최종 ADD_TASKS·COMPLETE·ESCALATE/한도/완료 이력/원자성/재시작/승인 결과 변조/역할별 Secret 경계를 검증한다.
+- 저장된 Final generation을 재시작 후 모델 재호출 없이 완료하며, 전체 검토 중 출력 변조나 Planning 중 원본 변경은 차단한다.
+
+실제 Gateway 검증: [전체 원시 evidence](evidence/orchestration-live-attempt1.json), [본문·artifact 검토](evidence/orchestration-live-review.json), [현재 모델 discovery](evidence/orchestration-model-discovery.json).
+
+```text
+Manager Planning → T1 evidence note → Worker / Manager APPROVE
+                 → T2 depends_on T1 → Worker / Manager APPROVE
+                 → Manager Final Review COMPLETE → Plan Archive
+```
+
+2 Tasks completed, 재작업 0, 외부 모델 호출 6, Plan Archive 1 / Task Archive 2. 모든 결정적 검사 true. T2는 T1의 승인 artifact hash/review/result를 고정 참조했고 source에는 승인 본문만 전달했다. 생성 중 Runtime 코드 해시는 변하지 않았다. 완료 파일의 실제 SHA-256을 재검사했고 최종 보고서의 네 bullet이 공개 합성 원문의 네 사실과 동일함을 직접 확인했다. 품질 판단을 인간 승인으로 우회하지 않았다.
+
+시각: 03:34:13–03:34:30 UTC (약 17.49초). 모든 호출은 현재 키가 허용한 Copilot `gpt-4o-mini`, 정책은 `workflow-live-copilot.json`. 입력 8,142 / 출력 985 / 합계 9,127 tokens; 실제 비용 unknown/null. Provider와 모델은 코드가 아닌 정책으로 선택한다. 이 표본은 일반적인 모델 판단 정확성이나 live 동적 변경/ESCALATE의 일반성을 입증하지 않는다.
+
+현재 기능의 실제 실행은 첫 시도에서 성공했다. 이전 저장소에 보존된 단일 Task 실패 evidence는 그대로 남아 있으며 덮어쓰지 않았다. 알려진 credential 문자열 차단을 적용했고 키 값은 증거에 포함하지 않았다. 현재 모델 discovery는 기존 제한 키에서 보이는 목록이며 모든 Provider의 전체 가용성이나 과금 조건을 보장하지 않는다.
+
+한계: 한 Manager/Worker, 순차 텍스트 문서 작업이다. 미시작 Task만 변경 가능하고 completed history는 수정하지 않는다. malformed 모델 응답을 자동 수리·무한 재시도하지 않는다. 저장 전 crash에서 중복 호출할 수 있고 DB/파일/Git은 단일 원자적 transaction이 아니다. 상세 책임 경계는 [DESIGN](../DESIGN.md).
+
 ### 최신 핵심 업무 순환 검증 — 2026-10-08
 
 **완료**: 공개 합성 원문으로 계약 → Worker 결과/자기 점검 → 결정적 검증 → Manager 독립 검토 APPROVE → Completed → Archive를 실제 통과했다. [성공 증거](evidence/manager-worker-live-copilot-json-mode.json). 원 요청·계약·기준·두 역할의 응답/정책/시도·검토·결정·검증·전체 이력을 JSON에 보존한다. 실제 두 역할은 같은 Copilot `gpt-4o-mini`를 사용했으며 역할 지침은 분리되어 있다. 이 성공 표본의 재작업은 0회다.
@@ -139,6 +165,10 @@ Provider 가용성·계정 quota·비용은 바뀔 수 있다. Vault/Git/파일 
 사용자는 실제 전송할 원문을 검토하고 명시적으로 승인해야 한다. 다음은 공개 가능한 실제 업무의 사용량/지연을 축적하고 별도로 제품 확장 범위를 정하는 것이다.
 
 ## English
+
+### Multi-task orchestration v1 validation — 2026-10-12
+
+104 unit tests and 7 local HTTP/CLI tests pass, with compileall and diff checks. A real public-synthetic run completed Planning → two dependent managed Tasks → Final COMPLETE → Plan Archive. Both Task reviews approved without revisions. All six external calls used the current policy-selected Copilot gpt-4o-mini route: 8,142 input + 985 output = 9,127 tokens, cost unknown. The approved dependency hash/reference, unchanged runtime code and final physical artifact hashes are retained in [raw evidence](evidence/orchestration-live-attempt1.json). [Content review](evidence/orchestration-live-review.json) confirms exactly the four supplied facts, with no unsupported additions. This is a bounded sample, not a guarantee of general semantic correctness. Existing historical failures remain preserved.
 
 ### Latest core responsibility validation — 2026-10-08
 

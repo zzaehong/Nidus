@@ -4,9 +4,45 @@
 
 ## 한국어
 
+### 다중 Task 조정 v1 — 2026-10-12
+
+`PlanRuntime`은 기존 `Runtime.run` 위의 조정 계층이다. 별도 Task 실행기/Planner Employee를 만들지 않는다. `plan_model.py`는 ID·strict Proposal·DAG·Ready 계산, `planning.py`는 Manager 호출/Plan 변경/Task 조정/전체 검토를 담당한다. 프롬프트는 prompts/common, manager_planning, manager_review, manager_completion, worker로 책임별 분리한다.
+
+| Prompt / AI responsibility | Program / Runtime responsibility |
+|---|---|
+| Goal interpretation, completion criteria proposal | Plan/Task ID generation, persistence, Task-Plan mapping |
+| Task decomposition, semantic dependency reasoning | Graph storage, cycle/invalid-reference detection, ready calculation |
+| Task addition necessity, plan-change reasoning | State transitions, Task/revision limits, atomic changes |
+| Worker execution, Task quality review | Completed-history protection, approval snapshots, hashes |
+| Final-goal review, human judgment escalation | Permission, secrets, Git, recovery, audit |
+
+Schema 2는 별도 `plans(id PRIMARY KEY, data)`를 추가하고 기존 tasks/events/state 및 Task JSON 호환성을 유지한다. Schema 1 Vault는 열 때 자동 확장한다. Plan은 원 요청, 상위 contract, 생성 Manager/시각, 상태/version, permanent Task ID/local-key mapping, specs, 최초 Proposal, 변경 이력, 모든 전체 검토/실제 generation, 판단 및 result를 저장한다. Plan/Task 생성과 변경/이벤트는 하나의 SQLite transaction으로 처리한다. 파일/Git/DB 전체는 하나의 원자적 transaction이 아니다.
+
+ID는 Runtime이 UTC microsecond 시각, 생성 Manager, UUID 기반 12자리 suffix로 생성한다. Plan은 `pln_TIMESTAMP_manager1_RANDOM`, Task는 `tsk_TIMESTAMP_manager1_PLAN-SUFFIX_003_RANDOM`. DB primary key와 중복 검사로 충돌을 거부한다. plan_id/local_key/created_manager/sequence/created_at은 Task의 immutable 식별 이력이며 assigned_manager/assigned_worker와 분리한다. v1은 manager-1/worker-1만 사용한다.
+
+Plan JSON은 duplicate key/NaN/fence/trailing text를 거부하며 임의 수리하지 않는다. Runtime은 필수 goal/criteria, local-key 고유성, priority(int 1–100), 경로·source 권한, 정규화된 출력 충돌, 자기 참조·없는 참조·cycle 및 Task 한도를 검사한다. Sources는 최초 선택 원본 또는 명시된 직접 dependency의 expected_output만 허용한다. 다른 Plan/Task가 이미 소유한 출력도 예약된 자원으로 보고 거부한다. Task 내부 depends_on은 permanent ID이고 Model Proposal은 local key만 사용한다.
+
+Ready는 queued AND 모든 dependency completed다. priority → sequence → created_at → stable ID로 하나를 선택하고 같은 vault lock 안에서 기존 Runtime을 실행한다. Plan Task를 개별 run으로 우회해도 활성 Plan의 현재 선택 및 dependency 승인을 검사한다. waiting Task는 해결 전 다음 Task를 선택하지 않는다. cancelled/blocked dependency는 후속 실행을 열지 않는다. Task Board의 ready는 그래프 조건이며 전송 승인/Plan 상태와 별개의 실행 가능성 표시다.
+
+Result Reference는 task_id/plan_id/output/output_hash/completed/approval/result를 후속 Task의 dependency_results에 고정한다. 매번 실제 승인 파일의 해시를 검사한다. dependency artifact를 source로 읽을 때 과거 요청/provenance envelope 대신 승인 result 본문만 투영하며 representation, 본문 SHA-256과 artifact SHA-256을 구분한다. 정확한 Prompt hash가 이 본문과 reference에 바인딩된다. 외부 파일 변경은 조용히 최신 입력으로 대체되지 않는다. 완료된 하위 Task도 과거 snapshot을 유지하며 변경된 artifact를 사용하려면 승인 버전 복원 또는 새 Plan이 필요하다.
+
+Completed Task 전체와 Completed Plan의 mutation은 Store에서 거부한다. Git checkpoint 실패만 명시적 성공 무효화로 처리한다: 이전 완료 객체 전체를 invalidated_completion에 남기고 blocked/result null로 표시한다. 승인 제출·검토를 지우지 않는다. Git 자동 background maintenance는 checkpoint에서 비활성화해 임시 Vault 종료와 경쟁하지 않게 한다.
+
+변경 Proposal은 reason/operations이며 다음 연산을 지원한다. add_task는 새 local_key/spec를 추가한다. cancel_unstarted_task는 한번도 claimed되지 않은 queued Task를 취소한다. modify_unstarted_task는 title/goal/priority/sources/completion_criteria/expected_output만 갱신하며 ID를 유지한다. add_dependency/remove_dependency도 대상은 never-started queued Task이고 전체 graph를 다시 검사한다. 변경 중 어느 연산이 실패해도 Task/Plan/이벤트 전체를 rollback한다. 완료·시작 이력은 수정할 수 없다. 취소 Task와 과거 local key도 전체 Task 한도에 포함한다.
+
+History는 version/timestamp/authority/reason/operations/affected_tasks/previous_plan_hash/new_plan_hash를 보존한다. Hash는 specs와 취소 ID 목록을 포함한다. 기본 한도 initial 10 / total 20 / revisions 5이며 설정 가능하다. 초과는 명시적 blocked로 전환하고 자동 확대하지 않는다.
+
+정상 완료 후 Planning을 재호출하지 않고 Runtime이 다음 ready를 계산한다. Worker questions/limitations, blocked Task 또는 ready가 없는 미완료 Plan은 Adjustment Context로 보낸다. 이 문맥만 CONTINUE/CHANGE_PLAN/ADD_TASKS/ESCALATE를 허용한다. CONTINUE는 ready work가 있어야 하며 CHANGE_PLAN은 추가 Task 없이도 지원 변경을 제안할 수 있다. 전체 Task가 완료/명시 취소되면 Final Review는 정확히 COMPLETE/ADD_TASKS/ESCALATE다. COMPLETE는 모든 비취소 Task 완료, 하나 이상의 승인 결과, 모든 상위 기준 satisfied, 빈 질문/change, 현재 Task/contract/history snapshot 및 실제 완료 출력 해시 일치를 요구한다. ADD_TASKS는 새 Task를 포함해야 한다.
+
+Worker 문맥은 현재 Task 계약, 원래 상위 요청/목표/제약, 승인 dependency 결과로 제한하고 상위 criterion ID를 전달하지 않는다. Manager Task Review는 실제 제출과 개별 기준, 검증된 artifact 경로/hash/저장 주체를 받는다. 파일 저장은 Runtime 책임이며 모델은 내용 품질을 검토한다. Final Review는 상위 기준과 선택 원본, Board/변경 이력, 승인 result/검토/한계/질문만 받는다. Home/전체 Vault/과거 Prompt를 전송하지 않는다.
+
+Planning/Task Review/Final 정책은 독립적으로 지정할 수 있고 employee identity와 호출 목적은 분리된다. 모든 호출은 기존 Gateway의 exact prompt/source hash/policy snapshot 전송 승인을 요구한다. 모든 역할 정책의 알려진 credential 문자열을 입력·출력·판단 메모·변경 Proposal에서 검사한다. Secret 값은 DB/프롬프트/증거에 저장하지 않는다. 알려지지 않은 민감정보의 일반적인 DLP 보장은 아니다.
+
+plan-run은 bounded 명시적 재개 단계다. 재시작 시 DB의 Plan/version/mapping/dependencies/기존 generation과 승인을 재사용한다. 현재와 동일한 snapshot에 이미 저장된 generation은 재호출하지 않는다. 모델 응답 저장 전 crash는 기존처럼 중복 호출할 수 있다. 인간 판단은 Task 기존 quality-decide, Plan resume/cancel로 나누며 Task 품질 대기는 먼저 해결해야 한다. 잘못된 모델 응답은 자동 수리·무한 재시도하지 않는다.
+
 ### 핵심 업무 순환 구현
 
-`nidus/workflow.py`는 별도 검증 객체가 아니라 Manager/Worker 계약·지침·업무 전이를 제공한다. `manager-1`과 `worker-1`은 역할 식별자이고 Provider와 독립적이다. `--contract`는 명시 계약 JSON, `--manager-policy`는 검토용 별도 정책이다. 생략하면 기본 계약과 Worker 정책을 사용한다. 기존 SQLite Task JSON을 확장하며 Schema 1과 기존 Task는 유지한다.
+`nidus/workflow.py`는 별도 검증 객체가 아니라 Manager/Worker 계약·업무 전이를 제공하며 지침은 prompts/에서 가져온다. `manager-1`과 `worker-1`은 역할 식별자이고 Provider와 독립적이다. `--contract`는 명시 계약 JSON, `--manager-policy`는 검토용 별도 정책이다. 생략하면 기본 계약과 Worker 정책을 사용한다. 기존 SQLite Task JSON을 확장하며 Schema 2에서도 기존 Task 형식은 유지한다.
 
 Worker는 `result/self_check/known_limitations/questions`, Manager는 `decision/criteria/reason/issues/instructions/questions` JSON을 반환한다. 모든 기준 ID가 정확히 한 번 나타나야 한다. JSON mode(`response_format=json_object`)를 기존 Gateway 정책·전송 Snapshot에 포함하고 Chat Completions payload로 전달한다. 형식/정상 종료/Secret 실패는 차단하며 임의 JSON 수리나 성공 전환을 하지 않는다. Manager APPROVE에는 모든 기준 satisfied, 빈 issues/instructions/questions가 필요하다. REWORK에는 구체적 지적과 수정 지시, ESCALATE에는 질문이 필수다.
 
@@ -16,7 +52,7 @@ Worker는 `result/self_check/known_limitations/questions`, Manager는 `decision/
 
 승인은 요청/계약/원문/결과/자기 점검/정책/검증/후보 해시에 바인딩된다. 검토 후 파일과 원문을 재확인하며 변경 시 승인을 제거하고 Blocked로 둔다. `--review-only`는 승인 후 완료 전 Checkpoint다. 유효한 저장 승인으로 재시작하면 모델을 재호출하지 않는다; 검토 전 Verifying은 Manager 호출이 필요할 수 있다.
 
-ESCALATE/한도는 품질 안건 Waiting이다. `quality-decide`는 이유를 필수로 받아 approve/rework/cancel을 기록하며, 일반 `decide`로 품질 안건을 승인할 수 없다. 인간 approve는 Manager의 ESCALATE/REWORK를 APPROVE로 바꾸지 않고 `authority=human`으로 별도 책임을 기록한 뒤 결정적 검증을 다시 수행한다. 오래된 안건은 승인할 수 없다. 전체 다중 직원 조직/자동 계획/자동 모델 최적화는 구현하지 않았다.
+ESCALATE/한도는 품질 안건 Waiting이다. `quality-decide`는 이유를 필수로 받아 approve/rework/cancel을 기록하며, 일반 `decide`로 품질 안건을 승인할 수 없다. 인간 approve는 Manager의 ESCALATE/REWORK를 APPROVE로 바꾸지 않고 `authority=human`으로 별도 책임을 기록한 뒤 결정적 검증을 다시 수행한다. 오래된 안건은 승인할 수 없다. 전체 다중 직원 조직과 자동 모델 최적화는 구현하지 않았다. 상위 목표 계획은 별도 Plan 기능이다.
 
 ### 실행 단위와 상태 소유권
 
@@ -96,9 +132,13 @@ Live harness는 기존 evidence 경로를 덮어쓰지 않는다. 개발 검증 
 
 ## English
 
+### Multi-task orchestration v1
+
+Schema 2 adds separate plans without rewriting legacy Tasks. PlanRuntime calls the existing Runtime under one vault lock. Runtime owns traceable IDs, strict proposal validation, DAG integrity, stable readiness, atomic five-operation changes, limits, frozen completed history and snapshot-bound completion. Prompts own goal interpretation, minimum decomposition, semantic dependencies, Task quality and final-goal judgment. Final decisions are COMPLETE/ADD_TASKS/ESCALATE; unfinished-plan Adjustment also permits CONTINUE and CHANGE_PLAN. Source selection is restricted to original selected paths or declared direct dependency outputs, with approved artifact hashes checked before reads. Dependency source text is the approved result, with separate artifact/text hashes. Each role has exact transmission approval and all role credentials are screened. Restart reuses stored generations and approvals. No multiple workers, parallel execution, tools, GUI or daemon.
+
 ### Core responsibility implementation
 
-`nidus/workflow.py` implements Manager/Worker contracts, instructions and transitions, not a verifier object. `manager-1`/`worker-1` role identifiers are independent of providers. `--contract` supplies explicit JSON; `--manager-policy` independently selects review routes. Defaults persist a Manager contract and reuse Worker policy without an extra planning call. Task JSON extends existing schema 1 without migrating legacy tasks.
+`nidus/workflow.py` implements Manager/Worker contracts, instructions and transitions, not a verifier object. `manager-1`/`worker-1` role identifiers are independent of providers. `--contract` supplies explicit JSON; `--manager-policy` independently selects review routes. Defaults persist a Manager contract and reuse Worker policy without an extra planning call. Schema 2 adds plans while retaining legacy Task JSON. Role instructions live in prompts/.
 
 Worker returns result/self_check/known_limitations/questions; Manager returns decision/criteria/reason/issues/instructions/questions. Every criterion appears exactly once. JSON mode (`response_format=json_object`) is included in the existing Gateway policy, exact transmission snapshot and Chat Completions payload. Reject malformed/truncated/credential-bearing responses without speculative repair. APPROVE requires satisfied criteria and no outstanding issues/instructions/questions; REWORK needs concrete issues/instructions; ESCALATE needs questions. Unsupported JSON-mode providers may fail closed.
 
@@ -108,7 +148,7 @@ Keep existing Board states; workflow_stage is worker_execution/manager_review/re
 
 Bind approval to original request, contract, sources, actual result/self-check, policies, checks and candidate hash. Recheck resources after review; changes invalidate approval and block completion. --review-only checkpoints approval before completion. Restart with valid saved approval makes no new model call; Verifying before review can still need a Manager call.
 
-Escalation/limits produce a quality Waiting agenda. quality-decide records a required reason for approve/rework/cancel; ordinary decide cannot approve quality agendas. Human approval preserves Manager's original ESCALATE/REWORK and records authority=human, followed by deterministic checks. Stale agendas cannot be approved. Full organization, automatic planning/model optimization remain unimplemented.
+Escalation/limits produce a quality Waiting agenda. quality-decide records a required reason for approve/rework/cancel; ordinary decide cannot approve quality agendas. Human approval preserves Manager's original ESCALATE/REWORK and records authority=human, followed by deterministic checks. Stale agendas cannot be approved. Full organization and automatic model optimization remain unimplemented; upper-goal planning is a separate Plan feature.
 
 ### Execution units and state ownership
 
