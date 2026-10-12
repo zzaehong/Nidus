@@ -4,6 +4,12 @@
 
 ## 한국어
 
+### Provider Connection Foundation 경계 — 2026-10-13
+
+기존 Gateway의 policy 검증·전송 snapshot·fallback·Task/Plan 메시지 생성은 유지했다. `request_bytes`와 `ChatCompletions`를 공통 transport로 재사용하고 `ProviderRegistry`(manifest), `ConnectionRegistry`(health/영속 Catalog), `OpenAICompatibleAdapter`(discovery/synthetic generation)를 추가했다. GUI 연결 API는 업무 Runtime을 생성/실행하지 않는다. Keychain은 `CredentialStore` 경계 내부에만 있으며 DB에는 reference를 저장한다.
+
+연결 상태는 configured/probing/ready/degraded/blocked다. 실제 일반 응답과 JSON 검증 전 ready를 허용하지 않는다. 기존 env policy 경로와 새 연결 경로는 공존하며 Route Broker는 미구현이다. 상세 책임·보안·discovery 실패 규칙·Catalog와 제약은 [CONNECTIONS](docs/CONNECTIONS.md)에 기술했다.
+
 ### Local GUI / Application 경계
 
 ```text
