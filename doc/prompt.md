@@ -1,1052 +1,1281 @@
-# 목표
+# Nidus Provider Connection Foundation v1 — Codex 구현 지시
 
-현재 Nidus `develop` 브랜치를 기준으로 **Nidus Local GUI v1**을 구현하라.
+## 목표
 
-이번 작업의 목표는 새로운 업무 엔진을 만드는 것이 아니다.
+현재 Nidus `develop`을 기준으로 **동적 조직 기능을 구현하기 전에 Provider/API 연결 기반을 먼저 안정화하라.**
 
-현재 구현된:
+현재 원격 기준:
 
 ```text
-Execution Plan
-→ PlanRuntime
-→ 기존 Task Runtime
-→ Manager / Worker workflow
-→ Security / Store / Git
+develop:
+11a36f39df42c7e9272c68237a1061bfe00d737a
+
+main:
+d9bd9d0069cef5157a283bea2a0af365c99d44b6
 ```
 
-위에 사용자가 상태를 보고, 판단하고, 다음 실행 단계를 명시적으로 시작할 수 있는 **로컬 GUI 계층**을 추가한다.
+단, 작업 시작 시 반드시 직접:
 
-핵심 원칙:
+```bash
+git status
+git branch --show-current
+git log -1 --oneline
+git fetch
+```
 
-> GUI는 Nidus의 새로운 두뇌가 아니다.
+를 확인하라.
 
-> GUI는 기존 Runtime의 상태를 보여주고 사용자의 명령을 전달하는 인터페이스다.
+사용자가 최근 작업 상태를 의도적으로 되돌렸으므로, 과거 feature branch나 이전 대화에서 존재했던 동적 조직/Assistant 구현이 현재 `develop`에 있다고 가정하지 마라.
+
+현재 `develop`의 실제 코드를 source of truth로 삼는다.
 
 ---
 
-# 1. 기준 UI
+# 1. 이번 Slice의 목적
 
-첨부된 Dashboard 이미지를 **Default GUI의 시각적 기준**으로 사용한다.
+현재 사용자는 Plan을 만들 때 Provider/Model policy JSON을 직접 입력해야 한다.
 
-전체적으로:
+현재 GUI도:
 
 ```text
-깨끗한 흰색/연회색 배경
-파란색 포인트
-macOS와 잘 어울리는 현대적인 Dashboard
-둥근 카드
-얇은 Border
-과하지 않은 Shadow
-명확한 상태 Badge
-넉넉한 여백
+사용자 요청
+Sources
+Planning Policy JSON
+
+고급:
+Worker Policy
+Review Policy
+Final Policy
+Task limits
+```
+
+구조다.
+
+이번 Slice에서는 GUI 자체를 크게 재설계하지 않는다.
+
+대신 다음 기반을 만든다.
+
+```text
+Provider Registry
+        ↓
+Provider Manifest
+        ↓
+Credential Store
+        ↓
+Connection Registry
+        ↓
+Connection Probe
+        ↓
+Model Discovery
+        ↓
+Model Catalog
+```
+
+목표는:
+
+> 사용자가 Provider를 한 번 연결하면 Nidus가 그 연결을 스스로 검증하고 사용할 수 있는 모델과 기능을 파악할 수 있게 하는 것.
+
+이다.
+
+향후:
+
+```text
+Work Request
+↓
+Assistant / Manager / Worker
+↓
+Route Broker
+↓
+Connection
+↓
+Provider
+```
+
+구조를 만들기 위한 기반이다.
+
+---
+
+# 2. 이번 작업에서 하지 않을 것
+
+이번 Slice에서 다음은 구현하지 않는다.
+
+```text
+GUI v2 전체 재설계
+Executive Assistant
+Dynamic Team
+Work Request
+비동기 Scheduler
+자동 Team 실행
+Pixel Office
+병렬 Worker
+병렬 Team
+복잡한 Budget Reservation
+자동 모델 품질 최적화
+JEV
+OAuth Provider 전체 구현
+Remote GUI
+Multi-user
+```
+
+특히 **현재 PlanRuntime이나 Manager/Worker workflow를 Provider 연결 문제 때문에 다시 설계하지 마라.**
+
+---
+
+# 3. 핵심 UX 목표
+
+Provider 연결 경험은 OmniRoute의 단순한 연결 방식을 참고한다.
+
+최종적으로 GUI에서는 다음 정도의 흐름을 만들 수 있어야 한다.
+
+```text
+AI Provider 연결
+↓
+Provider 선택
+↓
+API Key 또는 Endpoint 입력
+↓
+[연결 확인]
+↓
+Nidus 자동 검증
+↓
+READY
+```
+
+향후 GUI 예:
+
+```text
+AI 연결
+
+[ OmniRoute ]
+[ OpenAI 호환 API ]
+[ 기타 로컬/호환 API ]
+
++ 연결
+```
+
+OmniRoute:
+
+```text
+OmniRoute 연결
+
+Endpoint
+http://127.0.0.1:20128/v1
+
+Endpoint Key
+••••••••••••
+
+[ 연결 확인 ]
+```
+
+사용자가 다음을 직접 고르게 하지 않는다.
+
+```text
+model ID
+route
+JSON policy
+context length
+structured output option
+fallback order
+```
+
+---
+
+# 4. 중요한 제품 원칙
+
+Provider 연결은 Nidus의 핵심 사용자 경험이 아니다.
+
+장기 목표:
+
+```text
+95%
+업무 요청 / 진행 / 결과
+
+5%
+Provider 연결 설정
+```
+
+Provider 연결을 마친 이후 일반 사용 중에는:
+
+```text
+Provider
+Model
+Route
+Endpoint
+Policy JSON
+```
+
+을 거의 볼 필요가 없어야 한다.
+
+이번 Slice에서는 그 기반만 구축한다.
+
+---
+
+# 5. 기존 Gateway를 먼저 감사하라
+
+현재 `nidus/gateway.py`에는 이미:
+
+```text
+ChatCompletions
+Gateway
+route fallback
+policy validation
+error classification
+token/cost metadata
+transmission snapshot
+credential env reference
+```
+
+가 존재한다.
+
+현재 구조를 삭제하거나 무조건 교체하지 마라.
+
+먼저 다음을 분석하라.
+
+```text
+무엇을 재사용할 수 있는가
+무엇이 Task policy와 과도하게 결합되어 있는가
+Connection Layer가 어디에 위치해야 하는가
+기존 Gateway와 새 Provider layer의 경계는 어디인가
+```
+
+기본 방향:
+
+```text
+Runtime
+↓
+Gateway
+↓
+[향후 Route Broker]
+↓
+Connection Registry
+↓
+Provider Adapter
+```
+
+이번에는 `Route Broker` 전체를 구현하지 않는다.
+
+---
+
+# 6. Provider Manifest
+
+Provider 연결 UI와 연결 로직을 Provider별 하드코딩으로 만들지 않는다.
+
+Provider의 사용자-facing metadata를 `Provider Manifest`로 정의한다.
+
+개념 예:
+
+```json
+{
+  "id": "omniroute",
+  "name": "OmniRoute",
+  "auth_type": "api_key",
+  "default_base_url": "http://127.0.0.1:20128/v1",
+  "endpoint_editable": true,
+  "credential_label": "Endpoint Key",
+  "protocol": "openai_chat_completions",
+  "supports_model_discovery": true
+}
+```
+
+Generic OpenAI-compatible:
+
+```json
+{
+  "id": "openai-compatible",
+  "name": "OpenAI-compatible API",
+  "auth_type": "api_key",
+  "endpoint_editable": true,
+  "credential_label": "API Key",
+  "protocol": "openai_chat_completions",
+  "supports_model_discovery": true
+}
+```
+
+필요한 최소 필드만 정의하라.
+
+Manifest를 복잡한 Plugin framework로 만들지 않는다.
+
+---
+
+# 7. v1 Provider 범위
+
+이번 Slice에서는 **실제로 끝까지 검증 가능한 Provider 유형만 지원한다.**
+
+필수:
+
+```text
+1. OmniRoute
+2. Generic OpenAI-compatible endpoint
+```
+
+Generic OpenAI-compatible은 예를 들어:
+
+```text
+OpenAI
+NVIDIA NIM
+LM Studio
+사내 Gateway
+기타 OpenAI-compatible service
+```
+
+를 연결할 수 있는 기반이어야 한다.
+
+직접 Gemini native API나 Anthropic native API는 이번 Slice의 필수 완료 조건이 아니다.
+
+향후 Provider Adapter로 추가할 수 있는 구조만 확보한다.
+
+아직 지원하지 않는 Provider를 GUI에서 작동하는 것처럼 표시하지 마라.
+
+---
+
+# 8. Provider Adapter
+
+Provider와 protocol을 분리한다.
+
+예:
+
+```text
+Provider Manifest
+OmniRoute
+
+Protocol Adapter
+OpenAICompatibleAdapter
+```
+
+OmniRoute와 여러 OpenAI-compatible Provider가 동일한 adapter를 재사용할 수 있어야 한다.
+
+개념 인터페이스:
+
+```text
+discover_models(connection)
+probe_model(connection, model)
+generate(...)
+```
+
+구체적인 이름은 현재 코드 스타일에 맞게 결정하라.
+
+`Gateway.ChatCompletions`의 안정적인 부분은 최대한 재사용한다.
+
+---
+
+# 9. Credential Store
+
+API Key를 다음 위치에 저장하지 않는다.
+
+```text
+SQLite
+Vault
+Git
+Policy JSON
+Task
+Plan
+Prompt
+일반 로그
+Model Catalog
+Connection record의 평문 필드
+```
+
+DB에는 다음과 같은 reference만 존재한다.
+
+```text
+credential_ref
+```
+
+예:
+
+```text
+cred_...
+```
+
+## v1 권장
+
+현재 주 사용환경이 macOS이므로:
+
+```text
+CredentialStore interface
+        ↓
+MacOSKeychainCredentialStore
+```
+
+를 구현하는 방식을 우선 검토한다.
+
+macOS Keychain은 OS의 `security` 명령 또는 검증 가능한 안전한 방법을 사용할 수 있다.
+
+단:
+
+- shell injection 방지
+- Key 자체 로그 금지
+- subprocess argv/diagnostic leakage 검토
+- 조회 결과를 필요 이상 메모리에 유지하지 않음
+- 삭제/교체 가능
+
+을 지킨다.
+
+기존 환경변수 방식은 **호환 모드**로 유지할 수 있다.
+
+예:
+
+```text
+EnvironmentCredentialProvider
+```
+
+그러나 새 GUI 연결에서 입력된 Key를 `.env` 파일로 저장하지 않는다.
+
+---
+
+# 10. Credential Store abstraction
+
+OS-specific 구현을 다른 코드에 퍼뜨리지 않는다.
+
+개념:
+
+```text
+CredentialStore
+
+put(ref, secret)
+get(ref)
+replace(ref, secret)
+delete(ref)
+exists(ref)
+```
+
+실제 method 이름은 코드 스타일에 맞게 조정한다.
+
+향후 Linux Secret Service나 Windows Credential Manager 구현을 추가할 수 있어야 한다.
+
+이번 v1에서 지원하지 않는 OS를 지원하는 척하지 않는다.
+
+---
+
+# 11. Connection Registry
+
+Model과 Provider 연결 자체를 분리한다.
+
+Connection 예:
+
+```json
+{
+  "id": "conn_...",
+  "provider": "omniroute",
+  "base_url": "http://127.0.0.1:20128/v1",
+  "credential_ref": "cred_...",
+  "status": "ready",
+  "created_at": "...",
+  "last_probe_at": "...",
+  "last_error": null
+}
+```
+
+Connection에는 API Key 평문이 없어야 한다.
+
+Connection ID는 Runtime이 생성한다.
+
+불변 ID를 사용한다.
+
+---
+
+# 12. Connection 상태
+
+내부 상태는 최소:
+
+```text
+configured
+probing
+ready
+degraded
+blocked
+```
+
+를 표현할 수 있어야 한다.
+
+세부 실패 원인은 별도 error metadata로 기록한다.
+
+예:
+
+```text
+authentication_failed
+access_denied
+network_failure
+timeout
+rate_limited
+provider_unavailable
+invalid_request
+model_unavailable
+structured_output_unsupported
+```
+
+현재 Gateway의 ModelError taxonomy와 최대한 일관되게 사용하라.
+
+중복 taxonomy를 만들지 않는다.
+
+---
+
+# 13. configured와 ready는 반드시 다르다
+
+가장 중요한 규칙 중 하나다.
+
+```text
+API Key 저장됨
+≠
+Nidus에서 사용 가능
+```
+
+`configured`는 단순히 설정이 존재하는 상태다.
+
+`ready`는 Nidus가 실제로 검증한 상태다.
+
+---
+
+# 14. Test Connection / Probe Pipeline
+
+사용자가 `[연결 확인]`을 누르면 다음 단계를 수행한다.
+
+```text
+1. Endpoint 형식 검증
+2. Endpoint 접근
+3. 인증 검증
+4. 모델 후보 탐색
+5. 실제 짧은 Generation
+6. Structured Output probe
+7. 결과 기록
+```
+
+가능한 한 실제 호출로 확인한다.
+
+`GET /models`가 성공했다는 이유만으로 `ready`로 만들지 않는다.
+
+최소 하나의 실제 generation이 성공해야 한다.
+
+---
+
+# 15. Probe는 실제 업무 요청과 분리
+
+Connection probe는 Task나 Plan을 만들지 않는다.
+
+```text
+Provider Probe
+```
+
+라는 별도의 기술 실행으로 처리한다.
+
+Probe prompt에는 개인 Vault 자료를 넣지 않는다.
+
+고정된 공개 synthetic payload를 사용한다.
+
+예:
+
+```text
+Return exactly the word READY.
+```
+
+Structured output probe:
+
+```json
+{
+  "status": "READY"
+}
+```
+
+같은 최소 synthetic payload를 사용한다.
+
+---
+
+# 16. Model Discovery
+
+OpenAI-compatible Adapter에서는 가능하면:
+
+```text
+GET /models
 ```
 
 을 사용한다.
 
-기본 화면 구조:
+그러나 모델 목록 조회가 실패했다고 연결 전체를 즉시 실패시키지는 않는다.
+
+Provider가 discovery를 지원하지 않거나 결과가 불완전할 수 있기 때문이다.
+
+상태를 정확히 기록하라.
 
 ```text
-┌────────────┬────────────────────────────────┬───────────────────┐
-│            │                                │                   │
-│   NIDUS    │ Dashboard                      │ 사람 판단함       │
-│            │                                │                   │
-│ 홈         │ 상태 요약                       │ 전송 승인         │
-│ Plans      │                                │                   │
-│ Tasks      │ 최근 Plans │ 선택된 Plan        │ 품질 판단         │
-│ 판단함     │             │                    │                   │
-│ Archive    │             │ Task 목록          │ 최근 완료 Task    │
-│            │             │                    │                   │
-│ Vault      │             │ 진행도             │                   │
-│ 설정       │                                │                   │
-└────────────┴────────────────────────────────┴───────────────────┘
+discovery_supported
+discovery_success
+discovery_failed
 ```
 
-현재 단계에서는 픽셀 아트나 게임형 Office UI를 구현하지 않는다.
-
-단, 향후 같은 상태 데이터를:
-
-```text
-Default Dashboard Theme
-Pixel Office Theme
-```
-
-등으로 표현할 수 있도록 **업무 상태와 시각 표현을 분리**한다.
+등의 의미를 명확히 구분한다.
 
 ---
 
-# 2. GUI의 책임
+# 17. Model Catalog
 
-GUI는 다음 세 가지 행동에 집중한다.
+탐색된 모델은 내부 Catalog에 기록한다.
 
-```text
-Observe
-→ 현재 상태를 본다.
-
-Decide
-→ 사람에게 요청된 판단을 처리한다.
-
-Run
-→ 다음 한 단계를 실행한다.
-```
-
-GUI가 직접 다음을 판단해서는 안 된다.
+최소:
 
 ```text
-Task Ready 여부
-Dependency 충족 여부
-Task 완료 여부
-Plan 완료 여부
-승인 유효성
-Snapshot 유효성
-권한 유효성
-Plan 변경 가능 여부
+connection_id
+model_id
+discovered_at
+
+availability
+
+capabilities:
+  chat
+  structured_output
+
+last_probe_at
+last_success_at
+last_failure_at
+
+latency
 ```
 
-이것들은 기존 Runtime의 책임이다.
+가격/context/free quota 같은 값은 **확실한 근거가 있는 경우에만 저장**한다.
+
+모르면:
+
+```text
+unknown
+```
+
+으로 남긴다.
+
+0이나 free로 추정하지 않는다.
+
+첨부 설계의 모델 catalog는 기능·가격·가용성·context·구조화 출력 등을 라우팅 근거로 저장하고, 사용자에게 모델 ID 선택을 강요하지 않는 방향이다. 이를 유지하라. :chatgpt-content-reference{index="2"}
 
 ---
 
-# 3. Architecture
+# 18. Structured Output capability
 
-권장 구조:
+현재 Manager / Plan workflow는 JSON 출력에 크게 의존한다.
 
-```text
-Browser
-   ↓
-Local GUI Server
-   ↓
-GUI Service / API Adapter
-   ↓
-PlanRuntime / Runtime
-   ↓
-Store / Security / Gateway / Git
-```
-
-금지:
+따라서 v1에서 가장 중요한 capability 중 하나는:
 
 ```text
-GUI
-→ SQLite 직접 UPDATE
-
-GUI
-→ Task 상태 직접 변경
-
-GUI
-→ Plan 상태 직접 변경
+structured_output
 ```
 
-모든 상태 변경은 기존 Runtime 또는 이를 얇게 감싼 public service를 통해서만 수행한다.
+이다.
 
-CLI와 GUI가 서로 다른 업무 로직을 가지지 않도록 한다.
-
-가능하면:
+단:
 
 ```text
-CLI ─┐
-     ├→ shared Nidus application/service layer
-GUI ─┘
-          ↓
-      Runtime
+provider documentation says supported
 ```
 
-구조를 사용한다.
+와:
 
-필요하면 기존 CLI 내부 로직을 최소한으로 추출하여 재사용 가능한 service 함수로 만든다.
+```text
+Nidus probe passed
+```
 
-GUI 구현을 위해 Runtime 전체를 리팩터링하지 않는다.
+를 구분한다.
+
+Catalog에는 실제 검증 결과를 우선 사용한다.
 
 ---
 
-# 4. 기술 방향
+# 19. Model Availability
 
-v1은 **로컬 웹 GUI**로 구현한다.
-
-실행 예:
-
-```bash
-python3 -m nidus --vault "$vault" gui
-```
-
-기본 주소:
-
-```text
-http://127.0.0.1:8765
-```
-
-원칙:
-
-- `127.0.0.1`에만 Bind한다.
-- 외부 네트워크에 노출하지 않는다.
-- GUI 자체에는 외부 CDN/폰트/JavaScript 의존성을 두지 않는다.
-- 가능한 한 현재 Python Runtime과 자연스럽게 통합한다.
-- Frontend는 단순한 HTML/CSS/JavaScript로 충분하다.
-- 큰 SPA Framework나 Electron/Tauri는 이번 범위에서 도입하지 않는다.
-- 새로운 Python dependency가 필요하다면 이유를 문서화하고 최소화한다.
-- 현재 표준 라이브러리만으로 안정적으로 구현 가능하다면 그것을 우선 검토한다.
-
-Frontend Build Pipeline이 없어도 실행 가능하도록 하는 것을 선호한다.
-
----
-
-# 5. Theme와 업무 상태 분리
-
-GUI 코드에서 상태와 색/레이아웃을 강하게 결합하지 않는다.
+Model availability를 단순 boolean으로만 표현하지 않는 것을 선호한다.
 
 예:
 
 ```text
-PlanStatus
-TaskStatus
-AttentionType
-AllowedActions
+unknown
+available
+temporarily_unavailable
+rate_limited
+authentication_failed
+unsupported
 ```
 
-등은 UI 데이터 모델로 전달하고,
+단 Connection 상태와 Model 상태의 책임을 뒤섞지 않는다.
 
-표현은 CSS/Component에서 결정한다.
+---
 
-CSS 변수 또는 동등한 Design Token을 사용한다.
+# 20. 자동 모델 선택은 이번 Slice에서 제한
+
+이번 Slice에서 완전한 Route Broker는 만들지 않는다.
+
+그러나 Provider Foundation 검증을 위해 다음 API 정도는 제공할 수 있다.
+
+```text
+list_ready_connections()
+
+list_available_models(connection)
+
+select_probe_candidate()
+```
+
+실제 Manager/Worker 역할별:
+
+```text
+quality
+budget
+role
+capability
+```
+
+라우팅은 다음 Slice로 둔다.
+
+현재 Task policy 시스템을 임의로 제거하지 않는다.
+
+---
+
+# 21. 기존 Policy 호환성
+
+현재 Plan/Task Runtime은 `model_policy` JSON을 사용한다.
+
+이번 Slice에서 이것을 즉시 제거하지 않는다.
+
+기존 테스트와 Runtime은 계속 작동해야 한다.
+
+새 Connection Layer와 기존 policy는 당분간 공존할 수 있다.
 
 예:
 
 ```text
---color-accent
---color-success
---color-warning
---color-danger
---surface-primary
---surface-secondary
---border-color
---text-primary
---text-secondary
+Legacy Runtime
+→ existing policy routes
+
+New Connection Foundation
+→ Connection Registry / Catalog
 ```
 
-현재는 `default-light`만 구현한다.
+향후 Route Broker에서 통합한다.
 
-향후 Pixel Office Theme가 Runtime 수정 없이 추가될 수 있는 구조를 선호한다.
-
-단, 아직 복잡한 Theme Plugin System은 만들지 않는다.
+이번 Slice에서 무리하게 전체 migration을 하지 않는다.
 
 ---
 
-# 6. Dashboard
+# 22. OmniRoute 특별 지원
 
-첫 화면은 첨부 이미지와 유사하게 구성한다.
+OmniRoute는 v1에서 first-class manifest로 지원한다.
 
-상단 요약:
-
-```text
-진행 중 Plan
-사람 판단 필요
-실행 가능한 Task
-완료된 Plan
-```
-
-각 수치는 반드시 Runtime/Store의 실제 상태에서 계산한다.
-
-그 아래:
+기본 endpoint 후보:
 
 ```text
-최근 Plans
-선택된 Plan
-사람 판단함
-최근 완료 Task
+http://127.0.0.1:20128/v1
 ```
 
-을 보여준다.
+다만 실제 연결 여부를 추측하지 않는다.
 
-사용자가 페이지를 처음 열었을 때 가장 중요한 질문:
+향후 자동 감지를 고려할 수 있지만,
+이번 구현에서는 단순한 로컬 probe 정도만 허용한다.
 
-> 지금 Nidus에서 무슨 일이 진행 중인가?
-
-에 답할 수 있어야 한다.
+OmniRoute가 실행 중이라면 연결 화면에서 기본 endpoint를 제공할 수 있어야 한다.
 
 ---
 
-# 7. Navigation
+# 23. GUI 범위
 
-v1 Navigation:
+이번 Slice에서는 **전체 GUI를 다시 만들지 않는다.**
+
+현재 GUI에 최소한의:
 
 ```text
-홈
-Plans
-Tasks
-사람 판단함
-Archive
 설정
+→ AI 연결
 ```
 
-하단에는 현재 Vault를 표시한다.
+화면만 추가해도 된다.
+
+목적은 Connection Foundation을 실제 사람이 사용할 수 있는지 검증하는 것이다.
 
 예:
 
 ```text
-현재 Vault
-/tmp/nidus-example-vault
+AI 연결
+
+OmniRoute                       ● 정상
+http://127.0.0.1:20128
+사용 가능 모델 3
+
+[연결 테스트] [관리]
+
++ AI Provider 연결
 ```
 
-Settings는 복잡한 설정 편집기가 아니라 최소한의 read-only 정보 화면으로 시작해도 된다.
+---
+
+# 24. Add Provider UI
+
+```text
+AI Provider 연결
+
+[ OmniRoute ]
+[ OpenAI-compatible ]
+```
+
+OmniRoute 선택:
+
+```text
+Endpoint
+[ http://127.0.0.1:20128/v1 ]
+
+Endpoint Key
+[ ••••••••• ]
+
+[ 연결 확인 ]
+```
+
+OpenAI-compatible:
+
+```text
+이름
+[ Provider name ]
+
+Base URL
+[ https://.../v1 ]
+
+API Key
+[ ••••••••• ]
+
+[ 연결 확인 ]
+```
+
+모델 이름을 입력받지 않는 것을 기본으로 한다.
+
+Discovery가 불가능한 Provider를 지원해야 할 필요가 실제로 확인되기 전까지 manual model ID 기능을 추가하지 마라.
+
+---
+
+# 25. 연결 성공 화면
+
+사용자에게 내부 probe JSON을 그대로 보여주지 않는다.
 
 예:
 
 ```text
-Vault path
-Nidus version
-GUI bind address
-기본 Task/Plan limit
-현재 사용 정책 정보
+AI 연결이 준비되었습니다.
+
+Endpoint          정상
+인증              정상
+모델 탐색         8개
+실제 응답         성공
+구조화 응답       지원 확인
+
+[완료]
 ```
 
-작동하지 않는 버튼이나 메뉴를 장식용으로 두지 않는다.
+기술 세부 정보는 펼쳐서 확인할 수 있다.
 
 ---
 
-# 8. Plans 화면
+# 26. 연결 관리
 
-활성 Plan 목록을 보여준다.
-
-각 Plan 카드에는 최소:
+기존 Connection에 대해:
 
 ```text
-제목 또는 Goal 요약
-상태
-완료 Task / 전체 Task
-생성 시각
-Manager
-Plan version
-사람 판단 필요 여부
+연결 테스트
+Credential 교체
+Endpoint 수정
+Connection 삭제
+상세 정보
 ```
 
-를 표시한다.
+를 지원한다.
 
-Plan을 선택하면 상세 화면으로 이동한다.
-
----
-
-# 9. Plan 상세 화면
-
-첨부 이미지의 중앙 패널을 기준으로 한다.
-
-Header:
-
-```text
-Plan 제목
-상태 Badge
-Goal 설명
-생성 시각
-Manager
-Plan Version
-[다음 단계 실행]
-```
-
-Tabs:
-
-```text
-작업 목록
-의존 관계
-전체 정보
-실행 기록
-```
-
-v1에서는 탭을 모두 구현하되 지나치게 복잡하게 만들지 않는다.
-
----
-
-# 10. Task 목록
-
-Plan 안의 Task를 표 형태로 보여준다.
-
-최소 열:
-
-```text
-local_key
-제목
-상태
-의존성
-담당 Worker/Manager
-Ready 여부
-완료/실행 시각
-```
-
-상태 예:
-
-```text
-완료
-실행 가능
-대기
-진행 중
-사람 판단 필요
-차단됨
-취소됨
-```
-
-Ready 여부는 GUI가 계산하지 않는다.
-
-Backend가 Runtime 상태를 기준으로 제공한다.
-
-Task를 선택하면 Task 상세 화면 또는 Side Panel을 보여준다.
-
----
-
-# 11. Dependency View
-
-v1에서는 무거운 Graph Library를 도입하지 않는다.
-
-다음 중 단순하고 안정적인 방식을 선택한다.
-
-```text
-T1 ─┐
-    ├→ T3 → T4
-T2 ─┘
-```
-
-또는 카드/연결선 기반의 간단한 DAG 표현.
-
-필수 목적은:
-
-> 어떤 Task가 무엇을 기다리고 있는지 사람이 이해할 수 있게 하는 것
-
-이다.
-
-그래프 편집 기능은 만들지 않는다.
-
----
-
-# 12. Task 상세
-
-Task 상세에서는 기존 Manager/Worker workflow를 사람이 이해할 수 있게 보여준다.
-
-최소:
-
-```text
-Task ID / local_key
-Goal
-상태
-Manager
-Worker
-Dependencies
-Completion Contract
-Worker result
-Worker self-check
-Deterministic checks
-Manager Review
-REWORK history
-Result reference
-Output hash
-관련 timestamps
-```
-
-Completed Task의 과거 기록을 GUI에서 편집할 수 없게 한다.
-
----
-
-# 13. 사람 판단함
-
-이 화면은 v1의 핵심 기능이다.
-
-현재 Nidus의 다양한 `attention`을 한 곳에서 보여준다.
-
-단, 종류를 섞어 표현하지 않는다.
-
-최소 유형:
-
-```text
-외부 모델 전송 승인
-출력 덮어쓰기 승인
-Task 품질 판단
-Task ESCALATE
-Plan Final ESCALATE
-Plan 재개 필요
-```
-
-각 Attention 카드에는:
-
-```text
-종류
-관련 Plan / Task
-요청한 역할
-발생 시각
-이유
-정확한 전송/판단 범위
-허용된 행동
-```
-
-을 보여준다.
-
----
-
-# 14. Permission과 Quality를 명확히 구분
-
-특히 다음 두 종류는 시각적으로 명확히 다르게 표현한다.
-
-### Permission
+Credential 원문을 다시 화면에 표시하지 않는다.
 
 예:
 
 ```text
-외부 모델 전송 승인
+API Key
+등록됨
 
-manager-1이 다음 자료를 전송하려고 합니다.
-
-notes.md
-T1 승인 결과
-T2 승인 결과
-
-[상세 범위]
-[거부] [승인]
+[교체]
 ```
 
-### Quality / Human Judgment
-
-예:
-
-```text
-사람의 업무 판단 필요
-
-Manager decision: ESCALATE
-
-이유:
-두 결과 중 어떤 기준을 우선해야 하는지
-현재 정보만으로 결정하기 어렵습니다.
-
-[취소]
-[재작업]
-[계속]
-```
-
-GUI가 가능한 행동을 추측하지 않는다.
-
-Backend가 현재 attention에 대해 `allowed_actions` 또는 동등한 데이터를 제공하는 것을 선호한다.
+정도로.
 
 ---
 
-# 15. 다음 단계 실행
+# 27. Connection 삭제
 
-가장 중요한 Primary Action:
+Connection 삭제 시:
 
 ```text
-[다음 단계 실행]
+Connection metadata 삭제/비활성화
+Credential Store secret 삭제
+Model Catalog association 처리
+```
+
+를 명확하게 한다.
+
+과거 Task audit에서 사용했던 route/model 기록은 삭제하지 않는다.
+
+즉:
+
+```text
+Connection 삭제
+≠
+과거 실행 기록 삭제
 ```
 
 이다.
 
-이 버튼은 현재 `plan-run`의 의미를 그대로 가져야 한다.
+---
 
-즉 클릭 한 번:
+# 28. Security
 
-```text
-사용자 클릭
-↓
-PlanRuntime 한 bounded step
-↓
-State persist
-↓
-응답
-↓
-화면 갱신
-```
+현재 Nidus의 중요한 보안 원칙을 유지한다.
 
-이다.
-
-금지:
+특히:
 
 ```text
-while plan not complete:
-    계속 run
+Secret은 Prompt에 들어가지 않음
+Secret은 Vault에 들어가지 않음
+Secret은 Git에 들어가지 않음
+Secret은 SQLite에 평문으로 들어가지 않음
+Secret은 일반 로그에 들어가지 않음
 ```
 
-GUI가 자동으로 Plan 전체를 실행하지 않는다.
-
-현재 CLI의 명시적 실행/재개 경계를 보존한다.
+을 자동 테스트하라.
 
 ---
 
-# 16. 실행 중 UI
+# 29. Endpoint validation
 
-모델 호출은 시간이 걸릴 수 있다.
+기존 Gateway의 endpoint validation을 재사용하거나 동일 수준을 유지한다.
 
-버튼 클릭 후에는:
+특히:
 
 ```text
-실행 중...
+HTTP remote endpoint 금지
+localhost HTTP는 허용
+HTTPS remote 허용
+username/password embedded URL 거부
+query/fragment 포함 endpoint 검토
+redirect 제한
 ```
 
-상태를 보여주고 중복 실행 버튼을 잠근다.
-
-Frontend의 HTTP 요청이 끝날 때까지 Spinner 또는 Progress 표시를 제공한다.
-
-새로운 별도 Autonomous Background Scheduler는 만들지 않는다.
-
-Runtime의 기존 persistence/recovery/idempotency 성질을 유지한다.
+을 약화시키지 않는다.
 
 ---
 
-# 17. 새 Plan 만들기
+# 30. Provider Error body
 
-Dashboard의:
+현재 Gateway는 Provider error body를 읽거나 저장하지 않는 보수적인 정책을 사용한다.
 
-```text
-+ 새 Plan 만들기
-```
+새 Probe Layer도 민감한 Provider response/error가 로그로 유출되지 않도록 한다.
 
-버튼으로 간단한 생성 UI를 제공한다.
-
-최소 입력:
-
-```text
-사용자 요청
-Source(s)
-Planning model policy
-```
-
-Advanced 영역에서 필요하면:
-
-```text
-Worker policy
-Review policy
-Final policy
-Initial Task limit
-Total Task limit
-Revision limit
-```
-
-을 설정할 수 있다.
-
-기본값은 현재 CLI 기본값을 사용한다.
-
-GUI만의 새로운 기본값을 만들지 않는다.
-
-Source path는 Vault 기준이며 기존 Runtime 경로 검증을 그대로 통과해야 한다.
-
-가능하면 Vault에서 허용되는 `.md/.txt` 파일을 안전하게 선택할 수 있는 UI를 제공하되, 이를 위해 범위를 과도하게 키우지 않는다.
+디버깅 편의를 이유로 API 응답 body 전체를 저장하지 마라.
 
 ---
 
-# 18. Archive
+# 31. 테스트
 
-완료된 Plan과 Task를 조회할 수 있다.
+최소 다음을 검증한다.
 
-Archive에서는:
+### A. Manifest
 
 ```text
-완료 시각
-Goal
-Task 수
-Final Review
-결과
-Plan Version
+유효 manifest
+중복 provider id
+잘못된 auth type
+잘못된 protocol
 ```
-
-등을 볼 수 있다.
-
-Archive는 기본적으로 read-only다.
 
 ---
 
-# 19. API / GUI Adapter
-
-구체적인 endpoint 이름은 현재 코드 구조를 분석하여 정한다.
-
-개념적으로는 다음 기능이 필요하다.
+### B. Credential Store
 
 ```text
-GET  overview
-
-GET  active plans
-GET  archived plans
-GET  plan detail
-GET  task detail
-GET  attentions
-
-POST create plan
-POST run plan one step
-POST plan decision
-POST task decision
-POST task quality decision
+put
+get
+replace
+delete
+missing secret
 ```
 
-API layer는 Store를 직접 수정하지 않는다.
+그리고:
 
-항상 기존 application/runtime 계층을 통한다.
-
-오류 응답은 구조화한다.
-
-예:
-
-```json
-{
-  "error": "PLAN_BLOCKED",
-  "message": "...",
-  "details": {}
-}
+```text
+SQLite에 secret 없음
+Vault에 secret 없음
+Git diff에 secret 없음
+log에 secret 없음
 ```
 
-Frontend에서 Python traceback을 그대로 사용자에게 노출하지 않는다.
-
-개발 로그에는 원인을 보존한다.
+검증.
 
 ---
 
-# 20. Local GUI Security
-
-GUI도 Nidus Security boundary의 일부로 취급한다.
-
-최소:
+### C. Connection
 
 ```text
-127.0.0.1 only
-GET과 mutation 요청 구분
-mutation은 POST 사용
-Origin 확인
-요청 위조 방지
-잘못된 ID 거부
-Vault 밖 경로 거부
-Runtime permission 우회 금지
+create
+update
+delete
+unique ID
+invalid endpoint
 ```
-
-를 구현한다.
-
-브라우저의 다른 사이트가 localhost Nidus에 임의 POST를 보내는 것을 막기 위해
-간단한 per-session token/CSRF 방어 또는 동등한 보호를 사용한다.
-
-GUI Token은 Nidus Task/Prompt/Log에 유출하지 않는다.
-
-외부 접근용 인증 시스템은 이번 범위에서 구현하지 않는다.
 
 ---
 
-# 21. 기존 Runtime이 최종 진실
+### D. Successful OmniRoute-compatible probe
 
-GUI에 표시된 상태가 stale일 수 있다는 점을 고려한다.
-
-사용자가 버튼을 눌렀을 때 Backend는 항상 현재 Runtime 상태를 다시 확인한다.
-
-예:
+Fake HTTP server를 사용하여:
 
 ```text
-화면상 승인 가능
-↓
-그 사이 snapshot 변경
-↓
-사용자 승인 클릭
-↓
-Runtime 재검증
-↓
-승인 거부
-↓
-GUI 최신 상태 갱신
+/models
+/chat/completions
+JSON response
 ```
 
-Frontend 상태만 믿고 mutation하지 않는다.
+을 제공한다.
+
+```text
+configured
+→ probing
+→ ready
+```
+
+검증.
 
 ---
 
-# 22. 오류 처리
-
-사용자가 이해할 수 있게 다음을 구분한다.
+### E. Authentication failure
 
 ```text
-Waiting
-Blocked
-Invalid decision
-Stale approval
-Model failure
-Permission denied
-Malformed model output
-Runtime error
+401
+→ blocked/authentication_failed
 ```
 
-사용자에게는 친화적인 설명을 보여주되,
-원본 오류/진단 정보는 필요하면 펼쳐볼 수 있게 한다.
-
-기존 오류 의미를 GUI가 새롭게 재해석하지 않는다.
+Blind fallback 금지.
 
 ---
 
-# 23. 반응형 범위
-
-이번 GUI는 데스크톱 사용을 우선한다.
-
-기준:
+### F. Rate limit
 
 ```text
-Mac mini / Desktop browser
+429
 ```
 
-화면이 좁아지면:
-
-```text
-오른쪽 사람 판단함
-→ 아래로 이동
-
-최근 Plan sidebar
-→ 접기 또는 상단으로 이동
-```
-
-정도의 기본 반응형은 지원한다.
-
-모바일 전용 UX는 이번 완료 기준이 아니다.
+Connection을 영구적으로 broken 처리하지 않는다.
 
 ---
 
-# 24. 이번에 구현하지 않는 것
+### G. Provider unavailable
 
 ```text
-Pixel-art Office Theme
-Manager 캐릭터
-Worker 캐릭터
-사무실 Map
-Drag & Drop Plan editing
-Dependency 직접 편집
-Task 상태 직접 편집
-Prompt Editor
-Employee Management
-Multiple Workers
-Parallel Execution
-Project / Phase
-Full Model Management UI
-Git Client UI
-실시간 Token Streaming
-WebSocket 기반 실시간 Dashboard
-Electron / Tauri packaging
-Remote access
-User accounts
-Complex analytics
+503
 ```
 
-향후 Theme 구현을 막는 구조만 만들지 않으면 된다.
+temporary failure로 기록.
 
 ---
 
-# 25. 테스트
+### H. Model discovery failure + generation success
 
-Frontend 모양만 만들고 끝내지 않는다.
+Provider가 `/models`를 지원하지 않아도
+명확한 규칙 하에서 Connection 상태를 판단한다.
 
-최소 자동 테스트:
-
-### Server
-
-```text
-GUI server가 127.0.0.1에 시작
-기본 페이지 반환
-정적 asset 반환
-외부 bind 금지 또는 명시적 거부
-```
-
-### Dashboard
-
-Seed된 Store 상태가 올바른:
-
-```text
-active plans
-human attentions
-ready tasks
-archive count
-```
-
-로 변환된다.
-
-### Plan Detail
-
-```text
-Task order
-dependency
-status
-ready
-manager/worker
-progress
-```
-
-가 실제 Plan state와 일치한다.
-
-### One-step Run
-
-```text
-POST run
-→ PlanRuntime 정확히 한 bounded step
-```
-
-만 수행한다.
-
-자동 전체 실행이 없어야 한다.
-
-### Permission Decision
-
-GUI 승인/거부가 기존 permission decision 경로를 사용한다.
-
-### Quality Decision
-
-GUI의 quality action이 permission 경로와 섞이지 않는다.
-
-### Plan Decision
-
-Plan ESCALATE / resume / cancel이 기존 의미를 유지한다.
-
-### Stale State
-
-오래된 UI 상태에서 mutation 요청을 보내도 Runtime이 다시 검증한다.
-
-### Security
-
-```text
-잘못된 CSRF/session token
-잘못된 Origin
-invalid ID
-path traversal
-```
-
-이 거부된다.
-
-### Completed History
-
-GUI를 통해 Completed Task/Plan 과거 기록을 임의 변경할 수 없다.
-
-### Recovery
-
-GUI server 재시작 후 기존:
-
-```text
-Plan
-Task
-Attention
-Next step
-Archive
-```
-
-상태를 정상적으로 다시 표시한다.
+성공을 꾸며내지 않는다.
 
 ---
 
-# 26. 수동 UI 검증
+### I. Generation failure
 
-최소 다음 시나리오를 실제 브라우저에서 확인한다.
-
-```text
-Dashboard 열기
-→ 기존 Plan 목록 확인
-→ Plan 선택
-→ Task 상태 확인
-→ 다음 단계 실행
-→ 외부 전송 승인 카드 표시
-→ 승인
-→ 다음 단계 실행
-→ Task 완료
-→ Final Review
-→ Archive
-```
-
-별도로:
-
-```text
-Task Quality ESCALATE
-Plan ESCALATE
-```
-
-상태도 확인한다.
-
-브라우저 자동화 도구가 없다면 없는 기능을 꾸며내지 말고
-실제 가능한 수준에서 수동 검증 절차와 결과를 기록한다.
+`/models`가 성공했어도 실제 generation 실패 시 `ready` 금지.
 
 ---
 
-# 27. 기존 회귀 유지
+### J. Structured output
 
-현재 기준은:
+실제 structured-output probe 성공/실패를 catalog에 반영.
+
+---
+
+### K. Restart
+
+프로세스 재시작 후:
 
 ```text
-104 offline unit tests
-7 local HTTP/CLI tests
-compileall
-git diff --check
+Connection metadata
+Model Catalog
+credential_ref
+health metadata
 ```
 
-이며 실제 `develop` HEAD에서 다시 확인한다.
+복구.
 
-GUI 때문에 기존:
+Secret 원문은 DB에서 복구하지 않는다.
+
+---
+
+### L. Existing regression
+
+현재:
 
 ```text
-Single Task Runtime
-Manager/Worker workflow
-PlanRuntime
-Security
 Gateway
-Recovery
-Archive
+Single Task
+Manager workflow
+PlanRuntime
+GUI
+Security
 Git
+Archive
 ```
 
-동작이 깨져서는 안 된다.
-
-GUI 테스트를 추가한 뒤 전체 회귀를 다시 수행한다.
+회귀를 전부 유지한다.
 
 ---
 
-# 28. 문서
+# 32. 실제 Provider 검증
 
-최소 다음을 갱신한다.
+Fake test만으로 끝내지 않는다.
+
+현재 로컬 환경에서 사용 가능한 경우에 한해
+**OmniRoute 실제 연결을 별도 synthetic probe로 검증**한다.
+
+개인 Vault 데이터는 전송하지 않는다.
+
+고정 공개 synthetic prompt만 사용한다.
+
+Evidence에는:
+
+```text
+connection type
+endpoint host
+requested model candidate
+actual model
+probe result
+structured output result
+latency
+token metadata
+error category
+timestamp
+```
+
+등을 저장할 수 있다.
+
+Secret은 절대 저장하지 않는다.
+
+실제 OmniRoute가 실행되지 않거나 Key가 준비되지 않았다면:
+
+```text
+NOT RUN
+```
+
+으로 명시한다.
+
+Fake test를 실제 Provider 검증으로 표현하지 마라.
+
+---
+
+# 33. 첨부 GUI 설계 문서와의 관계
+
+`gui-model-agnostic-v2.md`의 다음 원칙은 유지한다.
+
+```text
+사용자는 결과 요청에 집중한다.
+연결은 최초 한 번 설정한다.
+업무마다 모델을 고르지 않는다.
+모델 정보는 필요할 때만 투명하게 보여준다.
+민감 자료는 기존 승인 경계를 유지한다.
+```
+
+:chatgpt-content-reference{index="3"}
+
+하지만 구현 순서를 변경한다.
+
+기존 계획:
+
+```text
+GUI request UX
+→ async
+→ collaboration
+→ model automation
+```
+
+이 아니라,
+
+이번 결정은:
+
+```text
+Provider Connection Foundation
+↓
+Model Discovery / Probe
+↓
+Connection Health
+↓
+후속 Route Broker
+↓
+그 다음 GUI v2
+```
+
+이다.
+
+따라서 이번 Slice에서는 문서의 장기 GUI 목표를 모두 구현하려 하지 마라.
+
+---
+
+# 34. 문서 갱신
+
+최소:
 
 ```text
 README.md
 DESIGN.md
-docs/CONCEPT.md
 docs/VALIDATION.md
 docs/plans/current-plan.md
 ```
 
-README에는:
+를 현재 구현에 맞게 갱신한다.
 
-```bash
-python3 -m nidus --vault "$vault" gui
-```
-
-부터 GUI 사용 흐름을 설명한다.
-
-DESIGN에는:
+필요하면:
 
 ```text
-GUI
-→ Application/API Adapter
-→ Runtime
+docs/CONNECTIONS.md
 ```
 
-경계를 명확히 기록한다.
+같은 전용 문서를 만들 수 있다.
 
-CONCEPT에는 이번 GUI를 장기적으로 `Manager's Office`의 초기 구현으로 볼 수 있음을 기록하되,
-아직 Pixel Office/Employee spatial UI는 구현되지 않았음을 구분한다.
+문서에는:
+
+```text
+현재 지원 Provider 유형
+연결 방법
+Credential 저장 방식
+Connection 상태 의미
+Probe 정의
+Model Catalog 정의
+현재 미지원 기능
+실제 검증 범위
+```
+
+를 명확하게 적는다.
+
+GUI v2를 이미 완성한 것처럼 문서화하지 않는다.
 
 ---
 
-# 29. Git Flow — 실제 개발 과정에서 적용
+# 35. Git Flow
 
-반드시 최신 `develop`에서 시작한다.
+현재 최신 `develop`에서 시작한다.
 
 `main`에 직접 작업하지 않는다.
 
-GUI 범위가 크므로 논리적 기능 단위로 feature branch를 나눈다.
-
-권장 예:
+권장 브랜치:
 
 ```text
-feature/gui-foundation
-feature/gui-runtime-api
-feature/gui-workflow-actions
-feature/gui-dashboard
-feature/gui-evidence
+feature/provider-registry
+feature/credential-store
+feature/connection-probe
+feature/provider-settings-ui
+feature/connection-evidence
 ```
 
-실제 코드 의존성에 따라 일부를 합쳐도 된다.
+코드 결합도가 높으면 일부를 합쳐도 된다.
 
-중요한 것은 branch 개수가 아니라:
+Branch 수 자체가 목표는 아니다.
 
-```text
-검증 가능한 작은 기능
-명확한 Commit
-안정된 develop
-```
-
-이다.
-
-기본 흐름:
+실제 흐름:
 
 ```text
 develop
@@ -1061,120 +1290,129 @@ feature branch
 ↓
 develop merge
 ↓
-develop 전체 관련 회귀
+develop regression
 ↓
-다음 feature branch
+최신 develop에서 다음 feature
 ```
 
-브랜치 이동 전:
-
-```bash
-git status
-```
-
-를 확인하고 미커밋 변경을 다른 브랜치로 가져가지 않는다.
-
-기능이 완성될 때마다 중간 Commit한다.
-
-예:
+가능한 commit 예:
 
 ```text
-feat: add local GUI server and application adapter
-feat: expose read-only dashboard state
-feat: add plan and task detail views
-feat: connect bounded plan execution
-feat: add permission and quality decisions
-feat: add plan creation flow
-test: cover GUI runtime and security boundaries
-docs: document local GUI workflow
+feat: add provider manifests and connection registry
+feat: add credential store abstraction
+feat: probe provider connections and discover models
+feat: persist model capability catalog
+feat: add minimal provider connection settings
+test: verify provider connection failure boundaries
+docs: document provider connection foundation
 ```
 
-모든 작업 후 한 번에 거대한 Commit 하나를 만들지 않는다.
-
-기능 branch가 검증되면 `develop`에 병합하고,
-다음 작업은 다시 최신 `develop`에서 branch를 만든다.
-
-`main`, `release/*`, `hotfix/*`는 이번 Slice에서 변경하지 않는다.
-
-원격 push / PR / main merge는 사용자가 별도로 요청하지 않는 한 수행하지 않는다.
-
-Git 이력을 마지막에 사후 조작하지 말고 실제 개발 과정이 기록되게 한다.
+마지막에 하나의 giant commit으로 만들지 않는다. commit은 한글로 작성한다.
 
 ---
 
-# 30. 완료 조건
+# 36. main / remote
+
+이번 작업에서는:
+
+```text
+main 수정 금지
+release/* 금지
+hotfix/* 금지
+remote push 금지
+PR 생성 금지
+```
+
+사용자가 별도로 요청하지 않는 한 로컬 `develop` 통합까지만 수행한다.
+
+---
+
+# 37. 완료 조건
 
 다음을 모두 만족해야 한다.
 
-1. `python3 -m nidus --vault "$vault" gui`로 로컬 GUI를 실행할 수 있다.
-2. 서버는 기본적으로 `127.0.0.1`에만 Bind한다.
-3. Dashboard가 실제 Plan/Task/Attention 상태를 보여준다.
-4. Plans 목록과 상세를 볼 수 있다.
-5. Task 상세와 기존 Manager/Worker 업무 이력을 볼 수 있다.
-6. 사람 판단함에서 Permission과 Quality 판단을 명확히 구분한다.
-7. 기존 permission / quality / plan decision 경로를 GUI에서 사용할 수 있다.
-8. 새 Plan을 GUI에서 만들 수 있다.
-9. `[다음 단계 실행]`은 PlanRuntime 한 단계만 진행한다.
-10. GUI가 DB를 직접 수정하지 않는다.
-11. Ready/Completed/Approval 유효성은 Runtime이 최종 결정한다.
-12. Completed history가 GUI에서도 immutable하다.
-13. Archive를 조회할 수 있다.
-14. Runtime 오류와 stale state를 안전하게 처리한다.
-15. CSRF/Origin 또는 동등한 localhost mutation 보호가 있다.
-16. 외부 CDN 없이 기본 GUI가 작동한다.
-17. 기존 104+7 기준을 포함한 전체 회귀가 유지된다.
-18. GUI 관련 자동 테스트가 추가된다.
-19. 실제 브라우저에서 주요 workflow를 검증한다.
-20. 문서가 실제 구현과 일치한다.
-21. Git Flow를 실제 구현 과정에서 지킨다.
-22. `main`은 변경하지 않는다.
-23. 최종 `develop` working tree가 clean하다.
+1. Provider Manifest가 존재한다.
+2. OmniRoute를 first-class connection type으로 지원한다.
+3. Generic OpenAI-compatible Provider를 연결할 수 있다.
+4. Credential이 Connection metadata와 분리된다.
+5. macOS에서 안전한 Credential Store를 사용할 수 있다.
+6. 기존 env credential 방식은 필요 시 호환된다.
+7. Connection Registry가 존재한다.
+8. Connection ID는 Runtime이 만든다.
+9. `configured`와 `ready`를 구분한다.
+10. 실제 generation 성공 전에는 ready가 되지 않는다.
+11. Model discovery를 수행한다.
+12. Model Catalog를 영속화한다.
+13. structured output을 실제 probe한다.
+14. Provider 오류가 현재 taxonomy와 일관되게 분류된다.
+15. Secret이 SQLite/Vault/Git/Prompt/일반 로그에 나타나지 않는다.
+16. 현재 Gateway/Runtime regression을 깨뜨리지 않는다.
+17. 최소 Provider 연결 UI가 존재한다.
+18. 사용자가 model ID나 Policy JSON을 연결 과정에서 고르지 않는다.
+19. Credential 교체/삭제가 가능하다.
+20. Connection 재검사가 가능하다.
+21. 프로세스 재시작 후 Connection/Catalog가 복구된다.
+22. Fake Provider integration test가 통과한다.
+23. 가능한 경우 실제 OmniRoute synthetic probe evidence를 남긴다.
+24. GUI v2나 Dynamic Organization으로 범위를 확장하지 않는다.
+25. 문서가 실제 구현과 일치한다.
+26. Git Flow가 실제 개발 과정에 반영된다.
+27. main은 변경하지 않는다.
+28. 최종 develop working tree가 clean하다.
 
 ---
 
-# 31. 최종 보고
+# 38. 최종 보고 형식
 
-작업 완료 후 다음 형식으로 보고하라.
+작업 완료 후 다음을 보고하라.
 
 ```text
 Status
 
 Starting develop HEAD
 
-Architecture
-- GUI server
-- application/API adapter
-- Runtime reuse
-- Store boundary
+Current architecture audit
+- existing Gateway
+- reused code
+- changed boundaries
 
-Frontend
-- Dashboard
-- Plans
-- Tasks
-- Human Attention
-- Archive
-- Settings
+Provider Manifest
 
-Workflow actions
-- create plan
-- run one step
-- permission decisions
-- quality decisions
-- plan decisions
+Supported providers
+
+Credential Store
+- backend
+- security
+- compatibility
+
+Connection Registry
+
+Probe Pipeline
+
+Model Discovery
+
+Model Catalog
+
+Structured Output Verification
+
+Connection States
+
+Error Handling
+
+Minimal GUI
+- add provider
+- test connection
+- manage connection
 
 Security
-- bind address
-- mutation protection
-- runtime validation
-
-Theme separation
-- current default theme
-- future Pixel Office compatibility
 
 Tests
+- unit
+- fake HTTP integration
 - existing regression
-- new GUI tests
-- browser/manual validation
+- real OmniRoute probe
+
+Evidence
 
 Known limitations
 
@@ -1182,8 +1420,8 @@ Docs
 
 Git Flow
 - feature branches
-- 주요 commits
-- develop merge commits
+- commits
+- merge commits
 - final develop HEAD
 - main unchanged
 - working tree clean
@@ -1193,50 +1431,46 @@ Recommended next step
 
 ---
 
-# 핵심 철학
+## 핵심 철학
 
-이번 GUI의 목적은 Nidus를 다시 만드는 것이 아니다.
-
-```text
-GUI
-→ 보여준다
-→ 사용자 입력을 받는다
-
-Runtime
-→ 판단된 시스템 규칙을 강제한다
-→ 상태를 변경한다
-```
-
-이어야 한다.
-
-첫 GUI는:
-
-> **본다 → 판단한다 → 실행한다**
-
-에 집중한다.
-
-현재 깨끗한 Dashboard를 먼저 완성하고,
-향후 같은 Runtime state를 기반으로 Manager와 Worker를 캐릭터로 표현하는
-Pixel Office Theme를 별도 표현 계층으로 추가할 수 있게 설계하라.
-
-현재 Nidus의 핵심 업무 로직을 최대한 재사용하고,
-GUI 구현 때문에 Runtime의 의미를 복제하거나 변경하지 마라.
-
-계획만 작성하고 멈추지 말고:
+이번 작업의 최종 목적은 이것이다.
 
 ```text
-저장소 분석
-→ Git Flow branch 생성
-→ GUI 기반 구조
-→ Runtime Adapter
-→ Dashboard/Plan/Task UI
-→ 판단/실행 연결
-→ 보안
-→ 테스트
-→ 브라우저 검증
-→ 문서화
-→ develop 통합
-→ 전체 회귀
+사용자
+
+"AI 연결"
+
+↓ 한 번
+
+Provider 등록
+↓
+Credential 저장
+↓
+Connection probe
+↓
+Model discovery
+↓
+Capability verification
+↓
+READY
+
+────────────────────────────
+
+이후 업무
+
+사용자 요청
+↓
+Nidus
+↓
+[향후 Route Broker]
+↓
+검증된 Connection
+↓
+Model
 ```
 
-까지 완료하라.
+**Provider 연결의 복잡성을 한 번만 해결하고, 업무 수행 중에는 그 복잡성을 사용자에게 다시 돌려주지 마라.**
+
+그리고 이번 Slice에서는 **연결이 신뢰할 수 있는지**를 먼저 해결한다.
+
+라우팅, 자연어 Work Request, Executive Assistant, Dynamic Organization, GUI v2는 이 기반이 검증된 뒤 다음 단계에서 구현한다.
