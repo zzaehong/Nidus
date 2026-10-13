@@ -22,18 +22,24 @@ class ProviderRegistry:
         self.manifests = {}
         for value in manifests if manifests is not None else [
             {'id':'gemini','name':'Google Gemini','auth_type':'api_key',
+             'connection_kind':'direct',
              'default_base_url':'https://generativelanguage.googleapis.com/v1beta','endpoint_editable':False,
              'credential_label':'Gemini API Key','protocol':'gemini_generate_content','adapter':'gemini',
              'supports_model_discovery':True,'api_key_required':True},
-            {'id':'openai-compatible','name':'OpenAI-compatible API','auth_type':'api_key',
+            {'id':'omniroute','name':'OmniRoute','auth_type':'api_key','connection_kind':'gateway',
+             'default_base_url':'http://127.0.0.1:20128/v1','endpoint_editable':True,
+             'credential_label':'Endpoint Key','protocol':'openai_chat_completions','adapter':'openai-compatible',
+             'supports_model_discovery':True,'api_key_required':False},
+            {'id':'openai-compatible','name':'OpenAI-compatible API','auth_type':'api_key','connection_kind':'compatible',
              'default_base_url':'','endpoint_editable':True,'credential_label':'API Key',
              'protocol':'openai_chat_completions','adapter':'openai-compatible','supports_model_discovery':True,
              'api_key_required':False}]:
-            required={'id','name','auth_type','default_base_url','endpoint_editable','credential_label','protocol',
+            required={'id','name','auth_type','connection_kind','default_base_url','endpoint_editable','credential_label','protocol',
                 'adapter','supports_model_discovery','api_key_required'}
             if (not isinstance(value,dict) or set(value)!=required or
                 any(not isinstance(value[k],str) or not value[k] or len(value[k])>128 for k in ('id','name','credential_label')) or
                 value['id'] in self.manifests or value['auth_type']!='api_key' or
+                value['connection_kind'] not in ('direct','gateway','compatible','local') or
                 not isinstance(value['protocol'],str) or not value['protocol'] or len(value['protocol'])>128 or
                 not isinstance(value['adapter'],str) or
                 not value['adapter'] or len(value['adapter'])>128 or type(value['endpoint_editable']) is not bool or
