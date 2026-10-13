@@ -194,7 +194,9 @@ class ConnectionTests(unittest.TestCase):
         self.assertEqual(self.registry.probe(c['id'])['connection']['last_error']['code'],'redirect_denied')
 
     def test_manifest_and_endpoints(self):
-        manifests=ProviderRegistry().list(); self.assertEqual(len(manifests),2)
+        manifests=ProviderRegistry().list(); self.assertEqual(len(manifests),3)
+        self.assertEqual({m['id']:m['connection_kind'] for m in manifests},
+            {'gemini':'direct','omniroute':'gateway','openai-compatible':'compatible'})
         for values in [manifests+[manifests[0]], [dict(manifests[0],auth_type='oauth')], [dict(manifests[0],protocol='')]]:
             with self.assertRaises(ModelError): ProviderRegistry(values)
         for url in ['http://example.com/v1','https://a:b@example.com/v1','https://example.com/v1?q=a',
@@ -205,7 +207,7 @@ class ConnectionTests(unittest.TestCase):
     def test_manifest_adapter_dispatch(self):
         manifests=ProviderRegistry().list()
         self.assertEqual({item['id']:item['adapter'] for item in manifests},
-                         {'gemini':'gemini','openai-compatible':'openai-compatible'})
+                         {'gemini':'gemini','omniroute':'openai-compatible','openai-compatible':'openai-compatible'})
         class AlternateAdapter:
             def __init__(self): self.calls=[]
             def discover_models(self, connection, secret):
@@ -215,7 +217,8 @@ class ConnectionTests(unittest.TestCase):
                 self.calls.append(('generate',connection['provider'],structured))
                 return {'text':'{"status":"READY"}' if structured else 'READY',
                         'model':model,'tokens':{'total_tokens':1}}
-        alt=dict(manifests[1],id='alternate-provider',name='Alternate provider',adapter='alternate')
+        generic=next(m for m in manifests if m['id']=='openai-compatible')
+        alt=dict(generic,id='alternate-provider',name='Alternate provider',adapter='alternate')
         alternate=AlternateAdapter()
         registry=ConnectionRegistry(self.store,self.keys,providers=[alt])
         with self.assertRaises(ModelError) as error:
@@ -223,21 +226,42 @@ class ConnectionTests(unittest.TestCase):
         self.assertEqual(error.exception.code,'unsupported_adapter')
         # Supplying both dispatch targets makes manifest selection observable.
         registry=ConnectionRegistry(self.store,self.keys,adapters={
-            'openai-compatible':self.registry.adapter,'alternate':alternate},providers=[manifests[1],alt])
+            'openai-compatible':self.registry.adapter,'alternate':alternate},providers=[generic,alt])
         connection=registry.create('alternate-provider',self.url,self.server.secret)
         result=registry.probe(connection['id'])
         self.assertEqual(result['connection']['status'],'ready')
         self.assertEqual(alternate.calls,[('discover','alternate-provider'),
             ('generate','alternate-provider',False),('generate','alternate-provider',True)])
 
-    def test_saved_omniroute_connection_migrates_to_generic_compatibility(self):
+    def test_saved_omniroute_identity_is_preserved_and_kind_backfilled(self):
         connection=self.create()
         stored=self.registry.get(connection['id']); stored['provider']='omniroute'
+        stored.pop('connection_kind',None)
         self.registry._save(stored)
         migrated=ConnectionRegistry(self.store,self.keys).get(connection['id'])
-        self.assertEqual(migrated['provider'],'openai-compatible')
+        self.assertEqual(migrated['provider'],'omniroute')
+        self.assertEqual(migrated['connection_kind'],'gateway')
         self.assertEqual(migrated['credential_ref'],connection['credential_ref'])
-        self.assertEqual(self.registry.probe(connection['id'])['connection']['status'],'ready')
+        restarted=ConnectionRegistry(self.store,self.keys)
+        self.assertEqual(restarted.get(connection['id']),migrated)
+        self.assertEqual(restarted.probe(connection['id'])['connection']['status'],'ready')
+
+    def test_connection_kind_mismatch_is_rejected_and_generic_endpoint_not_guessed(self):
+        generic=self.registry.create('openai-compatible',self.url,self.server.secret)
+        self.assertEqual(generic['connection_kind'],'compatible')
+        self.assertEqual(generic['provider'],'openai-compatible')
+        self.registry._save(dict(generic,connection_kind='gateway'))
+        with self.assertRaises(ModelError) as error: self.registry.probe(generic['id'])
+        self.assertEqual(error.exception.code,'connection_kind_mismatch')
+
+    def test_direct_gateway_and_compatible_connections_coexist(self):
+        gemini=self.registry.create('gemini',secret='gemini-key')
+        generic=self.registry.create('openai-compatible',self.url,self.server.secret)
+        gateway=self.registry.create('omniroute',self.url,self.server.secret)
+        self.assertEqual({c['provider'] for c in self.registry.list()},
+            {'gemini','openai-compatible','omniroute'})
+        self.assertEqual({c['connection_kind'] for c in (gemini,generic,gateway)},
+            {'direct','compatible','gateway'})
 
 
 class GeminiConnectionTests(unittest.TestCase):
@@ -315,7 +339,8 @@ class GeminiConnectionTests(unittest.TestCase):
         try:
             with patch('nidus.gui.ConnectionRegistry',side_effect=make_registry):
                 listing=request('')
-                self.assertEqual([provider['id'] for provider in listing['providers']],['gemini','openai-compatible'])
+                self.assertEqual([provider['id'] for provider in listing['providers']],
+                    ['gemini','omniroute','openai-compatible'])
                 created=request('',{'provider':'gemini','secret':self.server.secret})
                 self.assertNotIn(self.server.secret,json.dumps(created))
                 result=request('/'+created['id']+'/probe',{})
@@ -397,7 +422,7 @@ class ConnectionGUItests(unittest.TestCase):
         with urllib.request.urlopen(req,timeout=10) as response: return json.load(response)
     def test_gui_crud_probe_and_origin(self):
         import urllib.error
-        self.assertEqual(len(self.request('')['providers']),2)
+        self.assertEqual(len(self.request('')['providers']),3)
         data={'provider':'openai-compatible','base_url':self.url,'secret':self.server.secret}
         with self.assertRaises(urllib.error.HTTPError) as error: self.request('',data,False)
         self.assertEqual(error.exception.code,403)

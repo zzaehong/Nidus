@@ -21,11 +21,12 @@ class ConnectionRegistry:
           CREATE TABLE IF NOT EXISTS model_catalog (connection_id TEXT NOT NULL, model_id TEXT NOT NULL,
             data TEXT NOT NULL, PRIMARY KEY(connection_id, model_id));
         ''')
-        # Existing saved OmniRoute Connections remain usable as generic-compatible endpoints.
+        # Backfill canonical kind from provider identity; never infer from endpoint URLs.
         with self.store.lock():
             for conn in self.list():
-                if conn.get('provider')=='omniroute':
-                    conn['provider']='openai-compatible'
+                manifest=self.providers.manifests.get(conn.get('provider'))
+                if 'connection_kind' not in conn and manifest:
+                    conn['connection_kind']=manifest['connection_kind']
                     self._save(conn)
         # A process interrupted during a bounded probe never remains advertised as ready.
         with self.store.lock():
@@ -64,6 +65,8 @@ class ConnectionRegistry:
 
     def _adapter_for(self, connection):
         manifest=self.providers.get(connection['provider'])
+        if connection.get('connection_kind') != manifest['connection_kind']:
+            raise ModelError('connection_kind_mismatch')
         try: return self.adapters[manifest['adapter']]
         except KeyError: raise ModelError('unsupported_adapter') from None
 
@@ -89,7 +92,8 @@ class ConnectionRegistry:
         if secret and secret in base_url+name: raise ModelError('credential_in_content')
         with self.store.lock():
             if not credential_ref: self._backend().put(ref,secret)
-            conn={'id':'conn_'+uuid.uuid4().hex,'provider':provider,'name':name or manifest['name'],
+            conn={'id':'conn_'+uuid.uuid4().hex,'provider':provider,'connection_kind':manifest['connection_kind'],
+                'name':name or manifest['name'],
                 'base_url':base_url,'credential_ref':ref,'status':'configured','created_at':utc_now(),
                 'last_probe_at':None,'last_error':None,'discovery':{'supported':manifest['supports_model_discovery'],'status':'not_run'}}
             try: self._save(conn)
