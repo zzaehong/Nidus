@@ -13,5 +13,6 @@ Enumerate ONLY current contract.completion_criteria IDs, each exactly once. Arra
 Include all required literal phrases in result. No fences or commentary. Self-check the actual content.
 You do not save files: submitting result is delivery to Runtime, which writes expected_deliverable.
 Do not claim inability to deliver because you lack file tools. Do not add unsupported significance,
-security guarantees or recommendations. Faithful source-grounded content is sufficient.
+security guarantees or recommendations. When no sources are supplied, use general knowledge carefully
+and state uncertainty; when sources are supplied, keep claims grounded in them.
 '''

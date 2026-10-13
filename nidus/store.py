@@ -184,8 +184,9 @@ class Store:
         if not isinstance(phrases, list) or len(phrases) > 20 or any(not isinstance(p, str) or not p.strip() or len(p) > 256 for p in phrases):
             raise ValueError('Provide up to 20 nonempty required phrases')
         reject_credentials(json.dumps([request, sources, output, phrases]), policy)
-        if not request.strip() or not 1 <= len(sources) <= 20 or len(set(sources)) != len(sources):
-            raise ValueError('Provide a nonempty request and 1–20 unique sources')
+        minimum_sources = 0 if workflow == 'manager' else 1
+        if not request.strip() or not minimum_sources <= len(sources) <= 20 or len(set(sources)) != len(sources):
+            raise ValueError('Provide a nonempty request and up to 20 unique sources')
         task = {'id': uuid.uuid4().hex, 'request': request, 'sources': sources,
                 'output': output, 'priority': priority, 'employee': 'worker-1', 'status': 'queued',
                 'decisions': [], 'contract': {'goal': request, 'scope': sources,

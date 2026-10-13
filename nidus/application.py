@@ -5,6 +5,10 @@ import re
 from .planning import PlanRuntime
 from .runtime import Runtime, safe_path, output_hash
 from .plan_model import DEFAULT_LIMITS
+from .connections import ConnectionRegistry
+from .gateway import Gateway, ModelError
+from .plan_setup import (DEFAULT_SOURCE_SELECTION, model_candidates, policy_for,
+                         suggest_sources)
 
 
 def revision(store, entity):
@@ -27,10 +31,12 @@ def check_revision(store, entity, expected):
 
 
 class Application:
-    def __init__(self, store):
+    def __init__(self, store, credentials=None):
         self.store = store
-        self.planner = PlanRuntime(store)
-        self.runtime = Runtime(store)
+        self.connections = ConnectionRegistry(store,credentials)
+        gateway=Gateway(connections=self.connections)
+        self.planner = PlanRuntime(store,gateway)
+        self.runtime = Runtime(store,gateway)
 
     def entity(self, kind, identity):
         if not isinstance(identity, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,160}', identity):
@@ -85,9 +91,41 @@ class Application:
                              'review':p['review_policy'], 'final':p['final_policy']} for p in plans]}}
 
     def create_plan(self, data):
+        if 'model_selection' in data:
+            selected=data['model_selection']
+            if not isinstance(selected,dict) or set(selected)!={'connection_id','model_id'}:
+                raise ValueError('INVALID_MODEL_SELECTION: Choose a suggested model')
+            candidates=model_candidates(self.connections,data['request'])
+            candidate=next((c for c in candidates if c['connection_id']==selected['connection_id']
+                and c['model_id']==selected['model_id']),None)
+            if candidate is None:
+                raise ModelError('model_unavailable')
+            return self.planner.submit(data['request'],data['sources'],policy_for(candidate),
+                limits=data.get('limits'))
         # Policies are non-secret JSON objects; no arbitrary host filesystem policy reads.
         return self.planner.submit(data['request'], data['sources'], data['policy'],
             data.get('worker_policy'), data.get('review_policy'), data.get('limits'), data.get('final_policy'))
+
+    def suggest_plan_setup(self, request):
+        if not isinstance(request,str) or not request.strip() or len(request)>8192:
+            raise ValueError('INVALID_REQUEST: Enter a work request up to 8192 characters')
+        sources=suggest_sources(self.store.vault,request)
+        models=model_candidates(self.connections,request)
+        if not models:
+            raise ModelError('no_ready_connection')
+        selected_sources=[item['path'] for item in sources[:DEFAULT_SOURCE_SELECTION]]
+        selected=models[0]
+        return {'request':request,'sources':sources,'selected_sources':selected_sources,
+            'models':[{'connection_id':item['connection_id'],'model_id':item['model_id'],
+                'provider':item['provider'],'connection_kind':item['connection_kind'],
+                'connection_name':item['connection_name'],'manifest_name':item['manifest_name'],
+                'route_kind':item['route_kind'],'latency_ms':item['latency_ms']}
+                for item in models],
+            'model_selection':{'connection_id':selected['connection_id'],'model_id':selected['model_id']},
+            'policy':policy_for(selected),
+            'notices':['구성 추천은 로컬에서 처리하며 요청·파일 내용을 전송하지 않습니다.',
+                '실제 AI 호출 전에 전송 범위와 선택 모델을 확인하고 승인해야 합니다.',
+                '연결 비용 정보는 제공되지 않을 수 있으며 유료 API 사용량이 발생할 수 있습니다.']}
 
     def command(self, kind, identity, action, data):
         self.entity(kind, identity)

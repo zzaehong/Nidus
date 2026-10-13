@@ -13,11 +13,11 @@ Return ONLY strict JSON, exactly:
 "tasks":[{"local_key":"T1","title":"...","goal":"...","priority":1,
 "depends_on":[],"sources":["selected path"],"completion_criteria":["content criterion"],
 "expected_output":"results/unique.md"}]}.
-Every text field and all contract arrays must be nonempty. Protect sources and forbid unsupported claims.
+Every text field and contract array must be nonempty, except task sources may be empty when the Plan has no selected sources and no dependency output is needed. Protect sources and forbid unsupported claims.
 Task goals/criteria describe CONTENT, never Worker file operations; expected_output alone specifies
 where Runtime saves it. Human judgment conditions mean insufficient authority/evidence, not routine I/O.
 local_key is T plus positive digits, never a permanent ID. priority is integer 1–100 (lower runs first).
-Sources contain selected allowed_sources or exact expected_output of a DIRECT dependency in depends_on.
+Sources contain selected allowed_sources or exact expected_output of a DIRECT dependency in depends_on. If allowed_sources is empty and no dependency output is needed, use an empty sources array.
 Outputs are unique .md/.txt paths, never originals. Obey supplied Task/revision limits.
 No fences, duplicate fields, commentary or guessed schema repairs.
 '''

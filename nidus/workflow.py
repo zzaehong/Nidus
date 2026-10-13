@@ -11,11 +11,15 @@ def strings(value, nonempty=False):
 
 
 def completion_contract(request, sources, output, provided=None):
+    scope = ('Produce the requested document from selected sources only' if sources
+             else 'Produce the requested document from the request and available knowledge; state uncertainty')
+    evidence = ('Ground all factual claims in supplied sources; add no unsupported facts' if sources
+                else 'Do not invent specific facts; state uncertainty where evidence is unavailable')
     value = provided if provided is not None else {
-        'goal': request, 'scope': 'Produce the requested document from selected sources only',
+        'goal': request, 'scope': scope,
         'completion_criteria': [
             {'id': 'C1', 'description': 'Satisfy the original request, including its format and scope'},
-            {'id': 'C2', 'description': 'Ground all factual claims in supplied sources; add no unsupported facts'},
+            {'id': 'C2', 'description': evidence},
             {'id': 'C3', 'description': 'State uncertainty and limitations rather than inventing facts'}],
         'constraints': ['Protect original sources', 'Use no unapproved external materials', 'No tools or credentials'],
         'available_materials': list(sources), 'expected_deliverable': output,

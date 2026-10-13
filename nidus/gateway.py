@@ -65,7 +65,7 @@ def validate_policy(value):
     names = set()
     for route in routes:
         if not isinstance(route, dict) or set(route) - {'name', 'kind', 'provider', 'base_url', 'model',
-                'api_key_env', 'cost_per_million_input', 'cost_per_million_output'}:
+                'api_key_env', 'connection_id', 'cost_per_million_input', 'cost_per_million_output'}:
             raise ModelError('invalid_policy')
         for name in ('name', 'kind', 'provider', 'base_url', 'model'):
             if not isinstance(route.get(name), str) or not route[name] or len(route[name]) > 256 or any(ord(c) < 32 for c in route[name]):
@@ -89,6 +89,10 @@ def validate_policy(value):
             raise ModelError('invalid_local_endpoint')
         env = route.get('api_key_env')
         if env is not None and (not isinstance(env, str) or not re.fullmatch(r'[A-Z][A-Z0-9_]*(?:_API_KEY|_TOKEN)', env)):
+            raise ModelError('invalid_credential_reference')
+        connection_id=route.get('connection_id')
+        if connection_id is not None and (not isinstance(connection_id,str) or
+                not re.fullmatch(r'conn_[0-9a-f]{32}',connection_id) or env is not None):
             raise ModelError('invalid_credential_reference')
         for name in ('cost_per_million_input', 'cost_per_million_output'):
             rate = route.get(name)
@@ -244,8 +248,9 @@ class ChatCompletions:
 
 
 class Gateway:
-    def __init__(self, adapter=None):
+    def __init__(self, adapter=None, connections=None):
         self.adapter = adapter or ChatCompletions()
+        self.connections = connections
 
     def generate(self, task, records, audit):
         snapshot = transmission(task, records)
@@ -262,7 +267,12 @@ class Gateway:
                 metadata.update(role='manager', purpose=task['plan_context'])
             audit('model_attempt_started', metadata)
             try:
-                result = self.adapter.generate(route, messages, policy)
+                if route.get('connection_id'):
+                    if self.connections is None:
+                        raise ModelError('connection_runtime_unavailable')
+                    result = self.connections.generate_for_route(route,messages,policy)
+                else:
+                    result = self.adapter.generate(route, messages, policy)
                 if (not isinstance(result, dict) or not isinstance(result.get('text'), str)
                         or not all(candidate_checks(task, result['text'], result.get('finish_reason')).values())):
                     raise ModelError('acceptance_failed')
