@@ -31,7 +31,7 @@ Connection 상태는 `configured`, `probing`, `ready`, `degraded`, `blocked`입�
 
 Gemini discovery는 공식 `models.list`의 `supportedGenerationMethods`에서 `generateContent`를 찾습니다. API가 반환한 순서를 유지하고 최대 5개만 probe하므로 고정 모델 이름이나 오래된 별칭을 기본값으로 하드코딩하지 않습니다. embedding·이미지 등 `generateContent`를 지원하지 않는 모델은 후보 및 Catalog에 넣지 않습니다. Generic compatibility 연결은 모델 metadata가 없는 경우를 위해 이름순 최대 3개라는 별도 제한을 유지합니다.
 
-Catalog는 발견한 모델 ID와 Provider 반환 순서, 검증된 chat/structured capability, 실제 응답의 model version, latency와 API가 제공한 token metadata를 기록합니다. 가격, context length, 무료 quota를 추측하지 않으며 이 값들은 알 수 없는 상태로 남습니다. 기존 Task/Plan policy는 계속 별도로 동작하며 이 Connection/Catalog를 자동으로 사용하지 않습니다. Role별 라우팅과 Route Broker는 후속 Slice입니다.
+Catalog는 발견한 모델 ID와 Provider 반환 순서, 검증된 chat/structured capability, 실제 응답의 model version, latency와 API가 제공한 token metadata를 기록합니다. 가격, context length, 무료 quota를 추측하지 않으며 이 값들은 알 수 없는 상태로 남습니다. 기존에 저장된 Task/Plan policy는 연결 추가만으로 바뀌지 않습니다. GUI에서 새 Plan을 구성할 때는 현재 `ready` 상태이고 일반/구조화 응답 검증을 통과한 Catalog 모델을 추천하며, 선택한 연결을 포함한 Planning policy를 생성합니다. 현재는 같은 선택 모델 정책을 Worker/Review/Final에도 상속합니다. 역할별 모델을 자동 배정하는 Route Broker는 구현하지 않았습니다.
 
 실행 후보의 identity는 global `model_id`가 아니라 `(connection_id, model_id)`입니다. 같은 모델명이 Gemini direct와 OmniRoute gateway 양쪽에서 발견되면 인증·quota·장애 상태·upstream이 다른 별도 후보로 Catalog에 남습니다. 이번 Slice는 global model deduplication이나 Route Broker를 구현하지 않습니다.
 
@@ -47,7 +47,7 @@ Catalog는 발견한 모델 ID와 Provider 반환 순서, 검증된 chat/structu
 
 ### Legacy Plan/Task routing boundary
 
-`nidus/gateway.py`의 기존 `default_policy()`와 Plan/Task route 정책은 legacy 경로로 유지됩니다. 새 Direct/Gateway/Compatible Connection을 등록해도 그 policy나 현재 실행 경로는 자동으로 바뀌지 않습니다. 기존 legacy Gateway를 Connection Registry 기반으로 전환하는 작업은 향후 Route Broker Slice의 범위입니다.
+`nidus/gateway.py`의 기존 `default_policy()`와 이미 저장된 Plan/Task route 정책은 legacy 경로로 유지됩니다. 새 Direct/Gateway/Compatible Connection을 등록해도 기존 업무의 policy는 바뀌지 않습니다. 자연어 Plan 구성은 검증된 Connection Catalog에서 모델을 선택해 그 Plan 전용 정책을 생성합니다. 기존 CLI 정책의 Connection Registry 전환과 역할별 자동 배정은 별도 범위입니다.
 
 ## 설계와 보안 경계
 

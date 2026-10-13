@@ -4,6 +4,10 @@
 
 ## 한국어
 
+### 자연어 Plan 구성 — 2026-10-13
+
+전체 회귀 **153 PASS**, Frontend **10 PASS**. 새 GUI 흐름에서 자연어 입력, 로컬 Source 추천, verified/ready model 후보, 자동 정책 생성, Keychain reference를 사용한 연결 추론, 자료가 없는 Plan 생성을 검증했다. 모델 추천 설정은 요청이나 파일 내용을 외부로 보내지 않으며 실제 모델 호출은 진행하지 않았다. 테스트는 합성 Vault와 로컬 HTTP Provider fixture만 사용했다.
+
 ### API 연결 최적화 — 2026-10-13
 
 Starting local/fetched `develop`: `c17832c5959648826f1e731173c719a54cc0d8db`; `main`: `d9bd9d0069cef5157a283bea2a0af365c99d44b6`. `feature/connection-kinds` adds canonical manifest/record kinds and safe restart-stable backfill. `feature/omniroute-gateway` restores OmniRoute as a first-class `gateway`, dispatching through the existing OpenAI-compatible adapter. Both were integrated locally with no-ff merges; no push or main change.
@@ -57,7 +61,7 @@ GUI 15개는 서버 bind/페이지/assets/Host-Origin-token 방어, 실제 Store
 
 [브라우저 검토 및 영속 결과](evidence/gui-browser-review.json)에 실제 ID/Review/사람 결정/물리 결과 해시와 검증 범위를 보존했다. 스크린샷은 도구에서 직접 관찰했으며 파일로 보존하지 않았다. [재현 fixture](../scripts/gui_fixture.py)는 새 disposable Vault와 가짜 로컬 모델만 사용하고 외부 호출/실제 비용은 없다. 사용자 Vault나 credentials는 사용하지 않았다. 새 외부 모델 품질 검증을 했다는 의미가 아니며 기존 실제 모델 evidence는 보존했다.
 
-브라우저에서 발견한 첫 URL의 빈 Dashboard와 실행 중 문구 잔류는 수정하고 Frontend 검증에 반영했다. 과거 attention/run/completion 시각은 원래 없으므로 수정·추정하지 않고 미기록/event sequence로 표시한다. 새 요청부터 Runtime이 정확한 시각을 저장한다. 현 대화에 기준 Dashboard 이미지 첨부가 없어 문서의 시각 지침을 사용했다. [최종 GUI 보고서](GUI_REPORT.md).
+브라우저에서 발견한 첫 URL의 빈 Dashboard와 실행 중 문구 잔류는 수정하고 Frontend 검증에 반영했다. 과거 attention/run/completion 시각은 원래 없으므로 수정·추정하지 않고 미기록/event sequence로 표시한다. 새 요청부터 Runtime이 정확한 시각을 저장한다.
 
 ### 다중 Task 조정 v1 검증 — 2026-10-12
 
@@ -223,7 +227,7 @@ Provider 가용성·계정 quota·비용은 바뀔 수 있다. Vault/Git/파일 
 
 ### Local GUI v1 validation
 
-119 discovery tests (104 existing + 15 GUI), the existing 7 HTTP/CLI tests, six dependency-free frontend checks, compileall, JS syntax and diff checks pass. Actual Chrome actions verified creation, scoped permissions, explicit step execution, Task completion, Final Review, Archive, Task rework followed by Plan resume, Final ESCALATE cancel, and persisted state after CLI GUI restart. All new model calls were synthetic loopback fixtures, with no external API/cost. See [browser evidence](evidence/gui-browser-review.json) and [GUI report](GUI_REPORT.md).
+119 discovery tests (104 existing + 15 GUI), the existing 7 HTTP/CLI tests, six dependency-free frontend checks, compileall, JS syntax and diff checks pass. Actual Chrome actions verified creation, scoped permissions, explicit step execution, Task completion, Final Review, Archive, Task rework followed by Plan resume, Final ESCALATE cancel, and persisted state after CLI GUI restart. All new model calls were synthetic loopback fixtures, with no external API/cost. See [browser evidence](evidence/gui-browser-review.json).
 
 ### Multi-task orchestration v1 validation — 2026-10-12
 
