@@ -11,7 +11,7 @@ Nidus manages Direct, Gateway, Compatible, and reserved Local connections throug
 
 ## 연결 방법
 
-`python3 -m nidus --vault "$vault" gui`를 실행하고 **설정 → AI 연결 → Google Gemini**를 선택합니다. Google AI Studio에서 발급한 Gemini API Key를 입력하고 **연결 확인**을 누릅니다. Endpoint, model ID, route, policy, context length, JSON 설정은 입력하지 않습니다. Nidus가 모델 목록을 조회해 `generateContent`를 지원한다고 공식 metadata에 표시된 모델만 대상으로 최대 5개를 검사합니다. 일반 텍스트 응답과 JSON 응답이 모두 검증된 모델이 있으면 `READY`가 됩니다.
+`python3 -m nidus --vault "$vault" api`를 실행한 뒤 JSON API의 `/api/connections` endpoint로 Google Gemini 연결을 등록합니다. 연결은 `POST /api/connections/{id}/probe`로 확인합니다. Google AI Studio에서 발급한 Gemini API Key를 입력하고 **연결 확인**을 누릅니다. Endpoint, model ID, route, policy, context length, JSON 설정은 입력하지 않습니다. Nidus가 모델 목록을 조회해 `generateContent`를 지원한다고 공식 metadata에 표시된 모델만 대상으로 최대 5개를 검사합니다. 일반 텍스트 응답과 JSON 응답이 모두 검증된 모델이 있으면 `READY`가 됩니다.
 
 Probe는 계정에서 사용 가능한 모델에 실제 API 요청을 보내므로 Google의 요금·quota 정책이 적용될 수 있습니다. Nidus는 Gemini를 무료라고 표시하거나 가격/무료 quota를 추정하지 않습니다. 고정된 짧은 합성 문구만 전송하며 Vault의 사용자 자료는 전송하지 않습니다.
 

@@ -14,29 +14,25 @@
 
 연결 상태는 configured/probing/ready/degraded/blocked다. 실제 일반 응답과 JSON 검증 전 ready를 허용하지 않는다. Provider ID 기준 kind backfill은 idempotent이며 endpoint URL로 OmniRoute를 추측하지 않는다. kind와 manifest가 충돌하면 probe를 거부한다. 기존 env policy 경로와 새 연결 경로는 공존하며 Route Broker는 미구현이다. 상세 책임·보안·discovery 실패 규칙·Catalog와 제약은 [CONNECTIONS](docs/CONNECTIONS.md)에 기술했다.
 
-### Local GUI / Application 경계
+### API / Application 경계
 
 ```text
-Browser (default-light HTML/CSS/JS)
-  → loopback GUIServer / structured HTTP API
+API client
+  → loopback APIServer / structured JSON API
   → Application projection / thin commands
   → PlanRuntime / Runtime
   → Store / Security / Gateway / Git
 ```
 
-`nidus/gui.py`의 표준 라이브러리 HTTPServer는 단일 요청을 동기 처리하며 127.0.0.1에만 bind한다. 모델 실행 중 HTTP 요청을 유지하며 Frontend는 실행 중 상태로 중복 버튼을 잠근다. 별도 scheduler·Thread worker·자동 plan-run loop는 없다. 요청별 Store/SQLite connection을 열고 닫으며 업무 상태를 직접 쓰지 않는다. CLI와 GUI는 동일한 Runtime 메서드를 호출한다. `Application`은 Store를 읽어 상태·진행도·attention·allowed_actions를 투영하고 Plan 생성·실행·판단을 위임한다. task ready는 PlanRuntime.board/ready의 값이며 Dashboard 합계는 실행 액션을 허용하는 Plan의 ready Task 수다. 완료·승인·한도·DAG 판단은 Runtime에서 유지한다.
+`nidus/api.py`의 표준 라이브러리 HTTPServer는 JSON API만 제공하며 127.0.0.1에만 bind한다. 정적 화면과 프런트엔드 asset은 제공하지 않는다. 별도 scheduler·Thread worker·자동 plan-run loop는 없다. 요청별 Store/SQLite connection을 열고 닫으며 업무 상태를 직접 쓰지 않는다. CLI와 API는 동일한 Runtime 메서드를 호출한다. `Application`은 Store를 읽어 상태·진행도·attention·allowed_actions를 투영하고 Plan 생성·실행·판단을 위임한다. task ready는 PlanRuntime.board/ready의 값이며 overview 합계는 실행 액션을 허용하는 Plan의 ready Task 수다. 완료·승인·한도·DAG 판단은 Runtime에서 유지한다.
 
-API는 GET `/api/overview`, `/api/plans/ID`, `/api/tasks/ID`, `/api/session`과 POST `/api/plans`, `/api/plans/ID/run`, `/api/plans/ID/decision`, `/api/tasks/ID/decision`, `/api/tasks/ID/quality`다. Overview에 활성/Archive Plan, Task, Attention, 설정을 함께 제공하여 별도 목록 endpoint를 늘리지 않는다. 정책은 non-secret JSON object이며 호스트 파일 경로를 API로 열지 않는다. Source는 기존 safe_path/sources_for를 통한다.
+API는 GET `/api/overview`, `/api/plans/ID`, `/api/tasks/ID`, `/api/connections`, `/api/session`과 POST `/api/plan-setup`, `/api/plans`, Plan 실행/판단, Task 판단, 연결 생성·수정·probe·삭제를 제공한다. Overview에 활성/Archive Plan, Task, Attention, 설정을 함께 제공한다. 정책은 non-secret JSON object이며 호스트 파일 경로를 API로 열지 않는다. Source는 기존 safe_path/sources_for를 통한다.
 
-모든 mutation에 정확한 Host·Origin·서버 세션 token과 JSON Content-Type을 요구한다. cross-site fetch를 거부하고 CORS를 열지 않는다. token은 메모리에만 있고 no-store session endpoint를 통해 동일 Origin에 전달한다. Task/Prompt에 token을 복사하는 요청도 거부하며 요청 body/URL/token을 로그하지 않는다. CSP는 self-only script/style/connect와 frame/base/form 제한을 설정하고, 모든 모델/사용자 값은 textContent 또는 HTML escaping으로 표시한다. 임의 정적 파일 경로 대신 세 asset만 허용한다. body 256 KiB, socket timeout 30초로 제한한다. 이는 외부 사용자 인증이나 악성 로컬 프로세스 방어를 대신하지 않는다.
+모든 mutation에 정확한 Host·Origin·서버 세션 token과 JSON Content-Type을 요구한다. cross-site fetch를 거부하고 CORS를 열지 않는다. token은 메모리에만 있고 no-store session endpoint를 통해 전달한다. Task/Prompt에 token을 복사하는 요청도 거부하며 요청 body/URL/token을 로그하지 않는다. body 256 KiB, socket timeout 30초로 제한한다. 이는 외부 사용자 인증이나 악성 로컬 프로세스 방어를 대신하지 않는다.
 
-실행·판단 요청에는 객체와 source/output 파일 해시에서 얻은 revision을 전달한다. Runtime의 기존 vault lock 안에서 revision을 다시 검사한 뒤 기존 전이를 수행한다. 상태·파일 변경은 STALE_STATE이며 Frontend가 새 상태를 읽는다. 기존 transmission/quality/final approval 검증도 그대로 실행한다. CLI의 expected_state 기본값은 None으로 하위 호환하며 기존 snapshot 경계를 유지한다. Graph/완료 상태를 Frontend에서 계산하거나 DB를 직접 UPDATE하지 않는다.
+실행·판단 요청에는 객체와 source/output 파일 해시에서 얻은 revision을 전달한다. Runtime의 기존 vault lock 안에서 revision을 다시 검사한 뒤 기존 전이를 수행한다. 상태·파일 변경은 STALE_STATE이며 Client가 새 상태를 읽는다. 기존 transmission/quality/final approval 검증도 그대로 실행한다. Graph/완료 상태를 Client에서 계산하거나 DB를 직접 UPDATE하지 않는다.
 
-Permission과 Quality는 별도 API/카드이며 allowed_actions는 현재 attention과 Runtime 선택지를 바탕으로 제공한다. Task quality가 남아 있으면 Plan resume는 노출하지 않고 Runtime도 거부한다. 오류는 `{error,message,details}`이며 INVALID_DECISION/STALE_STATE/PERMISSION_DENIED 등 HTTP 오류와 Runtime의 waiting/blocked/model_error를 보존한다. Python traceback은 응답에 넣지 않고 개발 로그에 남긴다. 모델/구조화 결과 실패는 Runtime의 원래 진단을 표시하며 자동 수리하지 않는다.
-
-새 attention에는 requested_at, Task 실행/완료에는 last_run_at/completed_at을 기록한다. 기존 데이터는 migration이나 과거 이력 수정 없이 그대로 읽고, 없는 시각은 미기록 또는 실제 event sequence로 표시한다. 손상되거나 접근 불가한 source도 projection 자체를 차단하지 않으며 실행 시 Runtime이 거부한다.
-
-Theme는 업무 데이터의 status/ready/type/allowed_actions와 분리한 CSS 변수로 표현한다. default-light만 구현하며 Runtime 변경 없이 CSS/표현 계층을 교체할 수 있다. Pixel Office plugin system·캐릭터·공간 상태는 만들지 않는다. 데스크톱 우선이며 좁은 화면에서 판단함이 아래로, Plan 목록이 위로 이동한다.
+Permission과 Quality는 별도 API이며 allowed_actions는 현재 attention과 Runtime 선택지를 바탕으로 제공한다. Task quality가 남아 있으면 Plan resume는 노출하지 않고 Runtime도 거부한다. 오류는 `{error,message,details}`이며 INVALID_DECISION/STALE_STATE/PERMISSION_DENIED 등 HTTP 오류와 Runtime의 waiting/blocked/model_error를 보존한다. Python traceback은 응답에 넣지 않고 개발 로그에 남긴다.
 
 ### 다중 Task 조정 v1 — 2026-10-12
 
