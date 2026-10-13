@@ -3,8 +3,10 @@ import argparse
 import json
 import os
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from nidus.testing import temporary_vault
 import socket
-import tempfile
 import urllib.parse
 from nidus.connections import ConnectionRegistry
 from nidus.gateway import utc_now, ModelError
@@ -37,7 +39,8 @@ def main():
         except OSError:
             evidence['reason']='endpoint_not_running'
         else:
-            with tempfile.TemporaryDirectory(prefix='nidus-connection-live-') as vault:
+            with temporary_vault(prefix='nidus-connection-live-') as temp_vault:
+                vault=temp_vault
                 store=Store(vault)
                 try:
                     registry=ConnectionRegistry(store)

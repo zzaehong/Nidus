@@ -8,6 +8,7 @@ from .application import Application
 from .store import Store
 from .connections import ConnectionRegistry
 from .gateway import ModelError
+from .paths import validate_vault_location
 
 ASSETS = Path(__file__).with_name('web')
 
@@ -16,7 +17,7 @@ class GUIServer(HTTPServer):
     def __init__(self, vault, port=8765, host='127.0.0.1'):
         if host != '127.0.0.1':
             raise ValueError('GUI must bind to 127.0.0.1')
-        self.vault = str(Path(vault).resolve())
+        self.vault = str(validate_vault_location(vault))
         self.token = secrets.token_urlsafe(32)
         super().__init__((host, port), Handler)
         self.origin = 'http://127.0.0.1:' + str(self.server_port)

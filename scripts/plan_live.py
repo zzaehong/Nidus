@@ -5,9 +5,11 @@ import json
 import os
 import subprocess
 import sys
-import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from nidus.testing import persistent_vault
 
 
 def main():
@@ -33,7 +35,7 @@ def main():
     code_hashes = {str(p):hashlib.sha256(p.read_bytes()).hexdigest()
         for p in sorted(Path('nidus').rglob('*.py'))}
     revision = subprocess.run(['git','rev-parse','HEAD'],capture_output=True,text=True).stdout.strip()
-    vault = Path(tempfile.mkdtemp(prefix='nidus-plan-live-'))
+    vault = persistent_vault(prefix='nidus-plan-live-')
     source = ('# Public synthetic Nidus facts\n'
         'Nidus stores task state locally in a vault.\n'
         'Completed tasks retain their approved result and review history.\n'

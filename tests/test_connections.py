@@ -3,7 +3,6 @@ import io
 import json
 import logging
 import os
-import tempfile
 import threading
 import uuid
 import subprocess
@@ -15,6 +14,7 @@ from nidus.connections import ConnectionRegistry
 from nidus.credentials import EnvironmentCredentialProvider, validate_secret
 from nidus.gateway import ModelError
 from nidus.providers import ProviderRegistry, endpoint
+from nidus.testing import temporary_vault
 from nidus.store import Store
 
 
@@ -52,7 +52,7 @@ class FakeProvider(BaseHTTPRequestHandler):
 
 class ConnectionTests(unittest.TestCase):
     def setUp(self):
-        self.tmp=tempfile.TemporaryDirectory(); self.store=Store(self.tmp.name); self.keys=MemoryCredentials()
+        self.tmp=temporary_vault(); self.store=Store(self.tmp.name); self.keys=MemoryCredentials()
         self.registry=ConnectionRegistry(self.store,self.keys)
         self.server=HTTPServer(('127.0.0.1',0),FakeProvider)
         self.server.discovery=200; self.server.generation=200; self.server.structured=200

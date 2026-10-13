@@ -1,11 +1,11 @@
 import json
-import tempfile
 import threading
 import unittest
 from pathlib import Path
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 from unittest.mock import patch
+from nidus.testing import temporary_vault
 from nidus.application import Application, revision
 from nidus.gui import GUIServer
 from nidus.store import Store
@@ -15,7 +15,7 @@ from nidus.planning import PlanRuntime
 
 class GUIModelTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory()
+        self.temp = temporary_vault()
         self.vault = Path(self.temp.name)
         (self.vault/'notes.md').write_text('Public synthetic facts')
         self.store = Store(self.vault)
@@ -80,7 +80,7 @@ class GUIModelTests(unittest.TestCase):
 
 class GUIServerTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory()
+        self.temp = temporary_vault()
         self.server = GUIServer(self.temp.name, 0)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()

@@ -1,5 +1,5 @@
 """Disposable browser QA fixture. Synthetic local HTTP model, never external APIs.
-Run: PYTHONPATH=. python3 scripts/gui_fixture.py --vault /tmp/nidus-gui-qa
+Run: PYTHONPATH=. python3 scripts/gui_fixture.py --vault /Users/parkjaehong/Developer/nidus_vault/gui-qa
 Not used by the product GUI; the bounded seeding loop is test infrastructure only.
 """
 import argparse

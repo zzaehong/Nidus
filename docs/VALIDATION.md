@@ -4,6 +4,10 @@
 
 ## 한국어
 
+### 격리 테스트 Vault 적용 — 2026-10-13
+
+테스트/합성 데모의 임시 Vault를 소스 저장소와 분리해 `/Users/parkjaehong/Developer/nidus_vault` 아래로 모은다. `Store`와 GUI는 소스 저장소 및 그 상위 디렉터리를 Vault로 받지 않는다. `test_runtime`는 이 경계를 직접 검증한다. 테스트 중 Vault Git 커밋은 별도 임시 Vault 안에 한정된다.
+
 ### Provider Connection Foundation v1 — 2026-10-13
 
 시작 로컬 develop `7ef6a4d` / fetch 원격 develop `11a36f39df42c7e9272c68237a1061bfe00d737a`. 사용자 지시문은 `61490cc`로 보존했다. 기반 기능 129개 회귀 후 `07afc91`, UI/장애 복구 133개 회귀 후 `7026e6a`로 로컬 develop에 통합했다. 증거/문서 브랜치에서 설정 변경의 이전 Probe 표시 초기화도 검증했다.

@@ -1,13 +1,13 @@
-import tempfile
 import unittest
 from pathlib import Path
+from nidus.testing import temporary_vault
 from nidus.store import Store
 from nidus.runtime import Runtime
 
 
 class RuntimeTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory()
+        self.temp = temporary_vault()
         self.vault = Path(self.temp.name)
         (self.vault / 'notes.md').write_text('# Notes\n\nalpha\nbeta\ngamma\n', encoding='utf-8')
         self.store = Store(self.vault)
@@ -18,6 +18,11 @@ class RuntimeTests(unittest.TestCase):
 
     def submit(self, output='brief.md', sources=None):
         return self.store.submit('Brief the notes', sources or ['notes.md'], output, 'do-now')
+
+    def test_source_workspace_cannot_be_used_as_vault(self):
+        source = Path(__file__).resolve().parents[1]
+        with self.assertRaisesRegex(ValueError, 'outside the Nidus source workspace'):
+            Store(source)
 
     def test_contract_and_complete(self):
         task = self.submit()

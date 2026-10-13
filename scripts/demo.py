@@ -2,12 +2,14 @@
 import json
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from nidus.testing import persistent_vault
 
 
 def main():
-    vault = Path(tempfile.mkdtemp(prefix='nidus-demo-'))
+    vault = persistent_vault(prefix='nidus-demo-')
     (vault / 'notes.md').write_text('# Meeting notes\nShip the local runtime.\nVerify before completion.\n', encoding='utf-8')
 
     def cli(*args):

@@ -5,11 +5,12 @@ import sqlite3
 import uuid
 from pathlib import Path
 from .versioning import VaultGit
+from .paths import validate_vault_location
 
 
 class Store:
     def __init__(self, vault):
-        self.vault = Path(vault).resolve()
+        self.vault = validate_vault_location(vault)
         self.system = self.vault / '.nidus'
         if self.system.is_symlink():
             raise ValueError('System directory must not be a symlink')
