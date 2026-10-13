@@ -247,12 +247,25 @@ class ConnectionTests(unittest.TestCase):
         self.assertEqual(restarted.probe(connection['id'])['connection']['status'],'ready')
 
     def test_connection_kind_mismatch_is_rejected_and_generic_endpoint_not_guessed(self):
-        generic=self.registry.create('openai-compatible',self.url,self.server.secret)
+        generic=self.registry.create('openai-compatible','http://127.0.0.1:20128/v1',self.server.secret)
         self.assertEqual(generic['connection_kind'],'compatible')
         self.assertEqual(generic['provider'],'openai-compatible')
+        generic.pop('connection_kind')
+        self.registry._save(generic)
+        generic=ConnectionRegistry(self.store,self.keys).get(generic['id'])
+        self.assertEqual((generic['provider'],generic['connection_kind']),('openai-compatible','compatible'))
         self.registry._save(dict(generic,connection_kind='gateway'))
         with self.assertRaises(ModelError) as error: self.registry.probe(generic['id'])
         self.assertEqual(error.exception.code,'connection_kind_mismatch')
+
+    def test_legacy_gemini_and_generic_kinds_are_backfilled_from_provider(self):
+        gemini=self.registry.create('gemini',secret='gemini-key')
+        generic=self.registry.create('openai-compatible',self.url,self.server.secret)
+        for connection in (gemini,generic):
+            legacy=dict(connection); legacy.pop('connection_kind'); self.registry._save(legacy)
+        restarted=ConnectionRegistry(self.store,self.keys)
+        self.assertEqual(restarted.get(gemini['id'])['connection_kind'],'direct')
+        self.assertEqual(restarted.get(generic['id'])['connection_kind'],'compatible')
 
     def test_direct_gateway_and_compatible_connections_coexist(self):
         gemini=self.registry.create('gemini',secret='gemini-key')
@@ -262,6 +275,15 @@ class ConnectionTests(unittest.TestCase):
             {'gemini','openai-compatible','omniroute'})
         self.assertEqual({c['connection_kind'] for c in (gemini,generic,gateway)},
             {'direct','compatible','gateway'})
+
+    def test_omniroute_reuses_compatible_discovery_generation_and_structured_probe(self):
+        gateway=self.registry.create('omniroute',self.url,self.server.secret)
+        result=self.registry.probe(gateway['id'])
+        self.assertEqual(result['connection']['status'],'ready')
+        self.assertEqual(result['connection']['provider'],'omniroute')
+        self.assertEqual(result['models'][0]['capabilities'],
+            {'chat':'verified','structured_output':'verified'})
+        self.assertEqual([call[0] for call in self.server.calls],['GET','POST','POST'])
 
 
 class GeminiConnectionTests(unittest.TestCase):
@@ -422,7 +444,9 @@ class ConnectionGUItests(unittest.TestCase):
         with urllib.request.urlopen(req,timeout=10) as response: return json.load(response)
     def test_gui_crud_probe_and_origin(self):
         import urllib.error
-        self.assertEqual(len(self.request('')['providers']),3)
+        providers=self.request('')['providers']
+        self.assertEqual({p['id']:p['connection_kind'] for p in providers},
+            {'gemini':'direct','omniroute':'gateway','openai-compatible':'compatible'})
         data={'provider':'openai-compatible','base_url':self.url,'secret':self.server.secret}
         with self.assertRaises(urllib.error.HTTPError) as error: self.request('',data,False)
         self.assertEqual(error.exception.code,403)
@@ -433,6 +457,14 @@ class ConnectionGUItests(unittest.TestCase):
         self.assertEqual(updated['status'],'configured')
         self.assertEqual(self.request('')['connections'][0]['models'],[])
         self.request('/'+ident+'/delete',{}); self.assertEqual(self.request('')['connections'],[])
+
+    def test_gui_creates_and_probes_omniroute_identity(self):
+        data={'provider':'omniroute','base_url':self.url,'secret':self.server.secret}
+        created=self.request('',data)
+        self.assertEqual((created['provider'],created['connection_kind']),('omniroute','gateway'))
+        result=self.request('/'+created['id']+'/probe',{})
+        self.assertEqual(result['connection']['status'],'ready')
+        self.assertEqual(result['connection']['provider'],'omniroute')
     def test_backend_diagnostics_never_reflected(self):
         import urllib.error
         with patch.object(self.keys,'put',side_effect=ValueError(self.server.secret)):
