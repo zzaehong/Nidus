@@ -17,13 +17,13 @@ node tests/gui_frontend.js
 
 재현 용도의 영속 합성 데모는 실행별 `nidus-demo-*` Vault를 같은 분리 폴더에 남깁니다. 테스트가 만드는 Git 체크포인트와 산출물 커밋도 해당 격리 Vault의 로컬 `.git` 안에서만 발생합니다.
 
-### Provider Connection Foundation v1
+### Native AI connections
 
-**설정 → AI 연결**에서 OmniRoute 또는 OpenAI-compatible API를 선택하고 Endpoint/Key를 입력해 연결을 검증합니다. Key는 macOS Keychain에 보관하며, 실제 일반·구조화 응답을 검증해야 READY가 됩니다. 모델 탐색/Catalog/상태는 재시작 후 복구됩니다. 키 교체·주소 수정·재검사·삭제를 지원하고 연결 과정에서 모델 ID/Policy JSON을 요구하지 않습니다.
+Nidus connects to **Google Gemini directly** with one API Key. In **Settings → AI connection**, enter the key; Nidus discovers generation-capable models and checks normal plus structured JSON responses. The key goes to macOS Keychain. Nidus does not ask for a model ID, Endpoint, route, or policy for Gemini, and does not assume Gemini is free.
 
-**현재 v1의 다중 API 게이트웨이 연결 조건:** OmniRoute 등의 Key는 실제 사용 가능한 채팅 모델과 Provider 연결만 허용하도록 제한해야 합니다. 처음에는 검증된 모델 1개·연결 1개로 설정하세요. “모든 모델” 키의 자동 선별은 보장하지 않습니다. 현재 검사는 이름순 앞의 최대 3개만 호출하므로 정상 모델이 있어도 부적합한 후보 때문에 실패할 수 있습니다. [제한 키 설정과 확인된 실패 사례](docs/CONNECTIONS.md#다중-api-게이트웨이-연결의-필수-사전-설정-현재-v1).
+**OpenAI-compatible API** remains available for LM Studio, NVIDIA NIM, OmniRoute, and other compatible endpoints. The Connection path does not require OmniRoute. Existing Plan/Task policies and transmission approval continue to work independently; Connections are not automatically used by those policies. [Connection setup, status, security, and scope](docs/CONNECTIONS.md).
 
-기존 Plan/Task policy와 전송 승인은 그대로 유지합니다. 자동 라우팅과 GUI v2는 다음 단계입니다. [연결 방법·보안·검증 범위](docs/CONNECTIONS.md), [실제 OmniRoute 증거](docs/evidence/connection-omniroute-live.json).
+Gemini model discovery uses Google's `generateContent` capability metadata, then tries at most five candidates. A model must pass both real probe calls for the connection to become READY. The Generic OpenAI-compatible adapter retains its bounded first-three check when the endpoint provides no generation-capability metadata. [Synthetic fixture and live evidence](docs/CONNECTIONS.md#검증-자료).
 
 ### Local GUI v1
 
@@ -126,8 +126,7 @@ python3 -m nidus --vault "$vault" list --archive
 
 ### 3. 실제 모델 사용하기
 
-OmniRoute를 이미 설치했다면 다음과 같이 시작합니다. 기록된 검증 환경은 OmniRoute 3.8.51 / Node 24.21.0이며 설치 프로그램은 저장소에 포함되지 않습니다.
-다른 컴퓨터에서는 OmniRoute 설치·Provider 인증·Endpoint Key 발급을 먼저 마치거나, 다른 Chat Completions 호환 Endpoint를 정책에 지정하세요.
+기존 OpenAI-compatible route policy를 사용할 때는 호환 endpoint를 직접 지정할 수 있습니다. OmniRoute도 같은 호환 경로로 선택해 쓸 수 있지만 필수 구성요소는 아닙니다. 아래는 과거 검증 환경에서 사용한 optional OmniRoute 실행 예입니다. 설치 프로그램은 저장소에 포함되지 않습니다.
 
 ```sh
 omniroute --version
@@ -136,7 +135,7 @@ OMNIROUTE_SERVER_HOST=127.0.0.1 omniroute serve --daemon --no-open --no-tray
 # omniroute stop
 ```
 
-대시보드: http://127.0.0.1:20128 . `model-policy.pool.example.json`은 Gemini Flash-Lite → NVIDIA Lightning → Copilot 순서입니다.
+대시보드: http://127.0.0.1:20128 . `model-policy.pool.example.json`은 기존 Chat Completions 경로의 예이며 Native Gemini Connection과는 별개입니다.
 현재 호스트에는 모델 세 개와 기존 연결 세 개로 제한한 키가 저장소 밖 권한 600 파일에 준비되어 있습니다.
 다른 호스트에서는 직접 발급한 키를 `NIDUS_POOL_API_KEY` 환경변수로 제공하세요. Nidus는 `.env`를 자동으로 읽지 않습니다.
 앞 절의 `vault`와 `notes.md`를 사용하고, 아래 `TASK_ID`는 이번 submit이 반환한 새 ID로 교체하세요.
@@ -304,8 +303,7 @@ The briefing includes the request, source paths/hashes and the first three nonem
 
 ### 3. Use a real model
 
-If OmniRoute is installed, start it as below. The recorded validation host used OmniRoute 3.8.51 / Node 24.21.0; its installer is not bundled here.
-On another host, install OmniRoute, authenticate providers and issue an endpoint key first, or configure another Chat Completions-compatible endpoint.
+For an existing OpenAI-compatible route policy, configure a compatible endpoint directly. OmniRoute can still be used through this optional compatibility path; it is not required. The following is an example from the historical validation host (OmniRoute 3.8.51 / Node 24.21.0); its installer is not bundled here.
 
 ```sh
 omniroute --version
@@ -314,7 +312,7 @@ OMNIROUTE_SERVER_HOST=127.0.0.1 omniroute serve --daemon --no-open --no-tray
 # omniroute stop
 ```
 
-Dashboard: http://127.0.0.1:20128 . `model-policy.pool.example.json` orders Gemini Flash-Lite → NVIDIA Lightning → Copilot.
+Dashboard: http://127.0.0.1:20128 . `model-policy.pool.example.json` shows existing Chat Completions routes and is separate from the native Gemini Connection setting.
 The validated host has a mode-600 credential file outside the repository, limited to three models and three existing connections.
 Elsewhere, supply your own endpoint key through `NIDUS_POOL_API_KEY`. Nidus does not automatically load `.env` files.
 Use `vault` and `notes.md` from the previous section; replace `TASK_ID` below with the new ID returned by this submission.

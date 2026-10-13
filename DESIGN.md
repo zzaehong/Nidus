@@ -10,7 +10,7 @@
 
 ### Provider Connection Foundation 경계 — 2026-10-13
 
-기존 Gateway의 policy 검증·전송 snapshot·fallback·Task/Plan 메시지 생성은 유지했다. `request_bytes`와 `ChatCompletions`를 공통 transport로 재사용하고 `ProviderRegistry`(manifest), `ConnectionRegistry`(health/영속 Catalog), `OpenAICompatibleAdapter`(discovery/synthetic generation)를 추가했다. GUI 연결 API는 업무 Runtime을 생성/실행하지 않는다. Keychain은 `CredentialStore` 경계 내부에만 있으며 DB에는 reference를 저장한다.
+기존 Gateway의 policy 검증·전송 snapshot·fallback·Task/Plan 메시지 생성은 유지한다. AI Connection Foundation은 Provider manifest의 adapter ID로 `GeminiAdapter`(native Gemini REST) 또는 `OpenAICompatibleAdapter`를 선택한다. `ConnectionRegistry`는 discovery와 generation 계약만 호출하고 wire protocol을 직접 알지 않는다. GUI 연결 API는 업무 Runtime을 생성/실행하지 않는다. Keychain은 `CredentialStore` 경계 내부에만 있으며 DB에는 reference를 저장한다. OmniRoute는 OpenAI-compatible endpoint 중 하나이며 Connection Foundation은 OmniRoute를 필요로 하지 않는다.
 
 연결 상태는 configured/probing/ready/degraded/blocked다. 실제 일반 응답과 JSON 검증 전 ready를 허용하지 않는다. 기존 env policy 경로와 새 연결 경로는 공존하며 Route Broker는 미구현이다. 상세 책임·보안·discovery 실패 규칙·Catalog와 제약은 [CONNECTIONS](docs/CONNECTIONS.md)에 기술했다.
 
@@ -125,7 +125,7 @@ Desk Native Notes와 Checkpoint History는 유지하고 Next Action은 오래된
 
 ### Model Gateway
 
-`Gateway.generate` 뒤의 교체 가능한 표준 라이브러리 urllib Chat Completions Adapter를 사용한다. Direct API·OmniRoute·호환 Local 서버를 같은 정책으로 연결한다.
+`Gateway.generate` 뒤의 교체 가능한 표준 라이브러리 urllib Chat Completions Adapter를 사용한다. OpenAI-compatible direct endpoint·OmniRoute·호환 Local 서버를 같은 policy interface에 연결한다. Native Gemini Connection은 별도 Provider Adapter 경로이며 기존 Plan/Task policy를 자동 교체하지 않는다.
 Task JSON에 mode, 비밀 없는 정책, 필수 문구, 전송 Snapshot, 보존 응답과 시도 Metadata를 추가했으며 DB Schema 변경은 없다.
 정책은 최대 5개 순서 있는 Route, 1–60초 socket timeout, 1–4096 출력 토큰을 허용한다. Prompt는 128 KiB, 응답은 2 MiB로 제한한다.
 각 Route는 name/kind/provider/base_url/model과 선택적 credential 환경변수명·입출력 요율을 가진다. Free는 운영자 분류이며 청구 보장이 아니다. Paid에는 `allow_paid=true`가 필요하다.
@@ -225,7 +225,7 @@ Hostile external processes racing path changes are outside this cooperative loca
 
 ### Model Gateway
 
-A replaceable stdlib urllib Chat Completions adapter sits behind `Gateway.generate`. Direct APIs, OmniRoute and compatible local servers share the policy interface.
+A replaceable stdlib urllib Chat Completions adapter sits behind `Gateway.generate`. Direct OpenAI-compatible endpoints, OmniRoute and compatible local servers share the policy interface. The separate Connection Foundation dispatches Gemini native API calls through `GeminiAdapter`; registering a Connection does not replace existing Task/Plan policies.
 Task JSON adds mode, nonsecret policy, literal phrases, transmission snapshot, retained generation and attempt metadata without a database schema migration.
 Policy permits at most 5 ordered routes, 1–60-second socket timeouts and 1–4096 output tokens. Limit prompt to 128 KiB and response to 2 MiB.
 Routes contain name/kind/provider/base_url/model plus optional credential environment name and input/output rates. Free is an operator classification, not a billing guarantee. Paid requires `allow_paid=true`.
