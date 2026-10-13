@@ -8,6 +8,8 @@
 
 **설정 → AI 연결**에서 OmniRoute 또는 OpenAI-compatible API를 선택하고 Endpoint/Key를 입력해 연결을 검증합니다. Key는 macOS Keychain에 보관하며, 실제 일반·구조화 응답을 검증해야 READY가 됩니다. 모델 탐색/Catalog/상태는 재시작 후 복구됩니다. 키 교체·주소 수정·재검사·삭제를 지원하고 연결 과정에서 모델 ID/Policy JSON을 요구하지 않습니다.
 
+**현재 v1의 다중 API 게이트웨이 연결 조건:** OmniRoute 등의 Key는 실제 사용 가능한 채팅 모델과 Provider 연결만 허용하도록 제한해야 합니다. 처음에는 검증된 모델 1개·연결 1개로 설정하세요. “모든 모델” 키의 자동 선별은 보장하지 않습니다. 현재 검사는 이름순 앞의 최대 3개만 호출하므로 정상 모델이 있어도 부적합한 후보 때문에 실패할 수 있습니다. [제한 키 설정과 확인된 실패 사례](docs/CONNECTIONS.md#다중-api-게이트웨이-연결의-필수-사전-설정-현재-v1).
+
 기존 Plan/Task policy와 전송 승인은 그대로 유지합니다. 자동 라우팅과 GUI v2는 다음 단계입니다. [연결 방법·보안·검증 범위](docs/CONNECTIONS.md), [실제 OmniRoute 증거](docs/evidence/connection-omniroute-live.json).
 
 ### Local GUI v1

@@ -17,3 +17,5 @@
 [연결 사용법/설계/한계](../CONNECTIONS.md), [검증 이력](../VALIDATION.md), [실제 Probe](../evidence/connection-omniroute-live.json), [Keychain](../evidence/connection-keychain.json), [GUI](../evidence/connection-gui-review.json).
 
 다음 권장 단계: 현재 검증된 Connection/Catalog를 소비하는 제한적인 Route Broker를 정의한다. 역할별 capability 요구와 기존 policy 호환 경계를 먼저 정하고, 그 이후 업무별 모델/정책 입력을 줄이는 GUI를 진행한다.
+
+2026-10-13 사용 중 확인한 운영 조건: 다중 API 게이트웨이는 실제 사용 가능한 채팅 모델·Provider 연결만 허용한 제한 키로 연결한다. 모든 모델 키에서 735개가 발견되어도 현재 이름순 3개 검사로는 적합한 후보를 고르지 못해 HTTP 400으로 실패할 수 있다. 후속 Route Broker 작업 전에 capability/가용성 기반 Probe 후보 선택과 구체적인 GUI 실패 설명을 보완한다. 이는 현재 Nidus의 제약이며 게이트웨이 자체의 필수 제약으로 일반화하지 않는다.
