@@ -1,15 +1,17 @@
 # 현재 계획 / Current plan
 
-2026-10-13: Native Provider Connection Slice 1을 로컬 Git Flow로 구현한다. 목표는 OmniRoute를 first-class Connection manifest에서 내리고, Provider adapter dispatch와 Gemini native API를 추가하는 것이다. Task/Plan policy와 Runtime은 그대로 유지한다.
+2026-10-13: API 연결 최적화 Slice를 로컬 Git Flow로 통합한다. Gemini는 direct, OmniRoute는 gateway, Generic OpenAI-compatible은 compatible로 유지하며 OmniRoute와 Generic은 기존 `OpenAICompatibleAdapter`를 공유한다. Task/Plan policy와 Runtime은 그대로 유지한다.
 
-Source of truth: 시작 `develop` HEAD `bbc448b`와 당시 fetch한 `origin/develop`; 시작 `main` `d9bd9d0`. 사용자가 수정한 `doc/prompt.md`는 adapter·test 커밋과 분리하고 별도 docs commit으로 기록한다. `main`, release/hotfix, push, PR은 변경하지 않는다.
+Source of truth: 시작 `develop` HEAD `c17832c5959648826f1e731173c719a54cc0d8db`, fetch 후 동일한 `origin/develop`; 시작 `main` `d9bd9d0069cef5157a283bea2a0af365c99d44b6`. 수정된 `doc/prompt.md`는 docs commit으로 보존한다. `main`, release/hotfix, push, PR은 변경하지 않는다.
 
 | 기능 브랜치 | 기능 commit | develop merge / 회귀 |
 |---|---|---|
+| feature/connection-kinds | 구현·테스트 commit은 Git history 참조 | connection kind, canonical record, Provider adapter dispatch 검증 |
+| feature/omniroute-gateway | 구현·테스트·문서 commit은 Git history 참조 | OmniRoute identity, adapter reuse, GUI grouping, docs |
 | feature/provider-adapter-interface | `963d3c3` ProviderAdapter + manifest adapter dispatch | 로컬 `--no-ff` merge, 전체 Python 135 PASS |
 | feature/gemini-native-provider | `94a0b82` native Gemini adapter/UI; `5cf7864` discovery, probe, security 회귀 | docs/evidence와 사용자가 갱신한 prompt를 별도 문서 commit으로 기록한 뒤 로컬 `--no-ff` merge |
 
-완료: `GeminiAdapter`는 공식 model metadata에서 `generateContent` 모델을 찾아 최대 5개 검사하고 일반/구조화 JSON 응답을 모두 통과시킨다. API Key는 Keychain에 보관하고 Gemini 요청 header로만 보낸다. 실제 Gemini credential이 없어서 live 검증은 NOT RUN으로 기록했다. 전체 Python 143, Gateway/Plan HTTP 5+2, Frontend 10 테스트가 통과했다.
+완료된 기반: `GeminiAdapter`는 공식 model metadata에서 `generateContent` 모델을 찾아 최대 5개 검사하고 일반/구조화 JSON 응답을 모두 통과시킨다. API Key는 Keychain에 보관하고 Gemini 요청 header로만 보낸다. 실제 Gemini credential이 없어 live 검증은 NOT RUN으로 기록되어 있다. 이번 Slice 최종 검증 결과는 아래 Validation history에 추가한다.
 
 [연결 사용법/설계/한계](../CONNECTIONS.md), [검증 이력](../VALIDATION.md), [synthetic fixture](../evidence/gemini-native-synthetic.json), [live Gemini probe](../evidence/gemini-native-live.json).
 

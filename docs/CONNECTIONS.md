@@ -1,6 +1,13 @@
-# Native Provider Connection — Slice 1
+# Nidus AI Connections
 
-Nidus is moving Provider connections toward direct APIs. The current connection UI supports **Google Gemini natively** and **Generic OpenAI-compatible API**. OmniRoute is optional: connect it, LM Studio, NVIDIA NIM, or another compatible endpoint through the generic entry. The Connection path does not require OmniRoute.
+Nidus manages Direct, Gateway, Compatible, and reserved Local connections through one Connection Registry, Credential Store, and Model Catalog. Users may register Gemini, OmniRoute, and a Generic OpenAI-compatible endpoint at the same time. OmniRoute is an officially supported gateway option and is not a Nidus dependency. Adding a Connection does not change legacy Task/Plan routing.
+
+| Connection kind | Provider identity | Adapter |
+|---|---|---|
+| direct | Google Gemini (`gemini`) | `GeminiAdapter` |
+| gateway | OmniRoute (`omniroute`) | `OpenAICompatibleAdapter` |
+| compatible | OpenAI-compatible API (`openai-compatible`) | `OpenAICompatibleAdapter` |
+| local | reserved for later | not implemented |
 
 ## 연결 방법
 
@@ -8,11 +15,13 @@ Nidus is moving Provider connections toward direct APIs. The current connection 
 
 Probe는 계정에서 사용 가능한 모델에 실제 API 요청을 보내므로 Google의 요금·quota 정책이 적용될 수 있습니다. Nidus는 Gemini를 무료라고 표시하거나 가격/무료 quota를 추정하지 않습니다. 고정된 짧은 합성 문구만 전송하며 Vault의 사용자 자료는 전송하지 않습니다.
 
-OpenAI-compatible Provider를 선택하면 기존처럼 호환 Endpoint와 Key를 입력합니다. 이 방식으로 로컬 서버, NVIDIA NIM 또는 필요에 따라 OmniRoute를 연결할 수 있습니다. Generic 호환 Adapter는 Chat Completions 규격과 discovery 동작을 사용합니다.
+**통합 Gateway → OmniRoute**를 선택하면 기본 Endpoint `http://127.0.0.1:20128/v1`과 Endpoint Key를 입력합니다. 모델 ID를 받지 않으며 Chat Completions discovery/probe/generation은 기존 `OpenAICompatibleAdapter`가 수행합니다.
+
+**호환 API → OpenAI-compatible API**는 표시 이름(선택), Base URL, API Key를 받습니다. API Key가 필요 없는 호환 local endpoint도 지원합니다. 이 항목은 OmniRoute와 분리된 identity를 유지합니다.
 
 ### 여러 모델을 노출하는 호환 게이트웨이
 
-호환 Endpoint가 모델별 generation metadata를 제공하지 않으면 Generic Adapter는 이전 동작대로 이름순 앞의 최대 3개 모델만 검사합니다. OmniRoute와 같은 다중 API 게이트웨이의 연결이 실패하면 우선 실제로 사용할 수 있고 일반·JSON 응답을 지원하는 모델과 해당 upstream 연결만 허용한 Endpoint Key를 발급해 확인하세요. 이 설정은 Generic endpoint에서 첫 후보 검사를 예측 가능하게 하는 운영상 선택입니다. OmniRoute는 여전히 호환 API를 제공하는 선택지이며 Nidus의 필수 구성요소가 아닙니다.
+호환 Endpoint가 모델별 generation metadata를 제공하지 않으면 Adapter는 이름순 앞의 최대 3개 모델만 검사합니다. OmniRoute의 Endpoint Key가 허용한 모델 중 이 제한 안에 있는 후보가 적어도 하나는 일반·JSON 응답을 모두 지원해야 연결이 `ready`가 됩니다. 사용할 모델만 허용한 제한적 OmniRoute Key를 발급하면 이 조건을 예측 가능하게 만들 수 있습니다. Probe의 후보 제한은 연결 확인을 위한 것이며 이후 Runtime 자동 라우팅 기능은 아닙니다.
 
 2026-10-13에 보존된 [과거 OmniRoute 검증](evidence/connection-omniroute-live.json)은 모델 목록의 첫 항목들이 채팅 호출을 거부했지만 `gh/gpt-4o-mini`의 일반/구조화 응답은 통과했던 사례입니다. 그때의 first-three 제한은 이제 Gemini metadata 기반 후보 선택에는 적용되지 않습니다. 과거 evidence는 역사 자료로 보존합니다.
 
@@ -26,18 +35,20 @@ Catalog는 발견한 모델 ID와 Provider 반환 순서, 검증된 chat/structu
 
 ## 설계와 보안 경계
 
-Manifest는 Provider 표시 이름, auth 유형, 기본 endpoint, endpoint 수정 가능 여부, credential label, API key 필요 여부, adapter ID, model discovery 여부만 가집니다. Registry는 manifest의 adapter ID를 adapter lookup으로 해석합니다. `ConnectionRegistry`는 공통 discovery/generate/probe 계약만 호출하며 OpenAI Chat Completions wire format을 직접 알지 않습니다. 구현은 작은 `ProviderAdapter` 계약으로 제한하며 별도의 plugin framework는 없습니다.
+Manifest는 Provider 표시 이름, `connection_kind`, auth 유형, 기본 endpoint, endpoint 수정 가능 여부, credential label, API key 필요 여부, adapter ID, model discovery 여부를 가집니다. Provider identity와 protocol implementation은 별개입니다. Registry는 manifest adapter ID를 lookup하며 `ConnectionRegistry`는 공통 discovery/generate/probe 계약만 호출합니다. 별도의 OmniRoute adapter는 없습니다.
 
 현재 연결 경로는 다음과 같습니다.
 
 ```text
-Google Gemini → GeminiAdapter → Gemini GenerateContent REST API
-OpenAI-compatible API → OpenAICompatibleAdapter → Chat Completions
+Google Gemini (direct) → GeminiAdapter → Gemini GenerateContent REST API
+OmniRoute (gateway) ─────┐
+                         ├→ OpenAICompatibleAdapter → Chat Completions
+Generic (compatible) ────┘
 ```
 
 Gemini API Key와 호환 API Key는 기존 macOS `Security.framework` Keychain `CredentialStore`에 저장합니다. SQLite와 Model Catalog에는 무작위 `cred_…` reference만 남습니다. Gemini 요청은 Key를 URL query가 아니라 `x-goog-api-key` header로 전달합니다. API 응답 오류 body를 읽거나 저장하지 않으며 endpoint/모델 응답에 Key가 반향되면 연결을 거부합니다. GUI는 기존 Key를 다시 표시하지 않고 API 응답에 credential을 넣지 않습니다.
 
-이전 버전에서 저장한 `omniroute` Provider 연결이 있으면 Registry 시작 시 Provider ID만 `openai-compatible`로 바꿉니다. 사용자의 Endpoint, connection 이름, Keychain reference, Catalog와 Probe 기록은 유지되므로 기존 연결을 generic compatibility 경로로 계속 관리할 수 있습니다. 새 OmniRoute manifest는 목록에 노출하지 않습니다.
+기존 record에서 `connection_kind`가 없으면 Provider ID를 기준으로만 채웁니다: `gemini→direct`, `omniroute→gateway`, `openai-compatible→compatible`. migration은 재시작해도 결과가 같고 endpoint URL로 Provider를 추측하지 않습니다. 이미 `openai-compatible`로 변환된 과거 record는 compatible로 남습니다. Manifest와 record의 kind가 모순되면 probe가 `connection_kind_mismatch`로 거부합니다.
 
 SQLite에는 connection metadata와 model observations만 저장됩니다. 기존 Keychain 경계, Host/Origin/session token 검증, Task/Plan transmission 승인과 policy 동작은 유지됩니다. 연결 검사는 Task/Plan을 생성하거나 실행하지 않습니다.
 
@@ -45,8 +56,9 @@ SQLite에는 connection metadata와 model observations만 저장됩니다. 기�
 
 지원 상태:
 
-- **Native:** Google Gemini API Key, `models.list`, generation 후보 필터, `generateContent`, 실제 일반 및 JSON probe.
-- **Compatibility:** 임의 OpenAI-compatible Chat Completions endpoint. OmniRoute도 이 방식으로 선택해 연결할 수 있습니다.
+- **Direct:** Google Gemini API Key, `models.list`, generation 후보 필터, `generateContent`, 일반 및 JSON probe.
+- **Gateway:** OmniRoute Endpoint Key와 수정 가능한 endpoint, `/models`, generation, structured probe.
+- **Compatible:** 임의 OpenAI-compatible Chat Completions endpoint. 인증 없는 호환 endpoint도 허용합니다.
 - **Not implemented:** OpenAI native, Anthropic, Groq, Cloudflare, NVIDIA native, OAuth, 무료 Provider catalog, Route Broker, 자동 Provider 선택.
 
 향후 connection type은 API Key, OAuth, Local, 공식 Session Connector 등으로 확장할 수 있습니다. Session Connector는 Provider가 문서화하고 자동화를 허용하는 공식 OAuth/session API가 있을 때만 추가합니다. 비공식 Web cookie scraping은 지원하지 않습니다. 추가 Provider는 공식 API·metadata·약관을 확인하고 한 번에 하나씩 구현·검증합니다.
@@ -57,5 +69,7 @@ SQLite에는 connection metadata와 model observations만 저장됩니다. 기�
 - [실제 Gemini probe](evidence/gemini-native-live.json): 로컬 API credential이 준비되지 않아 `NOT RUN`으로 기록.
 - [과거 OmniRoute live evidence](evidence/connection-omniroute-live.json): 유지된 historical record.
 - [기존 Keychain evidence](evidence/connection-keychain.json)와 [GUI fixture review](evidence/connection-gui-review.json).
+
+OmniRoute connection을 등록하고 probe한 이번 Slice는 합성 OpenAI-compatible loopback fixture로 검증합니다. 실제 OmniRoute live probe는 새로 실행하지 않았습니다. 기존 [historical live evidence](evidence/connection-omniroute-live.json)는 과거 동작을 기록하며 현재 구현의 검증 결과로 간주하지 않습니다.
 
 검증 상태와 재현 명령은 [VALIDATION](VALIDATION.md)에 기록합니다.

@@ -17,13 +17,13 @@ node tests/gui_frontend.js
 
 재현 용도의 영속 합성 데모는 실행별 `nidus-demo-*` Vault를 같은 분리 폴더에 남깁니다. 테스트가 만드는 Git 체크포인트와 산출물 커밋도 해당 격리 Vault의 로컬 `.git` 안에서만 발생합니다.
 
-### Native AI connections
+### AI connections
 
-Nidus connects to **Google Gemini directly** with one API Key. In **Settings → AI connection**, enter the key; Nidus discovers generation-capable models and checks normal plus structured JSON responses. The key goes to macOS Keychain. Nidus does not ask for a model ID, Endpoint, route, or policy for Gemini, and does not assume Gemini is free.
+**Settings → AI connection** groups providers by connection kind: Direct API (Google Gemini), Gateway (OmniRoute), and Compatible API (OpenAI-compatible endpoint). Register any combination in the same Connection Registry. Each connection stores its Provider identity and `connection_kind`, while Gemini uses its native adapter and both OmniRoute and generic compatible endpoints reuse the Chat Completions adapter. Local is reserved for later.
 
-**OpenAI-compatible API** remains available for LM Studio, NVIDIA NIM, OmniRoute, and other compatible endpoints. The Connection path does not require OmniRoute. Existing Plan/Task policies and transmission approval continue to work independently; Connections are not automatically used by those policies. [Connection setup, status, security, and scope](docs/CONNECTIONS.md).
+Gemini asks for an API Key only. OmniRoute provides a default editable endpoint (`http://127.0.0.1:20128/v1`) and Endpoint Key. Generic compatible accepts a name, Base URL, and optional API Key. No form asks for model IDs. Credentials live in macOS Keychain; Plan/Task policies and transmission approvals remain independent and are not automatically replaced by these Connections. [Setup, migration, security, limits, and evidence](docs/CONNECTIONS.md).
 
-Gemini model discovery uses Google's `generateContent` capability metadata, then tries at most five candidates. A model must pass both real probe calls for the connection to become READY. The Generic OpenAI-compatible adapter retains its bounded first-three check when the endpoint provides no generation-capability metadata. [Synthetic fixture and live evidence](docs/CONNECTIONS.md#검증-자료).
+Gemini discovery uses Google's generation-capability metadata and probes at most five candidates. OpenAI-compatible discovery without capability metadata checks at most the first three candidates, so an OmniRoute restricted key should expose a usable model within that set. A connection becomes READY only when a model passes both normal and structured JSON probes. The historical OmniRoute live evidence is retained separately from current synthetic adapter tests.
 
 ### Local GUI v1
 
@@ -230,6 +230,12 @@ git switch -c feature/short-description
 ```
 
 ## English
+
+### AI connections
+
+**Settings → AI connection** groups providers by connection kind: Direct API (Google Gemini), Gateway (OmniRoute), and Compatible API (OpenAI-compatible endpoint). Any combination can coexist in one Connection Registry. Gemini uses its native adapter; OmniRoute and generic compatible endpoints reuse the Chat Completions adapter while preserving separate Provider identities. Local is reserved for later.
+
+Gemini asks for an API Key only. OmniRoute has an editable default endpoint (`http://127.0.0.1:20128/v1`) and Endpoint Key. Generic compatible accepts a name, Base URL, and optional API Key. No form asks for model IDs. Credentials are stored in macOS Keychain. Existing Plan/Task policies and transmission approvals stay independent and are not automatically replaced by these Connections. See [connection setup, migration, security, limitations, and evidence](docs/CONNECTIONS.md).
 
 ### Local GUI v1
 

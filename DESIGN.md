@@ -10,9 +10,9 @@
 
 ### Provider Connection Foundation 경계 — 2026-10-13
 
-기존 Gateway의 policy 검증·전송 snapshot·fallback·Task/Plan 메시지 생성은 유지한다. AI Connection Foundation은 Provider manifest의 adapter ID로 `GeminiAdapter`(native Gemini REST) 또는 `OpenAICompatibleAdapter`를 선택한다. `ConnectionRegistry`는 discovery와 generation 계약만 호출하고 wire protocol을 직접 알지 않는다. GUI 연결 API는 업무 Runtime을 생성/실행하지 않는다. Keychain은 `CredentialStore` 경계 내부에만 있으며 DB에는 reference를 저장한다. OmniRoute는 OpenAI-compatible endpoint 중 하나이며 Connection Foundation은 OmniRoute를 필요로 하지 않는다.
+기존 Gateway의 policy 검증·전송 snapshot·fallback·Task/Plan 메시지 생성은 유지한다. AI Connection Foundation의 Provider identity와 wire protocol은 분리되어 있다: Gemini는 `direct`/`GeminiAdapter`, OmniRoute는 `gateway`/`OpenAICompatibleAdapter`, generic 호환 endpoint는 `compatible`/`OpenAICompatibleAdapter`다. `ConnectionRegistry`는 discovery와 generation 계약만 호출한다. GUI 연결 API는 업무 Runtime을 생성/실행하지 않는다. Keychain은 `CredentialStore` 경계 내부에만 있으며 DB에는 reference를 저장한다. 같은 Registry/Catalog에 세 연결을 함께 등록할 수 있고, Local kind는 미래 확장용이다.
 
-연결 상태는 configured/probing/ready/degraded/blocked다. 실제 일반 응답과 JSON 검증 전 ready를 허용하지 않는다. 기존 env policy 경로와 새 연결 경로는 공존하며 Route Broker는 미구현이다. 상세 책임·보안·discovery 실패 규칙·Catalog와 제약은 [CONNECTIONS](docs/CONNECTIONS.md)에 기술했다.
+연결 상태는 configured/probing/ready/degraded/blocked다. 실제 일반 응답과 JSON 검증 전 ready를 허용하지 않는다. Provider ID 기준 kind backfill은 idempotent이며 endpoint URL로 OmniRoute를 추측하지 않는다. kind와 manifest가 충돌하면 probe를 거부한다. 기존 env policy 경로와 새 연결 경로는 공존하며 Route Broker는 미구현이다. 상세 책임·보안·discovery 실패 규칙·Catalog와 제약은 [CONNECTIONS](docs/CONNECTIONS.md)에 기술했다.
 
 ### Local GUI / Application 경계
 
@@ -225,7 +225,7 @@ Hostile external processes racing path changes are outside this cooperative loca
 
 ### Model Gateway
 
-A replaceable stdlib urllib Chat Completions adapter sits behind `Gateway.generate`. Direct OpenAI-compatible endpoints, OmniRoute and compatible local servers share the policy interface. The separate Connection Foundation dispatches Gemini native API calls through `GeminiAdapter`; registering a Connection does not replace existing Task/Plan policies.
+A replaceable stdlib urllib Chat Completions adapter sits behind `Gateway.generate`. In the Connection Foundation, OmniRoute keeps its `gateway` identity and generic endpoints keep their `compatible` identity while both reuse `OpenAICompatibleAdapter`; Gemini uses native `GeminiAdapter` as `direct`. Registering Connections does not replace existing Task/Plan policies.
 Task JSON adds mode, nonsecret policy, literal phrases, transmission snapshot, retained generation and attempt metadata without a database schema migration.
 Policy permits at most 5 ordered routes, 1–60-second socket timeouts and 1–4096 output tokens. Limit prompt to 128 KiB and response to 2 MiB.
 Routes contain name/kind/provider/base_url/model plus optional credential environment name and input/output rates. Free is an operator classification, not a billing guarantee. Paid requires `allow_paid=true`.
