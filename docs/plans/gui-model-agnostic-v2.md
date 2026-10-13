@@ -10,7 +10,7 @@
 
 ## 현행 GUI에서 확인된 간극
 
-현재 GUI는 Plan 생성 때 Planning policy JSON과 원본 경로를 받으며, 선택적으로 Worker·Review·Final 정책도 받는다. 이는 사용자가 모델 연결 세부사항을 알아야 한다는 요구를 만든다. PlanRuntime은 작업을 한 단계씩 진행하지만 자동 실행 루프가 없어 매 단계마다 사용자가 버튼을 눌러야 한다. HTTP 서버는 요청을 동기 처리하고 진행 중 이벤트 스트림이나 백그라운드 스케줄러가 없다. 화면은 Plan·Task·판단함을 보여주지만 여러 AI가 어떤 역할로 협력하는지 설명하는 작업실 경험은 제공하지 않는다. (근거: `docs/GUI_REPORT.md`, `DESIGN.md`, `nidus/gui.py`, `nidus/application.py`, `nidus/planning.py`.)
+자연어 Plan 구성 Slice에서 사용자가 모델 정책 JSON이나 Source 경로를 직접 입력하던 간극을 줄였다. 현재 화면은 요청을 받아 로컬 Vault 자료와 ready/검증 완료된 Connection 모델을 추천하며, 사용자가 검토한 다음 Plan을 생성한다. 구성 추천은 외부 AI 호출 없이 수행된다. 복수 모델의 역할별 배정, 예산 기반 자동 선택, 연속 대화, 백그라운드 스케줄러와 자동 실행은 여전히 구현되지 않았다. 현 구현의 Source of Truth는 `DESIGN.md`, `nidus/gui.py`, `nidus/application.py`, `nidus/plan_setup.py`, `nidus/planning.py`다.
 
 현 Gateway는 여러 호환 경로를 정책으로 호출할 수 있지만, 현재 GUI에는 연결 설정과 모델 후보 탐색을 위한 사용자 친화적 온보딩이 없다. 기본 경로가 준비되어 있다고 가정할 수도 없다. 따라서 “무료 모델 사용”을 보장하거나 사용자에게 모델 ID를 고르게 하는 것으로 문제를 해결할 수 없다. 무료 경로는 할당량·가용성·가격 조건이 변할 수 있으므로 선택 후보와 정책으로 다뤄야 한다.
 

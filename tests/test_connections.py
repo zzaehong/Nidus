@@ -131,6 +131,16 @@ class ConnectionTests(unittest.TestCase):
         self.assertEqual(len(self.server.calls),2)
         self.server.calls=[]; self.server.discovery=401; self.probe(); self.assertEqual(len(self.server.calls),1)
 
+    def test_ready_connection_can_generate_plan_messages_from_keychain_reference(self):
+        connection=self.probe()['connection']
+        route={'name':'Synthetic model','kind':'local','provider':'openai-compatible',
+            'base_url':connection['base_url'],'model':self.server.model,'connection_id':connection['id']}
+        result=self.registry.generate_for_route(route,[{'role':'user','content':'Return READY'}],
+            {'timeout_seconds':10,'max_tokens':32})
+        self.assertEqual(result['text'],'READY')
+        self.assertEqual(self.server.calls[-1][0],'POST')
+        self.assertNotIn(self.server.secret,str(result))
+
     def test_temporary_failures(self):
         for status,code in [(429,'rate_limited'),(503,'provider_unavailable'),(504,'timeout'),(403,'access_denied')]:
             self.server.generation=status; r=self.probe()

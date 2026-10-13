@@ -6,7 +6,7 @@
 
 ### Local GUI v1
 
-기존 Runtime 위에 Observe/Decide/Run을 제공하는 로컬 웹 인터페이스를 구현한다. Dashboard, Plan/Task 상세, Permission/Quality 판단함, 새 Plan, bounded one-step run, Archive, read-only 설정을 제공한다. 127.0.0.1만 bind하며 Origin/session token과 잠금 안의 stale revision 검사로 mutation을 보호한다. Frontend build/CDN/새 Python dependency는 없다. Runtime 규칙을 복제하거나 상태를 직접 수정하지 않는다. Pixel Office/원격 접속/계정/자동 실행은 범위 밖이다. GUI 수용 검증은 [GUI 보고서](docs/GUI_REPORT.md)에 기록한다.
+기존 Runtime 위에 Observe/Decide/Run을 제공하는 로컬 웹 인터페이스를 구현한다. Dashboard, Plan/Task 상세, Permission/Quality 판단함, 자연어 Plan 생성, bounded one-step run, Archive, read-only 설정을 제공한다. Plan 구성은 로컬 Vault에서 자료를 추천하고 검증된 AI 연결 모델을 제안한다. 127.0.0.1만 bind하며 Origin/session token과 잠금 안의 stale revision 검사로 mutation을 보호한다. Frontend build/CDN/새 Python dependency는 없다. Runtime 규칙을 복제하거나 상태를 직접 수정하지 않는다. Pixel Office/원격 접속/계정/자동 실행은 범위 밖이다. 구현과 검증은 [기술 설계](DESIGN.md)와 [검증 이력](docs/VALIDATION.md)에 기록한다.
 
 ### 다중 Task 조정 v1
 

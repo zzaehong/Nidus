@@ -96,11 +96,13 @@ class Handler(BaseHTTPRequestHandler):
             store = Store(self.server.vault)
             if parts[:2] == ['api', 'connections']:
                 return self.connection_request(store, parts, mutation, data)
-            app = Application(store)
+            app = Application(store,getattr(self.server,'credential_store',None))
             if not mutation and self.path == '/api/overview':
                 result = app.overview()
             elif not mutation and len(parts)==3 and parts[:2] in (['api','plans'], ['api','tasks']):
                 result = app.detail(parts[1], parts[2])
+            elif mutation and self.path == '/api/plan-setup' and set(data)=={'request'}:
+                result = app.suggest_plan_setup(data['request'])
             elif mutation and self.path == '/api/plans':
                 result = app.create_plan(data)
             elif mutation and len(parts)==4 and parts[:2] in (['api','plans'], ['api','tasks']):

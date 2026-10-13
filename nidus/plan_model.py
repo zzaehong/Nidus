@@ -56,7 +56,7 @@ def validate_graph(store, specs, allowed, maximum):
             raise ValueError('Invalid priority')
         if not strings(spec['completion_criteria'],True) or len(spec['completion_criteria']) > 20:
             raise ValueError('Missing or excessive completion criteria')
-        if not strings(spec['sources'],True) or len(spec['sources']) > 20 or len(set(spec['sources'])) != len(spec['sources']):
+        if not strings(spec['sources']) or len(spec['sources']) > 20 or len(set(spec['sources'])) != len(spec['sources']):
             raise ValueError('Invalid sources')
         for source in spec['sources']:
             safe_path(store.vault,source)

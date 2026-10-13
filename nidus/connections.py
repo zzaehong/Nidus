@@ -70,6 +70,29 @@ class ConnectionRegistry:
         try: return self.adapters[manifest['adapter']]
         except KeyError: raise ModelError('unsupported_adapter') from None
 
+    def generate_for_route(self, route, messages, policy):
+        """Resolve a secret by connection reference and dispatch without persisting it."""
+        ident=route.get('connection_id')
+        connection=self.get(ident)
+        manifest=self.providers.get(connection['provider'])
+        if connection.get('connection_kind') != manifest['connection_kind']:
+            raise ModelError('connection_kind_mismatch')
+        if (connection['status']!='ready' or route.get('provider')!=connection['provider'] or
+                route.get('base_url')!=connection['base_url'] or
+                route.get('kind') not in ('local','paid')):
+            raise ModelError('connection_changed')
+        model_id=route.get('model')
+        model=next((item for item in self.catalog(ident) if item['model_id']==model_id),None)
+        if (not model or model.get('availability')!='available' or
+                model.get('capabilities')!={'chat':'verified','structured_output':'verified'}):
+            raise ModelError('model_unavailable')
+        adapter=self._adapter_for(connection)
+        generate=getattr(adapter,'generate_messages',None)
+        if not callable(generate): raise ModelError('unsupported_adapter')
+        secret=self._backend(connection['credential_ref']).get(connection['credential_ref'])
+        validate_secret(secret)
+        return generate(connection,model_id,secret,messages,policy)
+
     def _catalog_save(self, model):
         self.store.db.execute('INSERT OR REPLACE INTO model_catalog VALUES (?,?,?)',
             (model['connection_id'],model['model_id'],canonical(model)))

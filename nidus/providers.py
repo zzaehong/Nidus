@@ -90,6 +90,10 @@ class OpenAICompatibleAdapter:
         return ChatCompletions().generate(route,[{'role':'user','content':
             'Return a JSON object with exactly one field: {"status":"READY"}.' if structured else 'Return exactly the word READY.'}],policy,secret=secret)
 
+    def generate_messages(self, connection, model, secret, messages, policy):
+        return ChatCompletions().generate({'base_url':connection['base_url'],'model':model},
+            messages,policy,secret=secret)
+
 
 class ProviderAdapter(Protocol):
     """Provider-neutral operations required by ConnectionRegistry."""
@@ -180,6 +184,55 @@ class GeminiAdapter:
             if not isinstance(actual,str) or not actual: actual=model
             if secret in text or secret in actual: raise ModelError('credential_in_content')
             return {'text':text,'model':actual,'tokens':tokens}
+        except (ValueError,TypeError,AttributeError) as error:
+            if isinstance(error,ModelError): raise
+            raise ModelError('invalid_response') from None
+
+    def generate_messages(self, connection, model, secret, messages, policy):
+        if not secret: raise ModelError('credential_missing')
+        if not isinstance(model,str) or not model or len(model)>256 or any(ord(c)<32 for c in model):
+            raise ModelError('invalid_model')
+        system=[]; contents=[]
+        for message in messages:
+            if not isinstance(message,dict) or message.get('role') not in ('system','user','assistant') or not isinstance(message.get('content'),str):
+                raise ModelError('invalid_request')
+            if message['role']=='system':
+                system.append(message['content'])
+            else:
+                contents.append({'role':'model' if message['role']=='assistant' else 'user',
+                    'parts':[{'text':message['content']}]})
+        if not contents: raise ModelError('invalid_request')
+        body={'contents':contents,'generationConfig':{'maxOutputTokens':policy['max_tokens']}}
+        if system: body['systemInstruction']={'parts':[{'text':'\n\n'.join(system)}]}
+        if policy.get('response_format')=='json_object':
+            body['generationConfig']['responseMimeType']='application/json'
+        url=connection['base_url']+'/models/'+urllib.parse.quote(model,safe='-._~')+':generateContent'
+        request=urllib.request.Request(url,data=json.dumps(body,separators=(',',':')).encode(),
+            headers={'User-Agent':'Nidus/0.2','Content-Type':'application/json','x-goog-api-key':secret})
+        raw=request_bytes(request,policy['timeout_seconds'])
+        if len(raw)>MAX_RESPONSE: raise ModelError('response_too_large')
+        try:
+            value=json.loads(raw)
+            candidates=value.get('candidates') if isinstance(value,dict) else None
+            if not isinstance(candidates,list) or not candidates: raise ValueError()
+            candidate=candidates[0]
+            content=candidate.get('content') if isinstance(candidate,dict) else None
+            parts=content.get('parts') if isinstance(content,dict) else None
+            if not isinstance(parts,list): raise ValueError()
+            text=''.join(part.get('text','') for part in parts
+                if isinstance(part,dict) and isinstance(part.get('text',''),str))
+            if not text or candidate.get('finishReason') not in ('STOP','FINISH_REASON_UNSPECIFIED'):
+                raise ModelError('incomplete_response')
+            usage=value.get('usageMetadata',{})
+            if not isinstance(usage,dict): usage={}
+            tokens={key:usage[source] for key,source in (
+                ('prompt_tokens','promptTokenCount'),('completion_tokens','candidatesTokenCount'),
+                ('total_tokens','totalTokenCount')) if type(usage.get(source)) is int}
+            actual=value.get('modelVersion')
+            if not isinstance(actual,str) or not actual: actual=model
+            if secret in text or secret in actual: raise ModelError('credential_in_content')
+            return {'text':text,'finish_reason':'stop','model':actual,'tokens':tokens,
+                'estimated_cost_usd':None}
         except (ValueError,TypeError,AttributeError) as error:
             if isinstance(error,ModelError): raise
             raise ModelError('invalid_response') from None

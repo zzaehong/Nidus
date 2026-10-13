@@ -40,8 +40,8 @@ class PlanRuntime:
                 raise ValueError('Invalid plan limits')
             if not 1 <= bounds['initial_tasks'] <= bounds['total_tasks'] <= 100 or bounds['revisions'] > 20:
                 raise ValueError('Invalid plan limits')
-            if not isinstance(request, str) or not request.strip() or not strings(sources, True) or len(set(sources)) != len(sources) or len(sources) > 20:
-                raise ValueError('Nonempty request and 1–20 unique sources required')
+            if not isinstance(request, str) or not request.strip() or not strings(sources) or len(set(sources)) != len(sources) or len(sources) > 20:
+                raise ValueError('Nonempty request and up to 20 unique sources required')
             records = sources_for(self.store, {'sources':sources})
             for p in (policy, worker, review, final_policy):
                 reject_credentials(canonical([request,records]), p)
