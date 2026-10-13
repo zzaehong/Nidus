@@ -1,6 +1,0 @@
-{
-  "date": "2026-10-12",
-  "endpoint": "http://127.0.0.1:20128/v1/models",
-  "scope": "Existing restricted key, read-only model catalog; no account or credential changes",
-  "models": ["gh/gpt-4o-mini", "github/gpt-4o-mini"]
-}
