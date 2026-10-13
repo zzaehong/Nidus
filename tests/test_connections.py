@@ -50,6 +50,32 @@ class FakeProvider(BaseHTTPRequestHandler):
              'usage':{'prompt_tokens':8,'completion_tokens':3,'total_tokens':11}})
 
 
+class FakeGemini(BaseHTTPRequestHandler):
+    def log_message(self,*args): pass
+    def respond(self, code, value):
+        data=json.dumps(value).encode(); self.send_response(code); self.send_header('Content-Length',str(len(data))); self.end_headers(); self.wfile.write(data)
+    def do_GET(self):
+        self.server.calls.append(('GET',self.path))
+        if self.headers.get('x-goog-api-key')!=self.server.secret:
+            return self.respond(401,{'error':{'message':'key rejected'}})
+        if self.server.discovery_status!=200:
+            return self.respond(self.server.discovery_status,{'error':{'message':'synthetic error'}})
+        self.respond(200,{'models':self.server.models})
+    def do_POST(self):
+        body=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+        model=self.path.split('/models/',1)[1].split(':generateContent',1)[0]
+        structured='responseFormat' in body.get('generationConfig',{})
+        self.server.calls.append(('POST',model,structured,body))
+        if self.headers.get('x-goog-api-key')!=self.server.secret:
+            return self.respond(401,{'error':{'message':'key rejected'}})
+        status=self.server.generate_status.get((model,structured),200)
+        if status!=200: return self.respond(status,{'error':{'message':'synthetic error'}})
+        text=self.server.outputs.get((model,structured),'READY' if not structured else '{"status":"READY"}')
+        self.respond(200,{'candidates':[{'content':{'parts':[{'text':text}]},'finishReason':'STOP'}],
+            'usageMetadata':{'promptTokenCount':5,'candidatesTokenCount':2,'totalTokenCount':7},
+            'modelVersion':'actual-'+model})
+
+
 class ConnectionTests(unittest.TestCase):
     def setUp(self):
         self.tmp=temporary_vault(); self.store=Store(self.tmp.name); self.keys=MemoryCredentials()
@@ -62,7 +88,7 @@ class ConnectionTests(unittest.TestCase):
         self.url='http://127.0.0.1:'+str(self.server.server_port)+'/v1'
     def tearDown(self):
         self.server.shutdown(); self.server.server_close(); self.thread.join(); self.store.close(); self.tmp.cleanup()
-    def create(self): return self.registry.create('omniroute',self.url,self.server.secret)
+    def create(self): return self.registry.create('openai-compatible',self.url,self.server.secret)
     def probe(self): return self.registry.probe(self.create()['id'])
 
     def test_success_restart_and_security(self):
@@ -133,7 +159,7 @@ class ConnectionTests(unittest.TestCase):
         self.assertNotIn(self.server.secret,json.dumps(r))
         self.server.model='synthetic'; self.server.plain=self.server.secret
         self.assertEqual(self.probe()['connection']['last_error']['code'],'credential_in_content')
-        with self.assertRaises(ModelError): self.registry.create('omniroute',self.url+'/'+self.server.secret,self.server.secret)
+        with self.assertRaises(ModelError): self.registry.create('openai-compatible',self.url+'/'+self.server.secret,self.server.secret)
 
     def test_interrupted_probe(self):
         c=self.create(); c['status']='probing'; self.registry._save(c)
@@ -169,7 +195,7 @@ class ConnectionTests(unittest.TestCase):
 
     def test_manifest_and_endpoints(self):
         manifests=ProviderRegistry().list(); self.assertEqual(len(manifests),2)
-        for values in [manifests+[manifests[0]], [dict(manifests[0],auth_type='oauth')], [dict(manifests[0],protocol='native')]]:
+        for values in [manifests+[manifests[0]], [dict(manifests[0],auth_type='oauth')], [dict(manifests[0],protocol='')]]:
             with self.assertRaises(ModelError): ProviderRegistry(values)
         for url in ['http://example.com/v1','https://a:b@example.com/v1','https://example.com/v1?q=a',
                     'https://example.com/#x','http://[invalid','https://example.com:bad','https://example.com/\n']:
@@ -179,7 +205,7 @@ class ConnectionTests(unittest.TestCase):
     def test_manifest_adapter_dispatch(self):
         manifests=ProviderRegistry().list()
         self.assertEqual({item['id']:item['adapter'] for item in manifests},
-                         {'omniroute':'openai-compatible','openai-compatible':'openai-compatible'})
+                         {'gemini':'gemini','openai-compatible':'openai-compatible'})
         class AlternateAdapter:
             def __init__(self): self.calls=[]
             def discover_models(self, connection, secret):
@@ -204,6 +230,152 @@ class ConnectionTests(unittest.TestCase):
         self.assertEqual(alternate.calls,[('discover','alternate-provider'),
             ('generate','alternate-provider',False),('generate','alternate-provider',True)])
 
+    def test_saved_omniroute_connection_migrates_to_generic_compatibility(self):
+        connection=self.create()
+        stored=self.registry.get(connection['id']); stored['provider']='omniroute'
+        self.registry._save(stored)
+        migrated=ConnectionRegistry(self.store,self.keys).get(connection['id'])
+        self.assertEqual(migrated['provider'],'openai-compatible')
+        self.assertEqual(migrated['credential_ref'],connection['credential_ref'])
+        self.assertEqual(self.registry.probe(connection['id'])['connection']['status'],'ready')
+
+
+class GeminiConnectionTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp=temporary_vault(); self.store=Store(self.tmp.name); self.keys=MemoryCredentials()
+        self.server=HTTPServer(('127.0.0.1',0),FakeGemini)
+        self.server.secret='gemini-test-'+uuid.uuid4().hex
+        self.server.discovery_status=200; self.server.generate_status={}; self.server.outputs={}; self.server.calls=[]
+        self.server.models=[
+            {'name':'models/embed-only','supportedGenerationMethods':['embedContent']},
+            {'name':'models/gemini-a','supportedGenerationMethods':['generateContent']},
+            {'name':'models/gemini-b','supportedGenerationMethods':['generateContent']},
+        ]
+        self.thread=threading.Thread(target=self.server.serve_forever,daemon=True); self.thread.start()
+        self.url='http://127.0.0.1:'+str(self.server.server_port)+'/v1beta'
+        providers=ProviderRegistry().list()
+        providers[0]['default_base_url']=self.url
+        self.registry=ConnectionRegistry(self.store,self.keys,providers=providers)
+    def tearDown(self):
+        self.server.shutdown(); self.server.server_close(); self.thread.join(); self.store.close(); self.tmp.cleanup()
+    def create(self,secret=None):
+        return self.registry.create('gemini',secret=self.server.secret if secret is None else secret)
+    def probe(self): return self.registry.probe(self.create()['id'])
+
+    def test_discovery_filters_and_structured_failure_tries_next(self):
+        self.server.generate_status[('gemini-a',True)]=400
+        result=self.probe(); connection=result['connection']
+        self.assertEqual(connection['status'],'ready')
+        self.assertEqual(connection['probe'],{'generation':'passed','structured_output':'passed'})
+        self.assertEqual(connection['discovery']['count'],2)
+        self.assertEqual([call[1] for call in self.server.calls if call[0]=='POST'],
+            ['gemini-a','gemini-a','gemini-b','gemini-b'])
+        selected=next(model for model in result['models'] if model['model_id']=='gemini-b')
+        self.assertEqual(selected['availability'],'available')
+        self.assertEqual(selected['actual_model'],'actual-gemini-b')
+        self.assertEqual(selected['tokens']['total_tokens'],7)
+        self.assertEqual(selected['capabilities'],{'chat':'verified','structured_output':'verified'})
+        self.assertTrue(all(model['model_id']!='embed-only' for model in result['models']))
+        posts=[call for call in self.server.calls if call[0]=='POST']
+        self.assertTrue(any('responseFormat' in call[3]['generationConfig'] for call in posts))
+        self.assertTrue(all('x-goog-api-key' not in call[3] for call in posts))
+
+    def test_gemini_key_endpoint_and_secret_boundary(self):
+        with self.assertRaises(ModelError) as error: self.registry.create('gemini')
+        self.assertEqual(error.exception.code,'invalid_credential')
+        with self.assertRaises(ModelError) as error:
+            self.registry.create('gemini',base_url='https://example.com',secret=self.server.secret)
+        self.assertEqual(error.exception.code,'invalid_endpoint')
+        c=self.create(); result=self.registry.probe(c['id'])
+        encoded=json.dumps({'connection':c,'result':result,'catalog':self.registry.catalog(c['id'])})
+        self.assertNotIn(self.server.secret,encoded)
+        diff=subprocess.run(['git','diff','HEAD'],capture_output=True,check=True).stdout
+        self.assertNotIn(self.server.secret.encode(),diff)
+        for path in Path(self.tmp.name).rglob('*'):
+            if path.is_file(): self.assertNotIn(self.server.secret.encode(),path.read_bytes(),str(path))
+        self.assertEqual(self.keys.get(c['credential_ref']),self.server.secret)
+        self.assertEqual(self.server.calls[0],('GET','/v1beta/models?pageSize=1000'))
+
+    def test_gemini_gui_api_never_returns_or_logs_key(self):
+        from nidus.gui import GUIServer
+        import logging
+        import urllib.request
+        from unittest.mock import patch
+        gui=GUIServer(self.tmp.name,0); gui.credential_store=self.keys
+        thread=threading.Thread(target=gui.serve_forever,daemon=True); thread.start()
+        output=io.StringIO(); handler=logging.StreamHandler(output); logging.getLogger().addHandler(handler)
+        def request(path,data=None):
+            headers={'Origin':gui.origin,'X-Nidus-Token':gui.token,'Content-Type':'application/json'}
+            req=urllib.request.Request(gui.origin+'/api/connections'+path,
+                data=json.dumps(data).encode() if data is not None else None,headers=headers)
+            with urllib.request.urlopen(req,timeout=10) as response: return json.load(response)
+        providers=self.registry.providers.list()
+        def make_registry(store,credentials=None):
+            return ConnectionRegistry(store,credentials,providers=providers)
+        try:
+            with patch('nidus.gui.ConnectionRegistry',side_effect=make_registry):
+                listing=request('')
+                self.assertEqual([provider['id'] for provider in listing['providers']],['gemini','openai-compatible'])
+                created=request('',{'provider':'gemini','secret':self.server.secret})
+                self.assertNotIn(self.server.secret,json.dumps(created))
+                result=request('/'+created['id']+'/probe',{})
+                self.assertEqual(result['connection']['status'],'ready')
+                self.assertNotIn(self.server.secret,json.dumps(result))
+        finally:
+            logging.getLogger().removeHandler(handler)
+            gui.shutdown(); gui.server_close(); thread.join()
+        self.assertNotIn(self.server.secret,output.getvalue())
+        self.assertNotIn(self.server.secret.encode(),self.store.db.execute('SELECT data FROM connections').fetchone()[0].encode())
+
+    def test_auth_and_temporary_errors_map_to_blocked_or_degraded(self):
+        for status,code,expected in [(401,'authentication_failed','blocked'),(403,'access_denied','blocked')]:
+            self.server.discovery_status=status
+            result=self.probe()['connection']
+            self.assertEqual((result['status'],result['last_error']['code']),(expected,code))
+        self.server.discovery_status=200
+        for status,code in [(429,'rate_limited'),(503,'provider_unavailable'),(504,'timeout')]:
+            self.server.generate_status[('gemini-a',False)]=status
+            self.server.generate_status[('gemini-b',False)]=status
+            result=self.probe()['connection']
+            self.assertEqual(result['status'],'degraded')
+            self.assertEqual(result['last_error']['code'],code)
+            self.server.generate_status.clear()
+
+    def test_gemini_rejects_credential_echoes_without_persisting_them(self):
+        connection=self.create()
+        self.server.models=[{'name':'models/'+self.server.secret,'supportedGenerationMethods':['generateContent']}]
+        result=self.registry.probe(connection['id'])
+        self.assertEqual(result['connection']['last_error']['code'],'credential_in_content')
+        self.assertNotIn(self.server.secret,json.dumps(result))
+        self.server.models=[{'name':'models/gemini-a','supportedGenerationMethods':['generateContent']}]
+        self.server.outputs[('gemini-a',False)]=self.server.secret
+        result=self.registry.probe(connection['id'])
+        self.assertEqual(result['connection']['last_error']['code'],'credential_in_content')
+        self.assertNotIn(self.server.secret,json.dumps(result))
+        self.assertNotIn(self.server.secret.encode(),self.store.db.execute('SELECT data FROM connections').fetchone()[0].encode())
+
+    def test_probe_candidate_limit_is_five(self):
+        self.server.models=[{'name':'models/candidate-'+str(i),'supportedGenerationMethods':['generateContent']}
+            for i in range(7)]
+        for i in range(5): self.server.generate_status[('candidate-'+str(i),False)]=404
+        result=self.probe(); posts=[call for call in self.server.calls if call[0]=='POST']
+        self.assertEqual(result['connection']['status'],'blocked')
+        self.assertEqual([call[1] for call in posts],['candidate-'+str(i) for i in range(5)])
+        self.assertEqual(len(posts),5)
+
+    def test_cached_gemini_candidates_keep_provider_order(self):
+        self.server.models=[
+            {'name':'models/gemini-b','supportedGenerationMethods':['generateContent']},
+            {'name':'models/gemini-a','supportedGenerationMethods':['generateContent']},
+        ]
+        connection=self.create(); self.assertEqual(self.registry.probe(connection['id'])['connection']['status'],'ready')
+        self.server.calls=[]; self.server.discovery_status=404
+        self.server.generate_status[('gemini-b',False)]=400
+        result=self.registry.probe(connection['id'])
+        self.assertEqual(result['connection']['status'],'ready')
+        self.assertEqual([call[1] for call in self.server.calls if call[0]=='POST'],
+            ['gemini-b','gemini-a','gemini-a'])
+
 
 if __name__=='__main__': unittest.main()
 
@@ -226,7 +398,7 @@ class ConnectionGUItests(unittest.TestCase):
     def test_gui_crud_probe_and_origin(self):
         import urllib.error
         self.assertEqual(len(self.request('')['providers']),2)
-        data={'provider':'omniroute','base_url':self.url,'secret':self.server.secret}
+        data={'provider':'openai-compatible','base_url':self.url,'secret':self.server.secret}
         with self.assertRaises(urllib.error.HTTPError) as error: self.request('',data,False)
         self.assertEqual(error.exception.code,403)
         c=self.request('',data); ident=c['id']
@@ -240,5 +412,5 @@ class ConnectionGUItests(unittest.TestCase):
         import urllib.error
         with patch.object(self.keys,'put',side_effect=ValueError(self.server.secret)):
             with self.assertRaises(urllib.error.HTTPError) as error:
-                self.request('',{'provider':'omniroute','base_url':self.url,'secret':self.server.secret})
+                self.request('',{'provider':'openai-compatible','base_url':self.url,'secret':self.server.secret})
         self.assertNotIn(self.server.secret,error.exception.read().decode())
