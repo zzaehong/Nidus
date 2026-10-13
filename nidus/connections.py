@@ -8,11 +8,13 @@ from .providers import ProviderRegistry, OpenAICompatibleAdapter, endpoint
 
 
 class ConnectionRegistry:
-    def __init__(self, store, credentials=None, adapter=None):
+    def __init__(self, store, credentials=None, adapter=None, adapters=None, providers=None):
         self.store=store
         self.credentials=credentials
-        self.providers=ProviderRegistry()
+        self.providers=ProviderRegistry(providers)
         self.adapter=adapter or OpenAICompatibleAdapter()
+        self.adapters=dict(adapters or {})
+        self.adapters.setdefault('openai-compatible',self.adapter)
         self.store.db.executescript('''
           CREATE TABLE IF NOT EXISTS connections (id TEXT PRIMARY KEY, data TEXT NOT NULL);
           CREATE TABLE IF NOT EXISTS model_catalog (connection_id TEXT NOT NULL, model_id TEXT NOT NULL,
@@ -53,6 +55,11 @@ class ConnectionRegistry:
         if self.get(ident)['status'] not in ('ready','degraded'): return []
         return [m for m in self.catalog(ident) if m['availability']=='available']
 
+    def _adapter_for(self, connection):
+        manifest=self.providers.get(connection['provider'])
+        try: return self.adapters[manifest['adapter']]
+        except KeyError: raise ModelError('unsupported_adapter') from None
+
     def _catalog_save(self, model):
         self.store.db.execute('INSERT OR REPLACE INTO model_catalog VALUES (?,?,?)',
             (model['connection_id'],model['model_id'],canonical(model)))
@@ -60,6 +67,7 @@ class ConnectionRegistry:
 
     def create(self, provider, base_url, secret='', name='', credential_ref=None):
         manifest=self.providers.get(provider); base_url=endpoint(base_url or manifest['default_base_url'])
+        if manifest['adapter'] not in self.adapters: raise ModelError('unsupported_adapter')
         validate_secret(secret)
         if not isinstance(name,str) or len(name)>128 or any(ord(c)<32 for c in name): raise ModelError('invalid_connection_name')
         ref=credential_ref or 'cred_'+uuid.uuid4().hex
@@ -119,6 +127,7 @@ class ConnectionRegistry:
     def probe(self, ident):
         with self.store.lock():
             conn=self.get(ident); endpoint(conn['base_url'])
+            adapter=self._adapter_for(conn)
             conn.update(status='probing',last_probe_at=utc_now(),last_error=None,probe={'generation':'not_run','structured_output':'not_run'})
             self._save(conn)
             try:
@@ -129,7 +138,7 @@ class ConnectionRegistry:
                     self._catalog_save(m)
                 secret=self._backend(conn['credential_ref']).get(conn['credential_ref']); validate_secret(secret)
                 try:
-                    models=self.adapter.discover_models(conn,secret)
+                    models=adapter.discover_models(conn,secret)
                     conn['discovery']={'supported':True,'status':'success','count':len(models)}
                 except ModelError as error:
                     conn['discovery']={'supported':True,'status':'failed','error':error.metadata()}
@@ -147,14 +156,14 @@ class ConnectionRegistry:
                     record=next(m for m in self.catalog(ident) if m['model_id']==model)
                     record['last_probe_at']=utc_now(); start=time.monotonic()
                     try:
-                        result=self.adapter.generate(conn,model,secret)
+                        result=adapter.generate(conn,model,secret)
                         if result['text'].strip()!='READY': raise ModelError('acceptance_failed')
                         record.update(availability='available',last_success_at=utc_now(),last_error=None,
                             latency_ms=round((time.monotonic()-start)*1000),actual_model=result['model'],tokens=result['tokens'])
                         record['capabilities']['chat']='verified'
                         conn['probe']['generation']='passed'
                         try:
-                            structured=self.adapter.generate(conn,model,secret,structured=True)
+                            structured=adapter.generate(conn,model,secret,structured=True)
                             try: passed=json.loads(structured['text'])=={'status':'READY'}
                             except (ValueError,TypeError): passed=False
                             if not passed: raise ModelError('structured_output_unsupported')
