@@ -74,7 +74,8 @@ window.addEventListener('hashchange',()=>{tab='tasks';if(state)render();});
 
 function connectionSettings(){
  const labels={configured:'설정됨 · 검증 필요',probing:'검사 중',ready:'정상',degraded:'일부 기능 확인 필요',blocked:'연결 차단'};
- return `<div class="panel"><h2>AI 연결</h2><p>공개 테스트 문구로 실제 응답과 구조화 응답을 확인합니다. Provider에 따라 호출 요금이 발생할 수 있습니다.</p><form id="connection-add"><label>Provider<select name="provider">${connections.providers.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></label><label>이름 · 선택<input name="name" maxlength="128"></label><label>Endpoint<input name="base_url" required value="${esc(connections.providers[0]?.default_base_url||'')}"></label><label><span id="credential-label">${esc(connections.providers[0]?.credential_label||'API Key')}</span><input name="secret" type="password" autocomplete="new-password" maxlength="8192"></label><small>인증이 없는 로컬 서버는 Key를 비워 둘 수 있습니다. 입력한 Key는 macOS Keychain에 보관합니다.</small><p><button class="primary">연결 확인</button></p></form></div><div class="grid-list">${connections.connections.map(c=>`<article class="panel" data-connection="${esc(c.id)}"><h2>${esc(c.name)} · ${esc(labels[c.status]||c.status)}</h2><p>${esc(c.base_url)}</p><p>사용 가능 모델 ${c.models.filter(m=>m.availability==='available').length}개</p>${connectionSummary(c)}<button data-connection-action="probe">연결 테스트</button><details><summary>관리 및 상세 정보</summary><form data-connection-update><label>Endpoint<input name="base_url" required value="${esc(c.base_url)}"></label><label>Key · 등록됨 · 새 값 입력 시 교체<input name="secret" type="password" autocomplete="new-password" maxlength="8192"></label><label><input name="replace_secret" type="checkbox"> Key 교체 (빈 값으로 바꾸려면 선택)</label><button>설정 저장</button></form><button data-connection-action="delete">연결 삭제</button><small>연결·Key·모델 목록을 삭제합니다. 과거 업무 기록은 유지됩니다.</small><details><summary>기술 세부 정보</summary>${json(c)}</details></details></article>`).join('')}</div>`;
+ const initial=connections.providers[0]||{};
+ return `<div class="panel"><h2>AI 연결</h2><p>공개 합성 문구로 실제 일반 응답과 구조화 응답을 확인합니다. Provider에 따라 호출 요금이 발생할 수 있습니다.</p><form id="connection-add"><label>Provider<select name="provider">${connections.providers.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></label><label>이름 · 선택<input name="name" maxlength="128"></label><label id="connection-endpoint"${initial.endpoint_editable?'':' hidden'}>Endpoint<input name="base_url"${initial.endpoint_editable?' required':''} value="${esc(initial.default_base_url||'')}"></label><label><span id="credential-label">${esc(initial.credential_label||'API Key')}</span><input name="secret" type="password" autocomplete="new-password" maxlength="8192"${initial.api_key_required?' required':''}></label><small id="credential-hint">${initial.api_key_required?'키는 macOS Keychain에 보관하며, 연결 검사를 위해 고정된 합성 문구만 전송합니다.':'인증이 없는 로컬 서버는 Key를 비워 둘 수 있습니다. 입력한 Key는 macOS Keychain에 보관합니다.'}</small><p><button class="primary">연결 확인</button></p></form></div><div class="grid-list">${connections.connections.map(c=>{const provider=connections.providers.find(p=>p.id===c.provider)||{};return `<article class="panel" data-connection="${esc(c.id)}"><h2>${esc(c.name)} · ${esc(labels[c.status]||c.status)}</h2><p>${esc(c.base_url)}</p><p>사용 가능 모델 ${c.models.filter(m=>m.availability==='available').length}개</p>${connectionSummary(c)}<button data-connection-action="probe">연결 테스트</button><details><summary>관리 및 상세 정보</summary><form data-connection-update>${provider.endpoint_editable?`<label>Endpoint<input name="base_url" required value="${esc(c.base_url)}"></label>`:''}<label>${esc(provider.credential_label||'Key')} · 등록됨 · 새 값 입력 시 교체<input name="secret" type="password" autocomplete="new-password" maxlength="8192"></label><label><input name="replace_secret" type="checkbox"> Key 교체 (빈 값으로 바꾸려면 선택)</label><button>설정 저장</button></form><button data-connection-action="delete">연결 삭제</button><small>연결·Key·모델 목록을 삭제합니다. 과거 업무 기록은 유지됩니다.</small><details><summary>기술 세부 정보</summary>${json(c)}</details></details></article>`;}).join('')}</div>`;
 }
 function connectionSummary(c){
  const p=c.probe||{};
@@ -87,17 +88,20 @@ async function connectionAction(work){
  finally{busy=false;render();document.querySelectorAll('button').forEach(b=>b.disabled=false);}
 }
 $('#content').addEventListener('change',event=>{
- if(event.target.matches('#connection-add [name="provider"]')){const p=connections.providers.find(p=>p.id===event.target.value);$('#connection-add [name="base_url"]').value=p.default_base_url;$('#credential-label').textContent=p.credential_label;}
+ if(event.target.matches('#connection-add [name="provider"]')){const p=connections.providers.find(p=>p.id===event.target.value);const endpointField=$('#connection-endpoint');const endpointInput=endpointField.querySelector('[name="base_url"]');endpointField.hidden=!p.endpoint_editable;endpointInput.required=!!p.endpoint_editable;endpointInput.value=p.default_base_url||'';$('#credential-label').textContent=p.credential_label;const key=$('#connection-add [name="secret"]');key.required=!!p.api_key_required;$('#credential-hint').textContent=p.api_key_required?'키는 macOS Keychain에 보관하며, 연결 검사를 위해 고정된 합성 문구만 전송합니다.':'인증이 없는 로컬 서버는 Key를 비워 둘 수 있습니다. 입력한 Key는 macOS Keychain에 보관합니다.';}
 });
 $('#content').addEventListener('submit',async event=>{
  const f=event.target;if(f.id!=='connection-add'&&!f.matches('[data-connection-update]'))return;
  event.preventDefault();if(busy)return;
- const values=new FormData(f); const data={base_url:values.get('base_url')};
+ const values=new FormData(f); const data={};
  if(f.id==='connection-add'){
+  const provider=connections.providers.find(p=>p.id===values.get('provider'));
   Object.assign(data,{provider:values.get('provider'),name:values.get('name'),secret:values.get('secret')});
+  if(provider?.endpoint_editable)data.base_url=values.get('base_url');
   f.querySelector('[name="secret"]').value='';
   await connectionAction(async()=>{const c=await api('connections',data);data.secret='';return api(`connections/${c.id}/probe`,{});});
  }else{
+  if(f.querySelector('[name="base_url"]'))data.base_url=values.get('base_url');
   if(values.get('secret')||values.get('replace_secret'))data.secret=values.get('secret');
   f.querySelector('[name="secret"]').value='';const id=f.closest('[data-connection]').dataset.connection;
   await connectionAction(()=>api(`connections/${id}/update`,data));

@@ -8,6 +8,16 @@
 
 테스트/합성 데모의 임시 Vault를 소스 저장소와 분리해 `/Users/parkjaehong/Developer/nidus_vault` 아래로 모은다. `Store`와 GUI는 소스 저장소 및 그 상위 디렉터리를 Vault로 받지 않는다. `test_runtime`는 이 경계를 직접 검증한다. 테스트 중 Vault Git 커밋은 별도 임시 Vault 안에 한정된다.
 
+### Native Provider Connection Slice 1 — 2026-10-13
+
+Starting local `develop` was `bbc448b`; starting `main` remains `d9bd9d0`. The user-updated `doc/prompt.md` stayed uncommitted and was excluded from feature commits. Feature 1 (`feature/provider-adapter-interface`) added a manifest-selected adapter dispatch and was merged locally after its connection suite passed; full Python regression then passed **135 tests**.
+
+Feature 2 adds a native Gemini adapter using the official [Models API](https://ai.google.dev/api/models) metadata and [GenerateContent API](https://ai.google.dev/api/generate-content). Targeted Python connection/Gemini tests: **23 PASS**. The final full suite is **143 PASS**; separate Gateway/Plan HTTP integration suites are **5 PASS + 2 PASS**; frontend tests are **10 PASS**. Tests cover Gemini metadata filtering, five-candidate cap, cached Provider order, normal and JSON payloads, continuing after a structured-output failure, legacy OmniRoute connection migration, authentication/access errors, 429/5xx/504 degraded mapping, and secret absence from SQLite, Vault files, Catalog, Git diff, API response, and logs. `compileall`, JavaScript syntax check, and `git diff --check` pass using a temporary Python cache prefix.
+
+Synthetic fixture evidence: [gemini-native-synthetic.json](evidence/gemini-native-synthetic.json). It confirms `gemini-a` passes normal generation but fails structured output, then `gemini-b` passes both; the Catalog chooses `actual-gemini-b`. This is deterministic loopback fixture evidence and is **not** a real Google API success.
+
+Actual Gemini probe: [gemini-native-live.json](evidence/gemini-native-live.json) is **NOT RUN**, because no direct Gemini API credential was available in the local environment. No request was made to Google's API and no personal Vault content was sent. The former [OmniRoute evidence](evidence/connection-omniroute-live.json) remains historical.
+
 ### Provider Connection Foundation v1 — 2026-10-13
 
 시작 로컬 develop `7ef6a4d` / fetch 원격 develop `11a36f39df42c7e9272c68237a1061bfe00d737a`. 사용자 지시문은 `61490cc`로 보존했다. 기반 기능 129개 회귀 후 `07afc91`, UI/장애 복구 133개 회귀 후 `7026e6a`로 로컬 develop에 통합했다. 증거/문서 브랜치에서 설정 변경의 이전 Probe 표시 초기화도 검증했다.

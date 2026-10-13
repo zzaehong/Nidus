@@ -4,7 +4,7 @@ import time
 import uuid
 from .credentials import MacOSKeychainCredentialStore, EnvironmentCredentialProvider, validate_secret
 from .gateway import ModelError, canonical, utc_now
-from .providers import ProviderRegistry, OpenAICompatibleAdapter, endpoint
+from .providers import ProviderRegistry, OpenAICompatibleAdapter, GeminiAdapter, endpoint
 
 
 class ConnectionRegistry:
@@ -15,11 +15,18 @@ class ConnectionRegistry:
         self.adapter=adapter or OpenAICompatibleAdapter()
         self.adapters=dict(adapters or {})
         self.adapters.setdefault('openai-compatible',self.adapter)
+        self.adapters.setdefault('gemini',GeminiAdapter())
         self.store.db.executescript('''
           CREATE TABLE IF NOT EXISTS connections (id TEXT PRIMARY KEY, data TEXT NOT NULL);
           CREATE TABLE IF NOT EXISTS model_catalog (connection_id TEXT NOT NULL, model_id TEXT NOT NULL,
             data TEXT NOT NULL, PRIMARY KEY(connection_id, model_id));
         ''')
+        # Existing saved OmniRoute Connections remain usable as generic-compatible endpoints.
+        with self.store.lock():
+            for conn in self.list():
+                if conn.get('provider')=='omniroute':
+                    conn['provider']='openai-compatible'
+                    self._save(conn)
         # A process interrupted during a bounded probe never remains advertised as ready.
         with self.store.lock():
             for conn in self.list():
@@ -65,8 +72,12 @@ class ConnectionRegistry:
             (model['connection_id'],model['model_id'],canonical(model)))
         self.store.db.commit()
 
-    def create(self, provider, base_url, secret='', name='', credential_ref=None):
-        manifest=self.providers.get(provider); base_url=endpoint(base_url or manifest['default_base_url'])
+    def create(self, provider, base_url='', secret='', name='', credential_ref=None):
+        manifest=self.providers.get(provider)
+        if base_url and (not isinstance(base_url,str) or (not manifest['endpoint_editable'] and
+                base_url.rstrip('/')!=manifest['default_base_url'])):
+            raise ModelError('invalid_endpoint')
+        base_url=endpoint(base_url or manifest['default_base_url'])
         if manifest['adapter'] not in self.adapters: raise ModelError('unsupported_adapter')
         validate_secret(secret)
         if not isinstance(name,str) or len(name)>128 or any(ord(c)<32 for c in name): raise ModelError('invalid_connection_name')
@@ -74,6 +85,7 @@ class ConnectionRegistry:
         if credential_ref:
             if secret or not ref.startswith('env:'): raise ModelError('invalid_credential_reference')
             secret=self._backend(ref).get(ref)
+        if manifest.get('api_key_required') and not secret: raise ModelError('invalid_credential')
         if secret and secret in base_url+name: raise ModelError('credential_in_content')
         with self.store.lock():
             if not credential_ref: self._backend().put(ref,secret)
@@ -89,7 +101,12 @@ class ConnectionRegistry:
     def update(self, ident, base_url=None, secret=None):
         with self.store.lock():
             conn=self.get(ident); ref=conn['credential_ref']
+            manifest=self.providers.get(conn['provider'])
+            if base_url is not None and (not isinstance(base_url,str) or (not manifest['endpoint_editable'] and
+                    base_url.rstrip('/')!=manifest['default_base_url'])):
+                raise ModelError('invalid_endpoint')
             if base_url is not None: base_url=endpoint(base_url)
+            if manifest.get('api_key_required') and secret=='': raise ModelError('invalid_credential')
             try:
                 current=self._backend(ref).get(ref)
             except ModelError as error:
@@ -121,12 +138,12 @@ class ConnectionRegistry:
             self.store.db.execute('DELETE FROM connections WHERE id=?',(ident,)); self.store.db.commit()
         return {'deleted':ident}
 
-    def select_probe_candidate(self, ident):
-        return [m['model_id'] for m in self.catalog(ident)][:3]
-
     def probe(self, ident):
         with self.store.lock():
             conn=self.get(ident); endpoint(conn['base_url'])
+            manifest=self.providers.get(conn['provider'])
+            if not manifest['endpoint_editable'] and conn['base_url']!=manifest['default_base_url']:
+                raise ModelError('invalid_endpoint')
             adapter=self._adapter_for(conn)
             conn.update(status='probing',last_probe_at=utc_now(),last_error=None,probe={'generation':'not_run','structured_output':'not_run'})
             self._save(conn)
@@ -142,17 +159,28 @@ class ConnectionRegistry:
                     conn['discovery']={'supported':True,'status':'success','count':len(models)}
                 except ModelError as error:
                     conn['discovery']={'supported':True,'status':'failed','error':error.metadata()}
-                    if error.code in ('authentication_failed','access_denied','credential_in_content'): raise
-                    models=list(old)
-                for model in models:
+                    if error.retryable or error.code in ('authentication_failed','access_denied','credential_in_content'): raise
+                    models=[record['model_id'] for record in sorted(old.values(),
+                        key=lambda record:(record.get('discovery_order',1000000),record['model_id']))]
+                for order,model in enumerate(models):
                     if model not in old:
                         self._catalog_save({'connection_id':ident,'model_id':model,'discovered_at':utc_now(),
+                            'discovery_order':order,
                             'availability':'unknown','capabilities':{'chat':'unknown','structured_output':'unknown'},
                             'last_probe_at':None,'last_success_at':None,'last_failure_at':None,'latency_ms':None,
                             'price':None,'context_length':None,'free_quota':None})
+                    else:
+                        old[model]['discovery_order']=order; self._catalog_save(old[model])
                 if not models: raise ModelError('model_unavailable')
                 last=ModelError('model_unavailable')
-                for model in sorted(models)[:3]:
+                choose=getattr(adapter,'probe_candidates',None)
+                candidates=choose(models) if callable(choose) else sorted(models)[:3]
+                if not isinstance(candidates,list): raise ModelError('invalid_response')
+                max_candidates=getattr(adapter,'max_probe_candidates',5)
+                if type(max_candidates) is not int or not 1<=max_candidates<=20: raise ModelError('invalid_adapter')
+                candidates=candidates[:max_candidates]
+                chat_model_found=False
+                for model in candidates:
                     record=next(m for m in self.catalog(ident) if m['model_id']==model)
                     record['last_probe_at']=utc_now(); start=time.monotonic()
                     try:
@@ -174,10 +202,14 @@ class ConnectionRegistry:
                             record['capabilities']['structured_output']='unverified'
                             record['structured_error']=error.metadata(); record['last_failure_at']=utc_now()
                             conn['probe']['structured_output']='failed'
-                            if error.code in ('authentication_failed','access_denied','credential_in_content'): raise
+                            last=error; chat_model_found=True
+                            if error.retryable or error.code in ('authentication_failed','access_denied','credential_in_content'): raise
+                            self._catalog_save(record)
+                            continue
                         self._catalog_save(record)
-                        conn['status']='ready' if record['capabilities']['structured_output']=='verified' else 'degraded'
-                        conn['last_error']=record.get('structured_error') if conn['status']=='degraded' else None
+                        conn['status']='ready'
+                        conn['probe']['structured_output']='passed'
+                        conn['last_error']=None
                         break
                     except ModelError as error:
                         last=error
@@ -185,7 +217,10 @@ class ConnectionRegistry:
                             ('temporarily_unavailable' if error.retryable else 'unsupported'),last_failure_at=utc_now(),last_error=error.metadata())
                         self._catalog_save(record)
                         if error.code in ('authentication_failed','access_denied','credential_in_content','rate_limited','quota_exhausted'): raise
-                else: raise last
+                else:
+                    if chat_model_found:
+                        conn['status']='degraded'; conn['last_error']=last.metadata()
+                    else: raise last
             except ModelError as error:
                 conn['status']='degraded' if error.retryable or error.code=='model_unavailable' else 'blocked'
                 conn['last_error']=error.metadata()

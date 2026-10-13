@@ -1,5 +1,6 @@
-"""Small manifest registry and a shared OpenAI-compatible protocol adapter."""
+"""Small Provider manifest registry and Provider adapter implementations."""
 import json
+import urllib.parse
 import urllib.request
 from typing import Protocol
 from .gateway import ChatCompletions, ModelError, MAX_RESPONSE, request_bytes, validate_policy
@@ -20,20 +21,24 @@ class ProviderRegistry:
     def __init__(self, manifests=None):
         self.manifests = {}
         for value in manifests if manifests is not None else [
-            {'id':'omniroute','name':'OmniRoute','auth_type':'api_key',
-             'default_base_url':'http://127.0.0.1:20128/v1','endpoint_editable':True,
-             'credential_label':'Endpoint Key','protocol':'openai_chat_completions','adapter':'openai-compatible',
-             'supports_model_discovery':True},
+            {'id':'gemini','name':'Google Gemini','auth_type':'api_key',
+             'default_base_url':'https://generativelanguage.googleapis.com/v1beta','endpoint_editable':False,
+             'credential_label':'Gemini API Key','protocol':'gemini_generate_content','adapter':'gemini',
+             'supports_model_discovery':True,'api_key_required':True},
             {'id':'openai-compatible','name':'OpenAI-compatible API','auth_type':'api_key',
              'default_base_url':'','endpoint_editable':True,'credential_label':'API Key',
-             'protocol':'openai_chat_completions','adapter':'openai-compatible','supports_model_discovery':True}]:
-            required={'id','name','auth_type','default_base_url','endpoint_editable','credential_label','protocol','adapter','supports_model_discovery'}
+             'protocol':'openai_chat_completions','adapter':'openai-compatible','supports_model_discovery':True,
+             'api_key_required':False}]:
+            required={'id','name','auth_type','default_base_url','endpoint_editable','credential_label','protocol',
+                'adapter','supports_model_discovery','api_key_required'}
             if (not isinstance(value,dict) or set(value)!=required or
                 any(not isinstance(value[k],str) or not value[k] or len(value[k])>128 for k in ('id','name','credential_label')) or
                 value['id'] in self.manifests or value['auth_type']!='api_key' or
-                value['protocol']!='openai_chat_completions' or not isinstance(value['adapter'],str) or
+                not isinstance(value['protocol'],str) or not value['protocol'] or len(value['protocol'])>128 or
+                not isinstance(value['adapter'],str) or
                 not value['adapter'] or len(value['adapter'])>128 or type(value['endpoint_editable']) is not bool or
-                type(value['supports_model_discovery']) is not bool or not isinstance(value['default_base_url'],str)):
+                type(value['supports_model_discovery']) is not bool or type(value['api_key_required']) is not bool or
+                not isinstance(value['default_base_url'],str)):
                 raise ModelError('invalid_provider_manifest')
             if value['default_base_url']: endpoint(value['default_base_url'])
             self.manifests[value['id']]=dict(value)
@@ -47,6 +52,11 @@ class ProviderRegistry:
 
 
 class OpenAICompatibleAdapter:
+    max_probe_candidates = 3
+
+    def probe_candidates(self, models):
+        return sorted(models)[:self.max_probe_candidates]
+
     def discover_models(self, connection, secret):
         headers={'User-Agent':'Nidus/0.2'}
         if secret: headers['Authorization']='Bearer '+secret
@@ -79,3 +89,91 @@ class ProviderAdapter(Protocol):
     """Provider-neutral operations required by ConnectionRegistry."""
     def discover_models(self, connection, secret): ...
     def generate(self, connection, model, secret, structured=False): ...
+    def probe_candidates(self, models): ...
+
+
+class GeminiAdapter:
+    """Native Gemini GenerateContent REST adapter, with metadata-based discovery."""
+    max_probe_candidates = 5
+    requires_api_key = True
+    max_discovery_pages = 5
+
+    def discover_models(self, connection, secret):
+        if not secret: raise ModelError('credential_missing')
+        models=[]; page_token=None
+        for _ in range(self.max_discovery_pages):
+            query={'pageSize':1000}
+            if page_token: query['pageToken']=page_token
+            url=connection['base_url']+'/models?'+urllib.parse.urlencode(query)
+            request=urllib.request.Request(url,headers={'User-Agent':'Nidus/0.2','x-goog-api-key':secret})
+            raw=request_bytes(request,10)
+            if len(raw)>MAX_RESPONSE: raise ModelError('response_too_large')
+            try:
+                value=json.loads(raw)
+                rows=value.get('models') if isinstance(value,dict) else None
+                if not isinstance(rows,list) or len(rows)>1000: raise ValueError()
+                for row in rows:
+                    if not isinstance(row,dict): raise ValueError()
+                    name=row.get('name'); methods=row.get('supportedGenerationMethods')
+                    if (not isinstance(name,str) or not name.startswith('models/') or len(name)>256 or
+                        any(ord(c)<32 for c in name) or not isinstance(methods,list) or
+                        any(not isinstance(item,str) for item in methods)):
+                        raise ValueError()
+                    if 'generateContent' in methods:
+                        model=name[len('models/'):]
+                        if secret in model: raise ModelError('credential_in_content')
+                        if model not in models: models.append(model)
+                page_token=value.get('nextPageToken')
+                if page_token is not None and (not isinstance(page_token,str) or not page_token or len(page_token)>512):
+                    raise ValueError()
+                if page_token and secret in page_token: raise ModelError('credential_in_content')
+                if not page_token: break
+            except (ValueError,TypeError,AttributeError) as error:
+                if isinstance(error,ModelError): raise
+                raise ModelError('invalid_response') from None
+        return models
+
+    def probe_candidates(self, models):
+        return list(models)[:self.max_probe_candidates]
+
+    def generate(self, connection, model, secret, structured=False):
+        if not secret: raise ModelError('credential_missing')
+        if not isinstance(model,str) or not model or len(model)>256 or any(ord(c)<32 for c in model):
+            raise ModelError('invalid_model')
+        url=connection['base_url']+'/models/'+urllib.parse.quote(model,safe='-._~')+':generateContent'
+        body={'contents':[{'role':'user','parts':[{'text':
+            'Return a JSON object with exactly one field: {"status":"READY"}.'
+            if structured else 'Return exactly the word READY.'}]}],
+            'generationConfig':{'maxOutputTokens':64}}
+        if structured:
+            body['generationConfig']['responseFormat']={'text':{'mimeType':'APPLICATION_JSON',
+                'schema':{'type':'OBJECT','properties':{'status':{'type':'STRING'}},'required':['status']}}}
+        request=urllib.request.Request(url,data=json.dumps(body,separators=(',',':')).encode(),
+            headers={'User-Agent':'Nidus/0.2','Content-Type':'application/json','x-goog-api-key':secret})
+        raw=request_bytes(request,10)
+        if len(raw)>MAX_RESPONSE: raise ModelError('response_too_large')
+        try:
+            value=json.loads(raw)
+            candidates=value.get('candidates') if isinstance(value,dict) else None
+            if not isinstance(candidates,list) or not candidates: raise ValueError()
+            candidate=candidates[0]
+            content=candidate.get('content') if isinstance(candidate,dict) else None
+            parts=content.get('parts') if isinstance(content,dict) else None
+            if not isinstance(parts,list): raise ValueError()
+            text=''.join(part.get('text','') for part in parts
+                if isinstance(part,dict) and isinstance(part.get('text',''),str))
+            finish=candidate.get('finishReason')
+            if not text or finish not in ('STOP','FINISH_REASON_UNSPECIFIED'):
+                raise ModelError('incomplete_response')
+            usage=value.get('usageMetadata',{})
+            if not isinstance(usage,dict): usage={}
+            tokens={key:usage[source] for key,source in (
+                ('prompt_tokens','promptTokenCount'),('completion_tokens','candidatesTokenCount'),
+                ('total_tokens','totalTokenCount')) if type(usage.get(source)) is int}
+            actual=value.get('modelVersion')
+            if not isinstance(actual,str) or not actual: actual=model
+            if secret in text or secret in actual: raise ModelError('credential_in_content')
+            return {'text':text,'model':actual,'tokens':tokens}
+        except (ValueError,TypeError,AttributeError) as error:
+            if isinstance(error,ModelError): raise
+            raise ModelError('invalid_response') from None

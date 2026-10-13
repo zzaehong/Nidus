@@ -1,82 +1,61 @@
-# Provider Connection Foundation v1
+# Native Provider Connection — Slice 1
 
-2026-10-13. 지원 유형은 **OmniRoute**와 **Generic OpenAI-compatible API** 두 가지다. 두 manifest가 같은 `OpenAICompatibleAdapter`를 사용한다. Gemini/Anthropic native API, OAuth, 자동 역할별 라우팅, GUI v2, 동적 조직은 구현하지 않았다.
+Nidus is moving Provider connections toward direct APIs. The current connection UI supports **Google Gemini natively** and **Generic OpenAI-compatible API**. OmniRoute is optional: connect it, LM Studio, NVIDIA NIM, or another compatible endpoint through the generic entry. The Connection path does not require OmniRoute.
 
 ## 연결 방법
 
-`python3 -m nidus --vault "$vault" gui` 실행 후 **설정 → AI 연결**에서 Provider를 선택한다. OmniRoute 기본 Endpoint는 `http://127.0.0.1:20128/v1`이다. 호환 API는 Base URL을 입력한다. Key를 입력하고 **연결 확인**을 누르면 먼저 설정을 저장하고 공개 합성 문구로 모델 탐색과 응답을 검사한다. 모델 ID나 Policy JSON은 입력하지 않는다. 인증이 없는 로컬 서버는 Key를 비워 둔다. Probe에도 Provider 사용 요금이 발생할 수 있다.
+`python3 -m nidus --vault "$vault" gui`를 실행하고 **설정 → AI 연결 → Google Gemini**를 선택합니다. Google AI Studio에서 발급한 Gemini API Key를 입력하고 **연결 확인**을 누릅니다. Endpoint, model ID, route, policy, context length, JSON 설정은 입력하지 않습니다. Nidus가 모델 목록을 조회해 `generateContent`를 지원한다고 공식 metadata에 표시된 모델만 대상으로 최대 5개를 검사합니다. 일반 텍스트 응답과 JSON 응답이 모두 검증된 모델이 있으면 `READY`가 됩니다.
 
-### 다중 API 게이트웨이 연결의 필수 사전 설정 (현재 v1)
+Probe는 계정에서 사용 가능한 모델에 실제 API 요청을 보내므로 Google의 요금·quota 정책이 적용될 수 있습니다. Nidus는 Gemini를 무료라고 표시하거나 가격/무료 quota를 추정하지 않습니다. 고정된 짧은 합성 문구만 전송하며 Vault의 사용자 자료는 전송하지 않습니다.
 
-**OmniRoute처럼 여러 Provider/API를 묶는 게이트웨이는, 실제 사용 가능한 채팅 모델과 해당 Provider 연결만 허용한 제한 키를 Nidus에 등록한다.** 현재 v1의 운영 조건이며, 모든 모델을 공개한 키에서 적합한 모델을 자동으로 찾아 연결하는 동작은 보장하지 않는다. 이 조건은 Nidus의 후보 선택 한계에서 비롯되며 모든 API 게이트웨이에 본질적으로 필요한 제약은 아니다.
+OpenAI-compatible Provider를 선택하면 기존처럼 호환 Endpoint와 Key를 입력합니다. 이 방식으로 로컬 서버, NVIDIA NIM 또는 필요에 따라 OmniRoute를 연결할 수 있습니다. Generic 호환 Adapter는 Chat Completions 규격과 discovery 동작을 사용합니다.
 
-OmniRoute 3.8.51에서는 **API 키 → 해당 키의 권한 편집**에서 허용 모델과 연결 범위를 설정한다. 처음에는 작동이 확인된 채팅 모델 1개와 그 모델을 제공하는 연결 1개로 제한하고 Nidus에서 검사한다. 일반 채팅 응답과 `json_object` 구조화 응답이 모두 가능한 모델이어야 한다. 범위를 확대할 때는 검증된 모델·연결만 추가하고 Nidus에서 **연결 테스트**를 다시 실행한다. 키 권한에 모델을 추가하는 것만으로 upstream 인증·이용 권한·할당량이 확보되는 것은 아니다.
+### 여러 모델을 노출하는 호환 게이트웨이
 
-`GET /models`에 표시되는 것과 실제 호출 가능한 것은 다르다. 현재 Nidus는 모델 ID를 정렬한 앞의 최대 3개를 검사하며, 목록에서 채팅 가능 여부나 실제 연결 여부를 먼저 구분하지 않는다. 따라서 모든 모델을 허용하면 부적합한 후보가 먼저 선택되어, 정상 모델이 목록에 있어도 검사가 실패할 수 있다. 제한 키도 성공을 보장하지 않으며 READY는 최소 한 모델의 일반·구조화 응답 검증 성공을 의미한다.
+호환 Endpoint가 모델별 generation metadata를 제공하지 않으면 Generic Adapter는 이전 동작대로 이름순 앞의 최대 3개 모델만 검사합니다. OmniRoute와 같은 다중 API 게이트웨이의 연결이 실패하면 우선 실제로 사용할 수 있고 일반·JSON 응답을 지원하는 모델과 해당 upstream 연결만 허용한 Endpoint Key를 발급해 확인하세요. 이 설정은 Generic endpoint에서 첫 후보 검사를 예측 가능하게 하는 운영상 선택입니다. OmniRoute는 여전히 호환 API를 제공하는 선택지이며 Nidus의 필수 구성요소가 아닙니다.
 
-2026-10-13 사용자 환경에서 모든 모델 키는 목록 조회에 성공해 735개를 발견했으나, 앞의 `aihorde/2DN`, `aihorde/526Mix-Animated`, `aihorde/A-Zovya RPG Inpainting`에 대한 채팅 요청이 모두 HTTP 400 / `invalid_request`로 실패했다. 기존 제한 키는 `gh/gpt-4o-mini`에서 성공했다. 이 사례의 실패는 목록 조회 인증 실패가 아닌 generation 단계 실패이며, Provider 오류 body를 저장하지 않으므로 upstream의 상세 거부 사유까지 확인한 것은 아니다.
+2026-10-13에 보존된 [과거 OmniRoute 검증](evidence/connection-omniroute-live.json)은 모델 목록의 첫 항목들이 채팅 호출을 거부했지만 `gh/gpt-4o-mini`의 일반/구조화 응답은 통과했던 사례입니다. 그때의 first-three 제한은 이제 Gemini metadata 기반 후보 선택에는 적용되지 않습니다. 과거 evidence는 역사 자료로 보존합니다.
 
-여기서 제한적 라우팅은 **게이트웨이에서 허용 대상을 좁히는 설정**을 뜻한다. Nidus에 자동 Route Broker가 구현되었다는 의미는 아니다. 향후에는 채팅 capability와 검증된 가용성을 기준으로 후보를 선택하고 구체적인 실패 원인을 화면에 표시해야 한다.
+## 상태와 모델 Catalog
 
-연결 카드는 상태·사용 가능 모델 수·응답 검증을 표시한다. **연결 테스트**로 재검사하며, **관리 및 상세 정보**에서 Endpoint 수정·Key 교체·삭제가 가능하다. 기존 Key는 다시 표시하지 않는다. 빈 Key로 교체할 때는 교체 체크박스를 선택한다. 설정 변경은 Catalog와 이전 Probe 표시를 초기화하고 다시 `configured`로 만든다. 삭제는 Keychain 항목, 현재 연결 metadata, Catalog association을 지우며 과거 Task/Plan audit는 유지한다. env 호환 연결을 삭제해도 사용자 환경변수는 변경하지 않는다.
+Connection 상태는 `configured`, `probing`, `ready`, `degraded`, `blocked`입니다. `ready`는 적어도 하나의 발견 모델에서 일반 응답과 구조화 JSON 응답을 실제로 확인했음을 뜻합니다. 일반 응답만 가능한 모델은 Catalog에 `available`로 남을 수 있지만, 구조화 probe가 실패하면 다음 Gemini 후보를 계속 검사합니다. 이후 후보가 둘 다 통과하면 그 모델을 선택하고 연결을 `ready`로 만듭니다. 후보 전체가 성공하지 않으면 연결은 `degraded` 또는 오류 유형에 따라 `blocked`입니다.
 
-이 연결은 아직 기존 Plan/Task의 policy를 대체하지 않는다. 업무 실행은 기존 정책과 전송 승인 경계를 그대로 사용한다. 이번 설정을 완료했다고 기존 Plan이 자동으로 이 연결을 사용하는 것은 아니다.
+Gemini discovery는 공식 `models.list`의 `supportedGenerationMethods`에서 `generateContent`를 찾습니다. API가 반환한 순서를 유지하고 최대 5개만 probe하므로 고정 모델 이름이나 오래된 별칭을 기본값으로 하드코딩하지 않습니다. embedding·이미지 등 `generateContent`를 지원하지 않는 모델은 후보 및 Catalog에 넣지 않습니다. Generic compatibility 연결은 모델 metadata가 없는 경우를 위해 이름순 최대 3개라는 별도 제한을 유지합니다.
 
-## 아키텍처 감사와 경계
+Catalog는 발견한 모델 ID와 Provider 반환 순서, 검증된 chat/structured capability, 실제 응답의 model version, latency와 API가 제공한 token metadata를 기록합니다. 가격, context length, 무료 quota를 추측하지 않으며 이 값들은 알 수 없는 상태로 남습니다. 기존 Task/Plan policy는 계속 별도로 동작하며 이 Connection/Catalog를 자동으로 사용하지 않습니다. Role별 라우팅과 Route Broker는 후속 Slice입니다.
 
-기존 `Gateway`는 Task/Plan 메시지·전송 snapshot·승인 대상 policy·route fallback·비용 metadata와 강하게 결합되어 있다. 이 부분은 유지했다. `ChatCompletions`의 bounded response parsing, no proxy/no redirect, HTTP 오류 taxonomy를 재사용한다. 공통 HTTP 부분만 `request_bytes`로 추출하고 명시적인 메모리 내 secret 전달 인자를 추가했다. 기존 호출은 계속 env reference를 해석한다.
+## 설계와 보안 경계
 
-새 계층은 `ProviderRegistry → ConnectionRegistry → OpenAICompatibleAdapter → ChatCompletions`다. Manifest는 표시 이름, 인증 유형, 기본 주소, 수정 가능 여부, Key label, protocol, discovery 지원 여부를 정의한다. 복잡한 plugin framework는 없다. Registry가 UUID 기반 불변 `conn_…`와 `cred_…`를 생성한다. GUI의 연결 API는 이 Registry를 호출하며 업무용 `Application/Runtime`과 분리된다. Probe는 Task/Plan을 만들지 않는다. 향후 Route Broker가 이 경계를 통합한다.
+Manifest는 Provider 표시 이름, auth 유형, 기본 endpoint, endpoint 수정 가능 여부, credential label, API key 필요 여부, adapter ID, model discovery 여부만 가집니다. Registry는 manifest의 adapter ID를 adapter lookup으로 해석합니다. `ConnectionRegistry`는 공통 discovery/generate/probe 계약만 호출하며 OpenAI Chat Completions wire format을 직접 알지 않습니다. 구현은 작은 `ProviderAdapter` 계약으로 제한하며 별도의 plugin framework는 없습니다.
 
-## Credential 저장과 보안
+현재 연결 경로는 다음과 같습니다.
 
-GUI 입력은 macOS `Security.framework`의 generic-password Keychain에 보관한다. Python `ctypes` 호출이므로 shell, subprocess argv, `.env` 파일을 거치지 않는다. service는 `org.nidus.provider-connections.v1`, account는 불투명 credential reference다. Python 문자열의 완전한 메모리 zeroization을 보장하지는 않으며 조회 버퍼는 API 사용 직후 해제한다. Keychain 접근이 거부되면 평문 저장으로 우회하지 않는다. 새 GUI 연결의 Linux/Windows secret backend는 미지원이다.
-
-현재 구현은 macOS에서 실제 검증한 SecKeychain API를 사용한다. Apple이 deprecated로 표시한 API이므로 향후 SecItem API로의 이전을 검토한다. [Apple 조회 API](https://developer.apple.com/documentation/security/seckeychainfindgenericpassword(_:_:_:_:_:_:_:_:)), [Apple 수정 API](https://developer.apple.com/documentation/security/seckeychainitemmodifyattributesanddata(_:_:_:_:)).
-
-`EnvironmentCredentialProvider`는 `env:NIDUS_…_API_KEY` 또는 `_TOKEN` 형태를 읽는 호환 경로다. 새 GUI에서는 env reference를 입력받거나 env 파일을 만들지 않는다. DB에는 `credential_ref`만 기록한다. URL/name, 발견 모델 ID, 응답 모델명/본문에 현재 Key 원문이 섞이면 거부한다. 응답 본문은 Catalog/evidence에 저장하지 않는다. HTTP 오류 body는 읽지 않으며 GUI 연결 오류는 안전한 코드만 반환한다. HTTP 원격 주소, URL userinfo/query/fragment를 거부하고 loopback HTTP/원격 HTTPS만 허용하며 redirect와 시스템 proxy를 사용하지 않는다. TLS 검증은 기본값을 유지한다.
-
-## Probe와 상태
-
-| 상태 | 의미 |
-|---|---|
-| configured | 저장됨. 사용 가능성 미검증 |
-| probing | 명시적 검사 진행 중 |
-| ready | 최소 한 모델에서 정확한 일반 응답과 JSON 응답 모두 검증 |
-| degraded | 일시적 오류, 후보 없음, 또는 chat 성공/구조화 검증 실패 |
-| blocked | 인증/접근/요청 등 설정 또는 응답 검토가 필요한 실패 |
-
-Probe는 endpoint 검증 → `GET /models` → 최대 3개 후보의 짧은 generation → 성공 후보의 `json_object` 검증 순서다. 각 HTTP timeout은 10초, generation 최대 출력은 64 tokens다. 일반 응답은 정확히 `READY`, 구조화 응답은 JSON을 파싱하여 정확히 `{"status":"READY"}`인지 검사한다. 한 번의 성공은 모든 모델이나 장기 안정성, 모든 JSON Schema의 지원을 보장하지 않는다. 후보는 모델 ID 정렬순 최대 3개이며 품질·가격을 추정하지 않는다. 자동 재시도/백그라운드 상태 갱신은 없다.
-
-인증/접근 실패는 다른 모델로 blind fallback하지 않는다. 429는 `rate_limited`, 503은 `provider_unavailable`, timeout/network도 기존 `ModelError`와 동일한 코드를 사용한다. 구조화 요청에서 400 등 프로토콜 오류가 나면 실제 오류와 unverified capability를 남기며 “지원됨”으로 추측하지 않는다.
-
-Discovery의 `supported`는 manifest 선언이고 `status=not_run/success/failed`는 실제 실행 결과다. `/models` 실패 시 해당 연결에서 **과거 발견한 ID만** 후보로 재사용한다. 인증 오류이면 재사용하지 않는다. 새 연결에 후보가 없으면 degraded로 남기며 모델명을 만들어내지 않는다. manual model ID UI는 없다. 성공한 discovery에서 사라진 기존 모델은 `unknown`으로 바뀐다.
-
-## Catalog와 영속성
-
-기존 SQLite에 `connections`, `model_catalog` 테이블을 추가했다. 업무 schema와 policy는 변경하지 않았다. Catalog key는 `(connection_id, model_id)`이며 발견 시각, availability, chat/structured_output 검증 결과, 최근 probe/성공/실패 시각, latency, actual model, token metadata를 보관한다. 가격/context/free quota는 근거가 없어 `null`(unknown)이다. availability는 unknown/available/temporarily_unavailable/rate_limited/authentication_failed/unsupported를 구분한다.
-
-재시작하면 metadata와 reference를 복구하고 secret은 Keychain/env에서 다시 조회한다. 중단된 probing은 degraded/probe_interrupted로 정리한다. Store의 기존 프로세스 잠금으로 검사와 수정이 충돌하지 않게 한다. Keychain과 SQLite 사이에 분산 트랜잭션은 없으며 OS 또는 DB 실패 시 ready 상태를 유지하지 않도록 먼저 상태를 무효화한다. Keychain에 없는 키는 새 키 입력으로 복구할 수 있다.
-
-API: GET `/api/connections`는 manifest와 연결/Catalog를 반환한다. POST `/api/connections`는 provider/base_url/secret/name으로 생성한다. POST `/api/connections/ID/{probe,update,delete}`는 재검사·설정 변경·삭제다. 기존 Host/Origin/session token 경계를 그대로 적용한다. 조회는 Key를 반환하지 않는다.
-
-## 검증과 한계
-
-- 전체 Python discovery 133개, 기존 HTTP integration 7개, frontend 10개 통과. 신규 14개에 fake Provider/GUI HTTP, 오류 분류, no redirect, 재시작, secret echo·저장·로그 방지, Key 손실 복구가 포함된다.
-- [실제 Keychain](evidence/connection-keychain.json): 합성 키 put/get/replace/delete/exists/missing PASS. 임시 항목 삭제 완료.
-- [실제 OmniRoute](evidence/connection-omniroute-live.json): 2개 모델 발견, 요청 `gh/gpt-4o-mini`, 응답 `gpt-4o-mini`, 일반/구조화 응답 PASS. 일반 응답 latency 1,152 ms, 14 tokens. 개인 Vault 자료 전송 없음.
-- [브라우저 검증](evidence/connection-gui-review.json): 합성 fixture로 설정 화면·재검사·관리 disclosure 확인. 실제 Keychain/OmniRoute 검증과 별개다.
-
-재현 명령:
-
-```sh
-python3 -m unittest discover -s tests -q
-python3 tests/integration/model_http.py -q
-python3 tests/integration/plan_http.py -q
-node tests/gui_frontend.js
-PYTHONPATH=. python3 scripts/credential_check.py
-PYTHONPATH=. python3 scripts/connection_live.py --allow-synthetic-transmission \
-  --credential-env-file /path/to/existing.env --evidence /tmp/new-connection-evidence.json
+```text
+Google Gemini → GeminiAdapter → Gemini GenerateContent REST API
+OpenAI-compatible API → OpenAICompatibleAdapter → Chat Completions
 ```
 
-Live harness는 기존 env 파일을 읽기만 하고 값을 출력하지 않는다. endpoint/key가 없으면 NOT RUN이다. Fake HTTP 성공은 실제 Provider 성공으로 집계하지 않는다. Generic 호환 서비스 각각의 실접속(OpenAI/NIM/LM Studio 등), Linux/Windows Keychain backend, OAuth/native API, 자동 모델 선택, scheduler/GUI v2는 검증·지원 범위 밖이다. 다음 단계는 검증된 Connection/Catalog를 소비하는 제한적인 Route Broker다.
+Gemini API Key와 호환 API Key는 기존 macOS `Security.framework` Keychain `CredentialStore`에 저장합니다. SQLite와 Model Catalog에는 무작위 `cred_…` reference만 남습니다. Gemini 요청은 Key를 URL query가 아니라 `x-goog-api-key` header로 전달합니다. API 응답 오류 body를 읽거나 저장하지 않으며 endpoint/모델 응답에 Key가 반향되면 연결을 거부합니다. GUI는 기존 Key를 다시 표시하지 않고 API 응답에 credential을 넣지 않습니다.
+
+이전 버전에서 저장한 `omniroute` Provider 연결이 있으면 Registry 시작 시 Provider ID만 `openai-compatible`로 바꿉니다. 사용자의 Endpoint, connection 이름, Keychain reference, Catalog와 Probe 기록은 유지되므로 기존 연결을 generic compatibility 경로로 계속 관리할 수 있습니다. 새 OmniRoute manifest는 목록에 노출하지 않습니다.
+
+SQLite에는 connection metadata와 model observations만 저장됩니다. 기존 Keychain 경계, Host/Origin/session token 검증, Task/Plan transmission 승인과 policy 동작은 유지됩니다. 연결 검사는 Task/Plan을 생성하거나 실행하지 않습니다.
+
+## 현재 범위와 다음 확장
+
+지원 상태:
+
+- **Native:** Google Gemini API Key, `models.list`, generation 후보 필터, `generateContent`, 실제 일반 및 JSON probe.
+- **Compatibility:** 임의 OpenAI-compatible Chat Completions endpoint. OmniRoute도 이 방식으로 선택해 연결할 수 있습니다.
+- **Not implemented:** OpenAI native, Anthropic, Groq, Cloudflare, NVIDIA native, OAuth, 무료 Provider catalog, Route Broker, 자동 Provider 선택.
+
+향후 connection type은 API Key, OAuth, Local, 공식 Session Connector 등으로 확장할 수 있습니다. Session Connector는 Provider가 문서화하고 자동화를 허용하는 공식 OAuth/session API가 있을 때만 추가합니다. 비공식 Web cookie scraping은 지원하지 않습니다. 추가 Provider는 공식 API·metadata·약관을 확인하고 한 번에 하나씩 구현·검증합니다.
+
+## 검증 자료
+
+- [Synthetic Gemini fixture evidence](evidence/gemini-native-synthetic.json): deterministic local HTTP fixture, 실제 Google API 검증이 아님.
+- [실제 Gemini probe](evidence/gemini-native-live.json): 로컬 API credential이 준비되지 않아 `NOT RUN`으로 기록.
+- [과거 OmniRoute live evidence](evidence/connection-omniroute-live.json): 유지된 historical record.
+- [기존 Keychain evidence](evidence/connection-keychain.json)와 [GUI fixture review](evidence/connection-gui-review.json).
+
+검증 상태와 재현 명령은 [VALIDATION](VALIDATION.md)에 기록합니다.

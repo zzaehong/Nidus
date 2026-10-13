@@ -1,1476 +1,1065 @@
-# Nidus Provider Connection Foundation v1 — Codex 구현 지시
+# Nidus Native Provider Connection — Slice 1
 
 ## 목표
 
-현재 Nidus `develop`을 기준으로 **동적 조직 기능을 구현하기 전에 Provider/API 연결 기반을 먼저 안정화하라.**
+현재 Nidus `develop`을 기준으로 **OmniRoute를 핵심 연결 경로에서 제거하고, Nidus가 Provider API를 직접 연결할 수 있는 최소 구조를 만든다.**
 
-현재 원격 기준:
-
-```text
-develop:
-11a36f39df42c7e9272c68237a1061bfe00d737a
-
-main:
-d9bd9d0069cef5157a283bea2a0af365c99d44b6
-```
-
-단, 작업 시작 시 반드시 직접:
-
-```bash
-git status
-git branch --show-current
-git log -1 --oneline
-git fetch
-```
-
-를 확인하라.
-
-사용자가 최근 작업 상태를 의도적으로 되돌렸으므로, 과거 feature branch나 이전 대화에서 존재했던 동적 조직/Assistant 구현이 현재 `develop`에 있다고 가정하지 마라.
-
-현재 `develop`의 실제 코드를 source of truth로 삼는다.
-
----
-
-# 1. 이번 Slice의 목적
-
-현재 사용자는 Plan을 만들 때 Provider/Model policy JSON을 직접 입력해야 한다.
-
-현재 GUI도:
+이번 Slice의 성공 기준은 단 하나다.
 
 ```text
-사용자 요청
-Sources
-Planning Policy JSON
-
-고급:
-Worker Policy
-Review Policy
-Final Policy
-Task limits
-```
-
-구조다.
-
-이번 Slice에서는 GUI 자체를 크게 재설계하지 않는다.
-
-대신 다음 기반을 만든다.
-
-```text
-Provider Registry
-        ↓
-Provider Manifest
-        ↓
-Credential Store
-        ↓
-Connection Registry
-        ↓
-Connection Probe
-        ↓
-Model Discovery
-        ↓
-Model Catalog
-```
-
-목표는:
-
-> 사용자가 Provider를 한 번 연결하면 Nidus가 그 연결을 스스로 검증하고 사용할 수 있는 모델과 기능을 파악할 수 있게 하는 것.
-
-이다.
-
-향후:
-
-```text
-Work Request
+사용자
 ↓
-Assistant / Manager / Worker
+설정 → AI 연결
 ↓
-Route Broker
+Google Gemini
 ↓
-Connection
+API Key 입력
 ↓
-Provider
-```
-
-구조를 만들기 위한 기반이다.
-
----
-
-# 2. 이번 작업에서 하지 않을 것
-
-이번 Slice에서 다음은 구현하지 않는다.
-
-```text
-GUI v2 전체 재설계
-Executive Assistant
-Dynamic Team
-Work Request
-비동기 Scheduler
-자동 Team 실행
-Pixel Office
-병렬 Worker
-병렬 Team
-복잡한 Budget Reservation
-자동 모델 품질 최적화
-JEV
-OAuth Provider 전체 구현
-Remote GUI
-Multi-user
-```
-
-특히 **현재 PlanRuntime이나 Manager/Worker workflow를 Provider 연결 문제 때문에 다시 설계하지 마라.**
-
----
-
-# 3. 핵심 UX 목표
-
-Provider 연결 경험은 OmniRoute의 단순한 연결 방식을 참고한다.
-
-최종적으로 GUI에서는 다음 정도의 흐름을 만들 수 있어야 한다.
-
-```text
-AI Provider 연결
+Nidus가 Gemini API를 직접 호출
 ↓
-Provider 선택
+모델 탐색
 ↓
-API Key 또는 Endpoint 입력
+일반 응답 Probe
 ↓
-[연결 확인]
-↓
-Nidus 자동 검증
+구조화 응답 Probe
 ↓
 READY
 ```
 
-향후 GUI 예:
+OmniRoute를 거치지 않는다.
 
-```text
-AI 연결
-
-[ OmniRoute ]
-[ OpenAI 호환 API ]
-[ 기타 로컬/호환 API ]
-
-+ 연결
-```
-
-OmniRoute:
-
-```text
-OmniRoute 연결
-
-Endpoint
-http://127.0.0.1:20128/v1
-
-Endpoint Key
-••••••••••••
-
-[ 연결 확인 ]
-```
-
-사용자가 다음을 직접 고르게 하지 않는다.
-
-```text
-model ID
-route
-JSON policy
-context length
-structured output option
-fallback order
-```
+현재 `develop`의 실제 코드와 HEAD를 작업 시작 시 직접 확인하고 그것을 source of truth로 사용한다.
 
 ---
 
-# 4. 중요한 제품 원칙
+## 1. 현재 구현을 버리지 않는다
 
-Provider 연결은 Nidus의 핵심 사용자 경험이 아니다.
-
-장기 목표:
+현재 존재하는 다음 기반은 최대한 재사용한다.
 
 ```text
-95%
-업무 요청 / 진행 / 결과
+CredentialStore
+MacOSKeychainCredentialStore
 
-5%
-Provider 연결 설정
+ConnectionRegistry
+
+Model Catalog
+
+configured
+probing
+ready
+degraded
+blocked
+
+Provider connection GUI
+
+Connection Probe
+
+기존 ModelError taxonomy
 ```
 
-Provider 연결을 마친 이후 일반 사용 중에는:
+이번 작업은 Connection Foundation을 다시 만드는 작업이 아니다.
+
+목적은 현재 구조를:
 
 ```text
-Provider
-Model
-Route
-Endpoint
-Policy JSON
+OpenAI-compatible 중심
 ```
 
-을 거의 볼 필요가 없어야 한다.
+에서:
 
-이번 Slice에서는 그 기반만 구축한다.
+```text
+Provider-neutral
+```
+
+로 최소한 확장하는 것이다.
 
 ---
 
-# 5. 기존 Gateway를 먼저 감사하라
+# 2. OmniRoute의 위치 변경
 
-현재 `nidus/gateway.py`에는 이미:
+OmniRoute를 Nidus의 first-class 핵심 Provider에서 내린다.
 
-```text
-ChatCompletions
-Gateway
-route fallback
-policy validation
-error classification
-token/cost metadata
-transmission snapshot
-credential env reference
-```
-
-가 존재한다.
-
-현재 구조를 삭제하거나 무조건 교체하지 마라.
-
-먼저 다음을 분석하라.
+즉:
 
 ```text
-무엇을 재사용할 수 있는가
-무엇이 Task policy와 과도하게 결합되어 있는가
-Connection Layer가 어디에 위치해야 하는가
-기존 Gateway와 새 Provider layer의 경계는 어디인가
+현재
+
+OmniRoute
+→ first-class Provider
 ```
 
-기본 방향:
+를 장기적으로:
 
 ```text
-Runtime
-↓
-Gateway
-↓
-[향후 Route Broker]
-↓
-Connection Registry
-↓
-Provider Adapter
+Generic OpenAI-compatible
+→ 필요하면 OmniRoute도 연결 가능
 ```
 
-이번에는 `Route Broker` 전체를 구현하지 않는다.
+로 변경한다.
+
+이번 Slice에서 OmniRoute 지원 코드를 반드시 삭제할 필요는 없다.
+
+단:
+
+> Nidus 설계가 OmniRoute를 필요로 한다고 가정하지 마라.
+
+README와 설계 문서에서도 OmniRoute를 기본 또는 권장 연결처럼 표현하지 않는다.
 
 ---
 
-# 6. Provider Manifest
+# 3. 최소 Provider Adapter interface
 
-Provider 연결 UI와 연결 로직을 Provider별 하드코딩으로 만들지 않는다.
+현재 `OpenAICompatibleAdapter`를 일반화할 수 있는 가장 작은 interface를 만든다.
 
-Provider의 사용자-facing metadata를 `Provider Manifest`로 정의한다.
+예:
+
+```python
+class ProviderAdapter:
+    def discover_models(...)
+    def probe_model(...)
+    def generate(...)
+```
+
+구체적 method 이름과 signature는 현재 코드 스타일을 따라라.
+
+중요한 것은:
+
+```text
+ConnectionRegistry
+```
+
+가 OpenAI-compatible API 형식을 직접 알지 않게 만드는 것이다.
+
+---
+
+# 4. Provider Manifest 확장
+
+현재 Manifest를 유지하되 Provider별 Adapter를 선택할 수 있어야 한다.
 
 개념 예:
 
 ```json
 {
-  "id": "omniroute",
-  "name": "OmniRoute",
+  "id": "gemini",
+  "name": "Google Gemini",
   "auth_type": "api_key",
-  "default_base_url": "http://127.0.0.1:20128/v1",
-  "endpoint_editable": true,
-  "credential_label": "Endpoint Key",
-  "protocol": "openai_chat_completions",
-  "supports_model_discovery": true
+  "adapter": "gemini",
+  "credential_label": "Gemini API Key"
 }
 ```
 
-Generic OpenAI-compatible:
+그리고 기존 Generic:
 
 ```json
 {
   "id": "openai-compatible",
   "name": "OpenAI-compatible API",
   "auth_type": "api_key",
-  "endpoint_editable": true,
-  "credential_label": "API Key",
-  "protocol": "openai_chat_completions",
-  "supports_model_discovery": true
+  "adapter": "openai-compatible"
 }
 ```
 
-필요한 최소 필드만 정의하라.
+Manifest를 거대한 Plugin framework로 만들지 마라.
 
-Manifest를 복잡한 Plugin framework로 만들지 않는다.
-
----
-
-# 7. v1 Provider 범위
-
-이번 Slice에서는 **실제로 끝까지 검증 가능한 Provider 유형만 지원한다.**
-
-필수:
-
-```text
-1. OmniRoute
-2. Generic OpenAI-compatible endpoint
-```
-
-Generic OpenAI-compatible은 예를 들어:
-
-```text
-OpenAI
-NVIDIA NIM
-LM Studio
-사내 Gateway
-기타 OpenAI-compatible service
-```
-
-를 연결할 수 있는 기반이어야 한다.
-
-직접 Gemini native API나 Anthropic native API는 이번 Slice의 필수 완료 조건이 아니다.
-
-향후 Provider Adapter로 추가할 수 있는 구조만 확보한다.
-
-아직 지원하지 않는 Provider를 GUI에서 작동하는 것처럼 표시하지 마라.
+이번 Slice에서 필요한 필드만 추가한다.
 
 ---
 
-# 8. Provider Adapter
+# 5. 첫 Native Provider는 Gemini 하나만 구현
 
-Provider와 protocol을 분리한다.
-
-예:
+이번 Slice에서는 다음 Provider만 새로 직접 지원한다.
 
 ```text
-Provider Manifest
-OmniRoute
-
-Protocol Adapter
-OpenAICompatibleAdapter
+Google Gemini
 ```
 
-OmniRoute와 여러 OpenAI-compatible Provider가 동일한 adapter를 재사용할 수 있어야 한다.
-
-개념 인터페이스:
+이유는 다양한 Provider를 한꺼번에 구현하기 전에:
 
 ```text
-discover_models(connection)
-probe_model(connection, model)
-generate(...)
+native API
++
+native authentication
++
+native model discovery
++
+native generation
++
+structured output
 ```
 
-구체적인 이름은 현재 코드 스타일에 맞게 결정하라.
-
-`Gateway.ChatCompletions`의 안정적인 부분은 최대한 재사용한다.
+이 Nidus Connection Foundation 위에서 실제로 작동하는지 증명하기 위함이다.
 
 ---
 
-# 9. Credential Store
+# 6. GeminiAdapter
 
-API Key를 다음 위치에 저장하지 않는다.
-
-```text
-SQLite
-Vault
-Git
-Policy JSON
-Task
-Plan
-Prompt
-일반 로그
-Model Catalog
-Connection record의 평문 필드
-```
-
-DB에는 다음과 같은 reference만 존재한다.
-
-```text
-credential_ref
-```
-
-예:
-
-```text
-cred_...
-```
-
-## v1 권장
-
-현재 주 사용환경이 macOS이므로:
-
-```text
-CredentialStore interface
-        ↓
-MacOSKeychainCredentialStore
-```
-
-를 구현하는 방식을 우선 검토한다.
-
-macOS Keychain은 OS의 `security` 명령 또는 검증 가능한 안전한 방법을 사용할 수 있다.
-
-단:
-
-- shell injection 방지
-- Key 자체 로그 금지
-- subprocess argv/diagnostic leakage 검토
-- 조회 결과를 필요 이상 메모리에 유지하지 않음
-- 삭제/교체 가능
-
-을 지킨다.
-
-기존 환경변수 방식은 **호환 모드**로 유지할 수 있다.
-
-예:
-
-```text
-EnvironmentCredentialProvider
-```
-
-그러나 새 GUI 연결에서 입력된 Key를 `.env` 파일로 저장하지 않는다.
-
----
-
-# 10. Credential Store abstraction
-
-OS-specific 구현을 다른 코드에 퍼뜨리지 않는다.
+새 Adapter를 구현한다.
 
 개념:
 
 ```text
-CredentialStore
+GeminiAdapter
 
-put(ref, secret)
-get(ref)
-replace(ref, secret)
-delete(ref)
-exists(ref)
+discover_models()
+generate()
+structured output probe
 ```
 
-실제 method 이름은 코드 스타일에 맞게 조정한다.
+공식 Gemini API의 현재 규격을 확인해서 구현하라.
 
-향후 Linux Secret Service나 Windows Credential Manager 구현을 추가할 수 있어야 한다.
+오래된 모델 이름이나 과거 API 형태를 추측해서 하드코딩하지 마라.
 
-이번 v1에서 지원하지 않는 OS를 지원하는 척하지 않는다.
-
----
-
-# 11. Connection Registry
-
-Model과 Provider 연결 자체를 분리한다.
-
-Connection 예:
-
-```json
-{
-  "id": "conn_...",
-  "provider": "omniroute",
-  "base_url": "http://127.0.0.1:20128/v1",
-  "credential_ref": "cred_...",
-  "status": "ready",
-  "created_at": "...",
-  "last_probe_at": "...",
-  "last_error": null
-}
-```
-
-Connection에는 API Key 평문이 없어야 한다.
-
-Connection ID는 Runtime이 생성한다.
-
-불변 ID를 사용한다.
-
----
-
-# 12. Connection 상태
-
-내부 상태는 최소:
+특히 이전 Nidus 작업에서 특정 Gemini 모델이 신규 사용자에게 404가 난 사례가 있었으므로:
 
 ```text
-configured
-probing
-ready
-degraded
-blocked
+모델 이름을 코드 기본값으로 신뢰하지 않는다.
 ```
 
-를 표현할 수 있어야 한다.
+Model discovery 결과를 사용한다.
 
-세부 실패 원인은 별도 error metadata로 기록한다.
+---
+
+# 7. 모델 자동 탐색
+
+사용자에게 Gemini model ID를 입력받지 않는다.
+
+흐름:
+
+```text
+Gemini API Key
+↓
+모델 목록 조회
+↓
+generation 가능한 후보 필터
+↓
+bounded probe
+↓
+실제 사용할 수 있는 후보 발견
+```
+
+Provider가 반환한 모델 metadata에서 generation 지원 여부를 알 수 있다면 활용한다.
+
+모르면 추측하지 않는다.
+
+---
+
+# 8. 후보 탐색 규칙
+
+현재 OmniRoute 구현처럼:
+
+```text
+alphabetical first 3
+```
+
+만 검사하는 방식을 Gemini Adapter에 복제하지 마라.
+
+대신 Provider metadata를 기반으로 명백히 generation 용도가 아닌 모델을 제거한 뒤 bounded 탐색을 수행한다.
+
+반드시 상한을 둔다.
 
 예:
 
 ```text
-authentication_failed
-access_denied
-network_failure
-timeout
-rate_limited
-provider_unavailable
-invalid_request
-model_unavailable
-structured_output_unsupported
+max_probe_candidates = 5
 ```
 
-현재 Gateway의 ModelError taxonomy와 최대한 일관되게 사용하라.
-
-중복 taxonomy를 만들지 않는다.
+정확한 수치는 테스트와 API 특성에 맞게 결정하되 무제한 탐색은 금지한다.
 
 ---
 
-# 13. configured와 ready는 반드시 다르다
+# 9. Structured Output
 
-가장 중요한 규칙 중 하나다.
+현재 Manager/Planning 계층은 구조화 응답을 중요하게 사용한다.
 
-```text
-API Key 저장됨
-≠
-Nidus에서 사용 가능
-```
-
-`configured`는 단순히 설정이 존재하는 상태다.
-
-`ready`는 Nidus가 실제로 검증한 상태다.
-
----
-
-# 14. Test Connection / Probe Pipeline
-
-사용자가 `[연결 확인]`을 누르면 다음 단계를 수행한다.
+따라서 Gemini connection을 `ready`로 판단하려면 최소한:
 
 ```text
-1. Endpoint 형식 검증
-2. Endpoint 접근
-3. 인증 검증
-4. 모델 후보 탐색
-5. 실제 짧은 Generation
-6. Structured Output probe
-7. 결과 기록
+normal text generation
++
+structured JSON response
 ```
 
-가능한 한 실제 호출로 확인한다.
-
-`GET /models`가 성공했다는 이유만으로 `ready`로 만들지 않는다.
-
-최소 하나의 실제 generation이 성공해야 한다.
-
----
-
-# 15. Probe는 실제 업무 요청과 분리
-
-Connection probe는 Task나 Plan을 만들지 않는다.
-
-```text
-Provider Probe
-```
-
-라는 별도의 기술 실행으로 처리한다.
-
-Probe prompt에는 개인 Vault 자료를 넣지 않는다.
-
-고정된 공개 synthetic payload를 사용한다.
-
-예:
-
-```text
-Return exactly the word READY.
-```
-
-Structured output probe:
-
-```json
-{
-  "status": "READY"
-}
-```
-
-같은 최소 synthetic payload를 사용한다.
-
----
-
-# 16. Model Discovery
-
-OpenAI-compatible Adapter에서는 가능하면:
-
-```text
-GET /models
-```
-
-을 사용한다.
-
-그러나 모델 목록 조회가 실패했다고 연결 전체를 즉시 실패시키지는 않는다.
-
-Provider가 discovery를 지원하지 않거나 결과가 불완전할 수 있기 때문이다.
-
-상태를 정확히 기록하라.
-
-```text
-discovery_supported
-discovery_success
-discovery_failed
-```
-
-등의 의미를 명확히 구분한다.
-
----
-
-# 17. Model Catalog
-
-탐색된 모델은 내부 Catalog에 기록한다.
-
-최소:
-
-```text
-connection_id
-model_id
-discovered_at
-
-availability
-
-capabilities:
-  chat
-  structured_output
-
-last_probe_at
-last_success_at
-last_failure_at
-
-latency
-```
-
-가격/context/free quota 같은 값은 **확실한 근거가 있는 경우에만 저장**한다.
-
-모르면:
-
-```text
-unknown
-```
-
-으로 남긴다.
-
-0이나 free로 추정하지 않는다.
-
-첨부 설계의 모델 catalog는 기능·가격·가용성·context·구조화 출력 등을 라우팅 근거로 저장하고, 사용자에게 모델 ID 선택을 강요하지 않는 방향이다. 이를 유지하라. :chatgpt-content-reference{index="2"}
-
----
-
-# 18. Structured Output capability
-
-현재 Manager / Plan workflow는 JSON 출력에 크게 의존한다.
-
-따라서 v1에서 가장 중요한 capability 중 하나는:
-
-```text
-structured_output
-```
-
-이다.
+를 모두 실제로 검증한다.
 
 단:
 
 ```text
-provider documentation says supported
+structured output 실패
 ```
 
-와:
-
-```text
-Nidus probe passed
-```
-
-를 구분한다.
-
-Catalog에는 실제 검증 결과를 우선 사용한다.
-
----
-
-# 19. Model Availability
-
-Model availability를 단순 boolean으로만 표현하지 않는 것을 선호한다.
+한 모델 때문에 탐색 전체를 끝내지 않는다.
 
 예:
 
 ```text
-unknown
-available
-temporarily_unavailable
-rate_limited
-authentication_failed
-unsupported
+Model A
+chat ✓
+structured ✕
+
+↓ 다음 후보
+
+Model B
+chat ✓
+structured ✓
+
+→ Connection READY
 ```
 
-단 Connection 상태와 Model 상태의 책임을 뒤섞지 않는다.
+여야 한다.
 
 ---
 
-# 20. 자동 모델 선택은 이번 Slice에서 제한
+# 10. ConnectionRegistry는 Provider-neutral하게 만든다
 
-이번 Slice에서 완전한 Route Broker는 만들지 않는다.
-
-그러나 Provider Foundation 검증을 위해 다음 API 정도는 제공할 수 있다.
+현재 Registry 안에:
 
 ```text
-list_ready_connections()
-
-list_available_models(connection)
-
-select_probe_candidate()
+OpenAICompatibleAdapter()
 ```
 
-실제 Manager/Worker 역할별:
+가 사실상 고정되어 있다면 이를 제거한다.
+
+개념:
 
 ```text
-quality
-budget
-role
-capability
+Connection
+↓
+provider manifest
+↓
+adapter lookup
+↓
+ProviderAdapter
 ```
 
-라우팅은 다음 Slice로 둔다.
-
-현재 Task policy 시스템을 임의로 제거하지 않는다.
-
----
-
-# 21. 기존 Policy 호환성
-
-현재 Plan/Task Runtime은 `model_policy` JSON을 사용한다.
-
-이번 Slice에서 이것을 즉시 제거하지 않는다.
-
-기존 테스트와 Runtime은 계속 작동해야 한다.
-
-새 Connection Layer와 기존 policy는 당분간 공존할 수 있다.
+형태로 만든다.
 
 예:
 
 ```text
-Legacy Runtime
-→ existing policy routes
+provider = gemini
+→ GeminiAdapter
 
-New Connection Foundation
-→ Connection Registry / Catalog
+provider = openai-compatible
+→ OpenAICompatibleAdapter
 ```
-
-향후 Route Broker에서 통합한다.
-
-이번 Slice에서 무리하게 전체 migration을 하지 않는다.
 
 ---
 
-# 22. OmniRoute 특별 지원
+# 11. Credential 구조는 그대로 유지
 
-OmniRoute는 v1에서 first-class manifest로 지원한다.
-
-기본 endpoint 후보:
+Gemini API Key도 기존 Keychain infrastructure를 사용한다.
 
 ```text
-http://127.0.0.1:20128/v1
+Gemini API Key
+↓
+MacOSKeychainCredentialStore
+↓
+cred_...
 ```
 
-다만 실제 연결 여부를 추측하지 않는다.
+SQLite에는 Key 원문을 저장하지 않는다.
 
-향후 자동 감지를 고려할 수 있지만,
-이번 구현에서는 단순한 로컬 probe 정도만 허용한다.
-
-OmniRoute가 실행 중이라면 연결 화면에서 기본 endpoint를 제공할 수 있어야 한다.
+기존 Secret 보안 경계를 약화시키지 않는다.
 
 ---
 
-# 23. GUI 범위
+# 12. GUI 변경은 최소
 
-이번 Slice에서는 **전체 GUI를 다시 만들지 않는다.**
+GUI를 다시 디자인하지 않는다.
 
-현재 GUI에 최소한의:
+현재:
 
 ```text
 설정
 → AI 연결
 ```
 
-화면만 추가해도 된다.
-
-목적은 Connection Foundation을 실제 사람이 사용할 수 있는지 검증하는 것이다.
-
-예:
+에서 Provider 목록에:
 
 ```text
-AI 연결
-
-OmniRoute                       ● 정상
-http://127.0.0.1:20128
-사용 가능 모델 3
-
-[연결 테스트] [관리]
-
-+ AI Provider 연결
+Google Gemini
+OpenAI-compatible API
 ```
 
----
+가 보이면 충분하다.
 
-# 24. Add Provider UI
-
-```text
-AI Provider 연결
-
-[ OmniRoute ]
-[ OpenAI-compatible ]
-```
-
-OmniRoute 선택:
+Gemini 연결 화면:
 
 ```text
-Endpoint
-[ http://127.0.0.1:20128/v1 ]
-
-Endpoint Key
-[ ••••••••• ]
-
-[ 연결 확인 ]
-```
-
-OpenAI-compatible:
-
-```text
-이름
-[ Provider name ]
-
-Base URL
-[ https://.../v1 ]
+Google Gemini
 
 API Key
-[ ••••••••• ]
+[••••••••••••]
 
-[ 연결 확인 ]
+[연결 확인]
 ```
 
-모델 이름을 입력받지 않는 것을 기본으로 한다.
+이 정도만 구현한다.
 
-Discovery가 불가능한 Provider를 지원해야 할 필요가 실제로 확인되기 전까지 manual model ID 기능을 추가하지 마라.
+다음을 사용자에게 묻지 않는다.
+
+```text
+Model
+Route
+Policy JSON
+Context length
+Structured output setting
+```
 
 ---
 
-# 25. 연결 성공 화면
+# 13. 무료 여부 처리
 
-사용자에게 내부 probe JSON을 그대로 보여주지 않는다.
-
-예:
+Gemini를 코드에서:
 
 ```text
-AI 연결이 준비되었습니다.
-
-Endpoint          정상
-인증              정상
-모델 탐색         8개
-실제 응답         성공
-구조화 응답       지원 확인
-
-[완료]
+free = true
 ```
 
-기술 세부 정보는 펼쳐서 확인할 수 있다.
+로 영구 고정하지 않는다.
+
+가격/무료 quota 정보가 공식적으로 안정적으로 확인되는 구조가 아직 없다면:
+
+```text
+pricing = unknown
+```
+
+으로 유지한다.
+
+향후 무료 API Catalog를 별도로 만들 예정이다.
+
+이번 Slice의 목표는:
+
+```text
+직접 API 연결
+```
+
+이지:
+
+```text
+가격 Router
+```
+
+가 아니다.
 
 ---
 
-# 26. 연결 관리
+# 14. Generic OpenAI-compatible 유지
 
-기존 Connection에 대해:
-
-```text
-연결 테스트
-Credential 교체
-Endpoint 수정
-Connection 삭제
-상세 정보
-```
-
-를 지원한다.
-
-Credential 원문을 다시 화면에 표시하지 않는다.
-
-예:
-
-```text
-API Key
-등록됨
-
-[교체]
-```
-
-정도로.
-
----
-
-# 27. Connection 삭제
-
-Connection 삭제 시:
-
-```text
-Connection metadata 삭제/비활성화
-Credential Store secret 삭제
-Model Catalog association 처리
-```
-
-를 명확하게 한다.
-
-과거 Task audit에서 사용했던 route/model 기록은 삭제하지 않는다.
+현재 Generic OpenAI-compatible 연결은 회귀시키지 않는다.
 
 즉:
 
 ```text
-Connection 삭제
-≠
-과거 실행 기록 삭제
+Gemini Native
++
+Generic OpenAI-compatible
 ```
 
-이다.
+가 공존한다.
+
+이 구조 덕분에 필요하면 사용자가:
+
+```text
+LM Studio
+NVIDIA NIM
+OmniRoute
+기타 proxy
+```
+
+를 여전히 Generic 연결로 사용할 수 있다.
+
+하지만 Nidus 자체는 OmniRoute에 의존하지 않는다.
 
 ---
 
-# 28. Security
+# 15. 이번 Slice에서 구현하지 않을 것
 
-현재 Nidus의 중요한 보안 원칙을 유지한다.
-
-특히:
+절대 범위를 넓히지 마라.
 
 ```text
-Secret은 Prompt에 들어가지 않음
-Secret은 Vault에 들어가지 않음
-Secret은 Git에 들어가지 않음
-Secret은 SQLite에 평문으로 들어가지 않음
-Secret은 일반 로그에 들어가지 않음
+OpenAI native adapter
+Anthropic adapter
+Groq adapter
+Cloudflare adapter
+NVIDIA native adapter
+
+Route Broker
+
+무료 Provider 자동 선택
+
+Executive Assistant
+
+Dynamic Organization
+
+Work Request GUI
+
+Scheduler
+
+OAuth
+
+GitHub Copilot 연결
+
+ChatGPT Web Cookie
+
+Claude Web Cookie
+
+Session Connector
+
+Pixel Office
+
+Budget Engine
 ```
 
-을 자동 테스트하라.
+이것들은 후속 Slice다.
 
 ---
 
-# 29. Endpoint validation
+# 16. Web Cookie / Session 방식
 
-기존 Gateway의 endpoint validation을 재사용하거나 동일 수준을 유지한다.
+이번 Slice에서는 구현하지 않는다.
 
-특히:
+다만 설계 문서에 다음 원칙만 남긴다.
+
+향후 연결 종류는:
 
 ```text
-HTTP remote endpoint 금지
-localhost HTTP는 허용
-HTTPS remote 허용
-username/password embedded URL 거부
-query/fragment 포함 endpoint 검토
-redirect 제한
+API Key
+OAuth
+Local
+Session Connector
 ```
 
-을 약화시키지 않는다.
+등으로 확장될 수 있다.
+
+하지만 Session Connector는:
+
+```text
+공식적으로 자동화가 허용된 경우
+공식 OAuth/session API가 있는 경우
+문서화된 연결 방식이 있는 경우
+```
+
+에만 지원한다.
+
+비공식 웹 cookie scraping을 이번 Slice에 넣지 않는다.
 
 ---
 
-# 30. Provider Error body
+# 17. 테스트 — 최소 필수
 
-현재 Gateway는 Provider error body를 읽거나 저장하지 않는 보수적인 정책을 사용한다.
+새 기능에 대해 다음 테스트를 추가한다.
 
-새 Probe Layer도 민감한 Provider response/error가 로그로 유출되지 않도록 한다.
-
-디버깅 편의를 이유로 API 응답 body 전체를 저장하지 마라.
-
----
-
-# 31. 테스트
-
-최소 다음을 검증한다.
-
-### A. Manifest
+### A. Adapter dispatch
 
 ```text
-유효 manifest
-중복 provider id
-잘못된 auth type
-잘못된 protocol
+gemini
+→ GeminiAdapter
+
+openai-compatible
+→ OpenAICompatibleAdapter
 ```
 
----
+잘못된 Provider/Adapter는 거부.
 
-### B. Credential Store
+### B. Gemini discovery fixture
 
-```text
-put
-get
-replace
-delete
-missing secret
-```
-
-그리고:
+가짜 Gemini HTTP endpoint 또는 deterministic adapter를 이용해:
 
 ```text
-SQLite에 secret 없음
-Vault에 secret 없음
-Git diff에 secret 없음
-log에 secret 없음
+모델 목록
+→ generation 가능한 모델 탐색
 ```
 
 검증.
 
----
-
-### C. Connection
+### C. Normal generation
 
 ```text
-create
-update
-delete
-unique ID
-invalid endpoint
+READY
 ```
 
----
+성공.
 
-### D. Successful OmniRoute-compatible probe
+### D. Structured output
 
-Fake HTTP server를 사용하여:
-
-```text
-/models
-/chat/completions
-JSON response
+```json
+{"status":"READY"}
 ```
 
-을 제공한다.
+성공.
+
+### E. 첫 모델 structured 실패
 
 ```text
-configured
-→ probing
-→ ready
+Model A
+chat ✓
+structured ✕
+
+Model B
+chat ✓
+structured ✓
+```
+
+결과:
+
+```text
+READY
+Model B available
 ```
 
 검증.
 
----
-
-### E. Authentication failure
+### F. 인증 실패
 
 ```text
-401
-→ blocked/authentication_failed
+401/403 또는 Gemini 대응 인증 오류
+→ blocked
 ```
 
-Blind fallback 금지.
-
----
-
-### F. Rate limit
+### G. rate limit / temporary error
 
 ```text
 429
+5xx
+timeout
 ```
 
-Connection을 영구적으로 broken 처리하지 않는다.
+→ degraded.
 
----
+### H. Secret boundary
 
-### G. Provider unavailable
+Gemini Key가:
 
 ```text
-503
+SQLite
+Vault
+Git diff
+Catalog
+GUI response
+일반 log
 ```
 
-temporary failure로 기록.
+에 존재하지 않음.
 
----
+### I. 기존 회귀
 
-### H. Model discovery failure + generation success
-
-Provider가 `/models`를 지원하지 않아도
-명확한 규칙 하에서 Connection 상태를 판단한다.
-
-성공을 꾸며내지 않는다.
-
----
-
-### I. Generation failure
-
-`/models`가 성공했어도 실제 generation 실패 시 `ready` 금지.
-
----
-
-### J. Structured output
-
-실제 structured-output probe 성공/실패를 catalog에 반영.
-
----
-
-### K. Restart
-
-프로세스 재시작 후:
+기존:
 
 ```text
-Connection metadata
-Model Catalog
-credential_ref
-health metadata
-```
-
-복구.
-
-Secret 원문은 DB에서 복구하지 않는다.
-
----
-
-### L. Existing regression
-
-현재:
-
-```text
+OpenAI-compatible Connection
 Gateway
-Single Task
-Manager workflow
 PlanRuntime
+Manager workflow
 GUI
 Security
-Git
 Archive
 ```
 
-회귀를 전부 유지한다.
+전체 회귀 유지.
 
 ---
 
-# 32. 실제 Provider 검증
+# 18. 실제 Gemini 검증
 
-Fake test만으로 끝내지 않는다.
-
-현재 로컬 환경에서 사용 가능한 경우에 한해
-**OmniRoute 실제 연결을 별도 synthetic probe로 검증**한다.
+사용 가능한 Gemini API credential이 현재 로컬 환경에 준비돼 있을 경우에만 실제 synthetic probe를 실행한다.
 
 개인 Vault 데이터는 전송하지 않는다.
 
-고정 공개 synthetic prompt만 사용한다.
+고정 synthetic payload만 사용한다.
 
-Evidence에는:
+Evidence 예:
 
 ```text
-connection type
-endpoint host
-requested model candidate
-actual model
-probe result
+provider
+connection status
+
+discovered models count
+
+selected probe model
+
+normal generation result
+
 structured output result
+
+actual model
+
 latency
-token metadata
-error category
+
+token metadata if available
+
 timestamp
 ```
 
-등을 저장할 수 있다.
+API Key는 절대 evidence에 포함하지 않는다.
 
-Secret은 절대 저장하지 않는다.
-
-실제 OmniRoute가 실행되지 않거나 Key가 준비되지 않았다면:
+Credential이 없으면:
 
 ```text
 NOT RUN
 ```
 
-으로 명시한다.
+으로 기록한다.
 
-Fake test를 실제 Provider 검증으로 표현하지 마라.
-
----
-
-# 33. 첨부 GUI 설계 문서와의 관계
-
-`gui-model-agnostic-v2.md`의 다음 원칙은 유지한다.
-
-```text
-사용자는 결과 요청에 집중한다.
-연결은 최초 한 번 설정한다.
-업무마다 모델을 고르지 않는다.
-모델 정보는 필요할 때만 투명하게 보여준다.
-민감 자료는 기존 승인 경계를 유지한다.
-```
-
-:chatgpt-content-reference{index="3"}
-
-하지만 구현 순서를 변경한다.
-
-기존 계획:
-
-```text
-GUI request UX
-→ async
-→ collaboration
-→ model automation
-```
-
-이 아니라,
-
-이번 결정은:
-
-```text
-Provider Connection Foundation
-↓
-Model Discovery / Probe
-↓
-Connection Health
-↓
-후속 Route Broker
-↓
-그 다음 GUI v2
-```
-
-이다.
-
-따라서 이번 Slice에서는 문서의 장기 GUI 목표를 모두 구현하려 하지 마라.
+테스트 fixture 성공을 실제 Gemini 성공이라고 표현하지 마라.
 
 ---
 
-# 34. 문서 갱신
+# 19. 기존 OmniRoute 코드 처리
 
-최소:
+이번 Slice에서 삭제가 필요하지 않으면 무리하게 삭제하지 마라.
+
+하지만:
+
+```text
+OmniRoute first-class manifest
+```
+
+가 더 이상 제품 방향과 맞지 않는다면 제거하고,
+
+필요 시:
+
+```text
+OpenAI-compatible API
+```
+
+를 통해 연결할 수 있다고 문서화한다.
+
+기존 OmniRoute historical evidence는 삭제하지 않는다.
+
+과거 검증 기록은 역사다.
+
+---
+
+# 20. 문서
+
+최소 다음을 갱신한다.
 
 ```text
 README.md
 DESIGN.md
+docs/CONNECTIONS.md
 docs/VALIDATION.md
 docs/plans/current-plan.md
 ```
 
-를 현재 구현에 맞게 갱신한다.
-
-필요하면:
+문서에서는 다음을 명확히 한다.
 
 ```text
-docs/CONNECTIONS.md
+Nidus는 Provider를 직접 지원하는 방향으로 전환한다.
+
+OmniRoute는 더 이상 핵심 의존성이 아니다.
+
+현재 Native Provider:
+Google Gemini
+
+현재 Compatibility Provider:
+OpenAI-compatible
+
+향후:
+여러 무료 API
+OpenAI
+Anthropic
+Groq
+Cloudflare
+Local
+OAuth
+공식 Session Connector
 ```
 
-같은 전용 문서를 만들 수 있다.
-
-문서에는:
-
-```text
-현재 지원 Provider 유형
-연결 방법
-Credential 저장 방식
-Connection 상태 의미
-Probe 정의
-Model Catalog 정의
-현재 미지원 기능
-실제 검증 범위
-```
-
-를 명확하게 적는다.
-
-GUI v2를 이미 완성한 것처럼 문서화하지 않는다.
+미구현 Provider를 지원된다고 표현하지 마라.
 
 ---
 
-# 35. Git Flow
+# 21. Git Flow — 반드시 지킬 것
 
-현재 최신 `develop`에서 시작한다.
-
-`main`에 직접 작업하지 않는다.
-
-권장 브랜치:
+현재 Nidus는 다음 원칙을 사용한다.
 
 ```text
-feature/provider-registry
-feature/credential-store
-feature/connection-probe
-feature/provider-settings-ui
-feature/connection-evidence
-```
+main
+→ 안정 버전
 
-코드 결합도가 높으면 일부를 합쳐도 된다.
-
-Branch 수 자체가 목표는 아니다.
-
-실제 흐름:
-
-```text
 develop
-↓
-feature branch
-↓
-구현
-↓
-관련 테스트
-↓
-논리 단위 commit
-↓
-develop merge
-↓
-develop regression
-↓
-최신 develop에서 다음 feature
+→ 다음 버전 통합
+
+feature/*
+→ 기능 개발
+
+release/*
+→ 릴리스 준비
+
+hotfix/*
+→ main 긴급 수정
 ```
 
-가능한 commit 예:
-
-```text
-feat: add provider manifests and connection registry
-feat: add credential store abstraction
-feat: probe provider connections and discover models
-feat: persist model capability catalog
-feat: add minimal provider connection settings
-test: verify provider connection failure boundaries
-docs: document provider connection foundation
-```
-
-마지막에 하나의 giant commit으로 만들지 않는다. commit은 한글로 작성한다.
+이번 작업에서도 반드시 실제 Git Flow를 적용한다.
 
 ---
 
-# 36. main / remote
+## 시작
 
-이번 작업에서는:
+먼저:
+
+```bash
+git status
+git branch --show-current
+git fetch
+git checkout develop
+git pull --ff-only
+git log -1 --oneline
+```
+
+현재 `develop`이 clean인지 확인한다.
+
+미커밋 변경이 있으면 임의 삭제/reset하지 말고 먼저 보고한다.
+
+---
+
+# 22. 최소 Branch 단위
+
+이번 Slice도 더 작은 두 단계로 나눈다.
+
+## Feature 1
 
 ```text
-main 수정 금지
+feature/provider-adapter-interface
+```
+
+범위:
+
+```text
+ProviderAdapter abstraction
+Adapter dispatch
+ConnectionRegistry provider-neutral화
+기존 OpenAI-compatible migration
+회귀 테스트
+```
+
+이 브랜치에서는 Gemini를 아직 구현하지 않아도 된다.
+
+완료 후:
+
+```text
+test
+commit
+checkout develop
+merge --no-ff feature/provider-adapter-interface
+전체 관련 회귀
+```
+
+---
+
+## Feature 2
+
+최신 develop에서:
+
+```text
+feature/gemini-native-provider
+```
+
+범위:
+
+```text
+Gemini manifest
+GeminiAdapter
+model discovery
+normal probe
+structured probe
+minimal GUI entry
+tests
+docs
+synthetic/live evidence
+```
+
+완료 후:
+
+```text
+test
+commit
+checkout develop
+merge --no-ff feature/gemini-native-provider
+전체 회귀
+```
+
+---
+
+# 23. 필요하면 evidence 문서는 같은 Gemini branch에 포함
+
+이번 기능 규모에서는 별도의 evidence branch를 반드시 만들 필요는 없다.
+
+브랜치 숫자를 늘리는 것이 목적이 아니다.
+
+단 구현과 검증 과정에서 여러 논리적 commit을 남긴다.
+
+예:
+
+```text
+refactor: decouple provider adapters from connection registry
+
+feat: add native Gemini provider connection
+
+test: verify Gemini discovery and capability probes
+
+docs: document direct provider connection strategy
+```
+
+마지막에 한 번에 giant commit하지 않는다.
+
+---
+
+# 24. main과 remote
+
+이번 작업에서:
+
+```text
+main 변경 금지
+
 release/* 금지
+
 hotfix/* 금지
+
 remote push 금지
+
 PR 생성 금지
 ```
 
-사용자가 별도로 요청하지 않는 한 로컬 `develop` 통합까지만 수행한다.
+사용자가 따로 요청하지 않는 한 로컬 `develop` 통합까지만 진행한다.
 
 ---
 
-# 37. 완료 조건
+# 25. 최종 완료 조건
 
 다음을 모두 만족해야 한다.
 
-1. Provider Manifest가 존재한다.
-2. OmniRoute를 first-class connection type으로 지원한다.
-3. Generic OpenAI-compatible Provider를 연결할 수 있다.
-4. Credential이 Connection metadata와 분리된다.
-5. macOS에서 안전한 Credential Store를 사용할 수 있다.
-6. 기존 env credential 방식은 필요 시 호환된다.
-7. Connection Registry가 존재한다.
-8. Connection ID는 Runtime이 만든다.
-9. `configured`와 `ready`를 구분한다.
-10. 실제 generation 성공 전에는 ready가 되지 않는다.
-11. Model discovery를 수행한다.
-12. Model Catalog를 영속화한다.
-13. structured output을 실제 probe한다.
-14. Provider 오류가 현재 taxonomy와 일관되게 분류된다.
-15. Secret이 SQLite/Vault/Git/Prompt/일반 로그에 나타나지 않는다.
-16. 현재 Gateway/Runtime regression을 깨뜨리지 않는다.
-17. 최소 Provider 연결 UI가 존재한다.
-18. 사용자가 model ID나 Policy JSON을 연결 과정에서 고르지 않는다.
-19. Credential 교체/삭제가 가능하다.
-20. Connection 재검사가 가능하다.
-21. 프로세스 재시작 후 Connection/Catalog가 복구된다.
-22. Fake Provider integration test가 통과한다.
-23. 가능한 경우 실제 OmniRoute synthetic probe evidence를 남긴다.
-24. GUI v2나 Dynamic Organization으로 범위를 확장하지 않는다.
-25. 문서가 실제 구현과 일치한다.
-26. Git Flow가 실제 개발 과정에 반영된다.
-27. main은 변경하지 않는다.
-28. 최종 develop working tree가 clean하다.
+1. ConnectionRegistry가 특정 OpenAI-compatible adapter에 고정되지 않는다.
+2. Provider → Adapter dispatch 구조가 존재한다.
+3. 기존 OpenAI-compatible 연결이 계속 작동한다.
+4. Gemini native API를 직접 연결할 수 있다.
+5. Gemini API Key만 입력하면 된다.
+6. 사용자에게 model ID를 요구하지 않는다.
+7. Gemini 모델을 자동 탐색한다.
+8. 실제 normal generation을 검증한다.
+9. 실제 structured output을 검증한다.
+10. 한 후보의 structured output 실패 때문에 전체 탐색을 조기 종료하지 않는다.
+11. 최소 하나의 완전한 후보가 있으면 Connection이 READY가 된다.
+12. Credential은 Keychain에 저장된다.
+13. Secret boundary가 유지된다.
+14. Model Catalog에 native Gemini 결과가 저장된다.
+15. GUI에서 Gemini 연결이 가능하다.
+16. 기존 Plan/Task policy에는 영향을 주지 않는다.
+17. OmniRoute가 Nidus의 필수 의존성이 아니다.
+18. 과거 OmniRoute evidence는 보존한다.
+19. 기존 전체 회귀가 통과한다.
+20. Gemini 실제 credential이 있으면 synthetic live probe를 수행한다.
+21. 없으면 NOT RUN이라고 정확히 기록한다.
+22. 문서가 구현 상태와 일치한다.
+23. Git Flow가 실제 commit/merge history에 반영된다.
+24. `main`은 변경되지 않는다.
+25. 최종 `develop` working tree가 clean하다.
 
 ---
 
-# 38. 최종 보고 형식
+# 26. 최종 보고
 
-작업 완료 후 다음을 보고하라.
+완료 후 다음 형식으로 보고하라.
 
 ```text
 Status
 
 Starting develop HEAD
 
-Current architecture audit
-- existing Gateway
-- reused code
-- changed boundaries
+Architecture change
+- before
+- after
 
-Provider Manifest
+Provider Adapter Interface
 
-Supported providers
+OpenAI-compatible regression
 
-Credential Store
-- backend
-- security
-- compatibility
+Gemini Native Provider
+- authentication
+- discovery
+- normal generation
+- structured output
 
-Connection Registry
-
-Probe Pipeline
-
-Model Discovery
+Connection Registry changes
 
 Model Catalog
 
-Structured Output Verification
+GUI
 
-Connection States
-
-Error Handling
-
-Minimal GUI
-- add provider
-- test connection
-- manage connection
-
-Security
+Credential security
 
 Tests
-- unit
-- fake HTTP integration
-- existing regression
-- real OmniRoute probe
 
-Evidence
+Synthetic integration evidence
+
+Real Gemini evidence
+- PASS / NOT RUN
+- reason
 
 Known limitations
 
 Docs
 
 Git Flow
-- feature branches
+- feature/provider-adapter-interface
 - commits
-- merge commits
+- develop merge
+- feature/gemini-native-provider
+- commits
+- develop merge
 - final develop HEAD
-- main unchanged
+- main HEAD unchanged
 - working tree clean
 
-Recommended next step
+Recommended next slice
 ```
 
 ---
 
-## 핵심 철학
+## 이 Slice 이후 순서
 
-이번 작업의 최종 목적은 이것이다.
+이번 작업이 성공한 뒤에만 다음 Provider를 하나씩 붙인다.
 
 ```text
-사용자
+Slice 2
+무료 API Provider 1개
 
-"AI 연결"
+Slice 3
+무료 API Provider 1개
 
-↓ 한 번
+Slice 4
+OpenAI / Anthropic 등 주요 유료 Provider
 
-Provider 등록
-↓
-Credential 저장
-↓
-Connection probe
-↓
-Model discovery
-↓
-Capability verification
-↓
-READY
+Slice 5
+OAuth Provider
 
-────────────────────────────
+Slice 6
+Route Broker
 
-이후 업무
-
-사용자 요청
-↓
-Nidus
-↓
-[향후 Route Broker]
-↓
-검증된 Connection
-↓
-Model
+Slice 7
+Assistant / Dynamic Organization GUI
 ```
 
-**Provider 연결의 복잡성을 한 번만 해결하고, 업무 수행 중에는 그 복잡성을 사용자에게 다시 돌려주지 마라.**
+무료 Provider 후보를 추가할 때도:
 
-그리고 이번 Slice에서는 **연결이 신뢰할 수 있는지**를 먼저 해결한다.
+```text
+Provider 조사
+↓
+공식 API 확인
+↓
+약관/자동화 허용 확인
+↓
+Adapter 하나 구현
+↓
+Probe
+↓
+실제 검증
+↓
+develop 통합
+```
 
-라우팅, 자연어 Work Request, Executive Assistant, Dynamic Organization, GUI v2는 이 기반이 검증된 뒤 다음 단계에서 구현한다.
+순서를 반복한다.
+
+**Provider 수를 빠르게 늘리는 것보다 “API Key 하나만 넣으면 Nidus가 알아서 사용할 수 있다”는 연결 경험을 Provider마다 확실하게 만드는 것을 우선하라.**

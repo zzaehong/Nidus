@@ -24,12 +24,12 @@ def main():
     args=parser.parse_args(); destination=Path(args.evidence)
     if destination.exists(): parser.error('Evidence exists; use a new path')
     url=endpoint(args.endpoint); parsed=urllib.parse.urlsplit(url)
-    if parsed.hostname not in ('127.0.0.1','localhost','::1'): parser.error('This live harness is local OmniRoute only')
+    if parsed.hostname not in ('127.0.0.1','localhost','::1'): parser.error('This harness is limited to a local OpenAI-compatible endpoint')
     if args.credential_env_file:
         for line in Path(args.credential_env_file).expanduser().read_text().splitlines():
             key,sep,value=line.strip().removeprefix('export ').partition('=')
             if sep and key==args.credential_env: os.environ[key]=value.strip().strip('\"\'')
-    evidence={'timestamp':utc_now(),'connection_type':'omniroute','endpoint_host':parsed.hostname,
+    evidence={'timestamp':utc_now(),'connection_type':'openai-compatible','endpoint_host':parsed.hostname,
         'synthetic_only':True,'status':'NOT RUN','reason':None}
     if args.credential_env not in os.environ:
         evidence['reason']='credential_not_available'
@@ -44,7 +44,7 @@ def main():
                 store=Store(vault)
                 try:
                     registry=ConnectionRegistry(store)
-                    conn=registry.create('omniroute',url,credential_ref='env:'+args.credential_env)
+                    conn=registry.create('openai-compatible',url,credential_ref='env:'+args.credential_env)
                     result=registry.probe(conn['id']); connection=result['connection']
                     evidence.update(status='PASS' if connection['status']=='ready' else 'FAILED',
                         connection_status=connection['status'],discovery=connection['discovery'],

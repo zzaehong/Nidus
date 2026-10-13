@@ -1,23 +1,20 @@
 # 현재 계획 / Current plan
 
-2026-10-13: Provider Connection Foundation v1을 로컬 develop에 통합한다. Provider Manifest, macOS Keychain CredentialStore, Connection Registry/Probe, 영속 Model Catalog, 최소 AI 연결 설정 UI 구현과 실제 OmniRoute/Keychain 검증을 마쳤다. 기존 Task/Plan policy·Runtime은 유지하며 Route Broker, GUI v2, Dynamic Organization은 후속 범위다.
+2026-10-13: Native Provider Connection Slice 1을 로컬 Git Flow로 구현한다. 목표는 OmniRoute를 first-class Connection manifest에서 내리고, Provider adapter dispatch와 Gemini native API를 추가하는 것이다. Task/Plan policy와 Runtime은 그대로 유지한다.
 
-시작 로컬 develop: `7ef6a4d` (원격 develop `11a36f39df42c7e9272c68237a1061bfe00d737a` 포함). main 기준 `d9bd9d0069cef5157a283bea2a0af365c99d44b6`. 시작 시 수정된 사용자 지시문 `doc/prompt.md`를 `61490cc`로 보존했다.
+Source of truth: 시작 `develop` HEAD `bbc448b`와 당시 fetch한 `origin/develop`; 시작 `main` `d9bd9d0`. 사용자가 수정한 `doc/prompt.md`는 adapter·test 커밋과 분리하고 별도 docs commit으로 기록한다. `main`, release/hotfix, push, PR은 변경하지 않는다.
 
 | 기능 브랜치 | 기능 commit | develop merge / 회귀 |
 |---|---|---|
-| feature/provider-foundation | `b3f2e4f` Registry/Keychain/discovery/probe/catalog + 보안/fake HTTP | `07afc91`, 129 PASS |
-| feature/provider-settings-ui | `2566793` 연결 설정/관리, GUI API 보안, key 손실 복구 | `7026e6a`, 133 PASS |
-| feature/connection-evidence | 설정 변경 시 Probe 표시 초기화, 실제 증거·재현 harness·문서 | 최종 통합 HEAD는 완료 응답 및 Git 이력 참조 |
+| feature/provider-adapter-interface | `963d3c3` ProviderAdapter + manifest adapter dispatch | 로컬 `--no-ff` merge, 전체 Python 135 PASS |
+| feature/gemini-native-provider | `94a0b82` native Gemini adapter/UI; `5cf7864` discovery, probe, security 회귀 | docs/evidence와 사용자가 갱신한 prompt를 별도 문서 commit으로 기록한 뒤 로컬 `--no-ff` merge |
 
-각 기능은 관련 테스트 후 commit → develop merge → 전체 회귀 뒤 다음 브랜치를 생성했다. 한글 commit/merge 메시지를 사용하며 사후 이력 재작성, main 변경, release/hotfix, push, PR은 하지 않는다.
+완료: `GeminiAdapter`는 공식 model metadata에서 `generateContent` 모델을 찾아 최대 5개 검사하고 일반/구조화 JSON 응답을 모두 통과시킨다. API Key는 Keychain에 보관하고 Gemini 요청 header로만 보낸다. 실제 Gemini credential이 없어서 live 검증은 NOT RUN으로 기록했다. 전체 Python 143, Gateway/Plan HTTP 5+2, Frontend 10 테스트가 통과했다.
 
-검증: discovery 133 + 기존 HTTP 7 + frontend 10. 실제 Keychain CRUD PASS. 실제 OmniRoute는 모델 2개 발견 후 `gh/gpt-4o-mini`(actual `gpt-4o-mini`)의 일반/구조화 응답 PASS. 브라우저는 합성 fixture로 재검사와 관리 표시를 확인했다. 개인 Vault 자료를 전송하지 않았다.
+[연결 사용법/설계/한계](../CONNECTIONS.md), [검증 이력](../VALIDATION.md), [synthetic fixture](../evidence/gemini-native-synthetic.json), [live Gemini probe](../evidence/gemini-native-live.json).
 
-[연결 사용법/설계/한계](../CONNECTIONS.md), [검증 이력](../VALIDATION.md), [실제 Probe](../evidence/connection-omniroute-live.json), [Keychain](../evidence/connection-keychain.json), [GUI](../evidence/connection-gui-review.json).
+이전 Connection Foundation v1 기록은 `7026e6a` merge와 historical OmniRoute evidence를 보존한다. v1 당시 이름순 최대 3개를 검사했던 제약은 generic OpenAI-compatible path에만 남아 있고 Gemini metadata-based discovery로 바뀌었다.
 
-다음 권장 단계: 현재 검증된 Connection/Catalog를 소비하는 제한적인 Route Broker를 정의한다. 역할별 capability 요구와 기존 policy 호환 경계를 먼저 정하고, 그 이후 업무별 모델/정책 입력을 줄이는 GUI를 진행한다.
-
-2026-10-13 사용 중 확인한 운영 조건: 다중 API 게이트웨이는 실제 사용 가능한 채팅 모델·Provider 연결만 허용한 제한 키로 연결한다. 모든 모델 키에서 735개가 발견되어도 현재 이름순 3개 검사로는 적합한 후보를 고르지 못해 HTTP 400으로 실패할 수 있다. 후속 Route Broker 작업 전에 capability/가용성 기반 Probe 후보 선택과 구체적인 GUI 실패 설명을 보완한다. 이는 현재 Nidus의 제약이며 게이트웨이 자체의 필수 제약으로 일반화하지 않는다.
+다음 권장 Slice 2: 후보 무료 Provider 하나의 공식 API·인증·quota/terms를 조사하고 native adapter 하나만 추가한다. 실제 API 검증은 사용할 수 있는 자격 증명과 synthetic-only payload가 있을 때만 수행하고, 가격은 공식적으로 신뢰 가능한 근거가 있을 때만 카탈로그에 기록한다.
 
 2026-10-13 작업환경 분리 결정: 자동 생성된 source `.nidus/state.sqlite3` 체크포인트 커밋 28개는 소스 저장소 이력에서 제거한다. 전체 기존 Git refs와 DB snapshot은 `/Users/parkjaehong/Developer/nidus_vault/backups/source-cleanup-20261013-101721`에 보존했다. 모든 자동 테스트/합성 데모 Vault는 같은 폴더 아래 실행별 디렉터리를 사용하고, Store/GUI는 source 또는 source를 포함하는 상위 경로를 Vault로 거부한다. 기존 `/Users/parkjaehong/NidusVault`의 미커밋 `results/brief.md` 삭제와 `.DS_Store` untracked를 확인했으며 보존한다.
