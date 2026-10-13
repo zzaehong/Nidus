@@ -19,3 +19,5 @@
 다음 권장 단계: 현재 검증된 Connection/Catalog를 소비하는 제한적인 Route Broker를 정의한다. 역할별 capability 요구와 기존 policy 호환 경계를 먼저 정하고, 그 이후 업무별 모델/정책 입력을 줄이는 GUI를 진행한다.
 
 2026-10-13 사용 중 확인한 운영 조건: 다중 API 게이트웨이는 실제 사용 가능한 채팅 모델·Provider 연결만 허용한 제한 키로 연결한다. 모든 모델 키에서 735개가 발견되어도 현재 이름순 3개 검사로는 적합한 후보를 고르지 못해 HTTP 400으로 실패할 수 있다. 후속 Route Broker 작업 전에 capability/가용성 기반 Probe 후보 선택과 구체적인 GUI 실패 설명을 보완한다. 이는 현재 Nidus의 제약이며 게이트웨이 자체의 필수 제약으로 일반화하지 않는다.
+
+2026-10-13 작업환경 분리 결정: 자동 생성된 source `.nidus/state.sqlite3` 체크포인트 커밋 28개는 소스 저장소 이력에서 제거한다. 전체 기존 Git refs와 DB snapshot은 `/Users/parkjaehong/Developer/nidus_vault/backups/source-cleanup-20261013-101721`에 보존했다. 모든 자동 테스트/합성 데모 Vault는 같은 폴더 아래 실행별 디렉터리를 사용하고, Store/GUI는 source 또는 source를 포함하는 상위 경로를 Vault로 거부한다. 기존 `/Users/parkjaehong/NidusVault`의 미커밋 `results/brief.md` 삭제와 `.DS_Store` untracked를 확인했으며 보존한다.

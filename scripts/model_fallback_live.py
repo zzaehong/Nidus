@@ -7,10 +7,12 @@ import argparse
 import json
 import subprocess
 import sys
-import tempfile
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from nidus.testing import temporary_vault, test_vault_root
 
 
 def main():
@@ -50,7 +52,7 @@ def main():
             'base_url': fault_url if injected else 'http://127.0.0.1:20128/v1',
             **({} if injected else {'api_key_env': 'NIDUS_VALIDATION_API_KEY'})})
     try:
-        with tempfile.TemporaryDirectory(prefix='nidus-fallback-policy-') as directory:
+        with temporary_vault(prefix='nidus-fallback-policy-', dir=test_vault_root()) as directory:
             policy = Path(directory) / 'policy.json'
             policy.write_text(json.dumps({'routes': routes, 'allow_paid': True,
                 'timeout_seconds': 60, 'max_tokens': 1024}), encoding='utf-8')

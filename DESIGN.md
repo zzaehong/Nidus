@@ -4,6 +4,10 @@
 
 ## 한국어
 
+### 개발 Vault 경계
+
+`nidus.testing`는 테스트와 합성 데모마다 `/Users/parkjaehong/Developer/nidus_vault` 아래에 별도 임시/영속 Vault를 만든다. `Store`와 GUI 진입점은 Vault가 소스 저장소 또는 그 상위 디렉터리인 경우 거부한다. 테스트 중 남는 Git checkpoint/artifact history는 해당 disposable Vault에 한정된다. 운영 작업공간은 사용자가 명시적으로 소스 밖 경로를 지정한다.
+
 ### Provider Connection Foundation 경계 — 2026-10-13
 
 기존 Gateway의 policy 검증·전송 snapshot·fallback·Task/Plan 메시지 생성은 유지했다. `request_bytes`와 `ChatCompletions`를 공통 transport로 재사용하고 `ProviderRegistry`(manifest), `ConnectionRegistry`(health/영속 Catalog), `OpenAICompatibleAdapter`(discovery/synthetic generation)를 추가했다. GUI 연결 API는 업무 Runtime을 생성/실행하지 않는다. Keychain은 `CredentialStore` 경계 내부에만 있으며 DB에는 reference를 저장한다.

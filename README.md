@@ -4,6 +4,19 @@
 
 ## 한국어
 
+### 개발 테스트 Vault 분리
+
+테스트 및 합성 데모는 소스 저장소 옆의 `/Users/parkjaehong/Developer/nidus_vault` 아래에 실행별 임시 Vault를 만들고 종료 시 정리합니다. 실제 GUI/CLI Vault도 `/Users/parkjaehong/Developer/Nidus` 또는 그 상위/하위 소스 경로로 지정할 수 없도록 막습니다. 기존 사용자 Vault는 명시적으로 `--vault`에 지정해야 합니다.
+
+```sh
+python3 -m unittest discover -s tests -q
+python3 tests/integration/model_http.py -q
+python3 tests/integration/plan_http.py -q
+node tests/gui_frontend.js
+```
+
+재현 용도의 영속 합성 데모는 실행별 `nidus-demo-*` Vault를 같은 분리 폴더에 남깁니다. 테스트가 만드는 Git 체크포인트와 산출물 커밋도 해당 격리 Vault의 로컬 `.git` 안에서만 발생합니다.
+
 ### Provider Connection Foundation v1
 
 **설정 → AI 연결**에서 OmniRoute 또는 OpenAI-compatible API를 선택하고 Endpoint/Key를 입력해 연결을 검증합니다. Key는 macOS Keychain에 보관하며, 실제 일반·구조화 응답을 검증해야 READY가 됩니다. 모델 탐색/Catalog/상태는 재시작 후 복구됩니다. 키 교체·주소 수정·재검사·삭제를 지원하고 연결 과정에서 모델 ID/Policy JSON을 요구하지 않습니다.

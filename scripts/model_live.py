@@ -3,8 +3,10 @@ import argparse
 import json
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from nidus.testing import persistent_vault
 
 
 def main():
@@ -15,7 +17,7 @@ def main():
     args = parser.parse_args()
     if Path(args.evidence).exists():
         parser.error('Evidence already exists; choose a new path')
-    vault = Path(tempfile.mkdtemp(prefix='nidus-model-live-'))
+    vault = persistent_vault(prefix='nidus-model-live-')
     (vault / 'notes.md').write_text('# Nidus sample\nNidus stores task state in a local vault.\n'
         'A task completes only after verification passes.\n'
         'Existing output files require human approval before replacement.\n', encoding='utf-8')

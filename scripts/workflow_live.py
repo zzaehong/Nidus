@@ -4,8 +4,10 @@ import datetime
 import json
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from nidus.testing import persistent_vault
 
 
 def main():
@@ -19,7 +21,7 @@ def main():
     if destination.exists():
         parser.error('Evidence already exists; choose a new path')
     started = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    vault = Path(tempfile.mkdtemp(prefix='nidus-workflow-live-'))
+    vault = persistent_vault(prefix='nidus-workflow-live-')
     source = ('# Public synthetic Nidus example\n'
               'Nidus stores task state in a local vault.\n'
               'Nidus retains completed task history in an archive.\n'

@@ -2,11 +2,12 @@
 import json
 import subprocess
 import sys
-import tempfile
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from nidus.testing import temporary_vault
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -42,7 +43,7 @@ class Handler(BaseHTTPRequestHandler):
 
 class HttpIntegration(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory()
+        self.temp = temporary_vault()
         self.root = Path(self.temp.name)
         self.vault = self.root / 'vault'
         self.vault.mkdir()
