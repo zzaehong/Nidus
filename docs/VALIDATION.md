@@ -4,6 +4,14 @@
 
 ## 한국어
 
+### API 연결 최적화 — 2026-10-13
+
+Starting local/fetched `develop`: `c17832c5959648826f1e731173c719a54cc0d8db`; `main`: `d9bd9d0069cef5157a283bea2a0af365c99d44b6`. `feature/connection-kinds` adds canonical manifest/record kinds and safe restart-stable backfill. `feature/omniroute-gateway` restores OmniRoute as a first-class `gateway`, dispatching through the existing OpenAI-compatible adapter. Both were integrated locally with no-ff merges; no push or main change.
+
+Connection regression: **28 PASS**. It covers all three legacy kind backfills, restart idempotency, previous OmniRoute identity preservation, rejection of manifest/record kind mismatch, the exact default OmniRoute URL remaining generic when the saved Provider is generic, simultaneous Gemini + OmniRoute + generic records, and OmniRoute `/models` + plain + structured probes through the shared adapter. GUI HTTP test also creates and probes OmniRoute while preserving `provider=omniroute`. All fixtures use synthetic local endpoints and credentials; the actual OmniRoute live endpoint was not contacted. Gemini live evidence remains **NOT RUN** for the separately recorded missing-credential reason; prior OmniRoute live evidence is retained as historical evidence only.
+
+Full Python regression: **148 PASS**; separate Gateway HTTP **5 PASS** and Plan HTTP **2 PASS**; frontend **10 PASS**. `compileall`, JavaScript syntax checks, and `git diff --check` pass. Feature commits and final merge IDs are recorded in Git history. Test Vaults remain under `/Users/parkjaehong/Developer/nidus_vault`, outside the source repository.
+
 ### 격리 테스트 Vault 적용 — 2026-10-13
 
 테스트/합성 데모의 임시 Vault를 소스 저장소와 분리해 `/Users/parkjaehong/Developer/nidus_vault` 아래로 모은다. `Store`와 GUI는 소스 저장소 및 그 상위 디렉터리를 Vault로 받지 않는다. `test_runtime`는 이 경계를 직접 검증한다. 테스트 중 Vault Git 커밋은 별도 임시 Vault 안에 한정된다.

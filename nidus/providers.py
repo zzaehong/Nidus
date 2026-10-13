@@ -29,7 +29,7 @@ class ProviderRegistry:
             {'id':'omniroute','name':'OmniRoute','auth_type':'api_key','connection_kind':'gateway',
              'default_base_url':'http://127.0.0.1:20128/v1','endpoint_editable':True,
              'credential_label':'Endpoint Key','protocol':'openai_chat_completions','adapter':'openai-compatible',
-             'supports_model_discovery':True,'api_key_required':False},
+             'supports_model_discovery':True,'api_key_required':True},
             {'id':'openai-compatible','name':'OpenAI-compatible API','auth_type':'api_key','connection_kind':'compatible',
              'default_base_url':'','endpoint_editable':True,'credential_label':'API Key',
              'protocol':'openai_chat_completions','adapter':'openai-compatible','supports_model_discovery':True,
