@@ -33,6 +33,22 @@ Gemini discovery는 공식 `models.list`의 `supportedGenerationMethods`에서 `
 
 Catalog는 발견한 모델 ID와 Provider 반환 순서, 검증된 chat/structured capability, 실제 응답의 model version, latency와 API가 제공한 token metadata를 기록합니다. 가격, context length, 무료 quota를 추측하지 않으며 이 값들은 알 수 없는 상태로 남습니다. 기존 Task/Plan policy는 계속 별도로 동작하며 이 Connection/Catalog를 자동으로 사용하지 않습니다. Role별 라우팅과 Route Broker는 후속 Slice입니다.
 
+실행 후보의 identity는 global `model_id`가 아니라 `(connection_id, model_id)`입니다. 같은 모델명이 Gemini direct와 OmniRoute gateway 양쪽에서 발견되면 인증·quota·장애 상태·upstream이 다른 별도 후보로 Catalog에 남습니다. 이번 Slice는 global model deduplication이나 Route Broker를 구현하지 않습니다.
+
+### 향후 OmniRoute 사용 모드
+
+이번 Slice에서는 다음 두 라우팅 모드를 구현하지 않습니다.
+
+**Transparent Gateway:** Nidus가 특정 OmniRoute model ID를 고르고 OmniRoute는 그 요청을 upstream에 전달합니다. 이후 Route Broker를 만들 때 기본 권장 모드로 삼을 수 있습니다.
+
+**Managed Gateway:** Nidus가 OmniRoute Combo 또는 managed model을 고르면 실제 upstream 모델은 OmniRoute가 선택합니다. 향후 Nidus는 응답의 actual model과 execution evidence를 기록해야 합니다.
+
+두 모드는 현재 GUI Connection 등록/probe와 기존 `/models` discovery에 영향을 주지 않습니다.
+
+### Legacy Plan/Task routing boundary
+
+`nidus/gateway.py`의 기존 `default_policy()`와 Plan/Task route 정책은 legacy 경로로 유지됩니다. 새 Direct/Gateway/Compatible Connection을 등록해도 그 policy나 현재 실행 경로는 자동으로 바뀌지 않습니다. 기존 legacy Gateway를 Connection Registry 기반으로 전환하는 작업은 향후 Route Broker Slice의 범위입니다.
+
 ## 설계와 보안 경계
 
 Manifest는 Provider 표시 이름, `connection_kind`, auth 유형, 기본 endpoint, endpoint 수정 가능 여부, credential label, API key 필요 여부, adapter ID, model discovery 여부를 가집니다. Provider identity와 protocol implementation은 별개입니다. Registry는 manifest adapter ID를 lookup하며 `ConnectionRegistry`는 공통 discovery/generate/probe 계약만 호출합니다. 별도의 OmniRoute adapter는 없습니다.
