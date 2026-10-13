@@ -176,6 +176,34 @@ class ConnectionTests(unittest.TestCase):
             with self.assertRaises(ModelError): endpoint(url)
         self.assertEqual(endpoint('https://example.com/v1/'),'https://example.com/v1')
 
+    def test_manifest_adapter_dispatch(self):
+        manifests=ProviderRegistry().list()
+        self.assertEqual({item['id']:item['adapter'] for item in manifests},
+                         {'omniroute':'openai-compatible','openai-compatible':'openai-compatible'})
+        class AlternateAdapter:
+            def __init__(self): self.calls=[]
+            def discover_models(self, connection, secret):
+                self.calls.append(('discover',connection['provider']))
+                return ['synthetic-alternate']
+            def generate(self, connection, model, secret, structured=False):
+                self.calls.append(('generate',connection['provider'],structured))
+                return {'text':'{"status":"READY"}' if structured else 'READY',
+                        'model':model,'tokens':{'total_tokens':1}}
+        alt=dict(manifests[1],id='alternate-provider',name='Alternate provider',adapter='alternate')
+        alternate=AlternateAdapter()
+        registry=ConnectionRegistry(self.store,self.keys,providers=[alt])
+        with self.assertRaises(ModelError) as error:
+            registry.create('alternate-provider',self.url,self.server.secret)
+        self.assertEqual(error.exception.code,'unsupported_adapter')
+        # Supplying both dispatch targets makes manifest selection observable.
+        registry=ConnectionRegistry(self.store,self.keys,adapters={
+            'openai-compatible':self.registry.adapter,'alternate':alternate},providers=[manifests[1],alt])
+        connection=registry.create('alternate-provider',self.url,self.server.secret)
+        result=registry.probe(connection['id'])
+        self.assertEqual(result['connection']['status'],'ready')
+        self.assertEqual(alternate.calls,[('discover','alternate-provider'),
+            ('generate','alternate-provider',False),('generate','alternate-provider',True)])
+
 
 if __name__=='__main__': unittest.main()
 
