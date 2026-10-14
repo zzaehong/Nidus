@@ -21,6 +21,7 @@ class Connection(StrictModel):
     base_url: str = Field(max_length=2048)
     api_key: str | None = Field(default=None, min_length=1, max_length=8192)
     enabled: bool = True
+    billing_tier: Literal["unconfirmed", "free", "paid"] = "unconfirmed"
 
     @field_validator("base_url")
     @classmethod
@@ -59,6 +60,7 @@ class Model(StrictModel):
     pricing: Literal["unknown", "free", "paid"] = "unknown"
     priority: int = Field(default=0, ge=0, le=10000)
     prompt_override: str | None = Field(default=None, max_length=100_000)
+    capability_confirmed: bool = False
     fallback_ids: list[str] = Field(default_factory=list, max_length=50)
     input_per_million: float | None = Field(default=None, ge=0, le=100000)
     output_per_million: float | None = Field(default=None, ge=0, le=100000)

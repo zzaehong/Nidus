@@ -10,7 +10,8 @@ import uuid
 from zoneinfo import ZoneInfo
 
 from .errors import RouterError
-from .schemas import Settings
+from .schemas import Model, Settings
+from .catalog import quote
 from .secrets import digest, new_token
 
 SCALE = Decimal(1_000_000_000)
@@ -31,7 +32,8 @@ def identifier():
 def approval_terms(model, connection):
     return digest(json.dumps({"model": {k: model[k] for k in
         ("id", "connection_id", "upstream_model", "pricing", "input_per_million", "output_per_million")},
-        "connection": {k: connection[k] for k in ("provider", "base_url", "credential_ref")}}, sort_keys=True))
+        "connection": {k: connection[k] for k in ("provider", "base_url", "credential_ref")},
+        "billing_tier": connection.get("billing_tier", "unconfirmed")}, sort_keys=True))
 
 
 class Store:
@@ -42,7 +44,7 @@ class Store:
         self.path = self.directory / "router.sqlite3"
         self.clock = clock or (lambda: datetime.now(timezone.utc))
         with self.db() as db:
-            if db.execute("PRAGMA user_version").fetchone()[0] not in (0, 1):
+            if db.execute("PRAGMA user_version").fetchone()[0] not in (0, 1, 2):
                 raise RouterError("configuration_conflict", 503)
             db.executescript("""
                 PRAGMA journal_mode=WAL;
@@ -55,7 +57,7 @@ class Store:
                 CREATE INDEX IF NOT EXISTS ledger_month ON ledger(month);
                 CREATE TABLE IF NOT EXISTS records (
                     id TEXT PRIMARY KEY, timestamp TEXT NOT NULL, value TEXT NOT NULL);
-                PRAGMA user_version=1;
+                PRAGMA user_version=2;
             """)
             db.execute("INSERT OR IGNORE INTO config VALUES ('settings', ?)",
                        (Settings().model_dump_json(),))
@@ -110,15 +112,26 @@ class Store:
         db.execute("UPDATE config SET value=? WHERE key='settings'", (json.dumps(settings),))
 
     def save_connection(self, value, connection_id=None):
+        from .discovery import identity
         connection_id = connection_id or identifier()
         value = {**value, "id": connection_id}
         with self.db(True) as db:
             old = db.execute("SELECT value FROM connections WHERE id=?", (connection_id,)).fetchone()
-            if old and any(json.loads(old[0])[k] != value[k] for k in
-                           ("provider", "base_url", "credential_ref")):
-                ids = [row[0] for row in db.execute("SELECT id,value FROM models")
-                       if json.loads(row[1])["connection_id"] == connection_id]
+            previous = json.loads(old[0]) if old else {}
+            changed = old and identity(previous) != identity(value)
+            if old:
+                value = previous | value
+            if changed:
+                ids = []
+                for row in db.execute("SELECT id,value FROM models").fetchall():
+                    model = json.loads(row[1])
+                    if model["connection_id"] == connection_id:
+                        ids.append(row[0])
+                        if model.get("origin") == "discovered":
+                            model["availability"] = "pending"
+                            db.execute("UPDATE models SET value=? WHERE id=?", (json.dumps(model), row[0]))
                 self.revoke(db, ids)
+                value["discovery"] = {"status": "pending", "last_success_at": None}
             db.execute("INSERT OR REPLACE INTO connections VALUES (?,?)", (connection_id, json.dumps(value)))
         return value
 
@@ -133,11 +146,78 @@ class Store:
                     or not set(value["fallback_ids"]) <= known):
                 raise RouterError("invalid_request", 422)
             old = db.execute("SELECT value FROM models WHERE id=?", (model_id,)).fetchone()
+            if old:
+                previous = json.loads(old[0])
+                value = previous | value
+                if any(previous[k] != value[k] for k in ("pricing", "input_per_million", "output_per_million")):
+                    value["pricing_origin"] = "manual"
+                if any(previous[k] != value[k] for k in ("connection_id", "upstream_model")):
+                    value.update(origin="manual", pricing_origin="manual", availability="available", support="supported")
+                if value.get("origin") == "discovered":
+                    value["support"] = ("supported" if value.get("capability_confirmed")
+                                        else value.get("detected_support", "unknown"))
             if old and any(json.loads(old[0])[k] != value[k] for k in
                            ("connection_id", "upstream_model", "pricing", "input_per_million", "output_per_million")):
                 self.revoke(db, [model_id])
             db.execute("INSERT OR REPLACE INTO models VALUES (?,?)", (model_id, json.dumps(value)))
         return value
+
+    def apply_discovery(self, connection, rows, error=None):
+        """Commit a complete listing atomically, rejecting results from old credentials."""
+        from .discovery import identity
+        with self.db(True) as db:
+            row = db.execute("SELECT value FROM connections WHERE id=?", (connection["id"],)).fetchone()
+            if not row or identity(json.loads(row[0])) != identity(connection):
+                return {"status": "superseded"}
+            current = json.loads(row[0])
+            previous = current.get("discovery", {})
+            now = self.clock().isoformat()
+            state = {"status": "error" if error else "success", "error": error,
+                     "last_attempt_at": now, "last_success_at": previous.get("last_success_at")}
+            if error is None:
+                state["last_success_at"] = now
+                state["count"] = len(rows)
+                existing = [json.loads(r[0]) for r in db.execute("SELECT value FROM models")]
+                own = [m for m in existing if m["connection_id"] == connection["id"]]
+                found = {r["upstream_model"]: r for r in rows}
+                known = {m["upstream_model"] for m in own}
+                priority = max((m["priority"] for m in existing), default=-1) + 1
+                prices = {u: quote(current, u, self.clock().date()) for u in found}
+                ordered = sorted(found, key=lambda u: ((prices[u] or {}).get("pricing") != "free",
+                                 sum((prices[u] or {}).get(k, 100000) for k in
+                                     ("input_per_million", "output_per_million")), u))
+                for upstream in ordered:
+                    if upstream not in known:
+                        model = Model(connection_id=connection["id"], name=found[upstream]["name"],
+                                      upstream_model=upstream, priority=min(priority, 10000)).model_dump()
+                        model.update(id=identifier(), origin="discovered", pricing_origin="catalog")
+                        own.append(model)
+                        priority += 1
+                revoked = []
+                for model in own:
+                    if model.get("origin") != "discovered":
+                        continue
+                    upstream = model["upstream_model"]
+                    before = tuple(model[k] for k in ("pricing", "input_per_million", "output_per_million"))
+                    model["availability"] = "available" if upstream in found else "missing"
+                    if upstream in found:
+                        model["detected_support"] = found[upstream]["support"]
+                        if not model.get("capability_confirmed"):
+                            model["support"] = found[upstream]["support"]
+                        if model.get("pricing_origin") == "catalog":
+                            price = prices[upstream]
+                            for field in list(model):
+                                if field.startswith("price_") or field == "free_tier_available":
+                                    model.pop(field)
+                            model.update(price or {"pricing": "unknown", "input_per_million": None,
+                                                   "output_per_million": None})
+                    if before != tuple(model[k] for k in ("pricing", "input_per_million", "output_per_million")):
+                        revoked.append(model["id"])
+                    db.execute("INSERT OR REPLACE INTO models VALUES (?,?)", (model["id"], json.dumps(model)))
+                self.revoke(db, revoked)
+            current["discovery"] = state
+            db.execute("UPDATE connections SET value=? WHERE id=?", (json.dumps(current), connection["id"]))
+            return state
 
     def delete_model(self, model_id):
         with self.db(True) as db:

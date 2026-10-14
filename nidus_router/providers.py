@@ -11,6 +11,8 @@ MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 
 
 def status_error(status):
+    if status == 404:
+        return RouterError("model_unavailable", 502, True)
     if status in (401, 403):
         return RouterError("authentication_failed", 502, True)
     if status in (402, 429):

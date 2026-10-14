@@ -42,7 +42,7 @@ async def test_free_first_fallback_and_prompt_override(store, credentials, add_m
     assert "input" not in record and "output" not in record
 
 
-async def test_explicit_fallback_only_and_non_recursive(store, credentials, add_model):
+async def test_explicit_fallback_then_auto_non_recursive(store, credentials, add_model):
     unrelated = add_model(pricing="free")
     fallback = add_model(pricing="free", fallback_ids=[unrelated["id"]])
     first = add_model(pricing="free", fallback_ids=[fallback["id"]])
@@ -52,7 +52,8 @@ async def test_explicit_fallback_only_and_non_recursive(store, credentials, add_
         return httpx.Response(503)
     with pytest.raises(RouterError, match="provider_unavailable"):
         await execute(store, credentials, handler, Generate(input="x", model=first["id"]))
-    assert len(calls) == 2
+    assert len([r for r in calls if r.method == "POST"]) == 3
+    assert len([r for r in calls if r.method == "GET"]) == 3
 
 
 @pytest.mark.parametrize("status,fallback", [(401, True), (403, True), (402, True), (429, True),
@@ -62,6 +63,8 @@ async def test_error_fallback_policy(store, credentials, add_model, status, fall
     add_model(pricing="free", priority=1)
     calls = []
     def handler(req):
+        if req.method == "GET":
+            return httpx.Response(200, json={"data": []})
         calls.append(req)
         return httpx.Response(status) if len(calls) == 1 else response()
     if fallback:
