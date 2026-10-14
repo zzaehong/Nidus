@@ -1,4 +1,6 @@
 MESSAGES = {
+    "billing_required": "공식 요금은 확인되었습니다. 연결 설정에서 API 프로젝트의 무료·유료 요금제를 확인하세요.",
+    "free_tier_unavailable": "이 모델은 확인된 무료 요금제에서 사용할 수 없습니다. 무료 지원 모델을 선택하세요.",
     "model_unavailable": "공급자에서 모델을 찾을 수 없습니다.",
     "discovery_invalid": "모델 목록을 확인하지 못했습니다. 수동 등록 또는 새로고침을 사용하세요.",
     "invalid_request": "요청 형식을 확인하세요.",

@@ -21,7 +21,8 @@ RATES = {
                "gpt-5-mini": (0.25, 2, False), "gpt-5-nano": (0.05, 0.4, False)},
     "anthropic": {"claude-haiku-4-5": (1, 5, False), "claude-haiku-4-5-20251001": (1, 5, False),
                   "claude-sonnet-4-6": (3, 15, False)},
-    "gemini": {"gemini-2.5-flash": (0.3, 2.5, True), "gemini-2.5-flash-lite": (0.1, 0.4, True)},
+    "gemini": {"gemini-2.5-flash": (0.3, 2.5, True), "gemini-2.5-flash-lite": (0.1, 0.4, True),
+               "gemini-3.1-flash-lite": (0.25, 1.5, True), "gemini-3.5-flash-lite": (0.3, 2.5, True)},
 }
 VERIFIED = "2026-10-14"
 
@@ -56,6 +57,12 @@ def model_status(model, connection, settings):
         return "connection_required"
     if model.get("support", "supported") != "supported":
         return "support_required"
+    if (model.get("pricing_origin") == "catalog" and model.get("free_tier_available")
+            and connection.get("billing_tier", "unconfirmed") == "unconfirmed"):
+        return "billing_required"
+    if (model.get("pricing_origin") == "catalog" and model.get("price_source")
+            and not model.get("free_tier_available") and connection.get("billing_tier") == "free"):
+        return "free_tier_unavailable"
     if model["pricing"] == "unknown" or (model["pricing"] == "paid" and any(
             model[k] is None for k in ("input_per_million", "output_per_million"))):
         return "unknown_pricing"
