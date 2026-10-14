@@ -126,19 +126,21 @@ curl -N http://127.0.0.1:8787/api/v1/generate \
 ## 검증 실행
 
 ```sh
-uv sync --locked --extra test
+uv sync --locked
 uv run --locked pytest -q
 uv run --locked python -m compileall -q nidus_router tests/router
 git diff --check
 ```
 
-테스트는 생성한 가짜 키, 임시 디렉터리, 모의 HTTP 응답을 사용합니다. 운영 OS 자격 증명 저장소나 실제 외부 AI 서비스를 사용하지 않습니다. 루프백 소켓 권한이 없는 환경에서는 `pytest -q --ignore=tests/router/test_http.py`로 오프라인 테스트만 실행할 수 있습니다.
+개발 환경은 `.python-version`의 Python 3.13과 `uv.lock`으로 재현합니다. `uv sync --locked`는 루트 `.venv`에 런타임과 기본 `dev` 그룹의 테스트 도구를 설치합니다.
+
+테스트는 생성한 가짜 키, 임시 디렉터리, 모의 HTTP 응답을 사용합니다. 운영 OS 자격 증명 저장소나 실제 외부 AI 서비스를 사용하지 않습니다. 루프백 소켓 권한이 없는 환경에서는 `uv run --locked pytest -q --ignore=tests/router/test_http.py`로 오프라인 테스트만 실행할 수 있습니다.
 
 브라우저 검증은 Playwright와 Chromium 또는 Chrome이 설치된 환경에서 별도 실행합니다.
 
 ```sh
 # 터미널 1: 임시 데이터와 메모리 자격 증명만 사용하는 모의 서버
-uv run --locked --extra test python tests/router/preview.py /tmp/nidus-router-preview-info.json
+uv run --locked python tests/router/preview.py /tmp/nidus-router-preview-info.json
 
 # 터미널 2: Node에서 playwright 패키지를 찾을 수 있어야 합니다.
 # 기본 Chromium 대신 설치된 Chrome을 쓰려면 PLAYWRIGHT_CHANNEL=chrome을 지정합니다.
