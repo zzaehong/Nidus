@@ -16,8 +16,8 @@ dependencies = [
   "tzdata>=2024.1",
 ]
 
-[project.optional-dependencies]
-test = ["pytest>=8,<9", "pytest-asyncio>=0.24,<2"]
+[dependency-groups]
+dev = ["pytest>=8,<9", "pytest-asyncio>=0.24,<2"]
 
 [project.scripts]
 nidus-router = "nidus_router.__main__:main"
