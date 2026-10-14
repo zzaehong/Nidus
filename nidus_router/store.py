@@ -28,6 +28,12 @@ def identifier():
     return uuid.uuid4().hex
 
 
+def approval_terms(model, connection):
+    return digest(json.dumps({"model": {k: model[k] for k in
+        ("id", "connection_id", "upstream_model", "pricing", "input_per_million", "output_per_million")},
+        "connection": {k: connection[k] for k in ("provider", "base_url", "credential_ref")}}, sort_keys=True))
+
+
 class Store:
     def __init__(self, directory, clock=None):
         self.directory = Path(directory).expanduser().resolve()
@@ -36,6 +42,8 @@ class Store:
         self.path = self.directory / "router.sqlite3"
         self.clock = clock or (lambda: datetime.now(timezone.utc))
         with self.db() as db:
+            if db.execute("PRAGMA user_version").fetchone()[0] not in (0, 1):
+                raise RouterError("configuration_conflict", 503)
             db.executescript("""
                 PRAGMA journal_mode=WAL;
                 CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -148,8 +156,12 @@ class Store:
             if not db.execute("DELETE FROM connections WHERE id=?", (connection_id,)).rowcount:
                 raise RouterError("not_found", 404)
 
-    def save_settings(self, value):
+    def save_settings(self, value, *, allow_approval_changes=True):
         with self.db(True) as db:
+            current = self.settings_from(db)
+            if not allow_approval_changes and any(value[k] != current[k] for k in
+                                                  ("approved_model_ids", "monthly_budget_usd")):
+                raise RouterError("configuration_conflict", 409)
             models = {row[0]: json.loads(row[1]) for row in db.execute("SELECT id,value FROM models")}
             for model_id in value["approved_model_ids"]:
                 model = models.get(model_id)
@@ -160,7 +172,22 @@ class Store:
         self.prune()
         return value
 
-    def reserve(self, request_id, model, estimate, snapshot_budget):
+    def approve_budget(self, approval):
+        with self.db(True) as db:
+            models = {row[0]: json.loads(row[1]) for row in db.execute("SELECT id,value FROM models")}
+            connections = {row[0]: json.loads(row[1]) for row in db.execute("SELECT id,value FROM connections")}
+            for model_id in approval["approved_model_ids"]:
+                model = models.get(model_id)
+                if not model or model["pricing"] != "paid" or any(
+                        model[k] is None for k in ("input_per_million", "output_per_million")):
+                    raise RouterError("unknown_pricing", 422)
+                if approval["terms"].get(model_id) != approval_terms(model, connections[model["connection_id"]]):
+                    raise RouterError("configuration_conflict", 409)
+            settings = self.settings_from(db) | {k: approval[k] for k in ("approved_model_ids", "monthly_budget_usd")}
+            db.execute("UPDATE config SET value=? WHERE key='settings'", (json.dumps(settings),))
+        return settings
+
+    def reserve(self, request_id, model, estimate, snapshot_budget, connection=None):
         reservation = identifier()
         with self.db(True) as db:
             settings = self.settings_from(db)
@@ -170,6 +197,11 @@ class Store:
                     or any(json.loads(current[0])[k] != model[k] for k in
                            ("connection_id", "upstream_model", "pricing", "input_per_million", "output_per_million"))):
                 raise RouterError("paid_not_approved", 403)
+            if connection is not None:
+                current_connection = db.execute("SELECT value FROM connections WHERE id=?", (connection["id"],)).fetchone()
+                if not current_connection or approval_terms(model, connection) != approval_terms(
+                        json.loads(current[0]), json.loads(current_connection[0])):
+                    raise RouterError("paid_not_approved", 403)
             budget = min(money(settings["monthly_budget_usd"]), money(snapshot_budget))
             if budget <= 0:
                 raise RouterError("paid_not_approved", 403)

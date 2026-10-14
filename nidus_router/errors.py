@@ -3,7 +3,7 @@ MESSAGES = {
     "unauthorized": "인증이 필요합니다.",
     "forbidden": "허용되지 않은 접근입니다.",
     "not_found": "대상을 찾을 수 없습니다.",
-    "configuration_conflict": "다른 설정에서 사용 중입니다. 참조를 먼저 제거하세요.",
+    "configuration_conflict": "설정이 변경되었거나 다른 설정에서 사용 중입니다. 새로고침 후 참조와 승인 조건을 확인하세요.",
     "credential_unavailable": "OS 자격 증명 저장소의 키를 확인하세요.",
     "no_available_model": "사용 가능한 모델이 없습니다.",
     "unknown_pricing": "모델의 요금 분류 또는 요율을 설정하세요.",

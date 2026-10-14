@@ -95,7 +95,7 @@ class Router:
                            "input_tokens": None, "output_tokens": None, "estimated_cost_usd": None}
                 record["attempts"].append(attempt)
                 reservation, charged, emitted, invoked = None, None, False, False
-                parts, length, finished = [], 0, False
+                parts, length, finished, terminal_received = [], 0, False, False
                 started = time.monotonic()
                 try:
                     if model["pricing"] == "unknown":
@@ -112,7 +112,7 @@ class Router:
                         # This is a local estimate, not a provider billing guarantee.
                         estimate = cost(model, len((prompt + request.input).encode("utf-8")) + 256,
                                         settings["max_output_tokens"])
-                        reservation = self.store.reserve(request_id, model, estimate, settings["monthly_budget_usd"])
+                        reservation = self.store.reserve(request_id, model, estimate, settings["monthly_budget_usd"], connection)
                         charged = estimate
                     invoked = True
                     async with asyncio.timeout(settings["timeout_seconds"]):
@@ -124,6 +124,7 @@ class Router:
                                         if event[field] is not None:
                                             attempt[field] = event[field]
                                 elif event["type"] == "finish":
+                                    terminal_received = True
                                     finished = event["ok"]
                                 elif event["type"] == "text":
                                     if not isinstance(event["text"], str):
@@ -160,7 +161,8 @@ class Router:
                     continue
                 finally:
                     if invoked:
-                        actual = cost(model, attempt["input_tokens"], attempt["output_tokens"])
+                        actual = cost(model, attempt["input_tokens"], attempt["output_tokens"]) if terminal_received else (
+                            0 if model["pricing"] == "free" else None)
                         self.store.settle(reservation, actual)
                         if actual is not None:
                             charged = actual

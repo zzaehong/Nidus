@@ -77,3 +77,9 @@ class Settings(StrictModel):
 
 class Login(StrictModel):
     token: str = Field(min_length=1, max_length=256)
+
+
+class BudgetApproval(StrictModel):
+    approved_model_ids: list[str] = Field(max_length=200)
+    monthly_budget_usd: float = Field(ge=0, le=100000)
+    terms: dict[str, str]

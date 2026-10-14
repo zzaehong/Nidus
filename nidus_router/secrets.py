@@ -50,6 +50,8 @@ class OSSecrets:
 
     def delete(self, reference):
         try:
-            self.backend().delete_password(self.service, reference)
+            backend = self.backend()
+            if backend.get_password(self.service, reference) is not None:
+                backend.delete_password(self.service, reference)
         except Exception:
             raise RouterError("credential_unavailable", 503) from None

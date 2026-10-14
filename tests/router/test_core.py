@@ -1,6 +1,4 @@
-import asyncio
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import aclosing
 from datetime import datetime, timezone
 import json
 
@@ -8,7 +6,7 @@ import httpx
 import pytest
 
 from nidus_router.errors import RouterError
-from nidus_router.router import Router, strict_json
+from nidus_router.router import Router
 from nidus_router.schemas import Generate
 from nidus_router.store import Store, money
 from conftest import response
@@ -179,3 +177,22 @@ def test_retention_keeps_budget_and_deletes_body(store, add_model):
     store.record({"request_id": "old", "input": "private"})
     store.clock = lambda: datetime(2026, 2, 2, tzinfo=timezone.utc)
     assert store.records() == []
+
+
+def test_connection_change_invalidates_inflight_approval(store, add_model):
+    model = add_model(pricing="paid", input_per_million=1, output_per_million=1)
+    connection = store.snapshot()["connections"][model["connection_id"]]
+    settings(store, approved_model_ids=[model["id"]], monthly_budget_usd=1)
+    store.save_connection(connection | {"base_url": "https://new.invalid/v1"}, connection["id"])
+    settings(store, approved_model_ids=[model["id"]], monthly_budget_usd=1)
+    with pytest.raises(RouterError, match="paid_not_approved"):
+        store.reserve("old-snapshot", model, money(0.1), 1, connection)
+
+
+def test_future_database_schema_is_not_overwritten(store):
+    with store.db(True) as db:
+        db.execute("PRAGMA user_version=999")
+    with pytest.raises(RouterError, match="configuration_conflict"):
+        Store(store.directory)
+    with store.db() as db:
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 999
