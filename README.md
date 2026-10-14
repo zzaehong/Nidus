@@ -4,22 +4,16 @@ Nidus는 사용자의 로컬 환경에서 동작하는 AI Office를 지향합니
 
 ## 빠른 시작
 
-Python 3.11 이상과 [uv](https://docs.astral.sh/uv/)가 필요합니다.
+[uv](https://docs.astral.sh/uv/)로 Python과 프로젝트 환경을 관리합니다. 개발 Python은 기존 환경에 맞춘 **3.13**이며 `.python-version`에 지정되어 있습니다. 패키지의 지원 범위는 Python 3.11 이상입니다.
 
 ```sh
 uv sync --locked
-uv run --locked python -m nidus_router serve
+uv run --locked nidus-router serve
 ```
 
 브라우저에서 [로컬 대시보드](http://127.0.0.1:8787)를 엽니다. 첫 실행 시 터미널에 서로 다른 `admin` 토큰과 `api` 키가 한 번씩 표시됩니다. `admin` 토큰으로 로그인하고, `api` 키는 연결할 프로그램에서 사용하세요.
 
-uv 없이 설치할 수도 있습니다. `python3.11`은 설치한 3.11 이상 실행 파일로 바꿀 수 있습니다.
-
-```sh
-python3.11 -m venv .venv
-.venv/bin/python -m pip install -e .
-.venv/bin/python -m nidus_router serve
-```
+`uv sync --locked`는 `.python-version`과 `uv.lock`을 사용해 프로젝트 루트의 `.venv`를 구성합니다. 테스트 도구도 기본 `dev` 그룹으로 함께 설치됩니다. 가상환경을 수동으로 활성화하지 않아도 `uv run`이 프로젝트 환경을 사용합니다.
 
 1. **연결과 모델:** OpenAI·Anthropic·Gemini 또는 OpenAI 호환 서비스의 키를 등록하고 모델을 추가합니다.
 2. **요금 분류:** 신규 모델은 ‘요금 미확인’으로 차단됩니다. 계정의 실제 요금 조건에 따라 무료/유료를 지정합니다.
@@ -66,19 +60,32 @@ print(result["output"])
 
 ```sh
 # 관리자 토큰 또는 호출용 키 재발급: 기존 값은 즉시 무효화됩니다.
-uv run --locked python -m nidus_router reset-admin
-uv run --locked python -m nidus_router rotate-api-key
+uv run --locked nidus-router reset-admin
+uv run --locked nidus-router rotate-api-key
 
 # 사용자 데이터는 Git 저장소 밖 경로만 사용할 수 있습니다.
-uv run --locked python -m nidus_router --data-dir /absolute/path/outside/repository serve --port 8787
+uv run --locked nidus-router --data-dir /absolute/path/outside/repository serve --port 8787
 
 # 모의 공급자와 루프백 HTTP를 사용하는 전체 테스트. 외부 AI API 호출 없음.
-uv sync --locked --extra test
+uv sync --locked
 uv run --locked pytest -q
 ```
 
+의존성 변경도 uv로 관리합니다. 변경된 `pyproject.toml`과 `uv.lock`을 함께 커밋하세요.
+
+```sh
+uv add <package>                     # 실행 의존성 추가
+uv add --dev <package>               # 개발 도구 추가
+uv remove <package>                  # 실행 의존성 제거
+uv lock --upgrade-package <package>  # 특정 패키지 업데이트
+uv sync --locked
+uv build                            # wheel과 소스 패키지 생성
+```
+
+개발 도구 없이 실행만 할 때는 `uv sync --locked --no-dev`와 `uv run --locked --no-dev nidus-router serve`를 사용합니다. 프로젝트 의존성을 전역 Python에 설치하거나 macOS 기본 `python3`로 실행하지 않습니다.
+
 - [라우터 API·정책·검증 안내](docs/ROUTER.md)
-- [Git Flow](docs/Git_Flow.md): 최신 `develop`에서 기능 브랜치 생성 → 검증·한글 커밋 → 로컬 `develop`에 `--no-ff` 병합 → 회귀 테스트. 이번 작업 브랜치는 사용자 지정 `feat/ai-api-router`입니다.
+- [Git Flow](docs/Git_Flow.md): 최신 `develop`에서 기능 브랜치 생성 → 검증·한글 커밋 → 로컬 `develop`에 `--no-ff` 병합 → 회귀 테스트.
 - [장기 제품 개념](docs/CONCEPT.md)
 
 첫 버전은 단일 텍스트 입력을 처리합니다. OAuth, 도구 호출, 이미지·음성, 대화 이력, 여러 모델 동시 실행, OpenAI 호환 수신 API와 과거 Vault 런타임은 포함하지 않습니다.

@@ -360,8 +360,8 @@ dependencies = [
     { name = "uvicorn" },
 ]
 
-[package.optional-dependencies]
-test = [
+[package.dev-dependencies]
+dev = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
 ]
@@ -372,12 +372,15 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.27,<1" },
     { name = "keyring", specifier = ">=25,<26" },
     { name = "pydantic", specifier = ">=2.9,<3" },
-    { name = "pytest", marker = "extra == 'test'", specifier = ">=8,<9" },
-    { name = "pytest-asyncio", marker = "extra == 'test'", specifier = ">=0.24,<2" },
     { name = "tzdata", specifier = ">=2024.1" },
     { name = "uvicorn", specifier = ">=0.30,<1" },
 ]
-provides-extras = ["test"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8,<9" },
+    { name = "pytest-asyncio", specifier = ">=0.24,<2" },
+]
 
 [[package]]
 name = "opentelemetry-api"

@@ -181,6 +181,16 @@ Secret을 필요 이상으로 전달하지 않는다.
 
 ## 7. 테스트 원칙
 
+### Python 개발 환경
+
+- 프로젝트 환경과 의존성 관리는 기존 개발 환경의 **uv**를 사용한다.
+- `.python-version`의 Python 3.13과 `uv.lock`을 기준으로 `uv sync --locked`를 실행한다. 각 checkout의 `.venv`를 사용하며 전역 Python에 프로젝트 패키지를 설치하지 않는다.
+- 테스트 도구는 `pyproject.toml`의 기본 `dev` dependency group으로 관리한다. `uv run --locked pytest -q`로 테스트하고 `uv run --locked nidus-router serve`로 실행한다.
+- 의존성은 `uv add` / `uv add --dev` / `uv remove`로 변경하고 `pyproject.toml`과 `uv.lock`을 함께 커밋한다.
+- 가상환경 수동 활성화나 별도의 pip 설치 절차를 기본 안내로 추가하지 않는다. `uv build`를 사용하며 빌드 백엔드는 패키지 관리 도구와 별개다.
+
+### 검증 구분
+
 Provider integration은 fixture 테스트와 실제 API 테스트를 구분한다.
 
 다음 표현을 정확히 사용한다.
