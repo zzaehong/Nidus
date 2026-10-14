@@ -1,4 +1,6 @@
 MESSAGES = {
+    "model_unavailable": "공급자에서 모델을 찾을 수 없습니다.",
+    "discovery_invalid": "모델 목록을 확인하지 못했습니다. 수동 등록 또는 새로고침을 사용하세요.",
     "invalid_request": "요청 형식을 확인하세요.",
     "unauthorized": "인증이 필요합니다.",
     "forbidden": "허용되지 않은 접근입니다.",

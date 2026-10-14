@@ -1,6 +1,7 @@
 "use strict";
 const $ = id => document.getElementById(id);
 let state = null, fallbackIds = [], recordsOffset = 0;
+const statusLabels = {available: "사용 가능", disabled: "비활성", connection_required: "연결 확인 필요", support_required: "호환성 확인 필요", unknown_pricing: "요금 미확인", approval_required: "유료 승인 필요"};
 const pricingLabels = {free: "무료", paid: "유료", unknown: "요금 미확인"};
 const defaults = {openai: "https://api.openai.com/v1", anthropic: "https://api.anthropic.com/v1", gemini: "https://generativelanguage.googleapis.com/v1beta", compatible: ""};
 function el(tag, text, className) {
@@ -52,8 +53,8 @@ function render() {
   $("metric-free").textContent = enabled.filter(m => m.pricing === "free").length;
   $("metric-spend").textContent = "$" + state.budget.used_and_reserved_usd.toFixed(4);
   const selected = $("test-model").value;
-  $("test-model").replaceChildren(option("auto", "자동 선택 · 무료 우선"), ...enabled.map(m => option(m.id, m.name)));
-  if ([...$("test-model").options].some(o => o.value === selected)) $("test-model").value = selected;
+  $("test-model").replaceChildren(option("auto", "자동 선택 · 무료 우선"), ...enabled.map(m => {const o = option(m.id, `${m.name} · ${statusLabels[m.status]}`); o.disabled = m.status !== "available"; return o;}));
+  if ([...$("test-model").options].some(o => o.value === selected && !o.disabled)) $("test-model").value = selected;
   $("policy-summary").replaceChildren();
   for (const [key, value] of [["응답 형식", state.settings.output_format === "json" ? "JSON · 전체 응답 검증" : "텍스트 · 스트리밍 가능"],
     ["유료 승인 모델", `${state.settings.approved_model_ids.length}개 / 월 $${state.settings.monthly_budget_usd}`],
@@ -65,21 +66,32 @@ function render() {
   for (const connection of state.connections) {
     const card = el("article", undefined, "connection-card"), info = el("div"), actions = el("div", undefined, "actions");
     info.append(el("h3", connection.name + (connection.enabled ? "" : " · 비활성")), el("p", `${connection.provider} · ${connection.base_url}`));
-    actions.append(button("수정", () => editConnection(connection)), button("삭제", async () => {
+    const discovery = connection.discovery;
+    info.append(el("p", discovery ? `모델 조회: ${discovery.status === "success" ? "완료" : discovery.status === "pending" ? "대기" : "실패 · 새로고침 또는 수동 등록"} · 마지막 성공: ${discovery.last_success_at ? new Date(discovery.last_success_at).toLocaleString("ko-KR") : "없음"}` : "모델 목록을 새로고침하세요."));
+    actions.append(button("모델 새로고침", async () => {
+      notice("모델 목록을 조회하는 중…");
+      const result = await api(`/admin/connections/${connection.id}/refresh`, "POST");
+      await refresh(); notice(result.status === "success" ? "모델 목록을 갱신했습니다." : "목록 조회에 실패했습니다. 연결 설정을 확인하거나 수동 등록하세요.", result.status !== "success");
+    }), button("수정", () => editConnection(connection)), button("삭제", async () => {
       if (!confirm(`‘${connection.name}’ 연결과 저장된 키를 삭제할까요? 연결된 모델을 먼저 삭제해야 합니다.`)) return;
       await api(`/admin/connections/${connection.id}`, "DELETE"); await refresh(); notice("연결을 삭제했습니다.");
     }, "danger"));
     card.append(info, actions); $("connection-list").append(card);
   }
   $("model-list").replaceChildren();
-  if (!state.models.length) $("model-list").append(el("div", "연결한 서비스에서 사용할 모델을 추가하세요.", "empty"));
+  if (!state.models.length) $("model-list").append(el("div", "연결을 등록하거나 모델 목록을 새로고침하세요. 목록 조회를 지원하지 않으면 고급 수동 등록을 사용하세요.", "empty"));
   $("add-model").disabled = !state.connections.length;
   for (const model of state.models) {
     const card = el("article", undefined, "model-card"), actions = el("div", undefined, "actions");
-    card.append(el("span", pricingLabels[model.pricing], `badge ${model.pricing}`), el("h3", model.name),
+    card.append(el("span", statusLabels[model.status], `badge ${model.pricing}`), el("h3", model.name),
       el("p", `${state.connections.find(c => c.id === model.connection_id)?.name} / ${model.upstream_model}`),
       el("p", `${model.enabled ? "활성" : "비활성"} · 순서 ${model.priority} · ${model.prompt_override === null ? "공통 프롬프트" : "개별 프롬프트"}`));
-    actions.append(button("수정", () => editModel(model)), button("테스트", () => {page("overview"); $("test-model").value = model.id; $("test-input").focus();}), button("삭제", async () => {
+    if (model.price_source) {
+      const source = el("a", `공식 요금 · 확인 ${model.price_verified_at}`);
+      source.href = model.price_source; source.target = "_blank"; source.rel = "noopener noreferrer";
+      card.append(source, el("p", `입력 $${model.input_per_million} / 출력 $${model.output_per_million} (100만 토큰) · ${model.pricing_origin === "manual" ? "사용자 요금" : "표준 요금 추정"}`));
+    }
+    actions.append(button("고급 설정", () => editModel(model)), button("테스트", () => {page("overview"); $("test-model").value = model.id; $("test-input").focus();}), button("삭제", async () => {
       if (!confirm(`‘${model.name}’ 모델을 삭제할까요?`)) return;
       await api(`/admin/models/${model.id}`, "DELETE"); await refresh(); notice("모델을 삭제했습니다.");
     }, "danger"));
@@ -98,7 +110,7 @@ function render() {
     $("prompt-previews").append(item);
   }
   $("route-list").replaceChildren();
-  const routes = enabled.filter(m => m.pricing === "free" || (m.pricing === "paid" && state.settings.approved_model_ids.includes(m.id) && state.settings.monthly_budget_usd > 0))
+  const routes = enabled.filter(m => m.status === "available")
     .sort((a, b) => (a.pricing === "paid") - (b.pricing === "paid") || a.priority - b.priority || a.id.localeCompare(b.id));
   for (const model of routes) $("route-list").append(el("li", `${model.name} · ${pricingLabels[model.pricing]} · 순서 ${model.priority}`));
   if (!routes.length) $("route-list").append(el("p", "호출 가능한 모델을 등록하고 요금을 분류하세요.", "muted"));
@@ -122,6 +134,7 @@ function editConnection(connection = null) {
   $("connection-name").value = connection?.name || "";
   $("connection-provider").value = connection?.provider || "openai";
   $("connection-url").value = connection?.base_url || defaults.openai;
+  $("connection-tier").value = connection?.billing_tier || "unconfirmed";
   $("connection-enabled").checked = connection?.enabled ?? true;
   $("connection-key").required = !connection;
   $("connection-dialog").showModal();
@@ -140,6 +153,7 @@ function editModel(model = null) {
   $("model-override-enabled").checked = model?.prompt_override != null;
   $("override-field").hidden = !$("model-override-enabled").checked;
   $("model-prompt").value = model?.prompt_override ?? state.settings.system_prompt;
+  $("model-capability").checked = model?.capability_confirmed || false;
   $("model-enabled").checked = model?.enabled ?? true;
   fallbackIds = [...(model?.fallback_ids || [])]; renderFallbacks();
   $("model-dialog").showModal();
@@ -188,14 +202,14 @@ submit("connection-form", async () => {
   const id = $("connection-id").value;
   await api("/admin/connections" + (id ? "/" + id : ""), id ? "PUT" : "POST", {
     name: $("connection-name").value, provider: $("connection-provider").value, base_url: $("connection-url").value,
-    api_key: $("connection-key").value || null, enabled: $("connection-enabled").checked});
-  $("connection-key").value = ""; $("connection-dialog").close(); await refresh(); notice("연결을 저장했습니다.");
+    api_key: $("connection-key").value || null, billing_tier: $("connection-tier").value, enabled: $("connection-enabled").checked});
+  $("connection-key").value = ""; $("connection-dialog").close(); await refresh(); notice("연결을 저장했습니다. 모델 목록의 사용 상태를 확인하세요.");
 });
 submit("model-form", async () => {
   const id = $("model-id").value;
   await api("/admin/models" + (id ? "/" + id : ""), id ? "PUT" : "POST", {
     connection_id: $("model-connection").value, name: $("model-name").value, upstream_model: $("model-upstream").value,
-    enabled: $("model-enabled").checked, pricing: $("model-pricing").value, priority: Number($("model-priority").value),
+    capability_confirmed: $("model-capability").checked, enabled: $("model-enabled").checked, pricing: $("model-pricing").value, priority: Number($("model-priority").value),
     input_per_million: $("model-input-rate").value === "" ? null : Number($("model-input-rate").value),
     output_per_million: $("model-output-rate").value === "" ? null : Number($("model-output-rate").value),
     prompt_override: $("model-override-enabled").checked ? $("model-prompt").value : null, fallback_ids: fallbackIds});
@@ -216,7 +230,7 @@ submit("test-form", async () => {
   $("test-result").hidden = false; $("test-result").textContent = "응답을 기다리는 중…";
   try {const result = await api("/admin/test", "POST", {input: $("test-input").value, model: $("test-model").value, stream: false});
     $("test-result").textContent = JSON.stringify(result, null, 2); await refresh();}
-  catch (err) {$("test-result").textContent = err.message; throw err;}
+  catch (err) {$("test-result").textContent = err.message; await refresh(); throw err;}
 });
 document.querySelectorAll("[data-page]").forEach(n => n.addEventListener("click", () => page(n.dataset.page)));
 document.querySelectorAll("[data-go]").forEach(n => n.addEventListener("click", () => page(n.dataset.go)));
@@ -224,7 +238,8 @@ document.querySelectorAll("[data-close]").forEach(n => n.addEventListener("click
 $("connection-dialog").addEventListener("close", () => {$("connection-key").value = "";});
 $("add-connection").addEventListener("click", () => editConnection());
 $("add-model").addEventListener("click", () => editModel());
-$("connection-provider").addEventListener("change", () => {$("connection-url").value = defaults[$("connection-provider").value];});
+$("select-paid").addEventListener("click", () => {$("paid-models").querySelectorAll("input:not(:disabled)").forEach(n => n.checked = true);});
+$("connection-provider").addEventListener("change", () => {$("connection-tier").value = "unconfirmed";$("connection-url").value = defaults[$("connection-provider").value];});
 $("model-override-enabled").addEventListener("change", () => {$("override-field").hidden = !$("model-override-enabled").checked;});
 $("add-fallback").addEventListener("click", () => {const m = state.models.find(m => m.id !== $("model-id").value && !fallbackIds.includes(m.id)); if (m) fallbackIds.push(m.id); renderFallbacks();});
 $("logout").addEventListener("click", () => api("/admin/logout", "POST").then(() => {state = null; showLogin();}).catch(report));

@@ -27,7 +27,18 @@ if __name__ == "__main__":
             json.dump(tokens, file)
 
         def upstream(request):
+            if request.method == "GET":
+                return httpx.Response(200, json={"models": [
+                    {"name": "models/" + name, "supportedGenerationMethods": ["generateContent"]}
+                    for name in ("gemini-2.5-flash", "gemini-2.5-flash-lite")]})
             payload = json.loads(request.content)
+            if "systemInstruction" in payload:
+                prompt = payload["systemInstruction"]["parts"][0]["text"]
+                text = '{"category":"positive"}' if "JSON" in prompt else "로컬 테스트 응답입니다."
+                if "연결 오류" in json.dumps(payload, ensure_ascii=False) and "flash-lite:" in request.url.path:
+                    return httpx.Response(503)
+                return httpx.Response(200, json={"candidates": [{"content": {"parts": [{"text": text}]}, "finishReason": "STOP"}],
+                    "usageMetadata": {"promptTokenCount": 10, "candidatesTokenCount": 3}})
             prompt = payload.get("messages", [{}])[0].get("content", "")
             return response('{"category":"positive"}' if "JSON" in prompt else "로컬 테스트 응답입니다.")
 

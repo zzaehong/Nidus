@@ -108,3 +108,39 @@ async def test_disconnect_cancels_upstream_and_keeps_uncertain_budget(store, cre
         await asyncio.to_thread(thread.join, 3)
         sock.close()
         await upstream.aclose()
+
+
+@pytest.mark.parametrize("kind", ["openai", "anthropic", "gemini", "compatible"])
+async def test_loopback_model_discovery(store, credentials, kind):
+    from nidus_router.discovery import Discovery
+    from test_discovery import connection
+    requests = []
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def do_GET(self):
+            requests.append(self.path)
+            body = {"models": [{"name": "models/gemini-2.5-flash", "supportedGenerationMethods": ["generateContent"]}]} if kind == "gemini" else {"data": [{"id": "gpt-4.1-mini", "type": "model"}]}
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            wire = json.dumps(body).encode()
+            for i in range(0, len(wire), 3):
+                self.wfile.write(wire[i:i+3])
+                self.wfile.flush()
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        c = connection(store, credentials, kind)
+        c = store.save_connection(c | {"base_url": f"http://127.0.0.1:{server.server_port}/v1"}, c["id"])
+        async with httpx.AsyncClient(trust_env=False) as client:
+            result = await Discovery(store, credentials, client).refresh(c["id"])
+        assert result["status"] == "success" and len(requests) == 1
+        model = next(iter(store.snapshot()["models"].values()))
+        assert model["pricing"] == "unknown"  # Official rates never apply to custom URLs.
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)

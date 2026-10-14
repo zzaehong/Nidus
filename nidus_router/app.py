@@ -11,6 +11,8 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 import httpx
 
 from .errors import RouterError
+from .catalog import model_status
+from .discovery import identity
 from .boundary import LocalBoundary
 from .router import Router, effective_prompt
 from .schemas import BudgetApproval, Connection, Generate, Login, Model, Settings
@@ -52,6 +54,7 @@ def create_app(directory=None, *, store=None, secrets=None, client=None, port=87
             cleanup_task.cancel()
             with suppress(asyncio.CancelledError):
                 await cleanup_task
+            await router.discovery.close()
             if owns_client:
                 await client.aclose()
 
@@ -118,7 +121,8 @@ def create_app(directory=None, *, store=None, secrets=None, client=None, port=87
         snapshot = store.snapshot()
         return {"settings": snapshot["settings"], "budget": store.budget(),
                 "connections": [public_connection(c) for c in snapshot["connections"].values()],
-                "models": [m | {"effective_prompt": effective_prompt(snapshot["settings"], m),
+                "models": [m | {"status": model_status(m, snapshot["connections"][m["connection_id"]], snapshot["settings"]),
+                                 "effective_prompt": effective_prompt(snapshot["settings"], m),
                                  "approval_terms": approval_terms(m, snapshot["connections"][m["connection_id"]])}
                            for m in snapshot["models"].values()]}
 
@@ -148,6 +152,11 @@ def create_app(directory=None, *, store=None, secrets=None, client=None, port=87
             raise
         if old and reference != old["credential_ref"]:
             secrets.delete(old["credential_ref"])
+        if not old or identity(old) != identity(saved):
+            await router.discovery.refresh(saved["id"])
+            saved = store.snapshot()["connections"].get(saved["id"])
+            if saved is None:
+                raise RouterError("not_found", 404)
         return public_connection(saved)
 
     @app.post("/admin/connections", dependencies=[Depends(admin)], status_code=201)
@@ -157,6 +166,10 @@ def create_app(directory=None, *, store=None, secrets=None, client=None, port=87
     @app.put("/admin/connections/{connection_id}", dependencies=[Depends(admin)])
     async def update_connection(connection_id: str, value: Connection):
         return await write_connection(value, connection_id)
+
+    @app.post("/admin/connections/{connection_id}/refresh", dependencies=[Depends(admin)])
+    async def refresh_models(connection_id: str):
+        return await router.discovery.refresh(connection_id)
 
     @app.delete("/admin/connections/{connection_id}", dependencies=[Depends(admin)])
     async def delete_connection(connection_id: str):
@@ -205,7 +218,8 @@ def create_app(directory=None, *, store=None, secrets=None, client=None, port=87
     @app.get("/api/v1/models", dependencies=[Depends(bearer)])
     async def models():
         snapshot = store.snapshot()
-        return {"models": [{k: m[k] for k in ("id", "name", "pricing")}
+        return {"models": [{k: m[k] for k in ("id", "name", "pricing")} |
+                           {"status": model_status(m, snapshot["connections"][m["connection_id"]], snapshot["settings"])}
                            for m in snapshot["models"].values()
                            if m["enabled"] and snapshot["connections"][m["connection_id"]]["enabled"]]}
 

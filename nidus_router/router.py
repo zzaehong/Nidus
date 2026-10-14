@@ -6,6 +6,8 @@ import json
 import time
 
 from .errors import RouterError
+from .catalog import model_status
+from .discovery import Discovery, REFRESH_ERRORS, identity
 from .providers import MAX_RESPONSE_BYTES, Provider
 from .store import money, usd
 
@@ -53,6 +55,7 @@ class Router:
     def __init__(self, store, secrets, client):
         self.store, self.secrets = store, secrets
         self.provider = Provider(client)
+        self.discovery = Discovery(store, secrets, client)
 
     def prepare(self, request):
         snapshot = self.store.snapshot()
@@ -61,9 +64,11 @@ class Router:
             raise RouterError("invalid_request", 413)
         if request.stream and settings["output_format"] == "json":
             raise RouterError("json_stream_not_supported", 422)
+        automatic = sorted((m for m in models.values()
+                            if model_status(m, connections[m["connection_id"]], settings) == "available"),
+                           key=lambda m: (m["pricing"] != "free", m["priority"], m["id"]))
         if request.model == "auto":
-            candidates = sorted((m for m in models.values() if m["pricing"] != "unknown"),
-                                key=lambda m: (m["pricing"] != "free", m["priority"], m["id"]))
+            candidates = automatic
         else:
             if request.model not in models:
                 raise RouterError("not_found", 404)
@@ -73,9 +78,13 @@ class Router:
             if first["pricing"] == "paid" and (first["id"] not in settings["approved_model_ids"]
                                               or settings["monthly_budget_usd"] <= 0):
                 raise RouterError("paid_not_approved", 403)
-            candidates = [first] + [models[x] for x in first["fallback_ids"] if x in models]
-        candidates = [m for m in candidates if m["enabled"] and connections[m["connection_id"]]["enabled"]]
+            candidates = [first] + [models[x] for x in first["fallback_ids"] if x in models] + automatic
+        candidates = list({m["id"]: m for m in candidates if
+                           model_status(m, connections[m["connection_id"]], settings) == "available"}.values())
         if not candidates:
+            if any(model_status(m, connections[m["connection_id"]], settings) == "approval_required"
+                   for m in models.values()):
+                raise RouterError("paid_not_approved", 403)
             raise RouterError("no_available_model", 503)
         return snapshot, candidates
 
@@ -88,8 +97,12 @@ class Router:
         if settings["store_bodies"]:
             record["input"] = request.input
         last_error = RouterError("no_available_model", 503)
+        refreshed = set()
+        excluded = set()
         try:
             for model in candidates:
+                if model["id"] in excluded:
+                    continue
                 connection = snapshot["connections"][model["connection_id"]]
                 attempt = {"model": model["id"], "status": "error", "error": None,
                            "input_tokens": None, "output_tokens": None, "estimated_cost_usd": None}
@@ -155,6 +168,20 @@ class Router:
                         error = RouterError("provider_unavailable", 503, True)
                     last_error = error
                     attempt["error"] = error.code
+                    if error.code in REFRESH_ERRORS and connection["id"] not in refreshed:
+                        refreshed.add(connection["id"])
+                        try:
+                            attempt["refresh"] = await self.discovery.refresh(connection["id"], automatic=True)
+                        except RouterError as refresh_error:
+                            # A connection may be removed while its generation is in flight.
+                            attempt["refresh"] = {"status": "error", "error": refresh_error.code}
+                        current = self.store.snapshot()
+                        live = current["connections"].get(connection["id"])
+                        if live is None or identity(live) != identity(connection):
+                            excluded.update(m["id"] for m in candidates if m["connection_id"] == connection["id"])
+                        elif attempt["refresh"]["status"] == "success":
+                            excluded.update(m["id"] for m in candidates if m["connection_id"] == connection["id"]
+                                            and current["models"].get(m["id"], {}).get("availability") in ("missing", "pending"))
                     if emitted or (not error.retryable and error.code not in
                                    ("paid_not_approved", "budget_exceeded", "unknown_pricing")):
                         raise error
@@ -179,6 +206,9 @@ class Router:
                 yield {"event": "done", "data": response}
                 return
             raise last_error
+        except (asyncio.CancelledError, GeneratorExit):
+            record["error"] = "cancelled"
+            raise
         except RouterError as error:
             record["error"] = error.code
             raise
