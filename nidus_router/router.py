@@ -73,6 +73,9 @@ class Router:
             if request.model not in models:
                 raise RouterError("not_found", 404)
             first = models[request.model]
+            status = model_status(first, connections[first["connection_id"]], settings)
+            if status in ("billing_required", "free_tier_unavailable"):
+                raise RouterError(status, 422)
             if first["pricing"] == "unknown":
                 raise RouterError("unknown_pricing", 422)
             if first["pricing"] == "paid" and (first["id"] not in settings["approved_model_ids"]
@@ -82,6 +85,9 @@ class Router:
         candidates = list({m["id"]: m for m in candidates if
                            model_status(m, connections[m["connection_id"]], settings) == "available"}.values())
         if not candidates:
+            if any(model_status(m, connections[m["connection_id"]], settings) == "billing_required"
+                   for m in models.values()):
+                raise RouterError("billing_required", 422)
             if any(model_status(m, connections[m["connection_id"]], settings) == "approval_required"
                    for m in models.values()):
                 raise RouterError("paid_not_approved", 403)
