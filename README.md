@@ -56,7 +56,7 @@ print(result["output"])
 
 ## 운영과 검증
 
-설정과 요청 기록은 기본 `~/.local/share/nidus-router/router.sqlite3`에 저장합니다. 본문 저장은 기본적으로 꺼져 있고 기록은 30일 후 삭제합니다. 공급자의 실제 청구액과 라우터의 추정 비용은 다를 수 있습니다.
+설정과 요청 기록은 기본 `~/.local/share/nidus-router/router.sqlite3`에 저장합니다. 본문 저장은 기본적으로 꺼져 있고 기록의 기본 보관 기간은 30일입니다. 서버가 실행 중일 때 조회·기록 작업과 정기 정리로 만료 기록을 삭제합니다. 공급자의 실제 청구액과 라우터의 추정 비용은 다를 수 있습니다.
 
 ```sh
 # 관리자 토큰 또는 호출용 키 재발급: 기존 값은 즉시 무효화됩니다.
@@ -84,7 +84,9 @@ uv build                            # wheel과 소스 패키지 생성
 
 개발 도구 없이 실행만 할 때는 `uv sync --locked --no-dev`와 `uv run --locked --no-dev nidus-router serve`를 사용합니다. 프로젝트 의존성을 전역 Python에 설치하거나 macOS 기본 `python3`로 실행하지 않습니다.
 
-- [라우터 API·정책·검증 안내](docs/ROUTER.md)
+- [라우터 API·정책 안내](docs/ROUTER.md)
+- [테스트 실행·검증 이력](docs/VALIDATION.md)
+- [개발 에이전트 작업 지침](docs/AGENTS.md)
 - [Git Flow](docs/Git_Flow.md): 최신 `develop`에서 기능 브랜치 생성 → 검증·한글 커밋 → 로컬 `develop`에 `--no-ff` 병합 → 회귀 테스트.
 - [장기 제품 개념](docs/CONCEPT.md)
 

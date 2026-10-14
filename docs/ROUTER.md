@@ -1,5 +1,7 @@
 # Nidus Router 0.1
 
+설치·첫 연결은 [README](../README.md), 테스트 실행·실제 호출 이력은 [검증 안내](VALIDATION.md)를 참고하세요. 이 문서는 현재 구현의 API와 정책을 설명합니다.
+
 ## 현재 구조
 
 ```text
@@ -62,8 +64,8 @@ OmniRoute의 연결·모델·라우팅 분리 구조를 참고했으며 실행 �
 | 402 | `budget_exceeded` |
 | 404 | `not_found` |
 | 409 | `configuration_conflict` — 설정 변경 또는 삭제 대상 참조 충돌 |
-| 413 / 422 | `invalid_request`, `unknown_pricing`, `json_stream_not_supported` |
-| 502 / 503 | `invalid_output`, `authentication_failed`, `provider_request_rejected`, `provider_unavailable`, `rate_limited`, `credential_unavailable`, `no_available_model` |
+| 413 / 422 | `invalid_request`, `unknown_pricing`, `billing_required`, `free_tier_unavailable`, `json_stream_not_supported` |
+| 502 / 503 | `model_unavailable`, `invalid_output`, `authentication_failed`, `provider_request_rejected`, `provider_unavailable`, `rate_limited`, `credential_unavailable`, `no_available_model` |
 
 ### `GET /api/v1/models`
 
@@ -152,67 +154,13 @@ SQLite는 기존 v1 설정·예산·기록을 유지하면서 스키마 버전 2
 
 ### 공식 요금 카탈로그
 
-2026-10-14 검토한 표준 텍스트 요금만 포함합니다. OpenAI `gpt-4.1-mini`, `gpt-4o-mini`, `gpt-5-mini`, `gpt-5-nano`; Anthropic `claude-haiku-4-5`, `claude-haiku-4-5-20251001`, `claude-sonnet-4-6`; Gemini `gemini-2.5-flash`, `gemini-2.5-flash-lite`의 정확한 ID에 적용합니다. 공급자의 현재 목록에 반환된 모델만 등록하므로 카탈로그 자체가 서비스 제공 여부를 보증하지는 않습니다.
+2026-10-14 검토한 표준 텍스트 요금만 포함합니다. OpenAI `gpt-4.1-mini`, `gpt-4o-mini`, `gpt-5-mini`, `gpt-5-nano`; Anthropic `claude-haiku-4-5`, `claude-haiku-4-5-20251001`, `claude-sonnet-4-6`; Gemini `gemini-2.5-flash`, `gemini-2.5-flash-lite`, `gemini-3.1-flash-lite`, `gemini-3.5-flash-lite`의 정확한 ID에 적용합니다. 공급자의 현재 목록에 반환된 모델만 등록하므로 카탈로그 자체가 서비스 제공 여부를 보증하지는 않습니다.
 
 출처는 [OpenAI 모델 문서](https://developers.openai.com/api/docs/models/gpt-4.1-mini), [Claude 요금 문서](https://platform.claude.com/docs/en/about-claude/pricing), [Gemini 요금 문서](https://ai.google.dev/gemini-api/docs/pricing)이며 개별 모델 응답에 직접 출처 링크와 확인일을 제공합니다. `price_valid_from`은 이 카탈로그의 적용 시작일이며 공급자의 최초 요금 시행일이 아닙니다. 포함된 요금의 공지된 종료일은 없어 `price_valid_until`은 `null`입니다. 자동 웹 스크래핑은 하지 않으며 요금 변경은 카탈로그 업데이트와 재조회로 적용합니다.
 
 공식 주소에만 표준 요금을 적용합니다. 사용자 지정 주소, 미등록 ID, 복잡한 구간별 요금은 추측하지 않고 보류합니다. Gemini 무료 구간은 사용자가 해당 연결의 무료 요금제 사용을 확인해야 적용하며, 미확인 상태에서는 호출하지 않습니다. 사용자 요금은 재조회가 덮어쓰지 않습니다. 새 유료 모델은 별도 승인해야 하고 자동 적용 요율이 바뀌면 승인이 해제됩니다. 할인·캐시·실제 청구액과 다른 추정치이며 잔여 공급자 한도 조회는 지원하지 않습니다.
 
-## 검증 실행
-
-```sh
-uv sync --locked
-uv run --locked pytest -q
-uv run --locked python -m compileall -q nidus_router tests/router
-git diff --check
-```
-
-개발 환경은 `.python-version`의 Python 3.13과 `uv.lock`으로 재현합니다. `uv sync --locked`는 루트 `.venv`에 런타임과 기본 `dev` 그룹의 테스트 도구를 설치합니다.
-
-테스트는 생성한 가짜 키, 임시 디렉터리, 모의 HTTP 응답을 사용합니다. 운영 OS 자격 증명 저장소나 실제 외부 AI 서비스를 사용하지 않습니다. 루프백 소켓 권한이 없는 환경에서는 `uv run --locked pytest -q --ignore=tests/router/test_http.py`로 오프라인 테스트만 실행할 수 있습니다.
-
-브라우저 검증은 Playwright와 Chromium 또는 Chrome이 설치된 환경에서 별도 실행합니다.
-
-```sh
-# 터미널 1: 임시 데이터와 메모리 자격 증명만 사용하는 모의 서버
-uv run --locked python tests/router/preview.py /tmp/nidus-router-preview-info.json
-
-# 터미널 2: Node에서 playwright 패키지를 찾을 수 있어야 합니다.
-# 기본 Chromium 대신 설치된 Chrome을 쓰려면 PLAYWRIGHT_CHANNEL=chrome을 지정합니다.
-node tests/router/dashboard.cjs /tmp/nidus-router-preview-info.json
-```
-
-브라우저 검증은 로그인 → 연결·모델 등록 → 프롬프트 설정 → JSON 요청 → 기록 확인, 모델별 재정의, 유료 모델·예산 승인, 모바일 가로 넘침·JavaScript 오류를 확인합니다. 화면 캡처는 `/tmp/nidus-router-dashboard.png`, `/tmp/nidus-router-mobile.png`에 생성합니다. 검증 후 모의 서버를 종료하세요.
-
-2026-10-14 기능 브랜치 검증 결과 (Python 3.13, 임시 가상환경):
-
-| 검증 | 결과 |
-| --- | --- |
-| 전체 자동 테스트 | **PASS — 59개** (오프라인 49개, 실제 루프백 HTTP·연결 취소 10개) |
-| Chrome 브라우저 흐름 | **PASS** — 무료 호출, JSON, 개별 프롬프트, 유료 승인, 모바일 화면 |
-| Python 컴파일·JavaScript 구문·Git 공백 검사 | **PASS** |
-| 잠금 파일 검증·wheel/sdist 빌드·대시보드 파일 포함 확인 | **PASS** |
-| 실제 외부 공급자 및 운영 OS 키 저장소 | **NOT RUN** — 실제 서비스 키 미사용 |
-
-검증 구분:
-
-- 자동 테스트: 모의 프로토콜, 실제 루프백 HTTP, 무료 우선·대체 정책, 예산 경쟁·재시작·월 경계, JSON, 인증·키 비노출, 클라이언트 취소.
-- 브라우저 테스트: 모의 공급자를 사용하는 실제 UI 흐름.
-- 실제 외부 API / 운영 OS 키 저장소 검증: **NOT RUN**. 사용자가 서비스 키를 등록한 후 대시보드에서 별도로 확인해야 합니다.
-
-첫 버전은 단일 사용자·로컬 실행용입니다. OAuth, 멀티모달, 도구 호출, 대화 세션, JSON Schema 검증, 동시 모델 호출, 공개 OpenAI 호환 수신 API는 구현하지 않았습니다.
-
-### 모델 자동 등록 기능 검증 (2026-10-14)
-
-`feat/auto-model-onboarding`, Python 3.13, 기존 uv 개발 환경에서 검증했습니다. 위 첫 버전 검증 기록은 그대로 보존합니다.
-
-- **PASS — 자동 테스트 90개:** 모의 응답과 실제 루프백 HTTP, 공급자별 목록·페이지네이션, 중복 방지·소멸·복귀, 동시 조회 공유·간격 제한, 설정 보존·구버전 DB 이전, 공식 주소·계정 요금 확인, 새 유료 모델 승인 대기·가격 변경 승인 해제, 지정 모델 우선·자동 대체, 스트리밍 오류·취소.
-- **PASS — Chrome:** 키 등록 → 모델 자동 생성 → 목록 새로고침 → 프롬프트 → JSON 요청·기록, 모델 재정의, 유료 승인·예산, 지정 모델 연결 오류 후 무료 자동 대체, 모바일 가로 넘침·JavaScript 오류 없음.
-- **PASS:** Python 컴파일, JavaScript 구문, Git 공백 검사, `uv build` wheel/sdist 생성 및 신규 모듈·정적 파일 포함.
-- **NOT RUN:** 실제 외부 공급자와 운영 OS 자격 증명 저장소. 생성한 테스트 키와 모의 공급자만 사용했습니다.
-
-
-### Gemini 계정 요금제 안내 개선 (2026-10-14)
+### Gemini 계정 확인
 
 모델 목록에 공식 요율이 표시되는데도 호출이 막히는 경우, **계정 요금제 확인 필요**와 **요금 미확인**을 구분합니다. 전자는 연결 설정의 계정 확인으로 해결하며, 후자는 카탈로그에 적용 요금 자료가 없다는 뜻입니다. 개요·연결·모델 카드에서 계정 설정으로 바로 이동할 수 있습니다. Google AI Studio의 API 키 페이지에서 해당 키의 프로젝트 요금제를 확인하고, 무료 계정이면 무료를 선택하세요. 이 선택은 Google의 결제 설정을 바꾸지 않습니다. 유료 계정에는 별도의 모델 승인과 예산이 계속 필요합니다.
 
@@ -220,9 +168,8 @@ node tests/router/dashboard.cjs /tmp/nidus-router-preview-info.json
 
 공식 표준 텍스트 요금을 확인한 `gemini-3.1-flash-lite`(입력 $0.25, 출력 $1.50/100만 토큰), `gemini-3.5-flash-lite`(입력 $0.30, 출력 $2.50/100만 토큰)를 카탈로그에 추가했습니다. 두 모델 모두 확인된 무료 계정에서는 무료 구간을 적용합니다. 출처: [Gemini 공식 요금](https://ai.google.dev/gemini-api/docs/pricing). 복잡한 요금의 모델과 제공 대상을 바꾸는 `latest` 별칭은 계속 자동 추정하지 않습니다.
 
-검증 결과:
+## 지원 범위와 검증
 
-- **PASS — 자동 테스트 97개:** `uv run --locked pytest -q`. 계정 미확인 오류, 무료 확인 후 호출, 키 보존, 사용자 지정 주소와 수동 요금 보존을 추가 검증했습니다.
-- **PASS — 실제 Gemini API / Chrome:** 사용자가 무료·미결제 프로젝트임을 확인한 기존 연결로 `gemini-3.1-flash-lite`를 지정해 호출했습니다. 2026-10-14 20:20 KST 요청 기록에서 같은 모델의 완료를 확인했습니다. 응답은 `{"status":"NIDUS_OK"}` 내용을 담은 텍스트이며 입력 23·출력 15토큰, 추정 비용 $0, 지연 2436ms였습니다. 본문 저장 꺼짐, 유료 승인 0개·예산 $0을 유지했습니다.
-- **FAIL — 이전 실제 호출:** `gemini-2.5-flash-lite` 지정 호출에서 모델 없음 오류가 발생했습니다. 목록에 표시된다는 사실만으로 실제 호출 가능함을 보장하지 않습니다.
-- **NOT RUN:** 이번 변경의 다른 공급자 실제 호출, 유료 호출, 실제 스트리밍 호출. 모의 회귀 테스트와 구분합니다.
+단일 사용자·로컬 실행과 단일 텍스트 입력을 지원합니다. OAuth, 멀티모달, 도구 호출, 대화 세션, JSON Schema, 동시 모델 호출, 공개 OpenAI 호환 수신 API와 과거 Vault 런타임은 포함하지 않습니다.
+
+실행 절차와 단계별 PASS·FAIL·NOT RUN 기록은 [검증 안내](VALIDATION.md)에 모았습니다.
