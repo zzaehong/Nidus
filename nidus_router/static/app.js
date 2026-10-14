@@ -1,7 +1,7 @@
 "use strict";
 const $ = id => document.getElementById(id);
 let state = null, fallbackIds = [], recordsOffset = 0;
-const statusLabels = {available: "사용 가능", disabled: "비활성", connection_required: "연결 확인 필요", support_required: "호환성 확인 필요", unknown_pricing: "요금 미확인", approval_required: "유료 승인 필요"};
+const statusLabels = {billing_required: "계정 요금제 확인 필요", free_tier_unavailable: "무료 요금제 미지원", available: "사용 가능", disabled: "비활성", connection_required: "연결 확인 필요", support_required: "호환성 확인 필요", unknown_pricing: "요금 미확인", approval_required: "유료 승인 필요"};
 const pricingLabels = {free: "무료", paid: "유료", unknown: "요금 미확인"};
 const defaults = {openai: "https://api.openai.com/v1", anthropic: "https://api.anthropic.com/v1", gemini: "https://generativelanguage.googleapis.com/v1beta", compatible: ""};
 function el(tag, text, className) {
@@ -49,9 +49,20 @@ function modelName(id) {return state.models.find(m => m.id === id)?.name || id;}
 function render() {
   document.querySelector('[data-go="connections"]').textContent = state.connections.length ? "연결 관리 ↗" : "첫 연결 추가 ↗";
   const enabled = state.models.filter(m => m.enabled && state.connections.find(c => c.id === m.connection_id)?.enabled);
-  $("metric-models").textContent = enabled.length;
+  $("metric-models").textContent = enabled.filter(m => m.status === "available").length;
   $("metric-free").textContent = enabled.filter(m => m.pricing === "free").length;
   $("metric-spend").textContent = "$" + state.budget.used_and_reserved_usd.toFixed(4);
+  $("model-readiness").replaceChildren();
+  const billingConnections = state.connections.filter(c => enabled.some(m => m.connection_id === c.id && m.status === "billing_required"));
+  for (const c of billingConnections) {
+    const note = el("div", undefined, "note");
+    note.append(el("p", `${c.name}: 공식 모델 요금은 확인되었습니다. 이 API 키의 계정 요금제를 한 번 확인하면 지원 모델에 함께 적용됩니다.`),
+      button("계정 요금제 확인", () => editConnection(c)));
+    $("model-readiness").append(note);
+  }
+  if (!enabled.some(m => m.status === "available") && !billingConnections.length) {
+    $("model-readiness").append(el("p", "호출 가능한 모델이 없습니다. 연결과 모델에서 표시된 상태를 확인하세요.", "note"));
+  }
   const selected = $("test-model").value;
   $("test-model").replaceChildren(option("auto", "자동 선택 · 무료 우선"), ...enabled.map(m => {const o = option(m.id, `${m.name} · ${statusLabels[m.status]}`); o.disabled = m.status !== "available"; return o;}));
   if ([...$("test-model").options].some(o => o.value === selected && !o.disabled)) $("test-model").value = selected;
@@ -66,6 +77,12 @@ function render() {
   for (const connection of state.connections) {
     const card = el("article", undefined, "connection-card"), info = el("div"), actions = el("div", undefined, "actions");
     info.append(el("h3", connection.name + (connection.enabled ? "" : " · 비활성")), el("p", `${connection.provider} · ${connection.base_url}`));
+    const tierLabels = {free: "무료 요금제 · 사용자 확인", paid: "유료 요금제 · 승인과 예산 적용", unconfirmed: "계정 요금제 미확인"};
+    info.append(el("p", tierLabels[connection.billing_tier || "unconfirmed"]));
+    if (billingConnections.some(c => c.id === connection.id)) {
+      info.append(el("p", "공식 요금은 확인되었습니다. 계정 요금제를 확인하면 무료 지원 모델의 요금이 함께 적용됩니다."));
+      actions.append(button("계정 요금제 확인", () => editConnection(connection)));
+    }
     const discovery = connection.discovery;
     info.append(el("p", discovery ? `모델 조회: ${discovery.status === "success" ? "완료" : discovery.status === "pending" ? "대기" : "실패 · 새로고침 또는 수동 등록"} · 마지막 성공: ${discovery.last_success_at ? new Date(discovery.last_success_at).toLocaleString("ko-KR") : "없음"}` : "모델 목록을 새로고침하세요."));
     actions.append(button("모델 새로고침", async () => {
@@ -89,9 +106,15 @@ function render() {
     if (model.price_source) {
       const source = el("a", `공식 요금 · 확인 ${model.price_verified_at}`);
       source.href = model.price_source; source.target = "_blank"; source.rel = "noopener noreferrer";
-      card.append(source, el("p", `입력 $${model.input_per_million} / 출력 $${model.output_per_million} (100만 토큰) · ${model.pricing_origin === "manual" ? "사용자 요금" : "표준 요금 추정"}`));
+      if (model.free_tier_available) card.append(el("p", model.pricing === "free" ? "적용 요금: 무료 ($0) · 확인한 무료 계정 기준" : model.status === "billing_required" ? "무료 계정에서 무료 구간 지원 · 계정 요금제 확인 필요" : "무료 구간은 무료 계정에만 적용됩니다. 현재 설정의 요금을 확인하세요."));
+      card.append(source, el("p", `유료 계정 표준: 입력 $${model.input_per_million} / 출력 $${model.output_per_million} (100만 토큰) · ${model.pricing_origin === "manual" ? "사용자 요금" : "표준 요금 추정"}`));
     }
-    actions.append(button("고급 설정", () => editModel(model)), button("테스트", () => {page("overview"); $("test-model").value = model.id; $("test-input").focus();}), button("삭제", async () => {
+    if (model.status === "billing_required") actions.append(button("계정 요금제 확인", () => editConnection(state.connections.find(c => c.id === model.connection_id))));
+    if (model.status === "unknown_pricing") card.append(el("p", "이 모델의 적용 요금 자료가 없습니다. 고급 설정에서 확인한 요금을 등록하세요."));
+    if (model.status === "support_required") card.append(el("p", "지원 여부를 확인하지 못한 모델입니다. 표시된다는 이유만으로 호출 가능하지는 않습니다."));
+    const test = button("테스트", () => {page("overview"); $("test-model").value = model.id; $("test-input").focus();});
+    test.disabled = model.status !== "available";
+    actions.append(button("고급 설정", () => editModel(model)), test, button("삭제", async () => {
       if (!confirm(`‘${model.name}’ 모델을 삭제할까요?`)) return;
       await api(`/admin/models/${model.id}`, "DELETE"); await refresh(); notice("모델을 삭제했습니다.");
     }, "danger"));
@@ -203,7 +226,7 @@ submit("connection-form", async () => {
   await api("/admin/connections" + (id ? "/" + id : ""), id ? "PUT" : "POST", {
     name: $("connection-name").value, provider: $("connection-provider").value, base_url: $("connection-url").value,
     api_key: $("connection-key").value || null, billing_tier: $("connection-tier").value, enabled: $("connection-enabled").checked});
-  $("connection-key").value = ""; $("connection-dialog").close(); await refresh(); notice("연결을 저장했습니다. 모델 목록의 사용 상태를 확인하세요.");
+  $("connection-key").value = ""; $("connection-dialog").close(); await refresh(); notice("연결과 계정 요금제를 저장했습니다. 모델 상태를 확인하고 빠른 테스트에서 호출하세요.");
 });
 submit("model-form", async () => {
   const id = $("model-id").value;
