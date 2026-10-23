@@ -1,12 +1,45 @@
 # Nidus
 
-TypeScript 기반 **Multi-Provider API Connectivity MVP**입니다. Provider와 API Key로 모델을 자동 탐색하고, 선택한 모델에 텍스트 요청을 보내며 사용량을 공통 포맷으로 반환합니다.
+TypeScript 기반 **Multi-Provider API Connectivity 엔진**과 **SwiftUI macOS 대시보드**입니다. Provider와 API Key로 모델을 자동 탐색하고, 선택한 모델에 텍스트 요청을 보내며 사용량을 공통 포맷으로 반환합니다. 기존 CLI도 그대로 사용할 수 있습니다.
 
-OpenAI(GPT), Anthropic(Claude), Google Gemini, DeepSeek를 지원합니다. SwiftUI, 자동 라우팅, Agent Loop, Tool 실행, Docker, Vault, Workflow는 구현 범위에 포함하지 않습니다.
+OpenAI(GPT), Anthropic(Claude), Google Gemini, DeepSeek를 지원합니다. 자동 라우팅, Agent Loop, Tool 실행, Docker, Vault, Workflow는 구현 범위에 포함하지 않습니다.
 
 ## 설치와 시작
 
-Node.js 22 이상(검증: 24.21.0), npm이 필요합니다. macOS Keychain 사용에는 Xcode Command Line Tools의 `swiftc`가 필요합니다. Swift 파일은 Security.framework를 호출하는 작은 저장소 helper이며 앱/UI가 아닙니다. API 연결 엔진과 CLI는 모두 TypeScript입니다. 외부 런타임 의존성은 없습니다.
+Node.js 22 이상(검증: 24.21.0), npm이 필요합니다. macOS Keychain 사용에는 Xcode Command Line Tools의 `swiftc`가 필요합니다. 대시보드는 macOS 13 이상을 대상으로 하며 Swift 5.9 이상으로 빌드합니다. API 연결 엔진과 CLI는 TypeScript이고, UI는 SwiftUI/AppKit입니다. 외부 npm 런타임 라이브러리는 없습니다.
+
+## macOS 대시보드
+
+```sh
+npm ci
+npm run build
+npm run build:keychain
+swift run NidusNativeApp
+```
+
+1. 왼쪽에서 OpenAI, Claude, Gemini, DeepSeek 중 서비스를 선택합니다.
+2. **API Key 등록 / 변경**에서 해당 업체의 API 키를 입력합니다. 별도 Endpoint 설정은 필요 없습니다.
+3. **연결 및 모델 조회**를 누르면 공식 Models API의 전체 페이지를 조회하고, 성공한 키는 Keychain에 저장합니다. 반환된 모델 목록은 즉시 표시됩니다.
+4. 모델을 검색·선택해 기능, 가격과 출처를 확인합니다. **모델 새로고침**은 API를 다시 조회합니다.
+5. **응답 테스트**에서 시스템 프롬프트, 메시지와 출력 한도를 입력하여 실제 요청을 보냅니다. 응답과 입력·출력 토큰 수가 표시되며 비용이 발생할 수 있습니다.
+6. 더 보기 메뉴에서 전체 가격 데이터를 보거나 키와 모델 캐시를 삭제할 수 있습니다. 삭제는 확인 후 실행됩니다.
+
+기존 CLI의 Keychain과 모델 캐시를 공유합니다. 앱을 열 때는 비밀키를 읽거나 API를 호출하지 않고 캐시만 표시합니다. **저장된 목록 · 재확인 필요**는 인증 성공 표시가 아닙니다. 연결 또는 새로고침 성공 시에만 **연결 확인됨 · Models API**로 바뀝니다. Models API 성공도 모든 모델의 채팅·과금 권한을 보장하지 않습니다. 기능이 불확실하면 `미확인`으로 표시합니다.
+
+키 입력은 AppKit의 마스킹 필드이며 credential content type과 텍스트 자동완성을 지정하지 않습니다. 시스템의 Keychain 접근 허용 창은 정상적인 보안 확인이며 비밀번호 자동완성 팝업과 별개입니다. OS별 비밀번호 제안 억제 동작은 수동 추가 검증이 필요합니다. 대시보드는 환경변수 API 키 대신 Keychain만 사용하므로 CLI의 `--env` 계정이 앱에 암묵적으로 적용되지 않습니다.
+
+### Finder에서 실행할 로컬 앱
+
+```sh
+npm run build:app
+open dist/Nidus.app
+```
+
+현재 머신의 Node 실행 파일, 컴파일한 Runtime과 Keychain helper를 포함합니다. 로컬 `.app` 실행과 엔진 준비 상태를 확인했습니다. **배포용 서명·공증 및 다른 Mac에서의 실행은 검증하지 않았습니다.** 앱 아키텍처와 포함한 Node의 macOS 요구사항은 빌드 머신에 따릅니다. Node를 갱신하면 앱도 다시 빌드하세요.
+
+개발 실행에서 경로를 못 찾으면 `command -v node`로 실행 파일을 확인합니다. Node가 활성화된 터미널에서 `swift run`을 실행하거나 `NIDUS_NODE_PATH`에 그 절대 경로를 지정하세요. `NIDUS_RUNTIME_ROOT`는 `dist/dashboard.js`가 있는 저장소 루트입니다. 탐색 순서는 명시적 설정 → 앱 리소스 → 현재 디렉터리 → 컴파일 시 소스 루트이며, Node는 명시적 설정 → 번들 → PATH → 표준 설치 위치입니다. 누락된 파일은 원인과 빌드 명령을 화면에 표시합니다.
+
+### CLI 사용
 
 ```sh
 npm ci
@@ -107,6 +140,7 @@ OpenAI·DeepSeek는 Bearer 인증, Gemini는 `x-goog-api-key`를 사용합니다
 npm test                 # strict TypeScript build + localhost Mock / CLI / engine 테스트
 npm run test:keychain    # macOS: 별도 UUID 서비스의 가짜 키만 생성·조회·교체·삭제
 npm run test:live        # opt-in 없으면 실제 API 테스트는 NOT RUN / skip
+swift test               # 앱 상태, 경로 탐색, Pipe 분리, 종료 및 타임아웃
 ```
 
 실제 모델 조회 테스트는 Secret Manager 등에서 해당 환경 키를 주입한 후 `NIDUS_LIVE=1 npm run test:live`로 실행합니다. 실제 채팅에는 추가로 `NIDUS_LIVE_CHAT=1` 및 `NIDUS_<PROVIDER>_MODEL`에 조회된 모델 ID를 지정해야 합니다. 실제 요청에는 과금이 발생할 수 있습니다. 테스트는 사용자의 기존 Keychain API 키를 자동으로 읽지 않습니다.
