@@ -9,6 +9,10 @@ import { providerIds, type ChatRequest, type ProviderAdapter, type ProviderId, t
 export class ConnectivityEngine {
   constructor(private readonly credentials: CredentialStore, private readonly store: ModelStore, private readonly registry: Record<ProviderId, ProviderAdapter> = adapters()) {}
   providers() { return providerIds.map(id => ({ id, authentication: "api-key", streamingImplemented: false, toolExecutionImplemented: false })); }
+  async cachedModels(provider: ProviderId) {
+    const saved = await this.store.load(provider);
+    return saved ? this.decorate(saved, "cache") : { source: "empty", fetchedAt: null, models: [] };
+  }
   private async key(provider: ProviderId): Promise<string> { return keyValue(await this.credentials.get(provider) ?? ""); }
   private snapshot(provider: ProviderId, models: ModelSnapshot["models"]): ModelSnapshot { return { version: 1, provider, fetchedAt: new Date().toISOString(), models }; }
   async connect(provider: ProviderId, inputKey: string, persist = true, options: RequestOptions = {}) {
