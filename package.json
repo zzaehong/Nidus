@@ -6,6 +6,7 @@
   "engines": { "node": ">=22.0.0" },
   "bin": { "nidus": "bin/nidus.mjs" },
   "scripts": {
+    "build:app": "npm run build && npm run build:keychain && node scripts/build-app.mjs",
     "build": "tsc -p tsconfig.json",
     "build:keychain": "swiftc native/keychain.swift -o dist/nidus-keychain",
     "test": "npm run build && node --test tests/*.test.mjs",
