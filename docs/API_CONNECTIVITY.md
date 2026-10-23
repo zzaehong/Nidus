@@ -21,6 +21,7 @@ macOS 대시보드는 SwiftUI → 요청별 Node 자식 프로세스(`dist/dashb
 | `scripts/build-app.mjs`, `native/Info.plist` | 현재 머신용 Node 포함 로컬 앱 번들 |
 | `src/classification.ts`, `src/health.ts` | 모델 대표 용도/분류 근거와 텍스트 동작 검사 |
 | `Sources/NidusNativeApp/HealthChecks*.swift` | 순차 일괄 검사, 과금 동의, 진행/중지/오류 격리 UI |
+| `Sources/NidusNativeApp/HealthResultStore.swift` | 버전이 있는 로컬 검사 기록, 원자적 저장, 재실행 복원과 미검사 선택 |
 
 모델 분류·일괄 검사 세부 계약은 [MODEL_HEALTH.md](MODEL_HEALTH.md)를 참고합니다. 이 기능은 이미지/영상/라이브 전용 Adapter를 구현하지 않으며, 미지원 유형을 실패로 오인하지 않도록 구분합니다.
 
