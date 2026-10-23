@@ -1,0 +1,17 @@
+{
+  "name": "nidus",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.0.0" },
+  "bin": { "nidus": "bin/nidus.mjs" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "build:keychain": "swiftc native/keychain.swift -o dist/nidus-keychain",
+    "test": "npm run build && node --test tests/*.test.mjs",
+    "test:live": "npm run build && node --test tests/live/*.test.mjs",
+    "test:keychain": "npm run build && npm run build:keychain && node --test tests/keychain/*.test.mjs",
+    "start": "node bin/nidus.mjs"
+  },
+  "devDependencies": { "@types/node": "^22.0.0", "typescript": "~5.9.3" }
+}
