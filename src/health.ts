@@ -27,6 +27,7 @@ export async function probeModel(model: Model, allowInferred: boolean,
   } catch (error) {
     const safe = publicError(error);
     return { ...base, status: "failed", reason: "Probe request failed; this does not establish that the model is broken.", error: safe.toJSON(),
-      stopProvider: ["authentication", "permission", "missing_key", "storage", "quota", "rate_limit"].includes(safe.code), durationMs: Date.now() - started };
+      // A failed probe applies only to this model. Keep the field for bridge compatibility.
+      stopProvider: false, durationMs: Date.now() - started };
   }
 }

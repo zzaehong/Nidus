@@ -77,6 +77,7 @@ struct DashboardView: View {
         }
         .toolbar {
             Button("모델 일괄 검사", systemImage: "checkmark.shield") { showHealth = true }.disabled(!dashboard.ready)
+                .help("선택한 범위의 텍스트 모델을 순차 검사합니다. 실패해도 다음 모델로 진행하며 실제 API 비용이 발생할 수 있습니다. 실행 전 대상과 요청 한도를 확인합니다.")
         }
         .sheet(isPresented: $showHealth) { HealthChecksView(initialProvider: selected ?? .openai).environmentObject(dashboard) }
         .overlay {

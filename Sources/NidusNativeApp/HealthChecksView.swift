@@ -40,6 +40,8 @@ struct HealthChecksView: View {
                 .font(.caption)
             Text("실제 과금이 발생할 수 있으며 금액 상한은 보장하지 않습니다. 자동 재시도는 하지 않습니다. 추론 토큰 예산 부족·권한·호환성 문제도 실패로 나타날 수 있습니다.")
                 .font(.caption).foregroundStyle(.orange)
+            Text("검사 시작: 대상 텍스트 모델에 각각 한 번 요청합니다. 429·인증·전달 오류 등으로 실패해도 1초 간격으로 다음 모델을 검사합니다. 반복 오류가 보이면 중지할 수 있습니다.")
+                .font(.caption).foregroundStyle(.secondary)
             if showingResults {
                 let completed = rows.filter { $0.status != .queued && $0.status != .running }.count
                 ProgressView(value: Double(completed), total: Double(max(rows.count, 1)))
@@ -78,6 +80,7 @@ struct HealthChecksView: View {
                 } else {
                     Button("\(count)개 모델 검사 시작…") { confirm = true }
                         .buttonStyle(.borderedProminent).disabled(count == 0 || !dashboard.ready || dashboard.states.values.contains { $0.busy })
+                        .help("실제 API 요청으로 텍스트 응답을 확인합니다. 실패한 모델은 재시도하지 않고 다음 모델로 진행합니다. 비용이 발생할 수 있습니다.")
                 }
             }
             Text("결과는 현재 앱 세션에만 유지됩니다. 키 변경·모델 새로고침 시 해당 Provider 결과를 지웁니다. 응답 확인은 모델의 모든 기능이 정상이라는 뜻이 아닙니다.")
