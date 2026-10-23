@@ -66,15 +66,10 @@ extension Dashboard {
         healthRunning = true; healthStopRequested = false
         healthRows = healthPlan(providers: providers, allowInferred: allowInferred, limit: limit)
         defer { healthRunning = false }
-        var blocked = Set<Provider>(), sent = false
+        var sent = false
         for index in healthRows.indices {
             guard healthRows[index].status == .queued else { continue }
             let row = healthRows[index]
-            if blocked.contains(row.provider) {
-                healthRows[index].status = .skipped
-                healthRows[index].reason = "인증/권한/한도/전달 오류로 해당 Provider 검사 중단"
-                continue
-            }
             if sent && !healthStopRequested { await pause() }
             if healthStopRequested || Task.isCancelled {
                 healthRows[index].status = .cancelled; healthRows[index].reason = "사용자 중지 · API 미호출"
@@ -92,11 +87,10 @@ extension Dashboard {
                 healthRows[index].durationMs = result.durationMs
                 healthRows[index].inputTokens = result.usage?.inputTokens
                 healthRows[index].outputTokens = result.usage?.outputTokens
-                if result.stopProvider { blocked.insert(row.provider) }
+                // Even older runtimes may set stopProvider: a model failure must not skip the queue.
             } catch {
                 healthRows[index].status = .failed
                 healthRows[index].reason = error.localizedDescription
-                blocked.insert(row.provider)
             }
         }
     }

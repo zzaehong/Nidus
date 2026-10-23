@@ -50,11 +50,11 @@ test('probe uses bounded fixed text request, preserves usage without returning m
   assert.equal(result.status, 'passed'); assert.deepEqual(result.usage, usage);
   assert.ok(!JSON.stringify(result).includes('synthetic-model-content')); assert.ok(result.durationMs >= 0);
 });
-test('probe failure distinguishes provider-wide blockers and preserves safe errors', async () => {
-  for (const code of ['authentication', 'permission', 'quota', 'rate_limit', 'missing_key', 'timeout', 'network', 'not_found', 'provider_error']) {
+test('probe failures never stop subsequent models and preserve safe errors', async () => {
+  for (const code of ['authentication', 'permission', 'quota', 'rate_limit', 'missing_key', 'storage', 'timeout', 'network', 'not_found', 'provider_error']) {
     const result = await probeModel(model('text', 'anthropic', {}, 'supported'), false, async () => { throw new NidusError(code, 'Safe failure', 429, '5'); });
     assert.equal(result.status, 'failed'); assert.equal(result.error.code, code); assert.equal(result.error.retryAfter, '5');
-    assert.equal(result.stopProvider, ['authentication', 'permission', 'quota', 'rate_limit', 'missing_key'].includes(code));
+    assert.equal(result.stopProvider, false);
   }
   const unexpected = await probeModel(model('text', 'anthropic', {}, 'supported'), false, async () => { throw new Error('synthetic-secret'); });
   assert.ok(!JSON.stringify(unexpected).includes('synthetic-secret'));
