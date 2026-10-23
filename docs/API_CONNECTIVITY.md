@@ -19,6 +19,10 @@ macOS 대시보드는 SwiftUI → 요청별 Node 자식 프로세스(`dist/dashb
 | `Sources/NidusNativeApp/Models.swift` | Codable 응답, Provider별 독립 상태, 연결 결과의 모델 자동 반영 |
 | `Sources/NidusNativeApp/App.swift` | SwiftUI 서비스·모델·가격·응답 화면, AppKit 보안 키 입력 |
 | `scripts/build-app.mjs`, `native/Info.plist` | 현재 머신용 Node 포함 로컬 앱 번들 |
+| `src/classification.ts`, `src/health.ts` | 모델 대표 용도/분류 근거와 텍스트 동작 검사 |
+| `Sources/NidusNativeApp/HealthChecks*.swift` | 순차 일괄 검사, 과금 동의, 진행/중지/오류 격리 UI |
+
+모델 분류·일괄 검사 세부 계약은 [MODEL_HEALTH.md](MODEL_HEALTH.md)를 참고합니다. 이 기능은 이미지/영상/라이브 전용 Adapter를 구현하지 않으며, 미지원 유형을 실패로 오인하지 않도록 구분합니다.
 
 `connect`는 새 키로 전체 모델 조회가 끝나기 전까지 저장소를 변경하지 않습니다. 목록은 메모리에 수집한 뒤 한 번에 교체하므로 중간 페이지 실패 시 일부 모델만 등록되지 않습니다. 키 교체 뒤 캐시 저장이 실패하면 기존 키를 복원합니다. 프로세스 강제 종료를 아우르는 두 저장소의 분산 트랜잭션은 아니므로 이 경우에는 다시 connect/refresh해야 합니다. 여러 CLI의 동시 키 교체를 직렬화하는 잠금은 MVP에 없습니다.
 

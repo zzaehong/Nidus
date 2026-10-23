@@ -52,6 +52,7 @@ struct APIKeyInput: NSViewRepresentable {
 struct DashboardView: View {
     @EnvironmentObject var dashboard: Dashboard
     @State private var selected: Provider? = .openai
+    @State private var showHealth = false
     var body: some View {
         NavigationSplitView {
             VStack(alignment: .leading, spacing: 20) {
@@ -74,6 +75,10 @@ struct DashboardView: View {
         } detail: {
             if let selected { ProviderView(provider: selected).id(selected) }
         }
+        .toolbar {
+            Button("모델 일괄 검사", systemImage: "checkmark.shield") { showHealth = true }.disabled(!dashboard.ready)
+        }
+        .sheet(isPresented: $showHealth) { HealthChecksView(initialProvider: selected ?? .openai).environmentObject(dashboard) }
         .overlay {
             if let error = dashboard.runtimeError {
                 VStack(alignment: .leading, spacing: 16) {
@@ -91,12 +96,15 @@ struct ProviderView: View {
     @EnvironmentObject var dashboard: Dashboard
     @State private var key = ""
     @State private var search = ""
+    @State private var kind = "all"
     @State private var showKey = false
     @State private var confirmDisconnect = false
     @State private var tab = 0
     private var state: ProviderState { dashboard.states[provider] ?? ProviderState() }
     private var model: APIModel? { state.models.first { $0.id == state.selectedModel } }
-    private var filtered: [APIModel] { state.models.filter { search.isEmpty || $0.id.localizedCaseInsensitiveContains(search) || $0.name.localizedCaseInsensitiveContains(search) } }
+    private var filtered: [APIModel] { state.models.filter {
+        (kind == "all" || ($0.classification?.kind ?? "unknown") == kind) && (search.isEmpty || $0.id.localizedCaseInsensitiveContains(search) || $0.name.localizedCaseInsensitiveContains(search))
+    } }
     private func binding<T>(_ path: WritableKeyPath<ProviderState, T>) -> Binding<T> {
         Binding(get: { state[keyPath: path] }, set: { dashboard.states[provider]?[keyPath: path] = $0 })
     }
@@ -131,6 +139,12 @@ struct ProviderView: View {
             HSplitView {
                 VStack(alignment: .leading, spacing: 10) {
                     TextField("모델 검색", text: $search).textFieldStyle(.roundedBorder)
+                    Picker("용도", selection: $kind) {
+                        Text("전체 (\(state.models.count))").tag("all")
+                        ForEach(["text", "image", "video", "live", "audio", "embedding", "moderation", "unknown"], id: \.self) { category in
+                            Text("\(modelKindLabel(category)) (\(state.models.filter { ($0.classification?.kind ?? "unknown") == category }.count))").tag(category)
+                        }
+                    }
                     if state.models.isEmpty {
                         VStack(spacing: 14) {
                             Image(systemName: "square.stack.3d.up").font(.system(size: 34)).foregroundStyle(.secondary)
@@ -143,7 +157,10 @@ struct ProviderView: View {
                             VStack(alignment: .leading, spacing: 6) {
                                 Text(item.name).fontWeight(.medium)
                                 Text(item.id).font(.caption.monospaced()).foregroundStyle(.secondary)
-                                Text("채팅: \(support(item.capabilities.chat))").font(.caption2)
+                                Text(item.classification?.label ?? "기타/미확인").font(.caption2)
+                                if let checked = dashboard.healthRows.first(where: { $0.provider == provider && $0.model == item.id }) {
+                                    Text(checked.status.label).font(.caption2).foregroundStyle(.secondary)
+                                }
                             }.padding(.vertical, 5).tag(item.id)
                         }.listStyle(.inset)
                         Text("미확인 모델은 텍스트 응답을 보장하지 않습니다.").font(.caption).foregroundStyle(.secondary)
@@ -163,7 +180,7 @@ struct ProviderView: View {
                 }.padding(.leading, 16).frame(minWidth: 340, maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
         }.padding(26)
-        .disabled(!dashboard.ready || state.busy)
+        .disabled(!dashboard.ready || state.busy || dashboard.healthRunning)
         .onChange(of: state.selectedModel) { _ in
             dashboard.states[provider]?.response = ""
             dashboard.states[provider]?.usage = ""
@@ -195,6 +212,10 @@ struct ProviderView: View {
             VStack(alignment: .leading, spacing: 16) {
                 Text(model.name).font(.title2.bold())
                 Text(model.id).font(.callout.monospaced()).textSelection(.enabled)
+                if let classification = model.classification {
+                    Text("분류: \(classification.label)").font(.headline)
+                    Text(classification.reason).font(.caption).foregroundStyle(.secondary)
+                }
                 Text("채팅 \(support(model.capabilities.chat)) · Streaming \(support(model.capabilities.streaming))\nTools \(support(model.capabilities.tools)) · Vision \(support(model.capabilities.vision))").font(.callout)
                 Text("기능 표시는 API 메타데이터 기준입니다. 이 앱은 텍스트 요청만 실행합니다.").font(.caption).foregroundStyle(.secondary)
                 Divider()

@@ -1,6 +1,6 @@
 import Foundation
 
-enum Provider: String, CaseIterable, Identifiable {
+enum Provider: String, CaseIterable, Identifiable, Codable {
     case openai, anthropic, gemini, deepseek
     var id: String { rawValue }
     var name: String {
@@ -15,6 +15,7 @@ struct APIModel: Decodable, Identifiable {
     let name: String
     let capabilities: Capabilities
     let pricing: Price
+    let classification: ModelClassification?
     struct Capabilities: Decodable { let chat: String; let streaming: String; let tools: String; let vision: String }
     struct Price: Decodable {
         let status: String
@@ -49,11 +50,14 @@ struct ProviderState {
 
 @MainActor final class Dashboard: ObservableObject {
     typealias Transport = ([String: Any]) async throws -> Data
-    private let transport: Transport
+    let transport: Transport
     init(transport: @escaping Transport = { try await Runtime.shared.call($0) }) { self.transport = transport }
     @Published var states = Dictionary(uniqueKeysWithValues: Provider.allCases.map { ($0, ProviderState()) })
     @Published var ready = false
     @Published var runtimeError: String?
+    @Published var healthRows: [HealthRow] = []
+    @Published var healthRunning = false
+    @Published var healthStopRequested = false
     private var started = false
     func start() async {
         guard !started else { return }; started = true
@@ -64,7 +68,8 @@ struct ProviderState {
         } catch { runtimeError = error.localizedDescription; started = false }
     }
     func operation(_ method: String, _ provider: Provider, extra: [String: Any] = [:]) async {
-        guard ready, states[provider]?.busy == false else { return }
+        guard ready, !healthRunning, states[provider]?.busy == false else { return }
+        if ["connect", "models", "disconnect"].contains(method) { healthRows.removeAll { $0.provider == provider } }
         states[provider]?.busy = true; states[provider]?.error = nil
         defer { states[provider]?.busy = false }
         do {

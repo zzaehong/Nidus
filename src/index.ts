@@ -6,3 +6,5 @@ export * from "./engine.js";
 export * from "./credentials.js";
 export * from "./storage.js";
 export * from "./pricing.js";
+export * from "./classification.js";
+export * from "./health.js";

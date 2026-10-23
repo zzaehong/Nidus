@@ -1,4 +1,6 @@
 import { adapters } from "./adapters/index.js";
+import { classifyModel } from "./classification.js";
+import { probeModel } from "./health.js";
 import type { CredentialStore } from "./credentials.js";
 import { NidusError } from "./errors.js";
 import { keyValue } from "./http.js";
@@ -39,10 +41,11 @@ export class ConnectivityEngine {
     return this.decorate(snapshot, "api");
   }
   private decorate(snapshot: ModelSnapshot, source: string) {
-    return { source, fetchedAt: snapshot.fetchedAt, models: snapshot.models.map(m => ({ ...m, pricing: priceFor(snapshot.provider, m.id) })) };
+    return { source, fetchedAt: snapshot.fetchedAt, models: snapshot.models.map(m => ({ ...m, classification: classifyModel(m), pricing: priceFor(snapshot.provider, m.id) })) };
   }
   async detail(provider: ProviderId, model: string, options: RequestOptions = {}) {
-    return { ...await this.registry[provider].getModel(await this.key(provider), model, options), pricing: priceFor(provider, model) };
+    const detail = await this.registry[provider].getModel(await this.key(provider), model, options);
+    return { ...detail, classification: classifyModel(detail), pricing: priceFor(provider, model) };
   }
   async pricing(provider: ProviderId) {
     const saved = await this.store.load(provider);
@@ -55,4 +58,10 @@ export class ConnectivityEngine {
     return this.registry[provider].chat(await this.key(provider), request, options);
   }
   async disconnect(provider: ProviderId) { await this.credentials.delete(provider); await this.store.remove(provider); return { provider, disconnected: true }; }
+  async probe(provider: ProviderId, model: string, allowInferred = false) {
+    const saved = await this.store.load(provider);
+    const known = saved?.models.find(m => m.id === model);
+    if (!known) throw new NidusError("invalid_request", "Refresh models before testing a discovered model.");
+    return probeModel(known, allowInferred, async (request, options) => this.registry[provider].chat(await this.key(provider), request, options));
+  }
 }
