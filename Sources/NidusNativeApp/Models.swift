@@ -51,11 +51,26 @@ struct ProviderState {
 @MainActor final class Dashboard: ObservableObject {
     typealias Transport = ([String: Any]) async throws -> Data
     let transport: Transport
-    init(transport: @escaping Transport = { try await Runtime.shared.call($0) }) { self.transport = transport }
+    let healthStore: HealthResultStore?
+    var healthStoreLoaded = true
+    init(healthStore: HealthResultStore? = nil, transport: @escaping Transport = { try await Runtime.shared.call($0) }) {
+        self.transport = transport
+        self.healthStore = healthStore
+        do {
+            let rows = try healthStore?.load() ?? []
+            healthHistory = Dictionary(uniqueKeysWithValues: rows.map { ($0.id, $0) })
+            healthRows = rows
+        } catch {
+            healthStoreLoaded = false
+            healthStorageError = "검사 기록을 읽지 못했습니다. 기존 파일은 보존됩니다. 저장 파일을 확인한 뒤 앱을 다시 실행해주세요."
+        }
+    }
     @Published var states = Dictionary(uniqueKeysWithValues: Provider.allCases.map { ($0, ProviderState()) })
     @Published var ready = false
     @Published var runtimeError: String?
     @Published var healthRows: [HealthRow] = []
+    @Published var healthHistory: [String: HealthRow] = [:]
+    @Published var healthStorageError: String?
     @Published var healthRunning = false
     @Published var healthStopRequested = false
     private var started = false
@@ -69,10 +84,11 @@ struct ProviderState {
     }
     func operation(_ method: String, _ provider: Provider, extra: [String: Any] = [:]) async {
         guard ready, !healthRunning, states[provider]?.busy == false else { return }
-        if ["connect", "models", "disconnect"].contains(method) { healthRows.removeAll { $0.provider == provider } }
         states[provider]?.busy = true; states[provider]?.error = nil
         defer { states[provider]?.busy = false }
         do {
+            // Invalidate before any credential mutation, including an uncertain transport outcome.
+            if ["connect", "disconnect"].contains(method) { try clearHealthResults(provider) }
             let data = try await transport(extra.merging(["method": method, "provider": provider.rawValue]) { _, new in new })
             switch method {
             case "connect", "models", "cached":

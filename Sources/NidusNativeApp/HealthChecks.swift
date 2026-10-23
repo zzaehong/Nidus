@@ -19,7 +19,7 @@ enum CheckStatus: String, Codable {
         }
     }
 }
-struct HealthRow: Identifiable {
+struct HealthRow: Identifiable, Codable {
     var id: String { provider.rawValue + ":" + model }
     let provider: Provider
     let model: String
@@ -44,11 +44,32 @@ struct ProbeResponse: Decodable {
 }
 
 extension Dashboard {
-    func healthPlan(providers: [Provider], allowInferred: Bool, limit: Int) -> [HealthRow] {
+    func persistHealthResults() throws {
+        guard healthStoreLoaded else { throw DashboardError(message: "기존 검사 기록을 읽지 못해 저장을 중단했습니다.") }
+        do {
+            try healthStore?.save(Array(healthHistory.values))
+            healthStorageError = nil
+        } catch {
+            healthStorageError = "검사 결과를 저장하지 못했습니다. 새 결과는 현재 세션에만 유지됩니다. 저장 공간과 파일 권한을 확인해주세요."
+            throw error
+        }
+    }
+    func clearHealthResults(_ provider: Provider) throws {
+        let previous = healthHistory
+        healthHistory = healthHistory.filter { $0.value.provider != provider }
+        do { try persistHealthResults() }
+        catch { healthHistory = previous; throw DashboardError(message: "검사 기록 초기화 실패: API 키 변경을 진행하지 않았습니다.") }
+        healthRows.removeAll { $0.provider == provider }
+    }
+    func healthPlan(providers: [Provider], allowInferred: Bool, limit: Int, onlyUntested: Bool = false) -> [HealthRow] {
         var rows: [HealthRow] = [], seen = Set<String>(), count = 0
         for provider in providers {
             for model in (states[provider]?.models ?? []).sorted(by: { $0.id < $1.id }) {
                 guard seen.insert(provider.rawValue + ":" + model.id).inserted else { continue }
+                if onlyUntested, let saved = healthHistory[provider.rawValue + ":" + model.id] {
+                    rows.append(saved)
+                    continue
+                }
                 let classification = model.classification
                 let supported = classification?.textProbe == "supported" || (allowInferred && classification?.textProbe == "opt_in")
                 let eligible = supported && count < max(1, min(limit, 500))
@@ -60,11 +81,11 @@ extension Dashboard {
         return rows
     }
     func stopHealthChecks() { healthStopRequested = true }
-    func runHealthChecks(providers: [Provider], allowInferred: Bool, limit: Int, confirmed: Bool,
+    func runHealthChecks(providers: [Provider], allowInferred: Bool, limit: Int, confirmed: Bool, onlyUntested: Bool = false,
                          pause: () async -> Void = { try? await Task.sleep(nanoseconds: 1_000_000_000) }) async {
-        guard confirmed, ready, !healthRunning, !states.values.contains(where: { $0.busy }) else { return }
+        guard confirmed, ready, healthStoreLoaded, !healthRunning, !states.values.contains(where: { $0.busy }) else { return }
         healthRunning = true; healthStopRequested = false
-        healthRows = healthPlan(providers: providers, allowInferred: allowInferred, limit: limit)
+        healthRows = healthPlan(providers: providers, allowInferred: allowInferred, limit: limit, onlyUntested: onlyUntested)
         defer { healthRunning = false }
         var sent = false
         for index in healthRows.indices {
@@ -76,6 +97,7 @@ extension Dashboard {
                 continue
             }
             healthRows[index].status = .running
+            let started = Date()
             do {
                 sent = true
                 let data = try await transport(["method": "probe", "provider": row.provider.rawValue, "model": row.model, "allowInferred": allowInferred, "confirmed": true])
@@ -90,7 +112,14 @@ extension Dashboard {
                 // Even older runtimes may set stopProvider: a model failure must not skip the queue.
             } catch {
                 healthRows[index].status = .failed
-                healthRows[index].reason = error.localizedDescription
+                healthRows[index].reason = "검사 요청 전달 또는 응답 해석에 실패했습니다."
+                healthRows[index].checkedAt = ISO8601DateFormatter().string(from: Date())
+                healthRows[index].durationMs = Int(Date().timeIntervalSince(started) * 1000)
+            }
+            if [.passed, .failed].contains(healthRows[index].status) {
+                healthHistory[row.id] = healthRows[index]
+                // Save after each result so stopping or exiting does not lose completed work.
+                try? persistHealthResults()
             }
         }
     }
