@@ -12,7 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 @main struct NidusApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
-    @StateObject private var dashboard = Dashboard()
+    @StateObject private var dashboard = Dashboard(healthStore: .application)
     var body: some Scene {
         WindowGroup("Nidus · API Connections") {
             DashboardView().environmentObject(dashboard)
@@ -159,8 +159,9 @@ struct ProviderView: View {
                                 Text(item.name).fontWeight(.medium)
                                 Text(item.id).font(.caption.monospaced()).foregroundStyle(.secondary)
                                 Text(item.classification?.label ?? "기타/미확인").font(.caption2)
-                                if let checked = dashboard.healthRows.first(where: { $0.provider == provider && $0.model == item.id }) {
+                                if let checked = dashboard.healthHistory[provider.rawValue + ":" + item.id] {
                                     Text(checked.status.label).font(.caption2).foregroundStyle(.secondary)
+                                        .help("최근 검사: \(checked.checkedAt ?? "미확인") · \(checked.reason)")
                                 }
                             }.padding(.vertical, 5).tag(item.id)
                         }.listStyle(.inset)

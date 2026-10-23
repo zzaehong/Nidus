@@ -6,13 +6,14 @@ struct HealthChecksView: View {
     let initialProvider: Provider
     @State private var allProviders = false
     @State private var allowInferred = false
+    @State private var onlyUntested = true
     @State private var limit = 20
     @State private var confirm = false
     @State private var resultsOnly = false
     @State private var resultFilter = "all"
     @State private var search = ""
     private var providers: [Provider] { allProviders ? Provider.allCases : [initialProvider] }
-    private var plan: [HealthRow] { dashboard.healthPlan(providers: providers, allowInferred: allowInferred, limit: limit) }
+    private var plan: [HealthRow] { dashboard.healthPlan(providers: providers, allowInferred: allowInferred, limit: limit, onlyUntested: onlyUntested) }
     private var count: Int { plan.filter { $0.status == .queued }.count }
     private var showingResults: Bool { resultsOnly || dashboard.healthRunning }
     private var rows: [HealthRow] { showingResults ? dashboard.healthRows : plan }
@@ -36,6 +37,12 @@ struct HealthChecksView: View {
             }.disabled(dashboard.healthRunning)
             Toggle("이름으로 추정한 텍스트 모델도 포함 (엔드포인트 호환성 미확인)", isOn: $allowInferred)
                 .disabled(dashboard.healthRunning)
+            Toggle("미검사 모델만 검사 (저장된 성공·실패 모델 제외)", isOn: $onlyUntested)
+                .disabled(dashboard.healthRunning)
+                .help("끄면 기존 결과가 있는 모델도 다시 검사하여 최신 결과로 갱신합니다. 미지원 유형은 계속 제외됩니다.")
+            if let error = dashboard.healthStorageError {
+                Text(error).font(.caption).foregroundStyle(.red)
+            }
             Text("미리보기: \(plan.count)개 중 \(count)회 요청 예정 · 순차 실행 · 요청 간 1초 · 최대 출력 256토큰/회 · HTTP 제한 30초/회")
                 .font(.caption)
             Text("실제 과금이 발생할 수 있으며 금액 상한은 보장하지 않습니다. 자동 재시도는 하지 않습니다. 추론 토큰 예산 부족·권한·호환성 문제도 실패로 나타날 수 있습니다.")
@@ -79,19 +86,19 @@ struct HealthChecksView: View {
                         .disabled(dashboard.healthStopRequested)
                 } else {
                     Button("\(count)개 모델 검사 시작…") { confirm = true }
-                        .buttonStyle(.borderedProminent).disabled(count == 0 || !dashboard.ready || dashboard.states.values.contains { $0.busy })
+                        .buttonStyle(.borderedProminent).disabled(count == 0 || !dashboard.ready || !dashboard.healthStoreLoaded || dashboard.states.values.contains { $0.busy })
                         .help("실제 API 요청으로 텍스트 응답을 확인합니다. 실패한 모델은 재시도하지 않고 다음 모델로 진행합니다. 비용이 발생할 수 있습니다.")
                 }
             }
-            Text("결과는 현재 앱 세션에만 유지됩니다. 키 변경·모델 새로고침 시 해당 Provider 결과를 지웁니다. 응답 확인은 모델의 모든 기능이 정상이라는 뜻이 아닙니다.")
+            Text("성공·실패의 최신 결과는 로컬에 저장됩니다. 목록 새로고침에는 유지하고 키 등록·변경·삭제 시 초기화합니다. 기존 결과도 함께 표시되며, 과거 성공은 현재 동작을 보장하지 않습니다.")
                 .font(.caption2).foregroundStyle(.secondary)
-        }.padding(24).frame(width: 850, height: 690)
+        }.padding(24).frame(width: 850, height: 750)
         .interactiveDismissDisabled(dashboard.healthRunning)
         .confirmationDialog("\(count)회 실제 API 요청을 실행할까요?", isPresented: $confirm) {
             Button("과금 가능성을 확인하고 실행") {
                 resultsOnly = true
-                let selected = providers, inferred = allowInferred, maximum = limit
-                Task { await dashboard.runHealthChecks(providers: selected, allowInferred: inferred, limit: maximum, confirmed: true) }
+                let selected = providers, inferred = allowInferred, maximum = limit, untested = onlyUntested
+                Task { await dashboard.runHealthChecks(providers: selected, allowInferred: inferred, limit: maximum, confirmed: true, onlyUntested: untested) }
             }
         } message: { Text("모든 요청은 ‘Reply with OK.’를 전송합니다. 이미지·영상·라이브 생성은 실행하지 않습니다. 가격 미확인 모델도 비용이 발생할 수 있습니다.") }
     }
