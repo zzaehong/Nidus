@@ -67,6 +67,7 @@ struct ChatRoomsView: View {
     @State private var storageError: String?
     @State private var sendError: String?
     @State private var draft = ""
+    @State private var rawMessageIDs = Set<UUID>()
     @State private var maxTokens = "1024"
     @State private var sending = false
     private let store = ChatRoomStore.application
@@ -196,9 +197,21 @@ struct ChatRoomsView: View {
                 }
                 if message.failed { Text("전송 실패").font(.caption2).foregroundStyle(.red) }
                 Spacer()
+                if message.role == "assistant" {
+                    Button(rawMessageIDs.contains(message.id) ? "미리보기" : "원문") {
+                        if rawMessageIDs.contains(message.id) { rawMessageIDs.remove(message.id) }
+                        else { rawMessageIDs.insert(message.id) }
+                    }.buttonStyle(.link).font(.caption)
+                }
                 Text(message.createdAt.formatted(date: .omitted, time: .shortened)).font(.caption2).foregroundStyle(.tertiary)
             }
-            Text(message.content).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+            Group {
+                if message.role == "assistant" && !rawMessageIDs.contains(message.id) {
+                    Text((try? AttributedString(markdown: message.content)) ?? AttributedString(message.content))
+                } else {
+                    Text(message.content)
+                }
+            }.textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
                 .padding(11).background(message.role == "user" ? Color.accentColor.opacity(0.13) : Color.secondary.opacity(0.1),
                                         in: RoundedRectangle(cornerRadius: 10))
         }
