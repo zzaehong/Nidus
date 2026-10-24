@@ -4,9 +4,33 @@ TypeScript 기반 **Multi-Provider API Connectivity 엔진**과 **SwiftUI macOS 
 
 OpenAI(GPT), Anthropic(Claude), Google Gemini, DeepSeek를 지원합니다. 자동 라우팅, Agent Loop, Tool 실행, Docker, Vault, Workflow는 구현 범위에 포함하지 않습니다.
 
+## Phase 3: 사용량 및 예산
+
+새로운 유료 채팅·모델 검사는 **전체 월간 예산과 단일 요청 예산을 설정한 뒤** 사용할 수 있습니다.
+SwiftUI 툴바의 **사용량 및 예산** 또는 아래 CLI를 사용하세요.
+
+```sh
+nidus budget total --usd 20
+nidus budget request --usd 5
+nidus budget openai --usd 10
+nidus usage
+```
+
+모든 추론은 공통 SQLite 예약·정산 경로를 거칩니다. 가격/안전한 상한 미확인은 차단하고,
+실패·취소·사용량 누락의 비용은 0으로 간주하지 않습니다. 입력 용량 전체를 예약하므로
+예약액은 실제 예상 비용보다 클 수 있습니다. 무료 티어 표시도 무료 잔량을 의미하지 않습니다.
+예산과 기록은 UTC 월, USD 정수 nano 단위로 보존합니다.
+
+대시보드는 로컬 추정·확인·미확인·예약·잔여 예산을 구분합니다. 선택적 조직 조회는 별도
+관리자 세션 키를 사용하며 외부 사용이 섞인 조직 비용을 로컬 예산에 합산하지 않습니다.
+**이 기능은 제공업체 청구액의 절대 한도를 보장하지 않습니다.**
+
+설정, 공식 가격 검증 출처, 관리자 키 정책, 테스트와 제한은
+[Phase 3 설계·검증 문서](docs/Phase3_Usage_Budget.md)를 참고하세요.
+
 ## 설치와 시작
 
-Node.js 22 이상(검증: 24.21.0), npm이 필요합니다. macOS Keychain 사용에는 Xcode Command Line Tools의 `swiftc`가 필요합니다. 대시보드는 macOS 13 이상을 대상으로 하며 Swift 5.9 이상으로 빌드합니다. API 연결 엔진과 CLI는 TypeScript이고, UI는 SwiftUI/AppKit입니다. 외부 npm 런타임 라이브러리는 없습니다.
+Node.js 22.13 이상(검증: 24.21.0), npm이 필요합니다. macOS Keychain 사용에는 Xcode Command Line Tools의 `swiftc`가 필요합니다. 대시보드는 macOS 13 이상을 대상으로 하며 Swift 5.9 이상으로 빌드합니다. API 연결 엔진과 CLI는 TypeScript이고, UI는 SwiftUI/AppKit입니다. 외부 npm 런타임 라이브러리는 없습니다.
 
 ## macOS 대시보드
 
