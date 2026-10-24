@@ -10,6 +10,7 @@ struct HealthResultStore {
     private struct Snapshot: Codable {
         let version: Int
         let results: [HealthRow]
+        let batches: [HealthBatch]?
     }
     func load() throws -> [HealthRow] {
         guard FileManager.default.fileExists(atPath: url.path) else { return [] }
@@ -21,12 +22,16 @@ struct HealthResultStore {
         }
         return snapshot.results
     }
-    func save(_ rows: [HealthRow]) throws {
+    func loadBatches() throws -> [HealthBatch] {
+        guard FileManager.default.fileExists(atPath: url.path) else { return [] }
+        return try JSONDecoder().decode(Snapshot.self, from: Data(contentsOf: url)).batches ?? []
+    }
+    func save(_ rows: [HealthRow], batches: [HealthBatch] = []) throws {
         let directory = url.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
                                                attributes: [.posixPermissions: 0o700])
         let completed = rows.filter { ($0.status == .passed || $0.status == .failed) && $0.checkedAt != nil }
-        let data = try JSONEncoder().encode(Snapshot(version: 1, results: completed.sorted { $0.id < $1.id }))
+        let data = try JSONEncoder().encode(Snapshot(version: 1, results: completed.sorted { $0.id < $1.id }, batches: batches))
         try data.write(to: url, options: .atomic)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
     }

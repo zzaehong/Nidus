@@ -229,6 +229,7 @@ struct ProviderView: View {
                     if let date = result.checkedAt { Text("검사 시각: \(date)").font(.caption).foregroundStyle(.secondary) }
                     if let duration = result.durationMs { Text("응답 시간: \(duration)ms").font(.caption).foregroundStyle(.secondary) }
                     Text("토큰: 입력 \(result.inputTokens.map(String.init) ?? "미보고") · 출력 \(result.outputTokens.map(String.init) ?? "미보고")")
+                    Text("검사 비용 추정: \(usd(result.estimatedUsageUSD)) · 예산 예약: \(usd(result.reservedUSD)) (청구액 아님)").font(.caption)
                         .font(.caption).foregroundStyle(.secondary)
                 } else {
                     Label("동작 검사 기록 없음", systemImage: "questionmark.circle").font(.callout).foregroundStyle(.secondary)

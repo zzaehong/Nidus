@@ -70,6 +70,11 @@ struct ChatRoomsView: View {
     @State private var rawMessageIDs = Set<UUID>()
     @State private var maxTokens = "1024"
     @State private var sending = false
+    @State private var acknowledgedModels = Set<String>()
+    @State private var approvalMessage: String?
+    @State private var approvalRoomID: UUID?
+    @State private var retest = false
+    @State private var contextInfo = "전송 전에 전체 문맥과 최대 출력 예산을 검사합니다. 토큰 수는 추정치입니다."
     private let store = ChatRoomStore.application
 
     private var selectedIndex: Int? { rooms.firstIndex { $0.id == selectedID } }
@@ -83,8 +88,11 @@ struct ChatRoomsView: View {
 
     private func selectableModels(for provider: Provider) -> [APIModel] {
         (dashboard.states[provider]?.models ?? []).filter { model in
-            model.usableForTextChat && dashboard.healthHistory[provider.rawValue + ":" + model.id]?.status == .passed
+            validation(model, provider) != .unsupported
         }
+    }
+    private func validation(_ model: APIModel, _ provider: Provider) -> ChatValidation {
+        ChatValidation.status(model: model, result: dashboard.healthHistory[provider.rawValue + ":" + model.id])
     }
 
     var body: some View {
@@ -108,7 +116,7 @@ struct ChatRoomsView: View {
                                 .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                         }.padding(.vertical, 5).tag(room.id)
                     }
-                }.listStyle(.sidebar)
+                }.listStyle(.sidebar).disabled(sending)
                 if let storageError { Text(storageError).font(.caption).foregroundStyle(.red).padding() }
             }.navigationSplitViewColumnWidth(min: 230, ideal: 270)
         } detail: {
@@ -123,8 +131,22 @@ struct ChatRoomsView: View {
             }
         }
         .frame(width: 1060, height: 760)
-        .toolbar { ToolbarItem(placement: .confirmationAction) { Button("닫기") { dismiss() } } }
+        .toolbar { ToolbarItem(placement: .confirmationAction) { Button("닫기") { dismiss() }.disabled(sending) } }
         .task { loadRooms() }
+        .interactiveDismissDisabled(sending)
+        .sheet(isPresented: $retest) {
+            if let room = activeRoom { HealthChecksView(initialProvider: room.provider, targetModelIDs: [room.model]).environmentObject(dashboard) }
+        }
+        .alert("호환성·문맥 및 과금 안내", isPresented: Binding(get: { approvalMessage != nil }, set: { if !$0 { approvalMessage = nil } })) {
+            Button("취소", role: .cancel) { approvalMessage = nil }
+            Button("확인하고 전송") {
+                approvalMessage = nil
+                if let index = rooms.firstIndex(where: { $0.id == approvalRoomID }) {
+                    acknowledgedModels.insert(rooms[index].provider.rawValue + ":" + rooms[index].model)
+                    send(index: index, approved: true)
+                }
+            }
+        } message: { Text(approvalMessage ?? "") }
         .alert("메시지를 보내지 못했습니다", isPresented: Binding(get: { sendError != nil }, set: { if !$0 { sendError = nil } })) {
             Button("확인", role: .cancel) { sendError = nil }
         } message: { Text(sendError ?? "요청을 완료하지 못했습니다.") }
@@ -141,19 +163,28 @@ struct ChatRoomsView: View {
                     ForEach(readyProviders, id: \.self) { Text($0.name).tag($0) }
                 }.frame(width: 210)
                 Picker("모델", selection: Binding(get: { rooms[index].model }, set: { rooms[index].model = $0; rooms[index].updatedAt = Date(); persist() })) {
-                    ForEach(activeModels) { model in Text(model.name + " · 검사 통과").tag(model.id) }
+                    ForEach(activeModels) { model in Text(model.name + " · " + validation(model, room.provider).rawValue).tag(model.id) }
                 }.frame(width: 280)
-            }
+            }.disabled(sending)
             TextField("이 채팅방의 system prompt (선택)", text: Binding(get: { rooms[index].systemPrompt }, set: { rooms[index].systemPrompt = $0; persist() }))
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.roundedBorder).disabled(sending)
+            if let model = activeModels.first(where: { $0.id == room.model }) {
+                HStack {
+                    Text(validation(model, room.provider).rawValue + " · " + (dashboard.healthHistory[room.provider.rawValue + ":" + room.model]?.reason ?? "호환성 미검증 · 실제 과금 가능"))
+                        .font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("모델 재검사…") { retest = true }.disabled(sending || dashboard.healthRunning)
+                }
+            }
+            Text(contextInfo).font(.caption2).foregroundStyle(.secondary).textSelection(.enabled)
             if readyProviders.isEmpty {
                 VStack(spacing: 8) {
-                    Label("동작 검사 통과 모델이 없습니다", systemImage: "checkmark.seal").font(.headline)
-                    Text("Provider를 연결하고 모델 일괄 동작 검사를 실행한 뒤 채팅을 시작하세요.")
+                    Label("텍스트 채팅 후보가 없습니다", systemImage: "checkmark.seal").font(.headline)
+                    Text("Provider를 연결하고 모델 목록을 조회하세요. 미검사 텍스트 후보도 안내 확인 후 선택할 수 있습니다.")
                         .font(.caption).foregroundStyle(.secondary)
                 }.frame(maxWidth: .infinity).padding(12)
             } else if activeModels.isEmpty {
-                    Label("이 Provider에는 동작 검사를 통과한 텍스트 모델이 없습니다. 먼저 모델 일괄 검사를 실행하세요.", systemImage: "info.circle")
+                    Label("이 Provider에는 텍스트 채팅 후보가 없습니다. 모델 목록을 새로고침하세요.", systemImage: "info.circle")
                         .font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
             }
             ScrollViewReader { proxy in
@@ -171,7 +202,7 @@ struct ChatRoomsView: View {
             }
             HStack(spacing: 12) {
                 TextField("메시지 입력", text: $draft, axis: .vertical).lineLimit(2...6)
-                    .textFieldStyle(.roundedBorder).onSubmit { send(index: index) }
+                    .textFieldStyle(.roundedBorder).disabled(sending).onSubmit { send(index: index) }
                 Button(action: { send(index: index) }) {
                     Image(systemName: "paperplane.fill").frame(width: 22, height: 22)
                 }.buttonStyle(.borderedProminent).disabled(!canSend(index: index))
@@ -180,7 +211,7 @@ struct ChatRoomsView: View {
                 Text("Provider를 바꿔도 이 방의 이전 메시지를 문맥으로 전송합니다. 실제 API 요금이 발생합니다.")
                     .font(.caption).foregroundStyle(.secondary)
                 Spacer()
-                TextField("최대 출력 토큰", text: $maxTokens).frame(width: 125)
+                TextField("최대 출력 토큰", text: $maxTokens).frame(width: 125).disabled(sending)
             }
         }.padding(20)
     }
@@ -218,16 +249,41 @@ struct ChatRoomsView: View {
     }
 
     private func canSend(index: Int) -> Bool {
-        guard !sending, storageError == nil, dashboard.ready, index < rooms.count,
+        guard !sending, !dashboard.healthRunning, storageError == nil, dashboard.ready, index < rooms.count,
+              dashboard.states[rooms[index].provider]?.busy == false,
               !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               let count = Int(maxTokens), (1...32768).contains(count), !activeModels.isEmpty,
               activeModels.contains(where: { $0.id == rooms[index].model }) else { return false }
         return true
     }
 
-    private func send(index: Int) {
+    private func send(index: Int, approved: Bool = false) {
         guard canSend(index: index) else { return }
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !approved {
+            let room = rooms[index]
+            let messages = conversationMessages(room.messages) + [["role": "user", "content": text]]
+            sending = true
+            dashboard.states[room.provider]?.busy = true
+            Task { @MainActor in
+                do {
+                    let data = try await dashboard.transport(["method": "chat.preflight", "provider": room.provider.rawValue,
+                        "request": ["model": room.model, "system": room.systemPrompt, "messages": messages, "maxOutputTokens": Int(maxTokens) ?? 1024]])
+                    let context = try JSONDecoder().decode(ContextAssessment.self, from: data)
+                    contextInfo = context.warning
+                    sending = false; dashboard.states[room.provider]?.busy = false
+                    guard let current = rooms.firstIndex(where: { $0.id == room.id }), selectedID == room.id else { return }
+                    if context.status == "exceeded" { sendError = "문맥 또는 출력 한도 초과 위험으로 전송을 중단했습니다. 출력 예산을 줄이거나 더 큰 문맥 모델을 선택하세요.\n" + context.warning; return }
+                    let state = activeModels.first(where: { $0.id == room.model }).map { validation($0, room.provider) } ?? .unsupported
+                    let unverified = state.requiresConsent(acknowledged: acknowledgedModels.contains(room.provider.rawValue + ":" + room.model))
+                    if unverified || context.status != "within_estimate" {
+                        approvalRoomID = room.id
+                        approvalMessage = (unverified ? "이 모델은 \(state.rawValue) 상태로 호환성을 보장하지 않습니다. " : "") + "실제 API 과금이 발생할 수 있습니다.\n" + context.warning
+                    } else { send(index: current, approved: true) }
+                } catch { sending = false; dashboard.states[room.provider]?.busy = false; sendError = error.localizedDescription }
+            }
+            return
+        }
         draft = ""
         rooms[index].messages.append(ChatMessage(role: "user", content: text, provider: rooms[index].provider, model: rooms[index].model))
         if rooms[index].title == "새 채팅방" { rooms[index].title = String(text.prefix(48)) }
@@ -238,11 +294,12 @@ struct ChatRoomsView: View {
         let provider = rooms[index].provider
         let model = rooms[index].model
         let system = rooms[index].systemPrompt
-        let messages = rooms[index].messages.filter { !$0.failed }.suffix(100).map { ["role": $0.role, "content": $0.content] }
+        let messages = conversationMessages(rooms[index].messages)
         let tokenLimit = Int(maxTokens) ?? 1024
         sending = true
+        dashboard.states[provider]?.busy = true
         Task { @MainActor in
-            defer { sending = false }
+            defer { sending = false; dashboard.states[provider]?.busy = false }
             do {
                 let data = try await dashboard.transport(["method": "chat", "provider": provider.rawValue,
                     "request": ["model": model, "system": system, "messages": messages, "maxOutputTokens": tokenLimit]])

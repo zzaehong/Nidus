@@ -6,6 +6,7 @@ import XCTest
         let object: [String: Any] = ["id": id, "name": id,
             "capabilities": ["chat": "unknown", "streaming": "unknown", "vision": "unknown", "tools": "unknown"],
             "pricing": ["status": "unknown", "sourceUrl": "https://example.invalid", "rates": []],
+            "probeEstimate": ["usd": 0.001],
             "classification": ["kind": kind, "confidence": probe == "supported" ? "metadata" : "inferred", "reason": "Fixture", "textProbe": probe]]
         return try JSONDecoder().decode(APIModel.self, from: JSONSerialization.data(withJSONObject: object))
     }

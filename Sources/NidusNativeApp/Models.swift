@@ -16,6 +16,14 @@ struct APIModel: Decodable, Identifiable {
     let capabilities: Capabilities
     let pricing: Price
     let classification: ModelClassification?
+    let limits: Limits?
+    let probeEstimate: ProbeEstimate?
+    struct Limits: Decodable { let inputTokens: Int?; let outputTokens: Int?; let contextTokens: Int? }
+    struct ProbeEstimate: Decodable { let usd: Double? }
+    var probeEstimatedUSD: Double? {
+        guard let cost = probeEstimate?.usd, cost.isFinite, cost >= 0 else { return nil }
+        return cost
+    }
     var usableForTextChat: Bool {
         guard capabilities.chat != "unsupported", classification?.kind == "text",
               ["supported", "opt_in"].contains(classification?.textProbe ?? "unsupported") else { return false }
@@ -65,6 +73,7 @@ struct ProviderState {
             let rows = try healthStore?.load() ?? []
             healthHistory = Dictionary(uniqueKeysWithValues: rows.map { ($0.id, $0) })
             healthRows = rows
+            healthBatches = try healthStore?.loadBatches() ?? []
         } catch {
             healthStoreLoaded = false
             healthStorageError = "검사 기록을 읽지 못했습니다. 기존 파일은 보존됩니다. 저장 파일을 확인한 뒤 앱을 다시 실행해주세요."
@@ -78,6 +87,7 @@ struct ProviderState {
     @Published var healthStorageError: String?
     @Published var healthRunning = false
     @Published var healthStopRequested = false
+    @Published var healthBatches: [HealthBatch] = []
     private var started = false
     func start() async {
         guard !started else { return }; started = true
