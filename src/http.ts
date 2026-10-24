@@ -36,7 +36,7 @@ export async function bounded<T>(options: RequestOptions, action: (signal: Abort
 
 export class HttpClient {
   constructor(private readonly fetcher: typeof fetch = fetch) {}
-  async json(url: string | URL, headers: Record<string, string>, signal: AbortSignal, body?: unknown, onHeaders?: (headers: Record<string, string>) => void): Promise<Record<string, unknown>> {
+  async json(url: string | URL, headers: Record<string, string>, signal: AbortSignal, body?: unknown, onHeaders?: (headers: Record<string, string>) => void, exactCostValues = false): Promise<Record<string, unknown>> {
     try {
       const response = await this.fetcher(url, {
         method: body === undefined ? "GET" : "POST", headers: { ...headers, "content-type": "application/json" },
@@ -60,7 +60,16 @@ export class HttpClient {
       }
       // Bound response memory, including chunked bodies. Timeout covers body reads too.
       const text = await readBody(response, 16 * 1024 * 1024);
-      try { return object(JSON.parse(text)); }
+      try {
+        return object(JSON.parse(text, (key, value, context?: { source: string }) => {
+          // Preserve the exact JSON decimal spelling before conversion to integer USD.
+          if (exactCostValues && key === 'value' && typeof value === 'number') {
+            if (!context?.source) throw new NidusError('invalid_response', 'Runtime cannot preserve billing decimal precision.');
+            return context.source;
+          }
+          return value;
+        }));
+      }
       catch { throw new NidusError("invalid_response", "Provider returned invalid JSON."); }
     } catch (error) {
       if (error instanceof NidusError) throw error;

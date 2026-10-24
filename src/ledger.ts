@@ -130,9 +130,13 @@ export class UsageLedger {
       const sum = (key: string, filter = (r: Row) => r.month === month) => rows.filter(filter).reduce((n, r) => n + (r[key] as bigint ?? 0n), 0n);
       const reserved = sum('reserved', () => true), estimated = sum('estimated', r => r.month === month && r.confirmed === null), confirmed = sum('confirmed');
       const limit = this.budget(provider ?? 'total'), used = this.exposure(month, provider);
-      const level = limit === null ? 'unconfigured' : used >= limit ? 'blocked' : used * 100n >= limit * 90n ? 'saving' : used * 100n >= limit * 80n ? 'warning' : 'normal';
+      const level = limit === null ? (provider && this.budget('total') !== null ? 'inherited' : 'unconfigured') : used >= limit ? 'blocked' : used * 100n >= limit * 90n ? 'saving' : used * 100n >= limit * 80n ? 'warning' : 'normal';
+      const totalLimit = this.budget('total');
+      const localRemaining = limit === null ? null : (limit > used ? limit - used : 0n);
+      const globalRemaining = totalLimit === null ? null : (totalLimit > this.exposure(month) ? totalLimit - this.exposure(month) : 0n);
+      const remaining = !provider ? localRemaining : globalRemaining === null ? null : localRemaining === null || globalRemaining < localRemaining ? globalRemaining : localRemaining;
       return { scope: provider ?? 'total', budgetUSD: limit === null ? null : dollars(limit), estimatedUSD: dollars(estimated), confirmedUSD: rows.some(r => r.month === month && r.confirmed !== null) ? dollars(confirmed) : null,
-        reservedUSD: dollars(reserved), exposureUSD: dollars(used), remainingUSD: limit === null ? null : dollars(limit > used ? limit - used : 0n), level,
+        reservedUSD: dollars(reserved), exposureUSD: dollars(used), remainingUSD: remaining === null ? null : dollars(remaining), level,
         utilizationPercent: limit && limit > 0n ? Number(used * 10000n / limit) / 100 : null,
         unknownCount: rows.filter(r => r.settlement === 'unresolved' || r.status === 'pending').length,
         unknownPriceCount: rows.filter(r => r.block_reason === 'unknown_price_or_bound').length };

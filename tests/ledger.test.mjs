@@ -137,3 +137,10 @@ test('rate limit header whitelist and balance use only reported USD, never infer
   });
   assert.equal((await deepseekBalance('synthetic', http)).usd, null);
 });
+test('provider remaining capacity respects the global ceiling even without a provider-specific budget', () => {
+  const l = fundedLedger(); l.setBudget('total', '1');
+  assert.equal(l.snapshot().providers[0].level, 'inherited');
+  assert.equal(l.snapshot().providers[0].remainingUSD, '1.000000000');
+  l.setBudget('openai', '10'); reserve(l);
+  assert.equal(l.snapshot().providers[0].remainingUSD, l.snapshot().total.remainingUSD); l.close();
+});

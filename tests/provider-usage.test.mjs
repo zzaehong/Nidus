@@ -37,3 +37,9 @@ test('empty reports are unknown, malformed/repeated pagination and non-USD repor
   await assert.rejects(accountReport('openai', 'synthetic', new HttpClient(async () => Response.json({ data: [], has_more: true, next_page: 'same' }))), /pagination/);
   await assert.rejects(accountReport('openai', 'synthetic', new HttpClient(async () => Response.json({ data: [{ results: [{ amount: { currency: 'EUR', value: 1 } }] }], has_more: false }))), /USD/);
 });
+test('OpenAI decimal spelling is preserved before integer conversion', async () => {
+  const report = await accountReport('openai', 'synthetic', new HttpClient(async url => new Response(String(url).includes('/costs?')
+    ? '{"data":[{"results":[{"amount":{"currency":"usd","value":0.10000000000000001}}]}],"has_more":false}'
+    : '{"data":[],"has_more":false}')));
+  assert.equal(report.reportedUSD, '0.100000001');
+});

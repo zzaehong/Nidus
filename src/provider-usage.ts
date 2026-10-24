@@ -44,7 +44,7 @@ export async function accountReport(provider: BillingProvider, adminKey: string,
     url.searchParams.set('bucket_width', '1d'); url.searchParams.set('limit', '31');
     const results: Record<string, unknown>[] = [], seen = new Set<string>();
     for (;;) {
-      const page = await http.json(url, headers, signal);
+      const page = await http.json(url, headers, signal, undefined, undefined, kind === 'cost');
       for (const bucket of array(page.data).map(object)) results.push(...array(bucket.results).map(object));
       if (results.length > 100_000) throw new NidusError('invalid_response', 'Organization report exceeds local limit.');
       if (page.has_more === false) return results;
