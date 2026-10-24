@@ -12,7 +12,8 @@ macOS 대시보드는 SwiftUI → 요청별 Node 자식 프로세스(`dist/dashb
 | `src/engine.ts` | 연결 검증, 키 등록, 모델 갱신, 캐시와 가격 결합 |
 | `src/storage.ts` | 비밀정보 없는 모델 목록의 원자적 파일 교체 |
 | `src/credentials.ts`, `native/keychain.swift` | macOS Keychain과 명시적 환경변수 모드 |
-| `src/pricing.ts` | 공식 출처를 가진 수동 가격 스냅샷과 정확한 ID 매칭 |
+| `src/pricing-snapshot.ts`, `src/pricing.ts` | 공식 수동 스냅샷·정확한 ID 매칭과 보수적 비용 추정 |
+| `src/context.ts` | 로컬 토큰 추정, Models 메타데이터/공식 한도, 전송 전 문맥 위험 검사 |
 | `src/cli.ts`, `src/prompt.ts`, `bin/nidus.mjs` | 명령 검증, 숨김 키 입력, JSON 출력 |
 | `src/dashboard.ts` | 단일 요청/응답 JSON envelope, 캐시 전용 읽기, 기존 엔진 호출 |
 | `Sources/NidusNativeApp/Runtime.swift` | Node/Runtime 탐색, 비동기 프로세스와 Pipe 수명, 오류/타임아웃 |
@@ -23,6 +24,7 @@ macOS 대시보드는 SwiftUI → 요청별 Node 자식 프로세스(`dist/dashb
 | `Sources/NidusNativeApp/HealthChecks*.swift` | 순차 일괄 검사, 과금 동의, 진행/중지/오류 격리 UI |
 | `Sources/NidusNativeApp/HealthResultStore.swift` | 버전이 있는 로컬 검사 기록, 원자적 저장, 재실행 복원과 미검사 선택 |
 | `Sources/NidusNativeApp/ChatRooms.swift` | 영구 채팅방, Provider별 모델 선택, Provider를 넘나드는 대화 문맥 |
+| `Sources/NidusNativeApp/ChatPolicy.swift` | 검증 상태·첫 사용 동의 정책, 전체 문맥 생성, preflight 응답 |
 
 모델 분류·일괄 검사 세부 계약은 [MODEL_HEALTH.md](MODEL_HEALTH.md)를 참고합니다. 이 기능은 이미지/영상/라이브 전용 Adapter를 구현하지 않으며, 미지원 유형을 실패로 오인하지 않도록 구분합니다.
 
@@ -44,4 +46,14 @@ macOS 대시보드는 SwiftUI → 요청별 Node 자식 프로세스(`dist/dashb
 
 시작 시 `ping` 성공 후에만 엔진 준비 상태를 표시합니다. 이후 `cached`로 네 Provider의 로컬 모델 목록을 읽되 API/Keychain을 건드리지 않습니다. `connect`의 Models API 결과를 UI에 직접 반영하므로 별도 수동 새로고침이 필요하지 않습니다. 공급자별 busy 상태로 같은 앱 내 중복 작업을 막고, 응답은 요청 당시 Provider에만 기록합니다. 다른 CLI/앱 프로세스와의 동시 키 교체 잠금은 없으므로 계정 교체는 한 곳에서 수행해야 합니다.
 
-가격 상세와 원본 데이터에는 기존 출처·확인시각·조건을 유지합니다. 응답 테스트는 단일 요청이며 전송마다 대화 이력을 누적하지 않습니다. 사용량 원본은 엔진 응답에 보존되고 화면에는 입력/출력/합계만 표시합니다. 키·프롬프트·응답을 앱 설정에 저장하지 않습니다. `.app`은 로컬 개발 번들이며 코드 서명, 공증, 업데이트와 배포 보안은 별도 후속 작업입니다.
+가격 상세와 원본 데이터에는 출처·확인시각·조건을 유지합니다. 응답 테스트 탭은 단일 요청이며 대화 이력을 누적하지 않습니다. 채팅방은 별도 로컬 파일에 대화/system prompt/응답을 저장합니다(API Key 제외). 사용량 원본은 엔진 응답에 보존됩니다. `.app`은 로컬 개발 번들이며 코드 서명, 공증, 업데이트와 배포 보안은 별도 후속 작업입니다.
+
+## 검사 예산과 채팅 preflight
+
+엔진은 캐시를 장식할 때 `probeEstimate.usd`를 추가합니다(null = 미확인). 가격 스냅샷에서 가장 높은 입력/출력 구간, 입력 128 추정·출력 256 한도를 사용하며 무료/캐시 할인을 가정하지 않습니다. UI가 표시한 값만 신뢰하지 않고 `probe`의 `remainingUSD`, `allowUnknownPrice`를 엔진에서 재검사합니다. `src/health.ts`의 공통 출력 한도와 가격 계산은 같은 상수를 사용합니다.
+
+Swift는 요청 직전 배치 예약액을 원자적으로 저장합니다. 완료 후 `max(예약액, 보고 사용량 비용 추정)`을 반영하며 실패/사용량 미보고는 예약액을 유지합니다. 미확인 가격을 승인하면 남은 예산 전부를 예약하여 한 건 후 멈춥니다. 기록은 사용자 설정 배치별이며 여러 앱/CLI를 아우르는 계정 전체 결제 한도가 아닙니다. 캐시 쓰기·미보고 비용은 추정 불가로 표시하며 실제 청구액을 보장하지 않습니다.
+
+채팅방은 먼저 `chat.preflight`를 호출합니다. 이 경로는 캐시만 읽고 키/API에 접근하지 않습니다. UTF-8 바이트 + 메시지당 16 + 전체 64 오버헤드로 입력을 추정하고 출력 한도를 별도로 고려합니다. Models API의 양수 한도를 우선하고 OpenAI GPT-4.1 일부 정확한 ID와 DeepSeek 문서상 정확한 ID만 정적 한도로 보완합니다. 한도가 없으면 unknown, 80%부터 경고, 초과 위험은 차단합니다. 실제 `chat`에서도 같은 검사를 재실행하여 UI 우회를 막습니다. 성공 응답에는 `context` 평가를 추가하고 기존 usage/본문 계약을 유지합니다. 자동 truncation/요약/압축은 없습니다.
+
+첫 사용 호환성/과금 동의는 앱 채팅방 세션 단위입니다. 검증 실패 후보도 사용자가 선택할 수 있지만 실패 사유와 재검사 경로를 제공하고 정상 모델로 표시하지 않습니다. 미지원 용도는 계속 제외합니다. 채팅방 요청 중 provider busy를 설정하여 같은 앱의 키 변경/일괄 검사와 겹치지 않게 합니다.
