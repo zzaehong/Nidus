@@ -2,7 +2,7 @@
 
 TypeScript 기반 **Multi-Provider API Connectivity 엔진**과 **SwiftUI macOS 대시보드**입니다. Provider와 API Key로 모델을 자동 탐색하고, 선택한 모델에 텍스트 요청을 보내며 사용량을 공통 포맷으로 반환합니다. 기존 CLI도 그대로 사용할 수 있습니다.
 
-OpenAI(GPT), Anthropic(Claude), Google Gemini, DeepSeek를 지원합니다. 자동 라우팅, Agent Loop, Tool 실행, Docker, Vault, Workflow는 구현 범위에 포함하지 않습니다.
+OpenAI(GPT), Anthropic(Claude), Google Gemini, DeepSeek를 지원합니다. 작업 난이도 기반 자동 라우팅과 수동 선택을 지원합니다. Agent Loop, Tool 실행, Docker, Vault, Workflow는 구현 범위에 포함하지 않습니다.
 
 ## Phase 3: 사용량 및 예산
 
@@ -27,6 +27,16 @@ nidus usage
 
 설정, 공식 가격 검증 출처, 관리자 키 정책, 테스트와 제한은
 [Phase 3 설계·검증 문서](docs/Phase3_Usage_Budget.md)를 참고하세요.
+
+## Phase 4: 작업 난이도 기반 자동 라우팅
+
+채팅방에서 **자동 라우팅**을 켜고 Simple / Normal(기본) / Complex를 선택할 수 있습니다.
+**후보·예산 확인**은 로컬 조회만 실행합니다. 실제 선택 모델과 전환 사유, 예약 상한·추정 비용을 표시하며
+모든 호출은 Phase 3 Budget Guard를 거칩니다. CLI는 `nidus chat --auto --difficulty normal`입니다.
+
+가격·등급 미확인은 자동 선택에서 제외하고, Complex는 예산 부족을 이유로 경량 모델에 보내지 않습니다.
+타임아웃·네트워크 오류에서는 자동 전환을 중단합니다. 무료 티어만으로 무료 사용을 가정하지 않습니다.
+정책, 공식 출처, 검증 결과와 제한은 [Phase 4 문서](docs/Phase4_Model_Router.md)에 정리했습니다.
 
 ## 설치와 시작
 
@@ -132,7 +142,7 @@ nidus disconnect gemini
 - macOS Keychain service: `com.nidus.connectivity`, account: Provider ID. 기기 전용·잠금 해제 시 접근하며 동기화하지 않습니다.
 - 키 입력은 터미널에 표시하지 않습니다. 키를 CLI 인자, Git, 로그, 일반 설정 파일에 저장하지 않습니다.
 - helper는 stdin/stdout 전용 Pipe로 키를 전달하며 키 값을 프로세스 인자에 넣지 않습니다. helper가 없으면 평문 저장으로 우회하지 않고 오류를 반환합니다.
-- 캐시: `~/.local/share/nidus/<provider>.json`. 모델 메타데이터만 저장하며 파일 권한은 `0600`, 생성 디렉터리는 `0700`입니다. 프롬프트·응답·사용량은 디스크에 저장하지 않습니다.
+- 캐시: `~/.local/share/nidus/<provider>.json`. 모델 메타데이터만 저장하며 파일 권한은 `0600`, 생성 디렉터리는 `0700`입니다. 모델 캐시에는 프롬프트·응답·사용량을 저장하지 않습니다. 채팅 기록과 사용량 장부는 위에 설명한 별도 저장소를 사용합니다.
 - 키는 요청 중 프로세스 메모리에 존재합니다. JavaScript 문자열의 완전한 메모리 소거는 보장하지 않습니다.
 
 CI 또는 macOS 외 환경에서는 `NIDUS_OPENAI_API_KEY`, `NIDUS_ANTHROPIC_API_KEY`, `NIDUS_GEMINI_API_KEY`, `NIDUS_DEEPSEEK_API_KEY`를 외부 Secret Manager에서 환경변수로 주입하고 `nidus connect <provider> --env`를 사용할 수 있습니다. 이 모드는 키를 영구 저장하지 않습니다. 환경변수는 Keychain보다 우선하며, 해당 환경에서 `models`는 다른 계정 캐시 사용을 피하기 위해 API를 다시 조회합니다. 키를 셸 명령에 직접 적으면 history에 남을 수 있으므로 피합니다.
@@ -170,7 +180,7 @@ CI 또는 macOS 외 환경에서는 `NIDUS_OPENAI_API_KEY`, `NIDUS_ANTHROPIC_API
 
 오류는 stderr에 `{error: {code, message, status, retryAfter}}`로 출력하고 종료 코드 1(취소 130)을 반환합니다. 인증, 권한, 잔액/한도, Rate Limit, 네트워크, 타임아웃, 취소, 잘못된 응답을 구분합니다. Gemini `API_KEY_INVALID`와 OpenAI `insufficient_quota`도 공통 코드로 변환합니다. 키·프롬프트가 포함될 수 있는 공급자 원문 오류와 stack trace는 출력하지 않습니다.
 
-`--timeout-ms` 기본값은 모델 조회 30초, 채팅 120초이며 본문 읽기와 전체 페이지 조회에도 적용합니다. Ctrl-C로 요청을 취소합니다. HTTP 리다이렉트를 따라 인증정보를 전달하지 않습니다. 자동 재시도는 없으므로 채팅 중복 과금을 유발하지 않습니다. 가격 계산·결제 내역 수집은 이번 범위가 아닙니다.
+`--timeout-ms` 기본값은 모델 조회 30초, 채팅 120초이며 본문 읽기와 전체 페이지 조회에도 적용합니다. Ctrl-C로 요청을 취소합니다. HTTP 리다이렉트를 따라 인증정보를 전달하지 않습니다. 수동 요청은 자동 재시도하지 않습니다. 자동 라우팅은 명시적 거절 오류에서만 다른 후보를 시도하며, 타임아웃·네트워크 오류는 중단합니다. 가격 계산과 선택적 계정 조회는 Phase 3 문서를 참고하세요.
 
 ## 공식 자료와 확인 시점
 
@@ -196,4 +206,4 @@ swift test               # 앱 상태, 경로 탐색, Pipe 분리, 종료 및 �
 
 실제 모델 조회 테스트는 Secret Manager 등에서 해당 환경 키를 주입한 후 `NIDUS_LIVE=1 npm run test:live`로 실행합니다. 실제 채팅에는 추가로 `NIDUS_LIVE_CHAT=1` 및 `NIDUS_<PROVIDER>_MODEL`에 조회된 모델 ID를 지정해야 합니다. 실제 요청에는 과금이 발생할 수 있습니다. 테스트는 사용자의 기존 Keychain API 키를 자동으로 읽지 않습니다.
 
-현재 검증: Mock/CLI/engine **42 PASS**, macOS Keychain synthetic **1 PASS**, 실제 터미널 숨김 입력 **PASS**, 실제 Provider 모델 조회·채팅 **8 NOT RUN**. 인증정보가 제공되지 않은 Provider는 실제 검증 완료로 표시하지 않습니다. 자세한 결과는 [검증 기록](docs/CONNECTIVITY_VALIDATION.md), 모듈 경계는 [아키텍처](docs/API_CONNECTIVITY.md)를 참고하세요.
+Connectivity MVP 당시 검증: Mock/CLI/engine **42 PASS**, macOS Keychain synthetic **1 PASS**, 실제 터미널 숨김 입력 **PASS**, 실제 Provider 모델 조회·채팅 **8 NOT RUN**. 인증정보가 제공되지 않은 Provider는 실제 검증 완료로 표시하지 않습니다. 자세한 결과는 [검증 기록](docs/CONNECTIVITY_VALIDATION.md), 모듈 경계는 [아키텍처](docs/API_CONNECTIVITY.md)를 참고하세요.
