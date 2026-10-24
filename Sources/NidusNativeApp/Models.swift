@@ -42,6 +42,7 @@ struct ChatResult: Decodable {
     struct Usage: Decodable { let inputTokens: Int?; let outputTokens: Int?; let totalTokens: Int? }
 }
 struct RoutingResult: Codable {
+    let tier: Int?
     let difficulty: String
     let reason: String
     let boundUSD: String?
@@ -49,6 +50,7 @@ struct RoutingResult: Codable {
     let budgetLevel: String?
     let transitions: [Transition]
     struct Transition: Codable {
+        let tier: Int?
         let provider: String
         let model: String
         let reason: String
@@ -64,6 +66,7 @@ struct RoutePlanResult: Decodable {
     let budget: Budget
     let excluded: [Excluded]
     struct Candidate: Decodable {
+        let tier: Int?
         let model: SelectedModel
         let quote: Quote
         let reason: String
@@ -74,7 +77,7 @@ struct RoutePlanResult: Decodable {
     struct Excluded: Decodable { let reason: String }
     var summary: String {
         guard let first = candidates.first else { return "자동 후보 없음: " + Array(Set(excluded.map(\.reason))).sorted().joined(separator: ", ") }
-        return "예상 선택: \(first.model.provider)/\(first.model.id) · 예약 상한 $\(first.quote.boundUSD ?? "미확인") · 예산 \(budget.level) · 잔여 $\(budget.remainingUSD ?? "미설정")"
+        return "예상 Tier \(first.tier.map(String.init) ?? "미확인"): \(first.model.provider)/\(first.model.id) · 예약 상한 $\(first.quote.boundUSD ?? "미확인") · 예산 \(budget.level) · 잔여 $\(budget.remainingUSD ?? "미설정")"
     }
 }
 struct ProviderState {

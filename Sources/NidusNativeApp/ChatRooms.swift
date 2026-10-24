@@ -161,7 +161,7 @@ struct ChatRoomsView: View {
                 }
             }.disabled(sending)
             if room.automaticRouting ?? false {
-                Text(routeSummary ?? "Normal은 범용 모델, Complex는 고급 모델을 선택합니다. 무료 티어만으로 무료 사용을 보장하지 않습니다. 후보 확인은 API를 호출하지 않습니다.")
+                Text(routeSummary ?? "설정된 Tier 순서로 선택합니다. Tier 및 라우팅 설정에서 순서와 자동 유료 허용을 변경하세요. 무료 티어만으로 무료 사용을 보장하지 않습니다. 후보 확인은 API를 호출하지 않습니다.")
                     .font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
             }
             TextField("이 채팅방의 system prompt (선택)", text: Binding(get: { rooms[index].systemPrompt }, set: { rooms[index].systemPrompt = $0; persist() }))
@@ -226,7 +226,7 @@ struct ChatRoomsView: View {
                 Text(message.createdAt.formatted(date: .omitted, time: .shortened)).font(.caption2).foregroundStyle(.tertiary)
             }
             if let routing = message.routing {
-                Text("자동 \(routing.difficulty) · 예약 상한 $\(routing.boundUSD ?? "미확인") · 추정 비용 $\(routing.estimatedUSD ?? "미확인") · 예산 \(routing.budgetLevel ?? "미확인") · \(routing.summary)")
+                Text("자동 \(routing.difficulty) · Tier \(routing.tier.map(String.init) ?? "이전 기록") · 예약 상한 $\(routing.boundUSD ?? "미확인") · 추정 비용 $\(routing.estimatedUSD ?? "미확인") · 예산 \(routing.budgetLevel ?? "미확인") · \(routing.summary)")
                     .font(.caption2).foregroundStyle(.secondary).textSelection(.enabled)
             }
             Group {

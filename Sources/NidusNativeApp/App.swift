@@ -54,6 +54,7 @@ struct DashboardView: View {
     @State private var selected: Provider? = .openai
     @State private var showHealth = false
     @State private var showUsage = false
+    @State private var showRouting = false
     @State private var showChat = false
     var body: some View {
         NavigationSplitView {
@@ -78,11 +79,13 @@ struct DashboardView: View {
             if let selected { ProviderView(provider: selected).id(selected) }
         }
         .toolbar {
+            Button("Tier 및 라우팅", systemImage: "arrow.triangle.branch") { showRouting = true }.disabled(!dashboard.ready)
             Button("사용량 및 예산", systemImage: "chart.bar") { showUsage = true }.disabled(!dashboard.ready)
             Button("모델 일괄 검사", systemImage: "checkmark.shield") { showHealth = true }.disabled(!dashboard.ready)
                 .help("선택한 범위의 텍스트 모델을 순차 검사합니다. 실패해도 다음 모델로 진행하며 실제 API 비용이 발생할 수 있습니다. 실행 전 대상과 요청 한도를 확인합니다.")
             Button("채팅방", systemImage: "bubble.left.and.bubble.right") { showChat = true }.disabled(!dashboard.ready)
         }
+        .sheet(isPresented: $showRouting) { RoutingSettingsView() }
         .sheet(isPresented: $showUsage) { UsageBudgetView() }
         .sheet(isPresented: $showHealth) { HealthChecksView(initialProvider: selected ?? .openai).environmentObject(dashboard) }
         .sheet(isPresented: $showChat) { ChatRoomsView().environmentObject(dashboard) }

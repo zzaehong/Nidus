@@ -109,7 +109,9 @@ struct UsageSnapshot: Decodable {
 struct UsageBudgetView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var model = UsageBudgetModel()
-    @State private var scope = "total"
+    @State private var scope = "openai"
+    @State private var advancedScope = "total"
+    @State private var advancedAmount = ""
     @State private var amount = ""
     private func usd(_ value: String?) -> String { value.map { "$" + $0 } ?? "미확인" }
     var body: some View {
@@ -124,12 +126,18 @@ struct UsageBudgetView: View {
                 .font(.callout).foregroundStyle(.secondary)
             HStack {
                 Picker("예산", selection: $scope) {
-                    Text("전체 월간").tag("total"); Text("단일 요청").tag("request")
                     ForEach(Provider.allCases) { p in Text(p.name + " 월간").tag(p.rawValue) }
                 }.frame(width: 240)
                 TextField("USD 금액", text: $amount).textFieldStyle(.roundedBorder).frame(width: 150)
                 Button("예산 저장") { Task { await model.save(scope: scope, usd: amount) } }.disabled(model.busy || amount.isEmpty)
                 if model.busy { ProgressView().controlSize(.small) }
+            }
+            DisclosureGroup("고급 설정 · 전체 월간 및 단일 요청 예산") {
+                HStack {
+                    Picker("범위", selection: $advancedScope) { Text("전체 월간").tag("total"); Text("단일 요청").tag("request") }.frame(width: 240)
+                    TextField("USD 금액", text: $advancedAmount).textFieldStyle(.roundedBorder).frame(width: 150)
+                    Button("고급 예산 저장") { Task { await model.save(scope: advancedScope, usd: advancedAmount) } }.disabled(model.busy || advancedAmount.isEmpty)
+                }
             }
             Text("전체 월간·단일 요청 예산을 설정해야 유료 요청이 가능합니다. Provider 한도는 선택 사항이며 0은 차단입니다. 월 기준은 UTC입니다.").font(.caption)
             Text("안전한 예약을 위해 모델의 최대 입력 용량을 사용합니다. Gemini·DeepSeek는 추론을 포함한 최대 출력도 예약하므로 실제 예상 지출보다 클 수 있습니다. 무료 티어가 있어도 무료 잔량은 미확인입니다.")
@@ -139,8 +147,8 @@ struct UsageBudgetView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
                         Text("\(data.month) · 단일 요청 예산 \(usd(data.requestBudgetUSD))").font(.headline)
-                        overview(data.total)
                         ForEach(data.providers) { overview($0) }
+                        DisclosureGroup("전체 월간 사용량") { overview(data.total) }
                         Divider()
                         Text("데이터 출처: \(data.source)").font(.caption)
                         Text("마지막 로컬 기록: \(data.updatedAt ?? "기록 없음")\n마지막 제공업체 조회: \(data.lastProviderSyncAt ?? "동기화 없음")").font(.caption)
