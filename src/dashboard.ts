@@ -25,7 +25,9 @@ export async function dispatch(input: unknown, engine: ConnectivityEngine): Prom
     case "probe":
       if (typeof r.model !== "string" || r.confirmed !== true || (r.allowInferred !== undefined && typeof r.allowInferred !== "boolean"))
         throw new NidusError("invalid_request", "Confirm probe cost and select a discovered model.");
-      return engine.probe(provider, r.model, r.allowInferred === true);
+      return engine.probe(provider, r.model, r.allowInferred === true, { remainingUSD: r.remainingUSD as number, allowUnknownPrice: r.allowUnknownPrice as boolean | undefined });
+    case "chat.preflight":
+      return engine.preflight(provider, r.request as ChatRequest);
     case "chat":
       if (!r.request || typeof r.request !== "object") throw new NidusError("invalid_request", "Invalid chat request.");
       return engine.chat(provider, r.request as ChatRequest, { timeoutMs: 120_000 });

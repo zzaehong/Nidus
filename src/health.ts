@@ -1,5 +1,6 @@
 import { classifyModel } from "./classification.js";
 import { publicError } from "./errors.js";
+import { PROBE_OUTPUT_LIMIT } from "./pricing.js";
 import type { Model, ChatResponse, ChatRequest, RequestOptions, Usage } from "./types.js";
 
 export interface ProbeResult {
@@ -21,7 +22,7 @@ export async function probeModel(model: Model, allowInferred: boolean,
     return { ...base, status: "skipped", reason: classification.textProbe === "opt_in" ? "Inferred text model requires explicit opt-in." : "No probe implemented for this model type; not a model failure." };
   }
   try {
-    const response = await chat({ model: model.id, messages: [{ role: "user", content: "Reply with OK." }], maxOutputTokens: 256 }, { timeoutMs: 30_000 });
+    const response = await chat({ model: model.id, messages: [{ role: "user", content: "Reply with OK." }], maxOutputTokens: PROBE_OUTPUT_LIMIT }, { timeoutMs: 30_000 });
     const passed = response.text.trim().length > 0;
     return { ...base, status: passed ? "passed" : "failed", reason: passed ? "Non-empty text response received; text endpoint only." : "No visible text within the probe budget; model health is inconclusive.", usage: response.usage, durationMs: Date.now() - started };
   } catch (error) {

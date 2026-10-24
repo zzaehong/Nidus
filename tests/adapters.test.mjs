@@ -49,6 +49,8 @@ test('Anthropic paginates, maps capabilities and includes cache reads/writes in 
   assert.equal(result.usage.providerUsage.input_tokens, 3);
   assert.equal(mock.requests[1].url, '/models?after_id=first');
   assert.equal(mock.requests[0].headers['anthropic-version'], '2026-10-21');
+  assert.ok(mock.requests.every(r => r.headers['anthropic-version'] === '2026-10-21'));
+  for (const removed of ['temperature', 'top_p', 'top_k']) assert.equal(mock.requests[3].body[removed], undefined);
   assert.equal(mock.requests[3].body.system, request.system); assert.equal(mock.requests[3].body.max_tokens, 100);
 });
 

@@ -1,56 +1,24 @@
-import type { ProviderId } from "./types.js";
+// Policy is separate from the manually reviewed snapshot. Never fuzzy-match model IDs.
+export { priceFor, pricesFor, pricingSources } from "./pricing-snapshot.js";
+export type { Price, Rate } from "./pricing-snapshot.js";
+import { priceFor } from "./pricing-snapshot.js";
+import type { ProviderId, Usage } from "./types.js";
 
-export interface Rate {
-  tier: string;
-  input: number;
-  output: number;
-  cachedInput: number | null;
-  conditions: string;
+export const PROBE_INPUT_ESTIMATE = 128; // Fixed short prompt + conservative protocol overhead, not tokenizer output.
+export const PROBE_OUTPUT_LIMIT = 256;
+export function estimateCost(provider: ProviderId, model: string, input: number | null, output: number | null): number | null {
+  const price = priceFor(provider, model);
+  if (price.status !== "verified_snapshot" || !price.rates.length || input === null || output === null ||
+      !Number.isFinite(input) || !Number.isFinite(output) || input < 0 || output < 0) return null;
+  // Highest documented tier, no free-tier or cache-read discount. Not a billing guarantee.
+  return (input * Math.max(...price.rates.map(r => r.input)) + output * Math.max(...price.rates.map(r => r.output))) / 1_000_000;
 }
-export interface Price {
-  provider: ProviderId;
-  model: string;
-  status: "verified_snapshot" | "unknown";
-  currency: "USD";
-  unit: "per_million_tokens";
-  freeTier: "available" | "unavailable" | "unknown";
-  sourceUrl: string;
-  checkedAt: string | null;
-  rates: Rate[];
-  notes: string;
+export function probeEstimate(provider: ProviderId, model: string) {
+  return { usd: estimateCost(provider, model, PROBE_INPUT_ESTIMATE, PROBE_OUTPUT_LIMIT), inputTokens: PROBE_INPUT_ESTIMATE,
+    outputTokens: PROBE_OUTPUT_LIMIT, guaranteed: false };
 }
-export const pricingSources: Record<ProviderId, string> = {
-  openai: "https://developers.openai.com/api/docs/pricing",
-  anthropic: "https://platform.claude.com/docs/en/about-claude/pricing",
-  gemini: "https://ai.google.dev/gemini-api/docs/pricing",
-  deepseek: "https://api-docs.deepseek.com/quick_start/pricing/"
-};
-const checkedAt = "2026-10-23T01:19:10Z";
-function entry(provider: ProviderId, model: string, rates: Rate[], freeTier: Price["freeTier"] = "unknown", sourceUrl = pricingSources[provider], notes = "Standard text requests only; excludes tools, cache storage/write, batch and negotiated discounts."): Price {
-  return { provider, model, status: "verified_snapshot", currency: "USD", unit: "per_million_tokens", freeTier, sourceUrl, checkedAt, rates, notes };
+export function usageCost(provider: ProviderId, model: string, usage: Usage | null): number | null {
+  // Cache writes can carry additional fees not represented by the base input rate.
+  if (!usage || (usage.cacheWriteTokens ?? 0) > 0) return null;
+  return estimateCost(provider, model, usage.inputTokens, usage.outputTokens);
 }
-const standard = (input: number, output: number, cachedInput: number): Rate[] => [{ tier: "standard", input, output, cachedInput, conditions: "Direct API, text tokens, standard service." }];
-// Explicit price records are not a model catalog and never create available models.
-// Exact IDs only: no fuzzy aliases, prefix matches, or guessed snapshot prices.
-const registry: Price[] = [
-  entry("openai", "gpt-4.1-mini", standard(0.4, 1.6, 0.1), "unavailable", "https://developers.openai.com/api/docs/models/gpt-4.1-mini"),
-  entry("openai", "gpt-4.1-mini-2025-04-14", standard(0.4, 1.6, 0.1), "unavailable", "https://developers.openai.com/api/docs/models/gpt-4.1-mini"),
-  entry("anthropic", "claude-sonnet-4-6", standard(3, 15, 0.3)),
-  entry("anthropic", "claude-opus-4-6", standard(5, 25, 0.5)),
-  entry("gemini", "gemini-3.5-flash-lite", standard(0.3, 2.5, 0.03), "available"),
-  entry("gemini", "gemini-2.5-flash", standard(0.3, 2.5, 0.03), "available", pricingSources.gemini, "Text standard tier; output includes thinking. Free tier has account/region/usage limits; cache storage billed separately. Availability still comes from Models API."),
-  entry("deepseek", "deepseek-flash", [
-    { tier: "peak", input: 0.3, output: 1.2, cachedInput: 0.006, conditions: "01:00–04:00 and 06:00–10:00 UTC Mon–Fri, excluding Chinese public holidays." },
-    { tier: "off_peak", input: 0.15, output: 0.6, cachedInput: 0.003, conditions: "All other hours; no automatic holiday/time-based rate selection." }
-  ]),
-  entry("deepseek", "deepseek-v4-pro", [
-    { tier: "peak", input: 1.32, output: 3.96, cachedInput: 0.044, conditions: "01:00–04:00 and 06:00–10:00 UTC Mon–Fri, excluding Chinese public holidays." },
-    { tier: "off_peak", input: 0.66, output: 1.98, cachedInput: 0.022, conditions: "All other hours; no automatic holiday/time-based rate selection." }
-  ])
-];
-export function priceFor(provider: ProviderId, model: string): Price {
-  return structuredClone(registry.find(p => p.provider === provider && p.model === model) ?? {
-    provider, model, status: "unknown", currency: "USD", unit: "per_million_tokens", freeTier: "unknown", sourceUrl: pricingSources[provider], checkedAt: null, rates: [], notes: "No reviewed price record for this exact model ID. Unknown is not zero or free."
-  });
-}
-export function pricesFor(provider: ProviderId): Price[] { return structuredClone(registry.filter(p => p.provider === provider)); }

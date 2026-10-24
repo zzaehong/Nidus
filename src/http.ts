@@ -45,15 +45,17 @@ export class HttpClient {
       if (!response.ok) {
         // Never expose raw provider errors: they can echo keys, headers or prompts.
         const status = response.status;
-        let quota = status === 402, invalidKey = status === 401;
+        let quota = status === 402, invalidKey = status === 401, versionError = false;
         try {
           const raw = object(JSON.parse(await readBody(response, 1024 * 1024)));
           const e = optionalObject(raw.error);
+          versionError = status === 400 && !!headers["anthropic-version"] && e.type === "invalid_request_error" &&
+            typeof e.message === "string" && /anthropic[-_ ]version/i.test(e.message);
           quota ||= e.code === "insufficient_quota" || e.type === "insufficient_quota";
           invalidKey ||= Array.isArray(e.details) && e.details.some(detail => detail && typeof detail === "object" && (detail as Record<string, unknown>).reason === "API_KEY_INVALID");
         } catch { /* HTTP status remains sufficient when error JSON is absent or invalid. */ }
         signal.throwIfAborted();
-        const code = invalidKey ? "authentication" : status === 403 ? "permission" : quota ? "quota" : status === 429 ? "rate_limit" : status === 404 ? "not_found" : status === 400 || status === 422 ? "invalid_request" : "provider_error";
+        const code = invalidKey ? "authentication" : status === 403 ? "permission" : versionError ? "api_version" : quota ? "quota" : status === 429 ? "rate_limit" : status === 404 ? "not_found" : status === 400 || status === 422 ? "invalid_request" : "provider_error";
         const retry = response.headers.get("retry-after");
         throw new NidusError(code, `Provider request failed (HTTP ${status}, ${code}).`, status, retry && /^\d{1,9}$/.test(retry) ? retry : null);
       }

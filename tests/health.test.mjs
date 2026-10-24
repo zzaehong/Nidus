@@ -73,6 +73,6 @@ test('engine reclassifies legacy cache; probe requires discovered ID, confirmati
   await assert.rejects(engine.probe('openai', 'invented', true));
   assert.equal((await engine.probe('openai', 'gpt-example')).status, 'skipped');
   assert.equal((await engine.probe('openai', 'gpt-image-example', true)).status, 'skipped'); assert.equal(readKeys, 0);
-  assert.equal((await dispatch({ method: 'probe', provider: 'openai', model: 'gpt-example', confirmed: true, allowInferred: true }, engine)).status, 'passed');
+  assert.equal((await dispatch({ method: 'probe', provider: 'openai', model: 'gpt-example', confirmed: true, allowInferred: true, remainingUSD: 1, allowUnknownPrice: true }, engine)).status, 'passed');
   assert.equal(requests, 1); assert.equal(readKeys, 1);
 });
