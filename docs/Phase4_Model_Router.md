@@ -1,5 +1,8 @@
 # Phase 4 — Task-Aware Model Router
 
+이 문서는 Phase 4 당시 구현·검증 기록입니다. 현재 난이도별 Tier 순서와 자동 유료 허용 정책은
+[Phase 4.1](Phase4_1_Tier_Router.md)에서 확장·변경했습니다.
+
 2026-10-24, `feature/usage-ledger-budget-guard`에서 Phase 3 위에 구현. `develop` 병합하지 않음.
 
 ## 실행과 정책

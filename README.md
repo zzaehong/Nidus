@@ -28,15 +28,21 @@ nidus usage
 설정, 공식 가격 검증 출처, 관리자 키 정책, 테스트와 제한은
 [Phase 3 설계·검증 문서](docs/Phase3_Usage_Budget.md)를 참고하세요.
 
-## Phase 4: 작업 난이도 기반 자동 라우팅
+## Phase 4.1: 사용자 설정 Tier 라우팅
 
 채팅방에서 **자동 라우팅**을 켜고 Simple / Normal(기본) / Complex를 선택할 수 있습니다.
 **후보·예산 확인**은 로컬 조회만 실행합니다. 실제 선택 모델과 전환 사유, 예약 상한·추정 비용을 표시하며
 모든 호출은 Phase 3 Budget Guard를 거칩니다. CLI는 `nidus chat --auto --difficulty normal`입니다.
 
-가격·등급 미확인은 자동 선택에서 제외하고, Complex는 예산 부족을 이유로 경량 모델에 보내지 않습니다.
+툴바 **Tier 및 라우팅**에서 모델 Tier와 난이도별 순서를 변경합니다. 기본 순서는 Simple 1→2,
+Normal 2→1, Complex 3→2이며, Tier 순서는 비용보다 우선합니다. 허용하지 않은 Tier로 전환하지 않습니다.
+
+**자동 유료 API 사용 허용**은 초기 꺼짐입니다. 설정에서 명시적으로 켜고 예산을 설정해야 자동 유료
+호출이 가능합니다. Provider별 예산을 우선 표시하며 전체·단일 요청 예산은 고급 설정에 있습니다.
+가격 또는 Tier 미확인은 자동 선택에서 제외합니다.
 타임아웃·네트워크 오류에서는 자동 전환을 중단합니다. 무료 티어만으로 무료 사용을 가정하지 않습니다.
-정책, 공식 출처, 검증 결과와 제한은 [Phase 4 문서](docs/Phase4_Model_Router.md)에 정리했습니다.
+현재 설정·정책·마이그레이션은 [Phase 4.1 문서](docs/Phase4_1_Tier_Router.md), 기존 검증 이력과
+공식 출처는 [Phase 4 문서](docs/Phase4_Model_Router.md)에 정리했습니다.
 
 ## 설치와 시작
 
