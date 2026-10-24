@@ -16,6 +16,11 @@ struct APIModel: Decodable, Identifiable {
     let capabilities: Capabilities
     let pricing: Price
     let classification: ModelClassification?
+    var usableForTextChat: Bool {
+        guard capabilities.chat != "unsupported", classification?.kind == "text",
+              ["supported", "opt_in"].contains(classification?.textProbe ?? "unsupported") else { return false }
+        return !id.localizedCaseInsensitiveContains("computer-use")
+    }
     struct Capabilities: Decodable { let chat: String; let streaming: String; let tools: String; let vision: String }
     struct Price: Decodable {
         let status: String

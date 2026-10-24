@@ -74,11 +74,11 @@ struct ChatRoomsView: View {
     private var selectedIndex: Int? { rooms.firstIndex { $0.id == selectedID } }
     private var activeRoom: ChatRoom? { selectedIndex.map { rooms[$0] } }
     private var activeModels: [APIModel] {
-        (dashboard.states[activeRoom?.provider ?? .openai]?.models ?? []).filter { $0.capabilities.chat != "unsupported" }
+        (dashboard.states[activeRoom?.provider ?? .openai]?.models ?? []).filter(\.usableForTextChat)
     }
     private var readyProviders: [Provider] {
         Provider.allCases.filter { provider in
-            (dashboard.states[provider]?.models ?? []).contains { $0.capabilities.chat != "unsupported" }
+            (dashboard.states[provider]?.models ?? []).contains(where: \.usableForTextChat)
         }
     }
 
@@ -136,7 +136,9 @@ struct ChatRoomsView: View {
                     ForEach(readyProviders, id: \.self) { Text($0.name).tag($0) }
                 }.frame(width: 210)
                 Picker("모델", selection: Binding(get: { rooms[index].model }, set: { rooms[index].model = $0; rooms[index].updatedAt = Date(); persist() })) {
-                    ForEach(activeModels) { Text($0.name).tag($0.id) }
+                    ForEach(activeModels) { model in
+                        Text(model.name + (model.classification?.confidence == "inferred" ? " · 추정" : "")).tag(model.id)
+                    }
                 }.frame(width: 280)
             }
             TextField("이 채팅방의 system prompt (선택)", text: Binding(get: { rooms[index].systemPrompt }, set: { rooms[index].systemPrompt = $0; persist() }))
@@ -146,6 +148,9 @@ struct ChatRoomsView: View {
                     Label("연결된 모델이 없습니다", systemImage: "key").font(.headline)
                     Text("대시보드에서 Provider API Key를 등록하고 모델 목록을 조회해주세요.").font(.caption).foregroundStyle(.secondary)
                 }.frame(maxWidth: .infinity).padding(12)
+            } else if activeModels.isEmpty {
+                Label("이 Provider에 텍스트 채팅용으로 분류된 모델이 없습니다. 다른 Provider를 선택하세요.", systemImage: "info.circle")
+                    .font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
             }
             ScrollViewReader { proxy in
                 ScrollView {
@@ -251,7 +256,7 @@ struct ChatRoomsView: View {
     private func createRoom() {
         guard !sending, storageError == nil else { return }
         let provider = readyProviders.first ?? .openai
-        let model = dashboard.states[provider]?.models.first(where: { $0.capabilities.chat != "unsupported" })?.id ?? ""
+        let model = dashboard.states[provider]?.models.first(where: \.usableForTextChat)?.id ?? ""
         rooms.insert(ChatRoom(provider: provider, model: model), at: 0)
         selectedID = rooms[0].id
         persist()
@@ -269,7 +274,7 @@ struct ChatRoomsView: View {
     }
     private func selectProvider(_ provider: Provider, at index: Int) {
         rooms[index].provider = provider
-        rooms[index].model = dashboard.states[provider]?.models.first(where: { $0.capabilities.chat != "unsupported" })?.id ?? ""
+        rooms[index].model = dashboard.states[provider]?.models.first(where: \.usableForTextChat)?.id ?? ""
         rooms[index].updatedAt = Date(); persist()
     }
     private func persist() {
