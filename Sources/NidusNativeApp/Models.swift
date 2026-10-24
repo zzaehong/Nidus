@@ -34,9 +34,48 @@ struct APIModel: Decodable, Identifiable {
 }
 struct ModelResult: Decodable { let source: String; let fetchedAt: String?; let models: [APIModel] }
 struct ChatResult: Decodable {
+    let provider: Provider?
+    let model: String?
+    let routing: RoutingResult?
     let text: String
     let usage: Usage
     struct Usage: Decodable { let inputTokens: Int?; let outputTokens: Int?; let totalTokens: Int? }
+}
+struct RoutingResult: Codable {
+    let difficulty: String
+    let reason: String
+    let boundUSD: String?
+    let estimatedUSD: String?
+    let budgetLevel: String?
+    let transitions: [Transition]
+    struct Transition: Codable {
+        let provider: String
+        let model: String
+        let reason: String
+        let status: String
+        let budget: String
+    }
+    var summary: String {
+        transitions.map { "\($0.provider)/\($0.model): \($0.reason) · \($0.status) · \($0.budget)" }.joined(separator: " → ")
+    }
+}
+struct RoutePlanResult: Decodable {
+    let candidates: [Candidate]
+    let budget: Budget
+    let excluded: [Excluded]
+    struct Candidate: Decodable {
+        let model: SelectedModel
+        let quote: Quote
+        let reason: String
+    }
+    struct SelectedModel: Decodable { let provider: String; let id: String }
+    struct Quote: Decodable { let boundUSD: String? }
+    struct Budget: Decodable { let level: String; let remainingUSD: String? }
+    struct Excluded: Decodable { let reason: String }
+    var summary: String {
+        guard let first = candidates.first else { return "자동 후보 없음: " + Array(Set(excluded.map(\.reason))).sorted().joined(separator: ", ") }
+        return "예상 선택: \(first.model.provider)/\(first.model.id) · 예약 상한 $\(first.quote.boundUSD ?? "미확인") · 예산 \(budget.level) · 잔여 $\(budget.remainingUSD ?? "미설정")"
+    }
 }
 struct ProviderState {
     var models: [APIModel] = []

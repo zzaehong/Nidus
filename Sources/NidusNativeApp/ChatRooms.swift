@@ -10,6 +10,7 @@ struct ChatMessage: Codable, Identifiable {
     var inputTokens: Int?
     var outputTokens: Int?
     var createdAt: Date
+    var routing: RoutingResult?
     var failed: Bool
     init(role: String, content: String, provider: Provider? = nil, model: String? = nil,
          inputTokens: Int? = nil, outputTokens: Int? = nil, failed: Bool = false) {
@@ -25,6 +26,8 @@ struct ChatRoom: Codable, Identifiable {
     var systemPrompt: String
     var provider: Provider
     var model: String
+    var automaticRouting: Bool?
+    var difficulty: String?
     var messages: [ChatMessage]
     var updatedAt: Date
     init(provider: Provider = .openai, model: String = "") {
@@ -70,6 +73,8 @@ struct ChatRoomsView: View {
     @State private var rawMessageIDs = Set<UUID>()
     @State private var maxTokens = "1024"
     @State private var sending = false
+    @State private var routeSummary: String?
+    @State private var previewing = false
     private let store = ChatRoomStore.application
 
     private var selectedIndex: Int? { rooms.firstIndex { $0.id == selectedID } }
@@ -139,20 +144,35 @@ struct ChatRoomsView: View {
                 Spacer()
                 Picker("Provider", selection: Binding(get: { rooms[index].provider }, set: { selectProvider($0, at: index) })) {
                     ForEach(readyProviders, id: \.self) { Text($0.name).tag($0) }
-                }.frame(width: 210)
+                }.frame(width: 210).disabled((room.automaticRouting ?? false) || sending)
                 Picker("모델", selection: Binding(get: { rooms[index].model }, set: { rooms[index].model = $0; rooms[index].updatedAt = Date(); persist() })) {
                     ForEach(activeModels) { model in Text(model.name + " · 검사 통과").tag(model.id) }
-                }.frame(width: 280)
+                }.frame(width: 280).disabled((room.automaticRouting ?? false) || sending)
+            }
+            HStack {
+                Toggle("자동 라우팅", isOn: Binding(get: { rooms[index].automaticRouting ?? false }, set: { rooms[index].automaticRouting = $0; routeSummary = nil; persist() }))
+                Picker("작업 난이도", selection: Binding(get: { rooms[index].difficulty ?? "normal" }, set: { rooms[index].difficulty = $0; routeSummary = nil; persist() })) {
+                    Text("Simple").tag("simple")
+                    Text("Normal").tag("normal")
+                    Text("Complex").tag("complex")
+                }.frame(width: 220).disabled(!(room.automaticRouting ?? false))
+                if room.automaticRouting ?? false {
+                    Button("후보·예산 확인") { preview(index: index) }.disabled(previewing || sending)
+                }
+            }.disabled(sending)
+            if room.automaticRouting ?? false {
+                Text(routeSummary ?? "Normal은 범용 모델, Complex는 고급 모델을 선택합니다. 무료 티어만으로 무료 사용을 보장하지 않습니다. 후보 확인은 API를 호출하지 않습니다.")
+                    .font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
             }
             TextField("이 채팅방의 system prompt (선택)", text: Binding(get: { rooms[index].systemPrompt }, set: { rooms[index].systemPrompt = $0; persist() }))
                 .textFieldStyle(.roundedBorder)
-            if readyProviders.isEmpty {
+            if !(room.automaticRouting ?? false) && readyProviders.isEmpty {
                 VStack(spacing: 8) {
                     Label("동작 검사 통과 모델이 없습니다", systemImage: "checkmark.seal").font(.headline)
                     Text("Provider를 연결하고 모델 일괄 동작 검사를 실행한 뒤 채팅을 시작하세요.")
                         .font(.caption).foregroundStyle(.secondary)
                 }.frame(maxWidth: .infinity).padding(12)
-            } else if activeModels.isEmpty {
+            } else if !(room.automaticRouting ?? false) && activeModels.isEmpty {
                     Label("이 Provider에는 동작 검사를 통과한 텍스트 모델이 없습니다. 먼저 모델 일괄 검사를 실행하세요.", systemImage: "info.circle")
                         .font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -205,6 +225,10 @@ struct ChatRoomsView: View {
                 }
                 Text(message.createdAt.formatted(date: .omitted, time: .shortened)).font(.caption2).foregroundStyle(.tertiary)
             }
+            if let routing = message.routing {
+                Text("자동 \(routing.difficulty) · 예약 상한 $\(routing.boundUSD ?? "미확인") · 추정 비용 $\(routing.estimatedUSD ?? "미확인") · 예산 \(routing.budgetLevel ?? "미확인") · \(routing.summary)")
+                    .font(.caption2).foregroundStyle(.secondary).textSelection(.enabled)
+            }
             Group {
                 if message.role == "assistant" && !rawMessageIDs.contains(message.id) {
                     MarkdownPreview(source: message.content)
@@ -220,9 +244,8 @@ struct ChatRoomsView: View {
     private func canSend(index: Int) -> Bool {
         guard !sending, storageError == nil, dashboard.ready, index < rooms.count,
               !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              let count = Int(maxTokens), (1...32768).contains(count), !activeModels.isEmpty,
-              activeModels.contains(where: { $0.id == rooms[index].model }) else { return false }
-        return true
+              let count = Int(maxTokens), (1...32768).contains(count) else { return false }
+        return (rooms[index].automaticRouting ?? false) || activeModels.contains(where: { $0.id == rooms[index].model })
     }
 
     private func send(index: Int) {
@@ -239,17 +262,21 @@ struct ChatRoomsView: View {
         let model = rooms[index].model
         let system = rooms[index].systemPrompt
         let messages = rooms[index].messages.filter { !$0.failed }.suffix(100).map { ["role": $0.role, "content": $0.content] }
+        let automatic = rooms[index].automaticRouting ?? false
+        let difficulty = rooms[index].difficulty ?? "normal"
         let tokenLimit = Int(maxTokens) ?? 1024
         sending = true
         Task { @MainActor in
             defer { sending = false }
             do {
-                let data = try await dashboard.transport(["method": "chat", "provider": provider.rawValue,
+                let data = try await dashboard.transport(["method": automatic ? "auto-chat" : "chat", "provider": provider.rawValue, "difficulty": difficulty,
                     "request": ["model": model, "system": system, "messages": messages, "maxOutputTokens": tokenLimit]])
                 let result = try JSONDecoder().decode(ChatResult.self, from: data)
                 guard let roomIndex = rooms.firstIndex(where: { $0.id == roomID }) else { return }
-                rooms[roomIndex].messages.append(ChatMessage(role: "assistant", content: result.text, provider: provider, model: model,
-                                                             inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens))
+                var reply = ChatMessage(role: "assistant", content: result.text, provider: result.provider ?? provider, model: result.model ?? model,
+                                        inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens)
+                reply.routing = result.routing
+                rooms[roomIndex].messages.append(reply)
                 rooms[roomIndex].updatedAt = Date()
                 do { try store.save(rooms) }
                 catch { storageError = "응답은 도착했지만 채팅 기록 저장에 실패했습니다." }
@@ -260,6 +287,22 @@ struct ChatRoomsView: View {
                 try? store.save(rooms)
                 sendError = error.localizedDescription
             }
+        }
+    }
+
+    private func preview(index: Int) {
+        let room = rooms[index]
+        let messages = room.messages.filter { !$0.failed }.suffix(99).map { ["role": $0.role, "content": $0.content] }
+            + [["role": "user", "content": draft.isEmpty ? "Preview" : draft]]
+        previewing = true
+        Task { @MainActor in
+            defer { previewing = false }
+            do {
+                let data = try await dashboard.transport(["method": "route-plan", "difficulty": room.difficulty ?? "normal",
+                    "request": ["model": "automatic", "system": room.systemPrompt, "messages": messages, "maxOutputTokens": Int(maxTokens) ?? 1024]])
+                guard selectedID == room.id else { return }
+                routeSummary = try JSONDecoder().decode(RoutePlanResult.self, from: data).summary + " · 실제 전송 직전에 예산을 다시 검사합니다."
+            } catch { routeSummary = error.localizedDescription }
         }
     }
 
