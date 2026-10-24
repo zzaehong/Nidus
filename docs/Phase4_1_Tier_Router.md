@@ -1,5 +1,8 @@
 # Phase 4.1 — 사용자 설정 Tier Router
 
+이 문서는 최초 Phase 4.1 구현 기록입니다. 이후 추가한 모델 Tier 재검증, 무료 상태와 모델별 승인,
+드래그 순서 변경 및 schema 4는 [추가 개선 문서](Phase4_1_Free_Use.md)를 참고하세요.
+
 2026-10-25 KST. 작업 브랜치 `feature/usage-ledger-budget-guard`.
 Phase 3 장부·가격·예산 Guard와 Phase 4 엔진·전환 기록을 확장한다. develop에 병합하지 않는다.
 
