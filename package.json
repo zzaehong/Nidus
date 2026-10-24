@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22.0.0" },
+  "engines": { "node": ">=22.13.0" },
   "bin": { "nidus": "bin/nidus.mjs" },
   "scripts": {
     "build:app": "npm run build && npm run build:keychain && node scripts/build-app.mjs",

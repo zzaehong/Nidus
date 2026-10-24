@@ -1,3 +1,6 @@
+import { UsageLedger, type TaskKind } from "./ledger.js";
+import { deepseekBalance, usageCapabilities, accountReport, adminCredential } from "./provider-usage.js";
+import { validateChatRequest } from "./adapters/base.js";
 import { adapters } from "./adapters/index.js";
 import { classifyModel } from "./classification.js";
 import { probeModel } from "./health.js";
@@ -9,7 +12,22 @@ import type { ModelSnapshot, ModelStore } from "./storage.js";
 import { providerIds, type ChatRequest, type ProviderAdapter, type ProviderId, type RequestOptions } from "./types.js";
 
 export class ConnectivityEngine {
-  constructor(private readonly credentials: CredentialStore, private readonly store: ModelStore, private readonly registry: Record<ProviderId, ProviderAdapter> = adapters()) {}
+  constructor(private readonly credentials: CredentialStore, private readonly store: ModelStore, private readonly registry: Record<ProviderId, ProviderAdapter> = adapters(), private ledger?: UsageLedger) {}
+  private usageLedger() { return this.ledger ??= new UsageLedger(); }
+  usage() { return { ...this.usageLedger().snapshot(), capabilities: usageCapabilities }; }
+  setBudget(scope: unknown, usd: unknown) { this.usageLedger().setBudget(scope, usd); return this.usage(); }
+  async syncAccount(provider: ProviderId) {
+    if (provider !== 'openai' && provider !== 'anthropic') throw new NidusError('unsupported', 'No connected organization billing API for this provider.');
+    const report = await accountReport(provider, adminCredential(provider));
+    this.usageLedger().saveAccountReport(report);
+    return this.usage();
+  }
+  async syncBalance(provider: ProviderId) {
+    if (provider !== "deepseek") throw new NidusError("unsupported", "Account billing credentials are not connected. Local estimates remain available.");
+    const balance = await deepseekBalance(await this.key(provider));
+    this.usageLedger().saveBalance(provider, balance.usd, balance.source);
+    return this.usage();
+  }
   providers() { return providerIds.map(id => ({ id, authentication: "api-key", streamingImplemented: false, toolExecutionImplemented: false })); }
   async cachedModels(provider: ProviderId) {
     const saved = await this.store.load(provider);
@@ -55,13 +73,33 @@ export class ConnectivityEngine {
     const saved = await this.store.load(provider);
     const known = saved?.models.find(m => m.id === request.model);
     if (known?.capabilities.chat === "unsupported") throw new NidusError("unsupported", "This model does not support the adapter's text generation endpoint.");
-    return this.registry[provider].chat(await this.key(provider), request, options);
+    return this.execute(provider, request, "chat", options);
   }
+  private async execute(provider: ProviderId, request: ChatRequest, task: TaskKind, options: RequestOptions = {}) {
+    validateChatRequest(request);
+    if (options.budgetException !== undefined && typeof options.budgetException !== "boolean") throw new NidusError("invalid_request", "Explicit exception approval must be boolean.");
+    if (options.signal?.aborted) throw new NidusError("cancelled", "Request cancelled before dispatch.");
+    const key = await this.key(provider);
+    const ledger = this.usageLedger();
+    const reservation = ledger.reserve(provider, request, task, options.budgetException === true);
+    let headers: Record<string, string> = {};
+    let result;
+    try {
+      result = await this.registry[provider].chat(key, request, { ...options, onHeaders: value => { headers = value; } });
+    } catch (error) {
+      ledger.settle(reservation, error instanceof NidusError && error.code === "cancelled" ? "cancelled" : "failed", error instanceof NidusError ? error.usage : null, headers);
+      throw error;
+    }
+    // Keep database failures outside the adapter catch: never retry a settlement or request.
+    ledger.settle(reservation, "succeeded", result.usage, headers);
+    return { ...result, requestId: reservation.id, budget: ledger.snapshot().total };
+  }
+
   async disconnect(provider: ProviderId) { await this.credentials.delete(provider); await this.store.remove(provider); return { provider, disconnected: true }; }
   async probe(provider: ProviderId, model: string, allowInferred = false) {
     const saved = await this.store.load(provider);
     const known = saved?.models.find(m => m.id === model);
     if (!known) throw new NidusError("invalid_request", "Refresh models before testing a discovered model.");
-    return probeModel(known, allowInferred, async (request, options) => this.registry[provider].chat(await this.key(provider), request, options));
+    return probeModel(known, allowInferred, async (request, options) => this.execute(provider, request, "probe", options));
   }
 }

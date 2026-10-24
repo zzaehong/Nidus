@@ -11,8 +11,12 @@ export async function dispatch(input: unknown, engine: ConnectivityEngine): Prom
   if (!input || typeof input !== "object") throw new NidusError("invalid_request", "Invalid dashboard request.");
   const r = input as Record<string, unknown>;
   if (r.method === "ping") return { ready: true };
+  if (r.method === "usage") return engine.usage();
+  if (r.method === "budget-set") return engine.setBudget(r.scope, r.usd);
   const provider = providerId(typeof r.provider === "string" ? r.provider : "");
   switch (r.method) {
+    case "account-sync": return engine.syncAccount(provider);
+    case "balance-sync": return engine.syncBalance(provider);
     case "cached": return engine.cachedModels(provider);
     case "connect":
       if (typeof r.key !== "string") throw new NidusError("missing_key", "API Key is required.");

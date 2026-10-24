@@ -1,3 +1,4 @@
+import { fundedLedger } from './helpers/ledger.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { mkdtemp, readFile, stat, rm, readdir } from 'node:fs/promises';
@@ -11,7 +12,7 @@ function fixture() {
   const credentials = { get: async p => secrets.get(p) ?? null, set: async (p, k) => { secrets.set(p, k); }, delete: async p => { secrets.delete(p); } };
   const store = { load: async p => cache.get(p) ?? null, save: async s => { cache.set(s.provider, s); }, remove: async p => { cache.delete(p); } };
   const adapter = { id: 'gemini', listModels: async key => { calls++; if (fail || key === 'invalid') throw new NidusError('authentication', 'Invalid credentials'); return [structuredClone(model)]; }, getModel: async () => structuredClone(model), chat: async () => ({ text: 'OK' }) };
-  const engine = new ConnectivityEngine(credentials, store, { gemini: adapter });
+  const engine = new ConnectivityEngine(credentials, store, { gemini: adapter }, fundedLedger());
   return { engine, cache, secrets, credentials, calls: () => calls, fail: () => { fail = true; } };
 }
 test('connect validates before persisting, refresh updates, failure preserves old registration', async () => {
@@ -34,7 +35,7 @@ test('ephemeral connect never writes credentials, unknown capabilities remain se
   const f = fixture(); await f.engine.connect('gemini', 'key', false); assert.equal(f.secrets.size, 0);
   f.secrets.set('gemini', 'key');
   f.cache.get('gemini').models[0].capabilities.chat = 'unknown';
-  assert.equal((await f.engine.chat('gemini', { model: model.id, messages: [{ role: 'user', content: 'hi' }] })).text, 'OK');
+  await assert.rejects(f.engine.chat('gemini', { model: model.id, messages: [{ role: 'user', content: 'hi' }] }), e => e.code === 'budget');
   f.cache.get('gemini').models[0].capabilities.chat = 'unsupported';
   await assert.rejects(f.engine.chat('gemini', { model: model.id, messages: [] }), e => e.code === 'unsupported');
 });
