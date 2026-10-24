@@ -15,6 +15,7 @@ export async function dispatch(input: unknown, engine: ConnectivityEngine): Prom
   if (r.method === 'routing-settings') return engine.routingSettings();
   if (r.method === 'routing-policy-set') return engine.setRoutingPolicy(r.difficulty, r.tiers);
   if (r.method === 'automatic-paid-set') return engine.setAutomaticPaid(r.allowed);
+  if (r.method === 'free-use-set') return engine.setFreeUse(providerId(typeof r.provider === 'string' ? r.provider : ''), r.model, r.status, r.approved, r.accountConfirmed, r.chargeRiskAccepted);
   if (r.method === 'model-tier-set') return engine.setModelTier(providerId(typeof r.provider === 'string' ? r.provider : ''), r.model, r.tier);
   if (r.method === "budget-set") return engine.setBudget(r.scope, r.usd);
   if (r.method === "route-plan" || r.method === "auto-chat") {

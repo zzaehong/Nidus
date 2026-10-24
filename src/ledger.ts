@@ -23,7 +23,7 @@ export class UsageLedger {
     this.db = new DatabaseSync(path);
     if (path !== ':memory:') chmodSync(path, 0o600);
     const schema = this.db.prepare('PRAGMA user_version').get() as { user_version: number };
-    if (schema.user_version > 3) { this.db.close(); throw new NidusError('storage', 'Usage ledger schema is newer than this app.'); }
+    if (schema.user_version > 4) { this.db.close(); throw new NidusError('storage', 'Usage ledger schema is newer than this app.'); }
     this.db.exec('PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;');
     this.transaction(() => this.db.exec(`
       CREATE TABLE IF NOT EXISTS budgets(scope TEXT PRIMARY KEY, amount INTEGER NOT NULL CHECK(amount>=0));
@@ -43,7 +43,8 @@ export class UsageLedger {
       CREATE TABLE IF NOT EXISTS model_tiers(provider TEXT NOT NULL, model TEXT NOT NULL, tier INTEGER NOT NULL CHECK(tier BETWEEN 0 AND 3), source TEXT, checked_at TEXT, user_modified INTEGER NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY(provider,model));
       CREATE TABLE IF NOT EXISTS routing_settings(id INTEGER PRIMARY KEY CHECK(id=1), allow_paid INTEGER NOT NULL, policies TEXT NOT NULL, revision INTEGER NOT NULL);
       INSERT OR IGNORE INTO routing_settings VALUES(1,0,'{"simple":[1,2],"normal":[2,1],"complex":[3,2]}',0);
-      PRAGMA user_version=3;`));
+      CREATE TABLE IF NOT EXISTS model_free_use(provider TEXT NOT NULL, model TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('verified','unverified','unavailable','unsupported')), checked_at TEXT, source TEXT NOT NULL, conditions TEXT NOT NULL, approved INTEGER NOT NULL, credential_hash TEXT, PRIMARY KEY(provider,model));
+      PRAGMA user_version=4;`));
   }
   close() { this.db.close(); }
   private rows(sql: string, ...params: SQLInputValue[]): Row[] {
@@ -138,7 +139,43 @@ export class UsageLedger {
       this.db.prepare('UPDATE routing_settings SET revision=revision+1 WHERE id=1').run();
     });
   }
-  reserve(provider: ProviderId, request: ChatRequest, task: TaskKind, exception = false, automatic?: { revision: number; difficulty: Difficulty; tier: Tier }): Reservation {
+  freeUse(provider: ProviderId, model: string) {
+    const price = priceFor(provider, model);
+    const row = this.rows('SELECT * FROM model_free_use WHERE provider=? AND model=?', provider, model)[0];
+    const status = price.freeTier === 'unavailable' ? 'unsupported' : String(row?.status ?? 'unverified');
+    return { status, approved: row?.approved === 1n && price.freeTier === 'available', checkedAt: row?.checked_at ?? null,
+      source: String(row?.source ?? price.sourceUrl), conditions: String(row?.conditions ?? 'Account eligibility and remaining quota are not verified. Paid upper bound and all budgets still apply.'),
+      verification: status === 'verified' && row?.checked_at ? 'user-account-attestation' : status === 'unavailable' ? 'user-reported-unavailable' : 'not-verified', freeTier: price.freeTier,
+      approvedForAutomatic: row?.approved === 1n && price.freeTier === 'available' && ['verified', 'unverified'].includes(status) };
+  }
+  // This is scoped consent to possible charges, never a zero-price entitlement.
+  setFreeUse(provider: ProviderId, model: string, status: unknown, approved: unknown, accountConfirmed: unknown, credentialHash: string) {
+    if (priceFor(provider, model).freeTier !== 'available') throw new NidusError('invalid_request', 'Only reviewed free-tier models can receive scoped free-use approval.');
+    if (!['verified','unverified','unavailable'].includes(String(status)) || typeof status !== 'string' || typeof approved !== 'boolean' || typeof accountConfirmed !== 'boolean')
+      throw new NidusError('invalid_request', 'Invalid free-use status or approval.');
+    if (status !== 'unverified' && accountConfirmed !== true) throw new NidusError('invalid_request', 'Confirm the current account conditions before recording availability.');
+    if (status === 'unavailable' && approved) throw new NidusError('invalid_request', 'Unavailable free use cannot be approved.');
+    const conditions = status === 'verified' ? 'User checked official free-tier terms and current account/project eligibility. Remaining quota is not synchronized; billing may still occur.'
+      : status === 'unavailable' ? 'User confirmed free quota exhausted or account ineligible. Recheck account before approving again.'
+      : 'Current account eligibility and remaining quota are unknown. Scoped approval accepts possible paid charges within existing budgets.';
+    this.transaction(() => {
+      this.db.prepare(`INSERT INTO model_free_use VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(provider,model) DO UPDATE SET status=excluded.status,checked_at=excluded.checked_at,source=excluded.source,conditions=excluded.conditions,approved=excluded.approved,credential_hash=excluded.credential_hash`)
+        .run(provider, model, status, this.now().toISOString(), priceFor(provider, model).sourceUrl, conditions, approved ? 1 : 0, credentialHash);
+      this.db.prepare('UPDATE routing_settings SET revision=revision+1 WHERE id=1').run();
+    });
+  }
+  invalidateFreeUse(provider: ProviderId) {
+    this.transaction(() => {
+      this.db.prepare("UPDATE model_free_use SET status='unverified',checked_at=NULL,approved=0,credential_hash=NULL WHERE provider=?").run(provider);
+      this.db.prepare('UPDATE routing_settings SET revision=revision+1 WHERE id=1').run();
+    });
+  }
+  scopedFreeApproval(provider: ProviderId, model: string, credentialHash?: string) {
+    if (!this.freeUse(provider, model).approvedForAutomatic) return false;
+    return credentialHash === undefined || this.rows('SELECT credential_hash FROM model_free_use WHERE provider=? AND model=?', provider, model)[0]?.credential_hash === credentialHash;
+  }
+  reserve(provider: ProviderId, request: ChatRequest, task: TaskKind, exception = false, automatic?: { revision: number; difficulty: Difficulty; tier: Tier; credentialHash?: string }): Reservation {
+    if (automatic && exception) throw new NidusError('invalid_request', 'Automatic reservations cannot use budget exceptions.');
     const price = priceFor(provider, request.model), bound = upperCost(provider, request, price);
     const at = this.now().toISOString(), month = at.slice(0, 7), id = randomUUID();
     const reason = this.transaction(() => {
@@ -146,7 +183,11 @@ export class UsageLedger {
       if (automatic) {
         const settings = this.routingSettings();
         if (settings.revision !== automatic.revision || !settings.policies[automatic.difficulty].includes(automatic.tier)) block = 'routing_policy_changed';
-        else if (bound !== null && bound > 0n && !settings.allowPaid) block = 'automatic_paid_disabled';
+        else {
+          const assigned = this.rows('SELECT tier FROM model_tiers WHERE provider=? AND model=?', provider, request.model)[0];
+          if (!assigned || assigned.tier !== BigInt(automatic.tier) || automatic.tier === 0) block = 'model_tier_mismatch';
+          else if (bound !== null && bound > 0n && !settings.allowPaid && (!automatic.credentialHash || !this.scopedFreeApproval(provider, request.model, automatic.credentialHash))) block = 'automatic_paid_disabled';
+        }
       }
       this.db.prepare(`INSERT INTO requests(id,at,month,provider,model,task,status,settlement,cost_status,reserved,bound,price_version,price_json,exception,block_reason,updated_at)
         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, at, month, provider, request.model, task, block ? 'blocked' : 'pending', block ? 'not_sent' : 'reserved', 'unknown', block ? 0n : bound!, bound, priceVersion(price), JSON.stringify(price), exception ? 1 : 0, block, at);

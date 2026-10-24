@@ -1,5 +1,5 @@
 import { dollars, money } from './money.js';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { difficulty, modelProfile, rankCandidates, type Candidate, type Difficulty, type Tier } from './router.js';
 import { UsageLedger, type TaskKind } from "./ledger.js";
 import { deepseekBalance, usageCapabilities, accountReport, adminCredential } from "./provider-usage.js";
@@ -52,6 +52,7 @@ export class ConnectivityEngine {
       }
       throw error;
     }
+    this.usageLedger().invalidateFreeUse(provider);
     this.usageLedger().recordHealth(provider, "*", "connected");
     return { provider, authentication: "models-api-verified", chatVerification: "not-run", credentialStorage: persist ? "macos-keychain" : "environment-session", ...this.decorate(snapshot, "api") };
   }
@@ -63,7 +64,7 @@ export class ConnectivityEngine {
     return this.decorate(snapshot, "api");
   }
   private decorate(snapshot: ModelSnapshot, source: string) {
-    return { source, fetchedAt: snapshot.fetchedAt, models: snapshot.models.map(m => ({ ...m, classification: classifyModel(m), routingProfile: modelProfile(m.provider, m.id), tierAssignment: this.usageLedger().modelTier(m.provider, m.id), health: { ...this.usageLedger().health(m.provider, m.id), available: this.usageLedger().health(m.provider, m.id).available && this.usageLedger().health(m.provider, '*').available }, pricing: priceFor(snapshot.provider, m.id) })) };
+    return { source, fetchedAt: snapshot.fetchedAt, models: snapshot.models.map(m => ({ ...m, classification: classifyModel(m), routingProfile: modelProfile(m.provider, m.id), tierAssignment: this.usageLedger().modelTier(m.provider, m.id), freeUse: this.usageLedger().freeUse(m.provider, m.id), health: { ...this.usageLedger().health(m.provider, m.id), available: this.usageLedger().health(m.provider, m.id).available && this.usageLedger().health(m.provider, '*').available }, pricing: priceFor(snapshot.provider, m.id) })) };
   }
   async detail(provider: ProviderId, model: string, options: RequestOptions = {}) {
     const detail = await this.registry[provider].getModel(await this.key(provider), model, options);
@@ -87,6 +88,14 @@ export class ConnectivityEngine {
     this.usageLedger().setModelTier(provider, model, tier);
     return this.routingSettings();
   }
+  async setFreeUse(provider: ProviderId, model: unknown, status: unknown, approved: unknown, accountConfirmed: unknown, chargeRiskAccepted: unknown) {
+    const saved = await this.store.load(provider);
+    if (typeof model !== 'string' || !saved?.models.some(m => m.id === model)) throw new NidusError('invalid_request', 'Select a discovered model.');
+    if (approved === true && chargeRiskAccepted !== true) throw new NidusError('invalid_request', 'Explicitly accept possible paid charges within your existing budgets for this model.');
+    const hash = createHash('sha256').update(await this.key(provider)).digest('hex');
+    this.usageLedger().setFreeUse(provider, model, status, approved, accountConfirmed, hash);
+    return this.routingSettings();
+  }
   async setRoutingPolicy(task: unknown, tiers: unknown) {
     this.usageLedger().setRoutingPolicy(task, tiers); return this.routingSettings();
   }
@@ -104,7 +113,7 @@ export class ConnectivityEngine {
       for (const model of saved?.models ?? []) {
         const health = ledger.health(provider, model.id);
         const quote = ledger.quote(provider, { ...request, model: model.id });
-        if (!settings.allowPaid && quote.boundUSD !== null && money(quote.boundUSD) > 0n) { quote.allowed = false; quote.reason = 'automatic_paid_disabled'; }
+        if (!settings.allowPaid && !ledger.scopedFreeApproval(provider, model.id) && quote.boundUSD !== null && money(quote.boundUSD) > 0n) { quote.allowed = false; quote.reason = 'automatic_paid_disabled'; }
         candidates.push({ model, tier: ledger.modelTier(provider, model.id).tier, profile: modelProfile(provider, model.id), health: { ...health, available: health.available && providerHealth.available },
           quote,
           pressure: [budget.total, budget.providers.find(p => p.scope === provider)!].some(p => ['warning', 'saving', 'blocked'].includes(p.level)) });
@@ -124,7 +133,7 @@ export class ConnectivityEngine {
       if (excludedProviders.has(provider) || !ledger.health(provider, '*').available || !ledger.health(provider, model).available) continue;
       if (options.signal?.aborted) throw new NidusError('cancelled', 'Automatic request cancelled.');
       const quote = ledger.quote(provider, { ...request, model });
-      const event = { provider, model, tier: candidate.tier, reason, status: quote.allowed ? 'selected' : 'blocked', budget: quote.reason ?? 'allowed', boundUSD: quote.boundUSD };
+      const event = { provider, model, freeUse: ledger.freeUse(provider, model), authorization: plan.settings.allowPaid ? "global-paid-permission" : "model-scoped-charge-consent", tier: candidate.tier, reason, status: quote.allowed ? 'selected' : 'blocked', budget: quote.reason ?? 'allowed', boundUSD: quote.boundUSD };
       transitions.push(event); ledger.recordRoute(routeId, event);
       if (!quote.allowed) { reason = quote.reason!; continue; }
       let result;
@@ -165,7 +174,7 @@ export class ConnectivityEngine {
     if (options.signal?.aborted) throw new NidusError("cancelled", "Request cancelled before dispatch.");
     const key = await this.key(provider);
     const ledger = this.usageLedger();
-    const reservation = ledger.reserve(provider, request, task, options.budgetException === true, automatic);
+    const reservation = ledger.reserve(provider, request, task, options.budgetException === true, automatic ? { ...automatic, credentialHash: createHash('sha256').update(key).digest('hex') } : undefined);
     let headers: Record<string, string> = {};
     let result;
     try {
@@ -182,7 +191,7 @@ export class ConnectivityEngine {
     return { ...result, estimatedUSD: cost === null ? null : dollars(cost), requestId: reservation.id, budget: ledger.snapshot().total };
   }
 
-  async disconnect(provider: ProviderId) { await this.credentials.delete(provider); await this.store.remove(provider); return { provider, disconnected: true }; }
+  async disconnect(provider: ProviderId) { await this.credentials.delete(provider); await this.store.remove(provider); this.usageLedger().invalidateFreeUse(provider); return { provider, disconnected: true }; }
   async probe(provider: ProviderId, model: string, allowInferred = false) {
     const saved = await this.store.load(provider);
     const known = saved?.models.find(m => m.id === model);
