@@ -1,5 +1,5 @@
 import { UsageLedger, type TaskKind } from "./ledger.js";
-import { deepseekBalance, usageCapabilities } from "./provider-usage.js";
+import { deepseekBalance, usageCapabilities, accountReport, adminCredential } from "./provider-usage.js";
 import { validateChatRequest } from "./adapters/base.js";
 import { adapters } from "./adapters/index.js";
 import { classifyModel } from "./classification.js";
@@ -16,6 +16,12 @@ export class ConnectivityEngine {
   private usageLedger() { return this.ledger ??= new UsageLedger(); }
   usage() { return { ...this.usageLedger().snapshot(), capabilities: usageCapabilities }; }
   setBudget(scope: unknown, usd: unknown) { this.usageLedger().setBudget(scope, usd); return this.usage(); }
+  async syncAccount(provider: ProviderId) {
+    if (provider !== 'openai' && provider !== 'anthropic') throw new NidusError('unsupported', 'No connected organization billing API for this provider.');
+    const report = await accountReport(provider, adminCredential(provider));
+    this.usageLedger().saveAccountReport(report);
+    return this.usage();
+  }
   async syncBalance(provider: ProviderId) {
     if (provider !== "deepseek") throw new NidusError("unsupported", "Account billing credentials are not connected. Local estimates remain available.");
     const balance = await deepseekBalance(await this.key(provider));
@@ -77,18 +83,18 @@ export class ConnectivityEngine {
     const ledger = this.usageLedger();
     const reservation = ledger.reserve(provider, request, task, options.budgetException === true);
     let headers: Record<string, string> = {};
+    let result;
     try {
-      const result = await this.registry[provider].chat(key, request, { ...options, onHeaders: value => { headers = value; } });
-      ledger.settle(reservation, "succeeded", result.usage, headers);
-      return { ...result, requestId: reservation.id, budget: ledger.snapshot().total };
+      result = await this.registry[provider].chat(key, request, { ...options, onHeaders: value => { headers = value; } });
     } catch (error) {
-      // Settlement errors leave the durable reservation intact. Never send a retry here.
-      if (!(error instanceof NidusError && error.code === "storage")) {
-        ledger.settle(reservation, error instanceof NidusError && error.code === "cancelled" ? "cancelled" : "failed", error instanceof NidusError ? error.usage : null, headers);
-      }
+      ledger.settle(reservation, error instanceof NidusError && error.code === "cancelled" ? "cancelled" : "failed", error instanceof NidusError ? error.usage : null, headers);
       throw error;
     }
+    // Keep database failures outside the adapter catch: never retry a settlement or request.
+    ledger.settle(reservation, "succeeded", result.usage, headers);
+    return { ...result, requestId: reservation.id, budget: ledger.snapshot().total };
   }
+
   async disconnect(provider: ProviderId) { await this.credentials.delete(provider); await this.store.remove(provider); return { provider, disconnected: true }; }
   async probe(provider: ProviderId, model: string, allowInferred = false) {
     const saved = await this.store.load(provider);

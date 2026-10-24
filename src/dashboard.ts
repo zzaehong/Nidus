@@ -15,6 +15,7 @@ export async function dispatch(input: unknown, engine: ConnectivityEngine): Prom
   if (r.method === "budget-set") return engine.setBudget(r.scope, r.usd);
   const provider = providerId(typeof r.provider === "string" ? r.provider : "");
   switch (r.method) {
+    case "account-sync": return engine.syncAccount(provider);
     case "balance-sync": return engine.syncBalance(provider);
     case "cached": return engine.cachedModels(provider);
     case "connect":

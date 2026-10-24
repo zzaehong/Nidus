@@ -1,8 +1,10 @@
+import type { AccountReport } from './provider-usage.js';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import { mkdirSync, chmodSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
+import { rateLimitHeaders } from './http.js';
 import { NidusError } from './errors.js';
 import { dollars, money } from './money.js';
 import { calculatedCost, priceFor, priceVersion, upperCost, type Price } from './pricing.js';
@@ -19,6 +21,8 @@ export class UsageLedger {
     if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
     this.db = new DatabaseSync(path);
     if (path !== ':memory:') chmodSync(path, 0o600);
+    const schema = this.db.prepare('PRAGMA user_version').get() as { user_version: number };
+    if (schema.user_version > 1) { this.db.close(); throw new NidusError('storage', 'Usage ledger schema is newer than this app.'); }
     this.db.exec(`PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;
       CREATE TABLE IF NOT EXISTS budgets(scope TEXT PRIMARY KEY, amount INTEGER NOT NULL CHECK(amount>=0));
       CREATE TABLE IF NOT EXISTS budget_changes(id INTEGER PRIMARY KEY, at TEXT NOT NULL, scope TEXT NOT NULL, amount INTEGER NOT NULL);
@@ -31,6 +35,7 @@ export class UsageLedger {
         headers TEXT NOT NULL DEFAULT '{}', updated_at TEXT NOT NULL, evidence TEXT);
       CREATE INDEX IF NOT EXISTS requests_month ON requests(month,provider);
       CREATE TABLE IF NOT EXISTS balances(provider TEXT PRIMARY KEY, usd TEXT, at TEXT NOT NULL, source TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS account_reports(provider TEXT NOT NULL, month TEXT NOT NULL, report TEXT NOT NULL, PRIMARY KEY(provider,month));
       PRAGMA user_version=1;`);
   }
   close() { this.db.close(); }
@@ -78,12 +83,14 @@ export class UsageLedger {
     return { id, price, bound: bound! };
   }
   settle(reservation: Reservation, status: 'succeeded' | 'failed' | 'cancelled', usage?: Usage | null, headers: Record<string, string> = {}) {
-    const cost = calculatedCost(reservation.price, usage);
     const token = (n: unknown) => typeof n === 'number' && Number.isSafeInteger(n) && n >= 0 ? n : null;
     this.transaction(() => {
+      const saved = this.rows("SELECT price_json,bound FROM requests WHERE id=? AND status='pending'", reservation.id)[0];
+      if (!saved) throw new NidusError('storage', 'Request settlement was already recorded or is missing.');
+      const cost = calculatedCost(JSON.parse(saved.price_json as string) as Price, usage);
       const result = this.db.prepare(`UPDATE requests SET status=?,settlement=?,cost_status=?,reserved=?,estimated=?,input=?,output=?,cached=?,writes=?,reasoning=?,headers=?,updated_at=?
-        WHERE id=? AND status='pending'`).run(status, cost === null ? 'unresolved' : 'estimated', cost === null ? 'unknown' : 'estimated', cost === null ? reservation.bound : 0n, cost,
-        token(usage?.inputTokens), token(usage?.outputTokens), token(usage?.cachedInputTokens), token(usage?.cacheWriteTokens), token(usage?.reasoningTokens), JSON.stringify(headers), this.now().toISOString(), reservation.id);
+        WHERE id=? AND status='pending'`).run(status, cost === null ? 'unresolved' : 'estimated', cost === null ? 'unknown' : 'estimated', cost === null ? saved.bound as bigint : 0n, cost,
+        token(usage?.inputTokens), token(usage?.outputTokens), token(usage?.cachedInputTokens), token(usage?.cacheWriteTokens), token(usage?.reasoningTokens), JSON.stringify(rateLimitHeaders(new Headers(headers))), this.now().toISOString(), reservation.id);
       if (result.changes !== 1) throw new NidusError('storage', 'Request settlement was already recorded or is missing.');
     });
   }
@@ -106,6 +113,9 @@ export class UsageLedger {
     const value = usd === null ? null : dollars(money(usd));
     this.db.prepare('INSERT INTO balances VALUES(?,?,?,?) ON CONFLICT(provider) DO UPDATE SET usd=excluded.usd,at=excluded.at,source=excluded.source').run(provider, value, this.now().toISOString(), source);
     return this.snapshot();
+  }
+  saveAccountReport(report: AccountReport) {
+    this.db.prepare('INSERT INTO account_reports VALUES(?,?,?) ON CONFLICT(provider,month) DO UPDATE SET report=excluded.report').run(report.provider, report.month, JSON.stringify(report));
   }
   snapshot() {
     // Consistent multi-query read even while other app/CLI processes settle requests.
@@ -137,7 +147,8 @@ export class UsageLedger {
       provider: r.provider, model: r.model, requests: Number(r.count), inputTokens: r.input === null ? null : Number(r.input), outputTokens: r.output === null ? null : Number(r.output), estimatedUSD: r.estimated === null ? null : dollars(r.estimated as bigint), confirmedUSD: r.confirmed === null ? null : dollars(r.confirmed as bigint), reservedUSD: dollars(r.reserved as bigint)
     }));
     return { currency: 'USD', month, source: 'nidus-local-ledger', updatedAt: this.rows('SELECT MAX(updated_at) AS at FROM requests')[0]?.at ?? null,
-      lastProviderSyncAt: this.rows('SELECT MAX(at) AS at FROM balances')[0]?.at ?? null,
+      accountReports: this.rows('SELECT report FROM account_reports WHERE month=?', month).map(r => JSON.parse(r.report as string) as AccountReport),
+      lastProviderSyncAt: this.rows("SELECT MAX(at) AS at FROM (SELECT at FROM balances UNION ALL SELECT json_extract(report,'$.syncedAt') AS at FROM account_reports)")[0]?.at ?? null,
       total: overview(), providers: providerIds.map(p => overview(p)), requestBudgetUSD: this.budget('request') === null ? null : dollars(this.budget('request')!),
       requests, models, balances: this.rows('SELECT * FROM balances'),
       note: 'Local Nidus requests only. Reservations may exceed expected cost. Provider invoices and external usage can differ. Pending costs never expire automatically.' };

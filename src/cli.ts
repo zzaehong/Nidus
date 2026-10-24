@@ -15,6 +15,7 @@ export const help = `Nidus API Connectivity MVP
   nidus usage
   nidus budget <total|request|provider> --usd <decimal USD>
   nidus balance <provider>
+  nidus account <openai|anthropic>  # separate session ADMIN_API_KEY
   nidus disconnect <provider>
 
 connect: hidden key entry, model discovery, macOS Keychain storage.
@@ -45,12 +46,12 @@ export async function main(argv = process.argv.slice(2), dependencies: CliDepend
   } catch { throw new NidusError("invalid_request", "Invalid arguments. Use nidus --help. API keys must never be command-line arguments."); }
   if (values.help || positionals.length === 0) { write(help); return; }
   const [command, argument] = positionals;
-  const commands = ["providers", "connect", "models", "pricing", "chat", "disconnect", "usage", "budget", "balance"];
+  const commands = ["providers", "connect", "models", "pricing", "chat", "disconnect", "usage", "budget", "balance", "account"];
   if (!commands.includes(command!)) throw new NidusError("invalid_request", "Unknown command. Use nidus --help.");
   const expected = ["providers", "chat", "usage"].includes(command!) ? 1 : 2;
   if (positionals.length !== expected) throw new NidusError("invalid_request", "Unexpected positional arguments. Use nidus --help.");
   const allowed: Record<string, string[]> = {
-    usage: [], budget: ["usd"], balance: [], providers: [], connect: ["env", "timeout-ms"], models: ["refresh", "detail", "timeout-ms"],
+    usage: [], budget: ["usd"], balance: [], account: [], providers: [], connect: ["env", "timeout-ms"], models: ["refresh", "detail", "timeout-ms"],
     pricing: [], chat: ["provider", "model", "max-output-tokens", "timeout-ms", "approve-budget-exception"], disconnect: []
   };
   if (Object.keys(values).some(v => !allowed[command!]!.includes(v))) throw new NidusError("invalid_request", "Option is not valid for this command.");
@@ -58,6 +59,7 @@ export async function main(argv = process.argv.slice(2), dependencies: CliDepend
   const engine = dependencies.engine ?? new ConnectivityEngine(new EnvironmentCredentials(persistent), new FileModelStore());
   if (command === "usage") { print(engine.usage()); return; }
   if (command === "budget") { print(engine.setBudget(argument, values.usd)); return; }
+  if (command === "account") { print(await engine.syncAccount(providerId(argument ?? ""))); return; }
   if (command === "balance") { print(await engine.syncBalance(providerId(argument ?? ""))); return; }
   if (command === "providers") { print(engine.providers()); return; }
   const provider = providerId(command === "chat" ? values.provider ?? "" : argument ?? "");
