@@ -4,6 +4,8 @@ func tierLabel(_ tier: Int) -> String {
     switch tier { case 1: return "Tier 1 · Lightweight"; case 2: return "Tier 2 · General"; case 3: return "Tier 3 · Advanced"; default: return "Unclassified" }
 }
 struct RoutingSettingsSnapshot: Decodable {
+    let geminiBilling: GeminiBilling?
+    struct GeminiBilling: Decodable { let state: String; let project: String; let checkedAt: String? }
     let allowPaid: Bool
     let policies: [String: [Int]]
     let models: [TierModel]
@@ -53,6 +55,7 @@ struct RoutingSettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var model = RoutingSettingsModel()
     @State private var search = ""
+    @State private var billingEditor = false
     @State private var freeUseSelection: RoutingSettingsSnapshot.TierModel?
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -71,6 +74,9 @@ struct RoutingSettingsView: View {
                             Task { await model.perform(["method": "automatic-paid-set", "allowed": value]) }
                         }))
                         Text("허용해도 Provider·전체·단일 요청 예산을 모두 검사합니다. 무료 티어 표시는 실제 무료 할당량이 아닙니다. 수동 요청은 기존 Budget Guard를 따릅니다.").font(.caption).foregroundStyle(.secondary)
+                        Text("Gemini 프로젝트: \(data.geminiBilling?.state ?? "unknown") · \(data.geminiBilling?.project ?? "미설정")").font(.headline)
+                        Text("확인 시각: \(data.geminiBilling?.checkedAt ?? "없음") · 남은 무료 할당량은 조회되지 않습니다.").font(.caption)
+                        Button("Gemini 프로젝트 결제 상태 설정") { billingEditor = true }
                         ForEach(["simple", "normal", "complex"], id: \.self) { difficulty in
                             policy(difficulty, data.policies[difficulty] ?? [])
                         }
@@ -88,6 +94,7 @@ struct RoutingSettingsView: View {
             }
             if model.busy { ProgressView().controlSize(.small) }
         }.padding(24).frame(width: 940, height: 760).task { await model.perform() }
+        .sheet(isPresented: $billingEditor) { GeminiBillingEditor(model: model) }
         .sheet(item: $freeUseSelection) { item in
             FreeUseEditor(item: item, model: model)
         }
@@ -138,7 +145,7 @@ struct RoutingSettingsView: View {
             Text("무료 티어: \(item.pricing.freeTier ?? "unknown") · 확인 상태: \(item.freeUse?.status ?? "unverified")").font(.caption)
             Text("마지막 확인: \(item.freeUse?.checkedAt ?? "없음") · 확인 방식: \(item.freeUse?.verification ?? "not-verified")").font(.caption)
             Text(item.freeUse?.conditions ?? "현재 계정의 무료 사용 가능 여부는 미확인입니다.").font(.caption).foregroundStyle(.secondary)
-            if item.freeUse?.status == "unverified" { Text("무료 할당량 미확인 — 승인은 0원 보장이 아니며 유료 상한으로 예산을 예약합니다.").font(.caption).foregroundStyle(.orange) }
+            if item.freeUse?.status == "unverified" { Text("무료 할당량 미확인 — Gemini 프로젝트 Free 설정은 별도 관리됩니다. 모델별 승인 자체는 비용을 0원으로 바꾸지 않습니다.").font(.caption).foregroundStyle(.orange) }
             if let source = item.freeUse?.source, let url = URL(string: source) { Link("무료 사용 공식 조건", destination: url).font(.caption) }
             Button(item.freeUse?.approved == true ? "무료 사용 상태 · 모델별 승인 변경" : "무료 사용 상태 확인 · 모델별 호출 승인") { freeUseSelection = item }
                 .disabled(item.pricing.freeTier != "available")
@@ -195,5 +202,43 @@ private struct FreeUseEditor: View {
         }.padding(24).frame(width: 620)
             .onAppear { status = item.freeUse?.status ?? "unverified"; approved = item.freeUse?.approved ?? false }
             .onChange(of: status) { _ in accountConfirmed = false; if status == "unavailable" { approved = false } }
+    }
+}
+
+private struct GeminiBillingEditor: View {
+    @ObservedObject var model: RoutingSettingsModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var state = "unknown"
+    @State private var project = ""
+    @State private var confirmed = false
+    @State private var risk = false
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Gemini 프로젝트 결제 상태").font(.headline)
+            Picker("결제 상태", selection: $state) {
+                Text("Unknown · 미확인").tag("unknown")
+                Text("Free · 무료 프로젝트 직접 확인").tag("free")
+                Text("Paid · 유료 프로젝트").tag("paid")
+            }
+            TextField("현재 API 키의 Google 프로젝트 ID", text: $project)
+            Link("Google AI Studio에서 프로젝트 확인", destination: URL(string: "https://aistudio.google.com/projects")!)
+            Text("Free 설정 시 공식 무료 지원 모델만 유료 예산 예약 없이 실행합니다. Paid·Unknown은 기존 예산 검사를 유지합니다. 남은 할당량은 알 수 없습니다.")
+            if state == "free" {
+                Toggle("현재 API 키의 프로젝트가 Google에서 Free Tier임을 확인했습니다", isOn: $confirmed)
+                Toggle("실제 Billing 상태를 보증하지 않으며, 설정이 틀리면 로컬 예산 밖에서 과금될 수 있음을 이해합니다", isOn: $risk)
+                Text("Google에서 결제를 활성화하거나 프로젝트를 변경하면 이 설정을 즉시 변경하세요. API 키 재연결 시 초기화됩니다.").font(.caption).foregroundStyle(.orange)
+            }
+            if let error = model.error { Text(error).foregroundStyle(.red) }
+            HStack {
+                Button("취소") { dismiss() }
+                Button("저장") { Task {
+                    await model.perform(["method": "gemini-billing-set", "state": state, "project": project, "confirmed": confirmed, "riskAccepted": risk])
+                    if model.error == nil { dismiss() }
+                }}.disabled(model.busy || (state == "free" && (project.isEmpty || !confirmed || !risk)))
+            }
+        }.padding(24).frame(width: 650)
+        .onAppear { state = model.snapshot?.geminiBilling?.state ?? "unknown"; project = model.snapshot?.geminiBilling?.project ?? "" }
+        .onChange(of: state) { _ in confirmed = false; risk = false }
+        .onChange(of: project) { _ in confirmed = false; risk = false }
     }
 }

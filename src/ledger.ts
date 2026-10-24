@@ -13,7 +13,7 @@ import { providerIds, type ChatRequest, type ProviderId, type Usage } from './ty
 
 export type BudgetScope = 'total' | 'request' | ProviderId;
 export type TaskKind = 'chat' | 'probe';
-export interface Reservation { id: string; price: Price; bound: bigint }
+export interface Reservation { id: string; price: Price; bound: bigint; billingMode: 'free' | 'paid' }
 type Row = Record<string, string | bigint | null>;
 export const ledgerPath = () => join(homedir(), '.local', 'share', 'nidus', 'usage.sqlite');
 export class UsageLedger {
@@ -23,7 +23,7 @@ export class UsageLedger {
     this.db = new DatabaseSync(path);
     if (path !== ':memory:') chmodSync(path, 0o600);
     const schema = this.db.prepare('PRAGMA user_version').get() as { user_version: number };
-    if (schema.user_version > 4) { this.db.close(); throw new NidusError('storage', 'Usage ledger schema is newer than this app.'); }
+    if (schema.user_version > 5) { this.db.close(); throw new NidusError('storage', 'Usage ledger schema is newer than this app.'); }
     this.db.exec('PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;');
     this.transaction(() => this.db.exec(`
       CREATE TABLE IF NOT EXISTS budgets(scope TEXT PRIMARY KEY, amount INTEGER NOT NULL CHECK(amount>=0));
@@ -44,7 +44,9 @@ export class UsageLedger {
       CREATE TABLE IF NOT EXISTS routing_settings(id INTEGER PRIMARY KEY CHECK(id=1), allow_paid INTEGER NOT NULL, policies TEXT NOT NULL, revision INTEGER NOT NULL);
       INSERT OR IGNORE INTO routing_settings VALUES(1,0,'{"simple":[1,2],"normal":[2,1],"complex":[3,2]}',0);
       CREATE TABLE IF NOT EXISTS model_free_use(provider TEXT NOT NULL, model TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('verified','unverified','unavailable','unsupported')), checked_at TEXT, source TEXT NOT NULL, conditions TEXT NOT NULL, approved INTEGER NOT NULL, credential_hash TEXT, PRIMARY KEY(provider,model));
-      PRAGMA user_version=4;`));
+      CREATE TABLE IF NOT EXISTS gemini_project(id INTEGER PRIMARY KEY CHECK(id=1), state TEXT NOT NULL, project TEXT NOT NULL, checked_at TEXT NOT NULL, credential_hash TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS request_billing(id TEXT PRIMARY KEY, mode TEXT NOT NULL, basis TEXT NOT NULL);
+      PRAGMA user_version=5;`));
   }
   close() { this.db.close(); }
   private rows(sql: string, ...params: SQLInputValue[]): Row[] {
@@ -84,9 +86,36 @@ export class UsageLedger {
   // Advisory only. reserve() rechecks this same policy under BEGIN IMMEDIATE.
   quote(provider: ProviderId, request: ChatRequest) {
     return this.transaction(() => {
-      const bound = upperCost(provider, request), reason = this.checkBudget(provider, bound, this.now().toISOString().slice(0, 7));
-      return { allowed: reason === null, reason, boundUSD: bound === null ? null : dollars(bound) };
+      const billing = this.billing(provider, request), bound = billing.bound, reason = billing.reason ?? this.checkBudget(provider, bound, this.now().toISOString().slice(0, 7));
+      return { billingMode: billing.mode, allowed: reason === null, reason, boundUSD: bound === null ? null : dollars(bound) };
     });
+  }
+  geminiBilling() {
+    const row = this.rows('SELECT * FROM gemini_project WHERE id=1')[0];
+    return { state: String(row?.state ?? 'unknown'), project: String(row?.project ?? ''), checkedAt: row?.checked_at ?? null,
+      source: 'user-project-attestation', remainingFreeQuota: null,
+      note: 'Not Google Billing verification. Incorrect settings can cause charges outside local budgets. Reconfirm after billing changes; reconnecting clears this setting.' };
+  }
+  setGeminiBilling(state: unknown, project: unknown, confirmed: unknown, riskAccepted: unknown, credentialHash: string) {
+    if (!['free','paid','unknown'].includes(String(state)) || typeof state !== 'string' || typeof project !== 'string' || !/^[a-zA-Z0-9:_-]{0,128}$/.test(project))
+      throw new NidusError('invalid_request', 'Invalid Gemini project billing setting.');
+    if (state === 'free' && (!project || confirmed !== true || riskAccepted !== true || !credentialHash))
+      throw new NidusError('invalid_request', 'Confirm this key belongs to a Free Tier project and acknowledge that this is not Google Billing verification.');
+    this.transaction(() => {
+      this.db.prepare('INSERT INTO gemini_project VALUES(1,?,?,?,?) ON CONFLICT(id) DO UPDATE SET state=excluded.state,project=excluded.project,checked_at=excluded.checked_at,credential_hash=excluded.credential_hash')
+        .run(state, project, this.now().toISOString(), credentialHash);
+      this.db.prepare('UPDATE routing_settings SET revision=revision+1 WHERE id=1').run();
+    });
+  }
+  private billing(provider: ProviderId, request: ChatRequest, credentialHash?: string, execution = false) {
+    const project = this.rows('SELECT * FROM gemini_project WHERE id=1')[0];
+    if (provider !== 'gemini' || project?.state !== 'free') return { mode: 'paid' as const, bound: upperCost(provider, request), reason: null as string | null };
+    const price = priceFor(provider, request.model);
+    let reason: string | null = null;
+    if (execution && (!credentialHash || project.credential_hash !== credentialHash)) reason = 'gemini_project_credential_changed';
+    else if (price.freeTier !== 'available' || !price.checkedAt || this.now().getTime() - Date.parse(price.checkedAt) > 30 * 86400000) reason = 'gemini_free_model_unverified';
+    else if (this.freeUse(provider, request.model).status === 'unavailable') reason = 'gemini_free_unavailable';
+    return { mode: 'free' as const, bound: 0n, reason };
   }
   recordRoute(routeId: string, event: { provider: ProviderId; model: string; reason: string; status: string; budget: string; boundUSD: string | null; requestId?: string; tier?: Tier }) {
     this.db.prepare('INSERT INTO route_events(route_id,at,event) VALUES(?,?,?)').run(routeId, this.now().toISOString(), JSON.stringify(event));
@@ -166,6 +195,7 @@ export class UsageLedger {
   }
   invalidateFreeUse(provider: ProviderId) {
     this.transaction(() => {
+      if (provider === 'gemini') this.db.prepare("UPDATE gemini_project SET state='unknown',credential_hash='' WHERE id=1").run();
       this.db.prepare("UPDATE model_free_use SET status='unverified',checked_at=NULL,approved=0,credential_hash=NULL WHERE provider=?").run(provider);
       this.db.prepare('UPDATE routing_settings SET revision=revision+1 WHERE id=1').run();
     });
@@ -174,12 +204,15 @@ export class UsageLedger {
     if (!this.freeUse(provider, model).approvedForAutomatic) return false;
     return credentialHash === undefined || this.rows('SELECT credential_hash FROM model_free_use WHERE provider=? AND model=?', provider, model)[0]?.credential_hash === credentialHash;
   }
-  reserve(provider: ProviderId, request: ChatRequest, task: TaskKind, exception = false, automatic?: { revision: number; difficulty: Difficulty; tier: Tier; credentialHash?: string }): Reservation {
+  reserve(provider: ProviderId, request: ChatRequest, task: TaskKind, exception = false, automatic?: { revision: number; difficulty: Difficulty; tier: Tier; credentialHash?: string }, credentialHash?: string): Reservation {
     if (automatic && exception) throw new NidusError('invalid_request', 'Automatic reservations cannot use budget exceptions.');
-    const price = priceFor(provider, request.model), bound = upperCost(provider, request, price);
+    const price = priceFor(provider, request.model);
+    let bound: bigint | null = null, billingMode: 'free' | 'paid' = 'paid';
     const at = this.now().toISOString(), month = at.slice(0, 7), id = randomUUID();
     const reason = this.transaction(() => {
-      let block = this.checkBudget(provider, bound, month, exception);
+      const billing = this.billing(provider, request, credentialHash ?? automatic?.credentialHash, true);
+      bound = billing.bound; billingMode = billing.mode;
+      let block = billing.reason ?? this.checkBudget(provider, bound, month, exception);
       if (automatic) {
         const settings = this.routingSettings();
         if (settings.revision !== automatic.revision || !settings.policies[automatic.difficulty].includes(automatic.tier)) block = 'routing_policy_changed';
@@ -191,17 +224,19 @@ export class UsageLedger {
       }
       this.db.prepare(`INSERT INTO requests(id,at,month,provider,model,task,status,settlement,cost_status,reserved,bound,price_version,price_json,exception,block_reason,updated_at)
         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, at, month, provider, request.model, task, block ? 'blocked' : 'pending', block ? 'not_sent' : 'reserved', 'unknown', block ? 0n : bound!, bound, priceVersion(price), JSON.stringify(price), exception ? 1 : 0, block, at);
+      this.db.prepare('INSERT INTO request_billing VALUES(?,?,?)').run(id, billingMode, billingMode === 'free' ? JSON.stringify(this.geminiBilling()) : 'paid-price-snapshot');
       return block;
     });
-    if (reason) throw new NidusError('budget', `Budget Guard blocked this request (${reason}). Review Usage & Budget. No inference request was sent.`);
-    return { id, price, bound: bound! };
+    if (reason) { const error = new NidusError('budget', `Budget Guard blocked this request (${reason}). Review Usage & Budget. No inference request was sent.`); error.reason = reason; throw error; }
+    return { id, price, bound: bound!, billingMode };
   }
   settle(reservation: Reservation, status: 'succeeded' | 'failed' | 'cancelled', usage?: Usage | null, headers: Record<string, string> = {}) {
     const token = (n: unknown) => typeof n === 'number' && Number.isSafeInteger(n) && n >= 0 ? n : null;
     this.transaction(() => {
       const saved = this.rows("SELECT price_json,bound FROM requests WHERE id=? AND status='pending'", reservation.id)[0];
       if (!saved) throw new NidusError('storage', 'Request settlement was already recorded or is missing.');
-      const cost = calculatedCost(JSON.parse(saved.price_json as string) as Price, usage);
+      const free = this.rows('SELECT mode FROM request_billing WHERE id=?', reservation.id)[0]?.mode === 'free';
+      const cost = free && token(usage?.inputTokens) !== null && token(usage?.outputTokens) !== null ? 0n : free ? null : calculatedCost(JSON.parse(saved.price_json as string) as Price, usage);
       const result = this.db.prepare(`UPDATE requests SET status=?,settlement=?,cost_status=?,reserved=?,estimated=?,input=?,output=?,cached=?,writes=?,reasoning=?,headers=?,updated_at=?
         WHERE id=? AND status='pending'`).run(status, cost === null ? 'unresolved' : 'estimated', cost === null ? 'unknown' : 'estimated', cost === null ? saved.bound as bigint : 0n, cost,
         token(usage?.inputTokens), token(usage?.outputTokens), token(usage?.cachedInputTokens), token(usage?.cacheWriteTokens), token(usage?.reasoningTokens), JSON.stringify(rateLimitHeaders(new Headers(headers))), this.now().toISOString(), reservation.id);
@@ -255,8 +290,8 @@ export class UsageLedger {
         unknownCount: rows.filter(r => r.settlement === 'unresolved' || r.status === 'pending').length,
         unknownPriceCount: rows.filter(r => r.block_reason === 'unknown_price_or_bound').length };
     };
-    const requests = this.rows('SELECT * FROM requests ORDER BY at DESC, rowid DESC LIMIT 200').map(r => ({
-      id: r.id, at: r.at, provider: r.provider, model: r.model, task: r.task, status: r.status, settlement: r.settlement, costStatus: r.cost_status,
+    const requests = this.rows(`SELECT requests.*, COALESCE(request_billing.mode,'paid') AS billing_mode,request_billing.basis AS billing_basis FROM requests LEFT JOIN request_billing USING(id) ORDER BY at DESC, requests.rowid DESC LIMIT 200`).map(r => ({
+      billingMode: r.billing_mode, billingBasis: r.billing_basis, id: r.id, at: r.at, provider: r.provider, model: r.model, task: r.task, status: r.status, settlement: r.settlement, costStatus: r.cost_status,
       reservedUSD: dollars(r.reserved as bigint), boundUSD: r.bound === null ? null : dollars(r.bound as bigint), estimatedUSD: r.estimated === null ? null : dollars(r.estimated as bigint), confirmedUSD: r.confirmed === null ? null : dollars(r.confirmed as bigint),
       inputTokens: r.input === null ? null : Number(r.input), outputTokens: r.output === null ? null : Number(r.output), cachedTokens: r.cached === null ? null : Number(r.cached), cacheWriteTokens: r.writes === null ? null : Number(r.writes), reasoningTokens: r.reasoning === null ? null : Number(r.reasoning),
       priceVersion: r.price_version, pricing: JSON.parse(r.price_json as string), exception: r.exception === 1n, blockReason: r.block_reason, headers: JSON.parse(r.headers as string), updatedAt: r.updated_at

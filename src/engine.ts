@@ -80,7 +80,12 @@ export class ConnectivityEngine {
       const cached = await this.cachedModels(provider);
       models.push(...cached.models);
     }
-    return { ...this.usageLedger().routingSettings(), models };
+    return { ...this.usageLedger().routingSettings(), geminiBilling: this.usageLedger().geminiBilling(), models };
+  }
+  async setGeminiBilling(state: unknown, project: unknown, confirmed: unknown, riskAccepted: unknown) {
+    const hash = state === 'free' ? createHash('sha256').update(await this.key('gemini')).digest('hex') : '';
+    this.usageLedger().setGeminiBilling(state, project, confirmed, riskAccepted, hash);
+    return this.routingSettings();
   }
   async setModelTier(provider: ProviderId, model: unknown, tier: unknown) {
     const saved = await this.store.load(provider);
@@ -128,12 +133,15 @@ export class ConnectivityEngine {
     const excludedProviders = new Set<ProviderId>();
     const transitions: { tier: Tier; provider: ProviderId; model: string; reason: string; status: string; budget: string; boundUSD: string | null; requestId?: string }[] = [];
     let reason = 'initial_selection';
+    let freeOnly = false;
     for (const candidate of plan.candidates) {
       const provider = candidate.model.provider, model = candidate.model.id;
       if (excludedProviders.has(provider) || !ledger.health(provider, '*').available || !ledger.health(provider, model).available) continue;
       if (options.signal?.aborted) throw new NidusError('cancelled', 'Automatic request cancelled.');
       const quote = ledger.quote(provider, { ...request, model });
-      const event = { provider, model, freeUse: ledger.freeUse(provider, model), authorization: plan.settings.allowPaid ? "global-paid-permission" : "model-scoped-charge-consent", tier: candidate.tier, reason, status: quote.allowed ? 'selected' : 'blocked', budget: quote.reason ?? 'allowed', boundUSD: quote.boundUSD };
+      if (freeOnly && quote.billingMode !== 'free') continue;
+      if (quote.allowed && quote.billingMode === 'free') freeOnly = true;
+      const event = { billingMode: quote.billingMode, provider, model, freeUse: ledger.freeUse(provider, model), authorization: quote.billingMode === "free" ? "user-project-free-attestation" : plan.settings.allowPaid ? "global-paid-permission" : "model-scoped-charge-consent", tier: candidate.tier, reason, status: quote.allowed ? 'selected' : 'blocked', budget: quote.reason ?? 'allowed', boundUSD: quote.boundUSD };
       transitions.push(event); ledger.recordRoute(routeId, event);
       if (!quote.allowed) { reason = quote.reason!; continue; }
       let result;
@@ -174,7 +182,7 @@ export class ConnectivityEngine {
     if (options.signal?.aborted) throw new NidusError("cancelled", "Request cancelled before dispatch.");
     const key = await this.key(provider);
     const ledger = this.usageLedger();
-    const reservation = ledger.reserve(provider, request, task, options.budgetException === true, automatic ? { ...automatic, credentialHash: createHash('sha256').update(key).digest('hex') } : undefined);
+    const reservation = ledger.reserve(provider, request, task, options.budgetException === true, automatic ? { ...automatic, credentialHash: createHash('sha256').update(key).digest('hex') } : undefined, createHash('sha256').update(key).digest('hex'));
     let headers: Record<string, string> = {};
     let result;
     try {
@@ -187,8 +195,8 @@ export class ConnectivityEngine {
     // Keep database failures outside the adapter catch: never retry a settlement or request.
     ledger.settle(reservation, "succeeded", result.usage, headers);
     ledger.recordHealth(provider, request.model, "passed");
-    const cost = calculatedCost(reservation.price, result.usage);
-    return { ...result, estimatedUSD: cost === null ? null : dollars(cost), requestId: reservation.id, budget: ledger.snapshot().total };
+    const cost = reservation.billingMode === 'free' ? (result.usage && Number.isSafeInteger(result.usage.inputTokens) && Number.isSafeInteger(result.usage.outputTokens) ? 0n : null) : calculatedCost(reservation.price, result.usage);
+    return { ...result, billingMode: reservation.billingMode, estimatedUSD: cost === null ? null : dollars(cost), requestId: reservation.id, budget: ledger.snapshot().total };
   }
 
   async disconnect(provider: ProviderId) { await this.credentials.delete(provider); await this.store.remove(provider); this.usageLedger().invalidateFreeUse(provider); return { provider, disconnected: true }; }

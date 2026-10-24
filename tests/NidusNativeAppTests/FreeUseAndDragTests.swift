@@ -41,4 +41,16 @@ final class FreeUseAndDragTests: XCTestCase {
         XCTAssertTrue(result.conditions.contains("paid bounds"))
         XCTAssertNotNil(result.checkedAt)
     }
+    @MainActor func testGeminiProjectSettingUsesSharedBridgeWithoutEnablingPaidRouting() async throws {
+        var sent: [String: Any] = [:]
+        let model = RoutingSettingsModel { input in
+            sent = input
+            return Data(#"{"allowPaid":false,"policies":{"normal":[2,1]},"models":[],"geminiBilling":{"state":"free","project":"test-project","checkedAt":"2026-10-25T00:00:00Z"}}"#.utf8)
+        }
+        await model.perform(["method": "gemini-billing-set", "state": "free", "project": "test-project", "confirmed": true, "riskAccepted": true])
+        XCTAssertEqual(sent["method"] as? String, "gemini-billing-set")
+        XCTAssertEqual(model.snapshot?.geminiBilling?.state, "free")
+        XCTAssertEqual(model.snapshot?.geminiBilling?.project, "test-project")
+        XCTAssertEqual(model.snapshot?.allowPaid, false)
+    }
 }

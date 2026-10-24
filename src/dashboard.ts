@@ -12,6 +12,7 @@ export async function dispatch(input: unknown, engine: ConnectivityEngine): Prom
   const r = input as Record<string, unknown>;
   if (r.method === "ping") return { ready: true };
   if (r.method === "usage") return engine.usage();
+  if (r.method === 'gemini-billing-set') return engine.setGeminiBilling(r.state, r.project, r.confirmed, r.riskAccepted);
   if (r.method === 'routing-settings') return engine.routingSettings();
   if (r.method === 'routing-policy-set') return engine.setRoutingPolicy(r.difficulty, r.tiers);
   if (r.method === 'automatic-paid-set') return engine.setAutomaticPaid(r.allowed);

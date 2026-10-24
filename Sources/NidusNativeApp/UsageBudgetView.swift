@@ -31,6 +31,7 @@ struct UsageRequest: Decodable, Identifiable {
     let task: String
     let status: String
     let settlement: String
+    let billingMode: String?
     let costStatus: String
     let estimatedUSD: String?
     let confirmedUSD: String?
@@ -179,7 +180,7 @@ struct UsageBudgetView: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("\(item.provider) / \(item.model) · \(item.task) · \(item.status)").fontWeight(.medium)
                                 Text("\(item.at) · \(item.id)").font(.caption.monospaced())
-                                Text("비용 \(item.costStatus) · 정산 \(item.settlement) · 추정 \(usd(item.estimatedUSD)) · 확인 \(usd(item.confirmedUSD)) · 예약 \(usd(item.reservedUSD))").font(.caption)
+                                Text("\(item.billingMode == "free" ? "무료 프로젝트 (사용자 확인)" : "유료 정책") · 비용 \(item.costStatus) · 정산 \(item.settlement) · 추정 \(usd(item.estimatedUSD)) · 확인 \(usd(item.confirmedUSD)) · 예약 \(usd(item.reservedUSD))").font(.caption)
                                 Text("입력 \(item.inputTokens.map(String.init) ?? "미보고") · 출력 \(item.outputTokens.map(String.init) ?? "미보고") · 캐시 읽기 \(item.cachedTokens.map(String.init) ?? "미보고") · 캐시 쓰기 \(item.cacheWriteTokens.map(String.init) ?? "미보고") · 추론 \(item.reasoningTokens.map(String.init) ?? "미보고")").font(.caption)
                                 Text("가격 버전: \(item.priceVersion)").font(.caption2.monospaced())
                                 if item.exception { Text("사용자 승인 예외").foregroundStyle(.orange) }
