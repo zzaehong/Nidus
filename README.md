@@ -217,3 +217,7 @@ swift test               # 앱 상태, 경로 탐색, Pipe 분리, 종료 및 �
 실제 모델 조회 테스트는 Secret Manager 등에서 해당 환경 키를 주입한 후 `NIDUS_LIVE=1 npm run test:live`로 실행합니다. 실제 채팅에는 추가로 `NIDUS_LIVE_CHAT=1` 및 `NIDUS_<PROVIDER>_MODEL`에 조회된 모델 ID를 지정해야 합니다. 실제 요청에는 과금이 발생할 수 있습니다. 테스트는 사용자의 기존 Keychain API 키를 자동으로 읽지 않습니다.
 
 Connectivity MVP 당시 검증: Mock/CLI/engine **42 PASS**, macOS Keychain synthetic **1 PASS**, 실제 터미널 숨김 입력 **PASS**, 실제 Provider 모델 조회·채팅 **8 NOT RUN**. 인증정보가 제공되지 않은 Provider는 실제 검증 완료로 표시하지 않습니다. 자세한 결과는 [검증 기록](docs/CONNECTIVITY_VALIDATION.md), 모듈 경계는 [아키텍처](docs/API_CONNECTIVITY.md)를 참고하세요.
+
+### Gemini Free Tier 프로젝트 설정
+
+Model Tier 및 Routing Policy의 **Gemini 프로젝트 결제 상태 설정**에서 현재 키의 프로젝트를 Free로 직접 확인할 수 있습니다. 공식 무료 지원 모델은 유료 예산을 예약하지 않으며, 무료 요청에서 유료 모델로 자동 승격하지 않습니다. Paid·Unknown은 기존 정책을 유지합니다. 사용자 설정은 Google Billing 상태를 보증하지 않으며 잘못 설정하면 과금될 수 있습니다. [지원 모델·설정·검증·한계](docs/Gemini_Free_Tier_Fix.md)를 확인하세요.
