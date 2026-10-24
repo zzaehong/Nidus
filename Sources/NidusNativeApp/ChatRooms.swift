@@ -207,7 +207,7 @@ struct ChatRoomsView: View {
             }
             Group {
                 if message.role == "assistant" && !rawMessageIDs.contains(message.id) {
-                    Text((try? AttributedString(markdown: message.content)) ?? AttributedString(message.content))
+                    MarkdownPreview(source: message.content)
                 } else {
                     Text(message.content)
                 }
