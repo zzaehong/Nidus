@@ -53,6 +53,7 @@ struct DashboardView: View {
     @EnvironmentObject var dashboard: Dashboard
     @State private var selected: Provider? = .openai
     @State private var showHealth = false
+    @State private var showChat = false
     var body: some View {
         NavigationSplitView {
             VStack(alignment: .leading, spacing: 20) {
@@ -78,8 +79,10 @@ struct DashboardView: View {
         .toolbar {
             Button("모델 일괄 검사", systemImage: "checkmark.shield") { showHealth = true }.disabled(!dashboard.ready)
                 .help("선택한 범위의 텍스트 모델을 순차 검사합니다. 실패해도 다음 모델로 진행하며 실제 API 비용이 발생할 수 있습니다. 실행 전 대상과 요청 한도를 확인합니다.")
+            Button("채팅방", systemImage: "bubble.left.and.bubble.right") { showChat = true }.disabled(!dashboard.ready)
         }
         .sheet(isPresented: $showHealth) { HealthChecksView(initialProvider: selected ?? .openai).environmentObject(dashboard) }
+        .sheet(isPresented: $showChat) { ChatRoomsView().environmentObject(dashboard) }
         .overlay {
             if let error = dashboard.runtimeError {
                 VStack(alignment: .leading, spacing: 16) {
@@ -217,6 +220,19 @@ struct ProviderView: View {
                 if let classification = model.classification {
                     Text("분류: \(classification.label)").font(.headline)
                     Text(classification.reason).font(.caption).foregroundStyle(.secondary)
+                }
+                if let result = dashboard.healthHistory[provider.rawValue + ":" + model.id] {
+                    Divider()
+                    Label("최근 동작 검사: \(result.status.label)", systemImage: result.status == .passed ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                        .font(.headline).foregroundStyle(result.status == .passed ? .green : .orange)
+                    Text(result.reason).font(.callout).textSelection(.enabled)
+                    if let date = result.checkedAt { Text("검사 시각: \(date)").font(.caption).foregroundStyle(.secondary) }
+                    if let duration = result.durationMs { Text("응답 시간: \(duration)ms").font(.caption).foregroundStyle(.secondary) }
+                    Text("토큰: 입력 \(result.inputTokens.map(String.init) ?? "미보고") · 출력 \(result.outputTokens.map(String.init) ?? "미보고")")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else {
+                    Label("동작 검사 기록 없음", systemImage: "questionmark.circle").font(.callout).foregroundStyle(.secondary)
+                    Text("모델 일괄 검사에서 이 모델의 텍스트 응답을 확인할 수 있습니다.").font(.caption).foregroundStyle(.secondary)
                 }
                 Text("채팅 \(support(model.capabilities.chat)) · Streaming \(support(model.capabilities.streaming))\nTools \(support(model.capabilities.tools)) · Vision \(support(model.capabilities.vision))").font(.callout)
                 Text("기능 표시는 API 메타데이터 기준입니다. 이 앱은 텍스트 요청만 실행합니다.").font(.caption).foregroundStyle(.secondary)

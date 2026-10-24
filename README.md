@@ -60,6 +60,12 @@ open dist/Nidus.app
 
 분류 근거·검사 범위·공식 출처와 검증 기록은 [MODEL_HEALTH.md](docs/MODEL_HEALTH.md)를 참고하세요.
 
+### Provider를 바꿔가며 이어가는 채팅방
+
+상단 **채팅방**에서 방을 만들고 Provider와 모델을 선택해 메시지를 보냅니다. 같은 방에서 Provider/모델을 바꾸면 최근 최대 100개의 성공한 대화 메시지를 선택한 API에 문맥으로 전달합니다. 각 메시지에는 사용한 Provider·모델이 표시되고, 방 제목·system prompt·대화는 로컬에 저장되어 앱을 다시 실행해도 이어집니다. 방은 왼쪽 목록에서 만들거나 삭제할 수 있습니다.
+
+채팅 데이터는 `~/Library/Application Support/Nidus/chat-rooms.json`에 저장하며 파일 권한은 0600입니다. API Key, 실패한 사용자 발화는 전송 문맥에서 제외하고, 서버 응답 본문과 system prompt/사용자 대화는 로컬 대화 기록에 저장됩니다. API 요청에는 실제 비용이 발생할 수 있습니다. 각 호출은 현재 선택한 Provider 키와 모델을 사용합니다.
+
 ### CLI 사용
 
 ```sh
