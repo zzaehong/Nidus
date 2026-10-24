@@ -1,3 +1,4 @@
+import { fundedLedger } from './helpers/ledger.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -8,7 +9,7 @@ test('dashboard connects with key, returns discovered models, refreshes, chats a
   let storedKey = null, snapshot = null, requests = 0;
   const credentials = { get: async () => storedKey, set: async (_, k) => { storedKey = k; }, delete: async () => { storedKey = null; } };
   const store = { load: async () => snapshot, save: async s => { snapshot = s; }, remove: async () => { snapshot = null; } };
-  const model = { name: 'models/discovered-not-hardcoded', supportedGenerationMethods: ['generateContent'] };
+  const model = { name: 'models/gemini-2.5-flash', supportedGenerationMethods: ['generateContent'] };
   const adapter = new GeminiAdapter('https://example.invalid', new HttpClient(async (url, options) => {
     requests++;
     assert.equal(options.headers['x-goog-api-key'], 'synthetic-dashboard-key');
@@ -16,18 +17,18 @@ test('dashboard connects with key, returns discovered models, refreshes, chats a
       candidates: [{ content: { parts: [{ text: 'Mock answer' }] } }], usageMetadata: { promptTokenCount: 2, candidatesTokenCount: 3, totalTokenCount: 5 }
     } : String(url).endsWith('/models') ? { models: [model] } : model);
   }));
-  const engine = new ConnectivityEngine(credentials, store, { gemini: adapter });
+  const engine = new ConnectivityEngine(credentials, store, { gemini: adapter }, fundedLedger());
   const call = (method, extra = {}) => dispatch({ method, provider: 'gemini', ...extra }, engine);
   assert.deepEqual((await call('cached')).models, []); assert.equal(requests, 0);
   const connected = await call('connect', { key: 'synthetic-dashboard-key' });
-  assert.equal(connected.models[0].id, 'discovered-not-hardcoded');
+  assert.equal(connected.models[0].id, 'gemini-2.5-flash');
   assert.equal(connected.source, 'api');
   assert.equal(JSON.stringify(connected).includes('synthetic-dashboard-key'), false);
   assert.equal((await call('cached')).source, 'cache'); assert.equal(requests, 1);
   await call('models'); assert.equal(requests, 2);
-  assert.equal((await call('detail', { model: 'discovered-not-hardcoded' })).id, 'discovered-not-hardcoded');
-  assert.equal((await call('pricing')).prices[0].status, 'unknown');
-  const chat = await call('chat', { request: { model: 'discovered-not-hardcoded', messages: [{ role: 'user', content: 'Hi' }] } });
+  assert.equal((await call('detail', { model: 'gemini-2.5-flash' })).id, 'gemini-2.5-flash');
+  assert.equal((await call('pricing')).prices[0].status, 'verified_snapshot');
+  const chat = await call('chat', { request: { model: 'gemini-2.5-flash', messages: [{ role: 'user', content: 'Hi' }] } });
   assert.equal(chat.text, 'Mock answer'); assert.equal(chat.usage.totalTokens, 5);
   await call('disconnect'); assert.equal(storedKey, null); assert.equal(snapshot, null);
 });

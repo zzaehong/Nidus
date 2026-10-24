@@ -25,7 +25,7 @@ export const pricingSources: Record<ProviderId, string> = {
   gemini: "https://ai.google.dev/gemini-api/docs/pricing",
   deepseek: "https://api-docs.deepseek.com/quick_start/pricing/"
 };
-const checkedAt = "2026-10-23T01:19:10Z";
+const checkedAt = "2026-10-24T06:00:00Z";
 function entry(provider: ProviderId, model: string, rates: Rate[], freeTier: Price["freeTier"] = "unknown", sourceUrl = pricingSources[provider], notes = "Standard text requests only; excludes tools, cache storage/write, batch and negotiated discounts."): Price {
   return { provider, model, status: "verified_snapshot", currency: "USD", unit: "per_million_tokens", freeTier, sourceUrl, checkedAt, rates, notes };
 }
@@ -54,3 +54,44 @@ export function priceFor(provider: ProviderId, model: string): Price {
   });
 }
 export function pricesFor(provider: ProviderId): Price[] { return structuredClone(registry.filter(p => p.provider === provider)); }
+
+// All inputs are plain text, standard direct API; no tools, media, explicit cache or batch.
+// Reserve the documented full input capacity instead of claiming a character heuristic
+// is a tokenizer bound. Gemini/DeepSeek reserve full output capacity including reasoning.
+import { createHash } from 'node:crypto';
+import { tokenCost } from './money.js';
+import type { ChatRequest, Usage } from './types.js';
+export const pricingLimits: Record<string, { input: number; output: number; source: string }> = {
+  'openai:gpt-4.1-mini': { input: 1_047_576, output: 32_768, source: 'https://developers.openai.com/api/docs/models/gpt-4.1-mini' },
+  'openai:gpt-4.1-mini-2025-04-14': { input: 1_047_576, output: 32_768, source: 'https://developers.openai.com/api/docs/models/gpt-4.1-mini' },
+  'anthropic:claude-sonnet-4-6': { input: 1_000_000, output: 128_000, source: 'https://platform.claude.com/docs/en/build-with-claude/context-windows' },
+  'anthropic:claude-opus-4-6': { input: 1_000_000, output: 128_000, source: 'https://platform.claude.com/docs/en/build-with-claude/context-windows' },
+  'gemini:gemini-2.5-flash': { input: 1_048_576, output: 65_536, source: 'https://ai.google.dev/gemini-api/docs/models/gemini-2.5-flash' },
+  'gemini:gemini-3.5-flash-lite': { input: 1_048_576, output: 65_536, source: 'https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash-lite' },
+  'deepseek:deepseek-flash': { input: 1_000_000, output: 384_000, source: pricingSources.deepseek },
+  'deepseek:deepseek-v4-pro': { input: 1_000_000, output: 384_000, source: pricingSources.deepseek }
+};
+export function priceVersion(price: Price): string {
+  return createHash('sha256').update(JSON.stringify(price)).digest('hex');
+}
+export function upperCost(provider: ProviderId, request: ChatRequest, price = priceFor(provider, request.model)): bigint | null {
+  const limits = pricingLimits[`${provider}:${request.model}`];
+  // Expired snapshots fail closed until reviewed; no automatic external price refresh.
+  if (!limits || price.status !== 'verified_snapshot' || !price.rates.length || !price.checkedAt ||
+      Date.now() - Date.parse(price.checkedAt) > 30 * 86400_000) return null;
+  const output = request.maxOutputTokens ?? 1024;
+  if (!Number.isSafeInteger(output) || output <= 0 || output > limits.output) return null;
+  const outputBound = provider === 'gemini' || provider === 'deepseek' ? limits.output : output;
+  return tokenCost(limits.input, Math.max(...price.rates.map(r => r.input))) + tokenCost(outputBound, Math.max(...price.rates.map(r => r.output)));
+}
+export function calculatedCost(price: Price, usage: Usage | null | undefined): bigint | null {
+  if (price.status !== 'verified_snapshot' || !price.rates.length || !usage) return null;
+  const { inputTokens: input, outputTokens: output } = usage;
+  const cached = usage.cachedInputTokens ?? 0, writes = usage.cacheWriteTokens ?? 0;
+  if (input === null || output === null || ![input, output, cached, writes].every(n => Number.isSafeInteger(n) && n >= 0) || cached + writes > input) return null;
+  // Write TTL is not normalized, so never guess a write price. No current adapter requests writes.
+  if (writes > 0) return null;
+  // Multi-tier schedules produce a conservative estimate, not an exact invoice.
+  const rate = (key: 'input' | 'output' | 'cachedInput') => Math.max(...price.rates.map(r => r[key] ?? r.input));
+  return tokenCost(input - cached, rate('input')) + tokenCost(cached, rate('cachedInput')) + tokenCost(output, rate('output'));
+}

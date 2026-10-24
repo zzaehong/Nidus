@@ -32,7 +32,7 @@ export interface ChatResponse {
   finishReason: string | null;
   usage: Usage;
 }
-export interface RequestOptions { signal?: AbortSignal; timeoutMs?: number }
+export interface RequestOptions { budgetException?: boolean; onHeaders?: (headers: Record<string, string>) => void; signal?: AbortSignal; timeoutMs?: number }
 export interface ProviderAdapter {
   readonly id: ProviderId;
   listModels(key: string, options?: RequestOptions): Promise<Model[]>;

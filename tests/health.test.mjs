@@ -1,3 +1,4 @@
+import { fundedLedger } from './helpers/ledger.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { classifyModel } from '../dist/classification.js';
@@ -63,16 +64,16 @@ test('probe failures never stop subsequent models and preserve safe errors', asy
 });
 test('engine reclassifies legacy cache; probe requires discovered ID, confirmation, and optional inferred consent', async () => {
   let readKeys = 0, requests = 0;
-  const models = [model('gpt-example', 'openai'), model('gpt-image-example', 'openai')];
+  const models = [model('gpt-4.1-mini', 'openai'), model('gpt-image-example', 'openai')];
   const engine = new ConnectivityEngine({ get: async () => { readKeys++; return 'synthetic'; } },
     { load: async () => ({ version: 1, provider: 'openai', fetchedAt: '2026-10-24', models }) },
-    { openai: { chat: async () => { requests++; return { text: 'OK', usage }; } } });
+    { openai: { chat: async () => { requests++; return { text: 'OK', usage }; } } }, fundedLedger());
   assert.equal((await engine.cachedModels('openai')).models[0].classification.kind, 'text'); assert.equal(readKeys, 0);
-  await assert.rejects(dispatch({ method: 'probe', provider: 'openai', model: 'gpt-example' }, engine));
-  await assert.rejects(dispatch({ method: 'probe', provider: 'openai', model: 'gpt-example', confirmed: true, allowInferred: 'yes' }, engine));
+  await assert.rejects(dispatch({ method: 'probe', provider: 'openai', model: 'gpt-4.1-mini' }, engine));
+  await assert.rejects(dispatch({ method: 'probe', provider: 'openai', model: 'gpt-4.1-mini', confirmed: true, allowInferred: 'yes' }, engine));
   await assert.rejects(engine.probe('openai', 'invented', true));
-  assert.equal((await engine.probe('openai', 'gpt-example')).status, 'skipped');
+  assert.equal((await engine.probe('openai', 'gpt-4.1-mini')).status, 'skipped');
   assert.equal((await engine.probe('openai', 'gpt-image-example', true)).status, 'skipped'); assert.equal(readKeys, 0);
-  assert.equal((await dispatch({ method: 'probe', provider: 'openai', model: 'gpt-example', confirmed: true, allowInferred: true }, engine)).status, 'passed');
+  assert.equal((await dispatch({ method: 'probe', provider: 'openai', model: 'gpt-4.1-mini', confirmed: true, allowInferred: true }, engine)).status, 'passed');
   assert.equal(requests, 1); assert.equal(readKeys, 1);
 });

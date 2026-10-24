@@ -56,19 +56,26 @@ export abstract class BaseAdapter implements ProviderAdapter {
   }
   async chat(key: string, request: ChatRequest, options: RequestOptions = {}): Promise<ChatResponse> {
     const headers = this.headers(keyValue(key));
-    this.validateModelID(request.model);
-    if (!Array.isArray(request.messages) || !request.messages.length || request.messages.some(m => !m || !["user", "assistant"].includes(m.role) || typeof m.content !== "string" || !m.content.trim())) throw new NidusError("invalid_request", "Nonempty user/assistant messages are required.");
-    if (request.system !== undefined && typeof request.system !== "string") throw new NidusError("invalid_request", "System prompt must be a string.");
-    if (request.maxOutputTokens !== undefined && (!Number.isSafeInteger(request.maxOutputTokens) || request.maxOutputTokens <= 0)) throw new NidusError("invalid_request", "maxOutputTokens must be a positive integer.");
+    validateChatRequest(request);
     const { path, body } = this.chatBody(request);
-    return bounded(options, async signal => this.normalizeChat(await this.http.json(`${this.endpoint}${path}`, headers, signal, body), request.model));
+    return bounded(options, async signal => this.normalizeChat(await this.http.json(`${this.endpoint}${path}`, headers, signal, body, options.onHeaders), request.model));
   }
 }
 export function textBlocks(value: unknown, type: string): string {
   return array(value).map(object).filter(p => p.type === type).map(p => typeof p.text === "string" ? p.text : "").join("");
 }
 export function response(provider: ProviderId, model: string, text: string, finish: unknown, tokens: Usage): ChatResponse {
-  if (!text) throw new NidusError("provider_error", "Provider returned no text (blocked, refused, incomplete, or unsupported output).");
+  if (!text) {
+    const error = new NidusError("provider_error", "Provider returned no text (blocked, refused, incomplete, or unsupported output).");
+    error.usage = tokens; throw error;
+  }
   return { provider, model, text, finishReason: typeof finish === "string" ? finish : null, usage: tokens };
 }
 export { array, count, object, string };
+
+export function validateChatRequest(request: ChatRequest): void {
+    if (!request || typeof request.model !== "string" || !request.model.trim() || request.model.length > 512 || /[\r\n\0]/.test(request.model)) throw new NidusError("invalid_request", "A valid model ID is required.");
+    if (!Array.isArray(request.messages) || !request.messages.length || request.messages.some(m => !m || !["user", "assistant"].includes(m.role) || typeof m.content !== "string" || !m.content.trim())) throw new NidusError("invalid_request", "Nonempty user/assistant messages are required.");
+    if (request.system !== undefined && typeof request.system !== "string") throw new NidusError("invalid_request", "System prompt must be a string.");
+    if (request.maxOutputTokens !== undefined && (!Number.isSafeInteger(request.maxOutputTokens) || request.maxOutputTokens <= 0)) throw new NidusError("invalid_request", "maxOutputTokens must be a positive integer.");
+}
