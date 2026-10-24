@@ -22,7 +22,7 @@ export class UsageLedger {
     this.db = new DatabaseSync(path);
     if (path !== ':memory:') chmodSync(path, 0o600);
     const schema = this.db.prepare('PRAGMA user_version').get() as { user_version: number };
-    if (schema.user_version > 1) { this.db.close(); throw new NidusError('storage', 'Usage ledger schema is newer than this app.'); }
+    if (schema.user_version > 2) { this.db.close(); throw new NidusError('storage', 'Usage ledger schema is newer than this app.'); }
     this.db.exec(`PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;
       CREATE TABLE IF NOT EXISTS budgets(scope TEXT PRIMARY KEY, amount INTEGER NOT NULL CHECK(amount>=0));
       CREATE TABLE IF NOT EXISTS budget_changes(id INTEGER PRIMARY KEY, at TEXT NOT NULL, scope TEXT NOT NULL, amount INTEGER NOT NULL);
@@ -36,7 +36,9 @@ export class UsageLedger {
       CREATE INDEX IF NOT EXISTS requests_month ON requests(month,provider);
       CREATE TABLE IF NOT EXISTS balances(provider TEXT PRIMARY KEY, usd TEXT, at TEXT NOT NULL, source TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS account_reports(provider TEXT NOT NULL, month TEXT NOT NULL, report TEXT NOT NULL, PRIMARY KEY(provider,month));
-      PRAGMA user_version=1;`);
+      CREATE TABLE IF NOT EXISTS route_events(id INTEGER PRIMARY KEY, route_id TEXT NOT NULL, at TEXT NOT NULL, event TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS model_health(provider TEXT NOT NULL, model TEXT NOT NULL, status TEXT NOT NULL, at TEXT NOT NULL, until_at TEXT, PRIMARY KEY(provider,model));
+      PRAGMA user_version=2;`);
   }
   close() { this.db.close(); }
   private rows(sql: string, ...params: SQLInputValue[]): Row[] {
@@ -63,18 +65,44 @@ export class UsageLedger {
     return this.rows(`SELECT COALESCE(SUM(CASE WHEN month=? THEN COALESCE(confirmed,estimated,0) ELSE 0 END + reserved),0) AS n
       FROM requests WHERE (month=? OR reserved>0) ${provider ? 'AND provider=?' : ''}`, month, month, ...(provider ? [provider] : []))[0]!.n as bigint;
   }
+  private checkBudget(provider: ProviderId, bound: bigint | null, month: string, exception = false): string | null {
+    if (bound === null) return 'unknown_price_or_bound';
+    if (bound === 0n || exception) return null;
+    const total = this.budget('total'), single = this.budget('request'), specific = this.budget(provider);
+    if (total === null || single === null) return 'budget_not_configured';
+    if (bound > single) return 'request_budget';
+    if (this.exposure(month) >= total || this.exposure(month) + bound > total) return 'monthly_budget';
+    if (specific !== null && (this.exposure(month, provider) >= specific || this.exposure(month, provider) + bound > specific)) return 'provider_budget';
+    return null;
+  }
+  // Advisory only. reserve() rechecks this same policy under BEGIN IMMEDIATE.
+  quote(provider: ProviderId, request: ChatRequest) {
+    return this.transaction(() => {
+      const bound = upperCost(provider, request), reason = this.checkBudget(provider, bound, this.now().toISOString().slice(0, 7));
+      return { allowed: reason === null, reason, boundUSD: bound === null ? null : dollars(bound) };
+    });
+  }
+  recordRoute(routeId: string, event: { provider: ProviderId; model: string; reason: string; status: string; budget: string; boundUSD: string | null; requestId?: string }) {
+    this.db.prepare('INSERT INTO route_events(route_id,at,event) VALUES(?,?,?)').run(routeId, this.now().toISOString(), JSON.stringify(event));
+  }
+  routes() {
+    return this.rows('SELECT route_id,at,event FROM route_events ORDER BY id DESC LIMIT 200').map(r => ({ routeId: r.route_id, at: r.at, ...JSON.parse(r.event as string) }));
+  }
+  recordHealth(provider: ProviderId, model: string, status: string, cooldownSeconds = 0) {
+    const at = this.now();
+    this.db.prepare('INSERT INTO model_health VALUES(?,?,?,?,?) ON CONFLICT(provider,model) DO UPDATE SET status=excluded.status,at=excluded.at,until_at=excluded.until_at')
+      .run(provider, model, status, at.toISOString(), cooldownSeconds ? new Date(at.getTime() + cooldownSeconds * 1000).toISOString() : null);
+  }
+  health(provider: ProviderId, model: string) {
+    const row = this.rows('SELECT * FROM model_health WHERE provider=? AND model=?', provider, model)[0];
+    return { status: row?.status ?? 'unknown', checkedAt: row?.at ?? null, excludedUntil: row?.until_at ?? null,
+      available: !row?.until_at || String(row.until_at) <= this.now().toISOString() };
+  }
   reserve(provider: ProviderId, request: ChatRequest, task: TaskKind, exception = false): Reservation {
     const price = priceFor(provider, request.model), bound = upperCost(provider, request, price);
     const at = this.now().toISOString(), month = at.slice(0, 7), id = randomUUID();
     const reason = this.transaction(() => {
-      const total = this.budget('total'), single = this.budget('request'), specific = this.budget(provider);
-      let block: string | null = bound === null ? 'unknown_price_or_bound' : null;
-      if (!block && bound! > 0n && !exception) {
-        if (total === null || single === null) block = 'budget_not_configured';
-        else if (bound! > single) block = 'request_budget';
-        else if (this.exposure(month) >= total || this.exposure(month) + bound! > total) block = 'monthly_budget';
-        else if (specific !== null && (this.exposure(month, provider) >= specific || this.exposure(month, provider) + bound! > specific)) block = 'provider_budget';
-      }
+      const block = this.checkBudget(provider, bound, month, exception);
       this.db.prepare(`INSERT INTO requests(id,at,month,provider,model,task,status,settlement,cost_status,reserved,bound,price_version,price_json,exception,block_reason,updated_at)
         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, at, month, provider, request.model, task, block ? 'blocked' : 'pending', block ? 'not_sent' : 'reserved', 'unknown', block ? 0n : bound!, bound, priceVersion(price), JSON.stringify(price), exception ? 1 : 0, block, at);
       return block;

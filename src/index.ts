@@ -12,3 +12,6 @@ export * from "./health.js";
 export * from "./ledger.js";
 export * from "./money.js";
 export * from "./provider-usage.js";
+
+export { modelProfile, rankCandidates, difficulty } from './router.js';
+export type { Difficulty, Grade, Candidate } from './router.js';

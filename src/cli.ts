@@ -12,6 +12,7 @@ export const help = `Nidus API Connectivity MVP
   nidus models <provider> [--refresh | --detail <model-id>]
   nidus pricing <provider>
   nidus chat --provider <provider> --model <model-id> [--max-output-tokens 1024]
+  nidus chat --auto [--difficulty simple|normal|complex]
   nidus usage
   nidus budget <total|request|provider> --usd <decimal USD>
   nidus balance <provider>
@@ -40,7 +41,7 @@ export async function main(argv = process.argv.slice(2), dependencies: CliDepend
   try {
     ({ values, positionals } = parseArgs({ args: argv, allowPositionals: true, strict: true, options: {
       help: { type: "boolean", short: "h" }, refresh: { type: "boolean" }, env: { type: "boolean" },
-      provider: { type: "string" }, model: { type: "string" }, detail: { type: "string" },
+      auto: { type: "boolean" }, difficulty: { type: "string" }, provider: { type: "string" }, model: { type: "string" }, detail: { type: "string" },
       "timeout-ms": { type: "string" }, "max-output-tokens": { type: "string" }, usd: { type: "string" }, "approve-budget-exception": { type: "boolean" }
     } }));
   } catch { throw new NidusError("invalid_request", "Invalid arguments. Use nidus --help. API keys must never be command-line arguments."); }
@@ -52,7 +53,7 @@ export async function main(argv = process.argv.slice(2), dependencies: CliDepend
   if (positionals.length !== expected) throw new NidusError("invalid_request", "Unexpected positional arguments. Use nidus --help.");
   const allowed: Record<string, string[]> = {
     usage: [], budget: ["usd"], balance: [], account: [], providers: [], connect: ["env", "timeout-ms"], models: ["refresh", "detail", "timeout-ms"],
-    pricing: [], chat: ["provider", "model", "max-output-tokens", "timeout-ms", "approve-budget-exception"], disconnect: []
+    pricing: [], chat: ["auto", "difficulty", "provider", "model", "max-output-tokens", "timeout-ms", "approve-budget-exception"], disconnect: []
   };
   if (Object.keys(values).some(v => !allowed[command!]!.includes(v))) throw new NidusError("invalid_request", "Option is not valid for this command.");
   const persistent = new KeychainStore();
@@ -62,7 +63,9 @@ export async function main(argv = process.argv.slice(2), dependencies: CliDepend
   if (command === "account") { print(await engine.syncAccount(providerId(argument ?? ""))); return; }
   if (command === "balance") { print(await engine.syncBalance(providerId(argument ?? ""))); return; }
   if (command === "providers") { print(engine.providers()); return; }
-  const provider = providerId(command === "chat" ? values.provider ?? "" : argument ?? "");
+  if (values.auto && (values.provider || values.model || values['approve-budget-exception'])) throw new NidusError('invalid_request', 'Automatic chat cannot specify a manual model or budget exception.');
+  if (values.difficulty && !values.auto) throw new NidusError('invalid_request', 'Difficulty requires --auto.');
+  const provider = values.auto ? 'openai' : providerId(command === "chat" ? values.provider ?? "" : argument ?? "");
   const controller = new AbortController(); const cancel = () => controller.abort();
   // Secret prompt manages raw-mode Ctrl-C itself; register HTTP cancellation afterward.
   let inputKey: string | undefined;
@@ -80,9 +83,10 @@ export async function main(argv = process.argv.slice(2), dependencies: CliDepend
         print(values.detail ? await engine.detail(provider, values.detail, options) : await engine.models(provider, values.refresh || !!process.env[credentialEnvironment[provider]], options)); break;
       case "pricing": print(await engine.pricing(provider)); break;
       case "chat": {
-        if (!values.model) throw new NidusError("invalid_request", "--model is required; use models to discover IDs.");
+        if (!values.auto && !values.model) throw new NidusError("invalid_request", "--model is required; use models to discover IDs.");
         const text = await (dependencies.readPrompt ?? chatPrompt)();
-        print(await engine.chat(provider, { model: values.model, messages: [{ role: "user", content: text }], maxOutputTokens: values["max-output-tokens"] === undefined ? undefined : Number(values["max-output-tokens"]) }, options)); break;
+        const request = { model: values.model ?? 'automatic', messages: [{ role: 'user' as const, content: text }], maxOutputTokens: values['max-output-tokens'] === undefined ? undefined : Number(values['max-output-tokens']) };
+        print(values.auto ? await engine.autoChat(request, values.difficulty, options) : await engine.chat(provider, request, options)); break;
       }
       case "disconnect":
         if (process.env[credentialEnvironment[provider]]) throw new NidusError("invalid_request", "Unset the session environment credential before disconnecting the stored credential.");

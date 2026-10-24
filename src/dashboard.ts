@@ -13,6 +13,11 @@ export async function dispatch(input: unknown, engine: ConnectivityEngine): Prom
   if (r.method === "ping") return { ready: true };
   if (r.method === "usage") return engine.usage();
   if (r.method === "budget-set") return engine.setBudget(r.scope, r.usd);
+  if (r.method === "route-plan" || r.method === "auto-chat") {
+    if (!r.request || typeof r.request !== 'object') throw new NidusError('invalid_request', 'Invalid chat request.');
+    return r.method === 'route-plan' ? engine.routePlan(r.request as ChatRequest, r.difficulty)
+      : engine.autoChat(r.request as ChatRequest, r.difficulty, { timeoutMs: 120_000 });
+  }
   const provider = providerId(typeof r.provider === "string" ? r.provider : "");
   switch (r.method) {
     case "account-sync": return engine.syncAccount(provider);
