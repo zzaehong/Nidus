@@ -81,7 +81,7 @@ private enum MarkdownParser {
                 if next.isEmpty || isBlockStart(next) || isTableStart(lines, index) { break }
                 paragraph.append(next); index += 1
             }
-            blocks.append(.paragraph(paragraph.joined(separator: " ")))
+            blocks.append(.paragraph(paragraph.joined(separator: "\n")))
         }
         return blocks
     }
@@ -143,7 +143,7 @@ struct MarkdownPreview: View {
             Text(inline(value)).font(level == 1 ? .title.bold() : level == 2 ? .title2.bold() : level == 3 ? .title3.bold() : .headline)
                 .fixedSize(horizontal: false, vertical: true)
         case .paragraph(let value):
-            Text(inline(value)).font(.body).fixedSize(horizontal: false, vertical: true)
+            inlineLines(value, font: .body, spacing: 2)
         case .list(let items, let ordered):
             VStack(alignment: .leading, spacing: 7) {
                 ForEach(items.indices, id: \.self) { index in
@@ -156,7 +156,7 @@ struct MarkdownPreview: View {
         case .quote(let value):
             HStack(alignment: .top, spacing: 9) {
                 RoundedRectangle(cornerRadius: 2).fill(.secondary.opacity(0.65)).frame(width: 3)
-                Text(inline(value)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                inlineLines(value, font: .body, spacing: 2).foregroundStyle(.secondary)
             }.fixedSize(horizontal: false, vertical: true).padding(.vertical, 2)
         case .code(let language, let value):
             VStack(alignment: .leading, spacing: 5) {
@@ -191,5 +191,13 @@ struct MarkdownPreview: View {
 
     private func inline(_ value: String) -> AttributedString {
         (try? AttributedString(markdown: value)) ?? AttributedString(value)
+    }
+    private func inlineLines(_ value: String, font: Font, spacing: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: spacing) {
+            ForEach(Array(value.components(separatedBy: "\n").enumerated()), id: \.offset) { _, line in
+                Text(inline(line)).font(font).fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
     }
 }
