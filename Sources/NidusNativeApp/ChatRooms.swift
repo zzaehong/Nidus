@@ -74,11 +74,15 @@ struct ChatRoomsView: View {
     private var selectedIndex: Int? { rooms.firstIndex { $0.id == selectedID } }
     private var activeRoom: ChatRoom? { selectedIndex.map { rooms[$0] } }
     private var activeModels: [APIModel] {
-        (dashboard.states[activeRoom?.provider ?? .openai]?.models ?? []).filter(\.usableForTextChat)
+        selectableModels(for: activeRoom?.provider ?? .openai)
     }
     private var readyProviders: [Provider] {
-        Provider.allCases.filter { provider in
-            (dashboard.states[provider]?.models ?? []).contains(where: \.usableForTextChat)
+        Provider.allCases.filter { !selectableModels(for: $0).isEmpty }
+    }
+
+    private func selectableModels(for provider: Provider) -> [APIModel] {
+        (dashboard.states[provider]?.models ?? []).filter { model in
+            model.usableForTextChat && dashboard.healthHistory[provider.rawValue + ":" + model.id]?.status == .passed
         }
     }
 
@@ -136,21 +140,20 @@ struct ChatRoomsView: View {
                     ForEach(readyProviders, id: \.self) { Text($0.name).tag($0) }
                 }.frame(width: 210)
                 Picker("모델", selection: Binding(get: { rooms[index].model }, set: { rooms[index].model = $0; rooms[index].updatedAt = Date(); persist() })) {
-                    ForEach(activeModels) { model in
-                        Text(model.name + (model.classification?.confidence == "inferred" ? " · 추정" : "")).tag(model.id)
-                    }
+                    ForEach(activeModels) { model in Text(model.name + " · 검사 통과").tag(model.id) }
                 }.frame(width: 280)
             }
             TextField("이 채팅방의 system prompt (선택)", text: Binding(get: { rooms[index].systemPrompt }, set: { rooms[index].systemPrompt = $0; persist() }))
                 .textFieldStyle(.roundedBorder)
             if readyProviders.isEmpty {
                 VStack(spacing: 8) {
-                    Label("연결된 모델이 없습니다", systemImage: "key").font(.headline)
-                    Text("대시보드에서 Provider API Key를 등록하고 모델 목록을 조회해주세요.").font(.caption).foregroundStyle(.secondary)
+                    Label("동작 검사 통과 모델이 없습니다", systemImage: "checkmark.seal").font(.headline)
+                    Text("Provider를 연결하고 모델 일괄 동작 검사를 실행한 뒤 채팅을 시작하세요.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }.frame(maxWidth: .infinity).padding(12)
             } else if activeModels.isEmpty {
-                Label("이 Provider에 텍스트 채팅용으로 분류된 모델이 없습니다. 다른 Provider를 선택하세요.", systemImage: "info.circle")
-                    .font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
+                    Label("이 Provider에는 동작 검사를 통과한 텍스트 모델이 없습니다. 먼저 모델 일괄 검사를 실행하세요.", systemImage: "info.circle")
+                        .font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
             }
             ScrollViewReader { proxy in
                 ScrollView {
@@ -256,7 +259,7 @@ struct ChatRoomsView: View {
     private func createRoom() {
         guard !sending, storageError == nil else { return }
         let provider = readyProviders.first ?? .openai
-        let model = dashboard.states[provider]?.models.first(where: \.usableForTextChat)?.id ?? ""
+        let model = selectableModels(for: provider).first?.id ?? ""
         rooms.insert(ChatRoom(provider: provider, model: model), at: 0)
         selectedID = rooms[0].id
         persist()
@@ -274,7 +277,7 @@ struct ChatRoomsView: View {
     }
     private func selectProvider(_ provider: Provider, at index: Int) {
         rooms[index].provider = provider
-        rooms[index].model = dashboard.states[provider]?.models.first(where: \.usableForTextChat)?.id ?? ""
+        rooms[index].model = selectableModels(for: provider).first?.id ?? ""
         rooms[index].updatedAt = Date(); persist()
     }
     private func persist() {
