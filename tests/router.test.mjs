@@ -14,6 +14,7 @@ const request = { model: 'automatic', messages: [{ role: 'user', content: 'priva
 const pairs = [['openai', 'gpt-4.1-mini'], ['gemini', 'gemini-3.5-flash-lite'], ['gemini', 'gemini-2.5-flash'], ['deepseek', 'deepseek-flash'], ['deepseek', 'deepseek-v4-pro'], ['anthropic', 'claude-sonnet-4-6'], ['anthropic', 'claude-opus-4-6']];
 const model = (provider, id) => ({ provider, id, name: id, capabilities: { chat: 'supported', tools: 'unknown', vision: 'unknown', streaming: 'unknown' }, limits: { inputTokens: null, outputTokens: null, contextTokens: null }, details: {}, capabilitySource: 'mock' });
 function fixture({ ledger = fundedLedger(), models = pairs, fail = () => {} } = {}) {
+  ledger.setAutomaticPaid(true);
   const calls = []; let discovery = 0;
   const registry = Object.fromEntries(['openai', 'gemini', 'deepseek', 'anthropic'].map(provider => [provider, {
     listModels: async () => { discovery++; throw Error('selection must not discover'); },
@@ -33,7 +34,7 @@ test('task policies select lightweight/general/advanced, default Normal, local p
   assert.equal((await f.engine.autoChat(request, 'complex')).model, 'deepseek-v4-pro');
   assert.equal(f.ledger.snapshot().requests.length, 1);
 });
-test('unknown grades/prices excluded; Complex never downgrades; invalid difficulty rejected', async () => {
+test('unknown grades/prices excluded; Complex never uses disallowed lightweight tier; invalid difficulty rejected', async () => {
   const f = fixture({ models: [['openai', 'gpt-4.1-mini'], ['openai', 'new-unknown']] });
   assert.equal(modelProfile('openai', 'new-unknown').grade, 'unknown');
   assert.equal(modelProfile('openai', 'new-unknown').releasedAt, null);
@@ -141,7 +142,7 @@ test('metadata incompatibility and cancelled request cannot dispatch; newer adva
   const f = fixture(); const plan = await f.engine.routePlan(request, 'simple'); const light = plan.candidates[0];
   const media = { ...light, model: { ...light.model, details: { outputModalities: ['IMAGE'] } } };
   assert.equal(rankCandidates([media], 'simple').length, 0);
-  const advanced = { ...light, model: { ...light.model, id: 'new-advanced' }, profile: { ...light.profile, grade: 'advanced', releasedAt: '2026-10-24' } };
+  const advanced = { ...light, tier: 3, model: { ...light.model, id: 'new-advanced' }, profile: { ...light.profile, grade: 'advanced', releasedAt: '2026-10-24' } };
   assert.equal(rankCandidates([advanced, light], 'simple')[0].profile.grade, 'lightweight');
   const controller = new AbortController(); controller.abort();
   await assert.rejects(f.engine.autoChat(request, 'simple', { signal: controller.signal }), e => e.code === 'cancelled');

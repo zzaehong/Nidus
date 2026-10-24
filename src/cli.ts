@@ -13,6 +13,10 @@ export const help = `Nidus API Connectivity MVP
   nidus pricing <provider>
   nidus chat --provider <provider> --model <model-id> [--max-output-tokens 1024]
   nidus chat --auto [--difficulty simple|normal|complex]
+  nidus routing
+  nidus routing-policy <simple|normal|complex> --tiers 2,1
+  nidus model-tier <provider> --model <id> --tier <0|1|2|3|default>
+  nidus automatic-paid <allow|deny>
   nidus usage
   nidus budget <total|request|provider> --usd <decimal USD>
   nidus balance <provider>
@@ -41,23 +45,30 @@ export async function main(argv = process.argv.slice(2), dependencies: CliDepend
   try {
     ({ values, positionals } = parseArgs({ args: argv, allowPositionals: true, strict: true, options: {
       help: { type: "boolean", short: "h" }, refresh: { type: "boolean" }, env: { type: "boolean" },
-      auto: { type: "boolean" }, difficulty: { type: "string" }, provider: { type: "string" }, model: { type: "string" }, detail: { type: "string" },
+      tiers: { type: "string" }, tier: { type: "string" }, auto: { type: "boolean" }, difficulty: { type: "string" }, provider: { type: "string" }, model: { type: "string" }, detail: { type: "string" },
       "timeout-ms": { type: "string" }, "max-output-tokens": { type: "string" }, usd: { type: "string" }, "approve-budget-exception": { type: "boolean" }
     } }));
   } catch { throw new NidusError("invalid_request", "Invalid arguments. Use nidus --help. API keys must never be command-line arguments."); }
   if (values.help || positionals.length === 0) { write(help); return; }
   const [command, argument] = positionals;
-  const commands = ["providers", "connect", "models", "pricing", "chat", "disconnect", "usage", "budget", "balance", "account"];
+  const commands = ["providers", "connect", "models", "pricing", "chat", "disconnect", "usage", "budget", "balance", "account", "routing", "routing-policy", "model-tier", "automatic-paid"];
   if (!commands.includes(command!)) throw new NidusError("invalid_request", "Unknown command. Use nidus --help.");
-  const expected = ["providers", "chat", "usage"].includes(command!) ? 1 : 2;
+  const expected = ["providers", "chat", "usage", "routing"].includes(command!) ? 1 : 2;
   if (positionals.length !== expected) throw new NidusError("invalid_request", "Unexpected positional arguments. Use nidus --help.");
   const allowed: Record<string, string[]> = {
-    usage: [], budget: ["usd"], balance: [], account: [], providers: [], connect: ["env", "timeout-ms"], models: ["refresh", "detail", "timeout-ms"],
+    routing: [], "routing-policy": ["tiers"], "model-tier": ["model", "tier"], "automatic-paid": [], usage: [], budget: ["usd"], balance: [], account: [], providers: [], connect: ["env", "timeout-ms"], models: ["refresh", "detail", "timeout-ms"],
     pricing: [], chat: ["auto", "difficulty", "provider", "model", "max-output-tokens", "timeout-ms", "approve-budget-exception"], disconnect: []
   };
   if (Object.keys(values).some(v => !allowed[command!]!.includes(v))) throw new NidusError("invalid_request", "Option is not valid for this command.");
   const persistent = new KeychainStore();
   const engine = dependencies.engine ?? new ConnectivityEngine(new EnvironmentCredentials(persistent), new FileModelStore());
+  if (command === 'routing') { print(await engine.routingSettings()); return; }
+  if (command === 'routing-policy') { print(await engine.setRoutingPolicy(argument, values.tiers === '' ? [] : values.tiers?.split(',').map(Number))); return; }
+  if (command === 'model-tier') { print(await engine.setModelTier(providerId(argument ?? ''), values.model, values.tier === 'default' ? null : values.tier === undefined || values.tier === '' ? undefined : Number(values.tier))); return; }
+  if (command === 'automatic-paid') {
+    if (!['allow', 'deny'].includes(argument ?? '')) throw new NidusError('invalid_request', 'Use allow or deny.');
+    print(await engine.setAutomaticPaid(argument === 'allow')); return;
+  }
   if (command === "usage") { print(engine.usage()); return; }
   if (command === "budget") { print(engine.setBudget(argument, values.usd)); return; }
   if (command === "account") { print(await engine.syncAccount(providerId(argument ?? ""))); return; }

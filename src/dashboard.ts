@@ -12,6 +12,10 @@ export async function dispatch(input: unknown, engine: ConnectivityEngine): Prom
   const r = input as Record<string, unknown>;
   if (r.method === "ping") return { ready: true };
   if (r.method === "usage") return engine.usage();
+  if (r.method === 'routing-settings') return engine.routingSettings();
+  if (r.method === 'routing-policy-set') return engine.setRoutingPolicy(r.difficulty, r.tiers);
+  if (r.method === 'automatic-paid-set') return engine.setAutomaticPaid(r.allowed);
+  if (r.method === 'model-tier-set') return engine.setModelTier(providerId(typeof r.provider === 'string' ? r.provider : ''), r.model, r.tier);
   if (r.method === "budget-set") return engine.setBudget(r.scope, r.usd);
   if (r.method === "route-plan" || r.method === "auto-chat") {
     if (!r.request || typeof r.request !== 'object') throw new NidusError('invalid_request', 'Invalid chat request.');

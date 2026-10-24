@@ -1,3 +1,4 @@
+import { modelProfile, gradeTier, difficulty, type Difficulty, type Tier } from './router.js';
 import type { AccountReport } from './provider-usage.js';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import { mkdirSync, chmodSync } from 'node:fs';
@@ -22,8 +23,9 @@ export class UsageLedger {
     this.db = new DatabaseSync(path);
     if (path !== ':memory:') chmodSync(path, 0o600);
     const schema = this.db.prepare('PRAGMA user_version').get() as { user_version: number };
-    if (schema.user_version > 2) { this.db.close(); throw new NidusError('storage', 'Usage ledger schema is newer than this app.'); }
-    this.db.exec(`PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;
+    if (schema.user_version > 3) { this.db.close(); throw new NidusError('storage', 'Usage ledger schema is newer than this app.'); }
+    this.db.exec('PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;');
+    this.transaction(() => this.db.exec(`
       CREATE TABLE IF NOT EXISTS budgets(scope TEXT PRIMARY KEY, amount INTEGER NOT NULL CHECK(amount>=0));
       CREATE TABLE IF NOT EXISTS budget_changes(id INTEGER PRIMARY KEY, at TEXT NOT NULL, scope TEXT NOT NULL, amount INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS requests(
@@ -38,7 +40,10 @@ export class UsageLedger {
       CREATE TABLE IF NOT EXISTS account_reports(provider TEXT NOT NULL, month TEXT NOT NULL, report TEXT NOT NULL, PRIMARY KEY(provider,month));
       CREATE TABLE IF NOT EXISTS route_events(id INTEGER PRIMARY KEY, route_id TEXT NOT NULL, at TEXT NOT NULL, event TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS model_health(provider TEXT NOT NULL, model TEXT NOT NULL, status TEXT NOT NULL, at TEXT NOT NULL, until_at TEXT, PRIMARY KEY(provider,model));
-      PRAGMA user_version=2;`);
+      CREATE TABLE IF NOT EXISTS model_tiers(provider TEXT NOT NULL, model TEXT NOT NULL, tier INTEGER NOT NULL CHECK(tier BETWEEN 0 AND 3), source TEXT, checked_at TEXT, user_modified INTEGER NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY(provider,model));
+      CREATE TABLE IF NOT EXISTS routing_settings(id INTEGER PRIMARY KEY CHECK(id=1), allow_paid INTEGER NOT NULL, policies TEXT NOT NULL, revision INTEGER NOT NULL);
+      INSERT OR IGNORE INTO routing_settings VALUES(1,0,'{"simple":[1,2],"normal":[2,1],"complex":[3,2]}',0);
+      PRAGMA user_version=3;`));
   }
   close() { this.db.close(); }
   private rows(sql: string, ...params: SQLInputValue[]): Row[] {
@@ -82,7 +87,7 @@ export class UsageLedger {
       return { allowed: reason === null, reason, boundUSD: bound === null ? null : dollars(bound) };
     });
   }
-  recordRoute(routeId: string, event: { provider: ProviderId; model: string; reason: string; status: string; budget: string; boundUSD: string | null; requestId?: string }) {
+  recordRoute(routeId: string, event: { provider: ProviderId; model: string; reason: string; status: string; budget: string; boundUSD: string | null; requestId?: string; tier?: Tier }) {
     this.db.prepare('INSERT INTO route_events(route_id,at,event) VALUES(?,?,?)').run(routeId, this.now().toISOString(), JSON.stringify(event));
   }
   routes() {
@@ -98,11 +103,51 @@ export class UsageLedger {
     return { status: row?.status ?? 'unknown', checkedAt: row?.at ?? null, excludedUntil: row?.until_at ?? null,
       available: !row?.until_at || String(row.until_at) <= this.now().toISOString() };
   }
-  reserve(provider: ProviderId, request: ChatRequest, task: TaskKind, exception = false): Reservation {
+  routingSettings() {
+    const row = this.rows('SELECT * FROM routing_settings WHERE id=1')[0]!;
+    return { allowPaid: row.allow_paid === 1n, policies: JSON.parse(row.policies as string) as Record<Difficulty, Tier[]>, revision: Number(row.revision) };
+  }
+  setRoutingPolicy(task: unknown, tiers: unknown) {
+    if (typeof task !== 'string') throw new NidusError('invalid_request', 'Select a task difficulty.');
+    const level = difficulty(task);
+    if (!Array.isArray(tiers) || tiers.length > 3 || tiers.some(t => ![1,2,3].includes(t)) || new Set(tiers).size !== tiers.length)
+      throw new NidusError('invalid_request', 'Tier order must contain distinct tiers 1, 2 or 3; empty disables this difficulty.');
+    this.transaction(() => {
+      const settings = this.routingSettings(); settings.policies[level] = tiers as Tier[];
+      this.db.prepare('UPDATE routing_settings SET policies=?, revision=revision+1 WHERE id=1').run(JSON.stringify(settings.policies));
+    });
+  }
+  setAutomaticPaid(value: unknown) {
+    if (typeof value !== 'boolean') throw new NidusError('invalid_request', 'Automatic paid permission must be boolean.');
+    this.db.prepare('UPDATE routing_settings SET allow_paid=?, revision=revision+1 WHERE id=1').run(value ? 1 : 0);
+  }
+  modelTier(provider: ProviderId, model: string) {
+    const profile = modelProfile(provider, model);
+    this.db.prepare('INSERT OR IGNORE INTO model_tiers VALUES(?,?,?,?,?,0,?)').run(provider, model, gradeTier(profile.grade), profile.source, profile.checkedAt, this.now().toISOString());
+    const row = this.rows('SELECT * FROM model_tiers WHERE provider=? AND model=?', provider, model)[0]!;
+    return { tier: Number(row.tier) as Tier, source: row.source as string | null, checkedAt: row.checked_at as string | null,
+      userModified: row.user_modified === 1n, updatedAt: row.updated_at as string };
+  }
+  setModelTier(provider: ProviderId, model: string, tier: unknown) {
+    if (tier !== null && ![0,1,2,3].includes(tier as number)) throw new NidusError('invalid_request', 'Tier must be 0, 1, 2, 3 or null to restore default.');
+    this.transaction(() => {
+      const profile = modelProfile(provider, model), custom = tier !== null;
+      this.db.prepare(`INSERT INTO model_tiers VALUES(?,?,?,?,?,?,?) ON CONFLICT(provider,model) DO UPDATE SET
+        tier=excluded.tier,source=excluded.source,checked_at=excluded.checked_at,user_modified=excluded.user_modified,updated_at=excluded.updated_at`)
+        .run(provider, model, custom ? tier as number : gradeTier(profile.grade), custom ? 'user' : profile.source, custom ? null : profile.checkedAt, custom ? 1 : 0, this.now().toISOString());
+      this.db.prepare('UPDATE routing_settings SET revision=revision+1 WHERE id=1').run();
+    });
+  }
+  reserve(provider: ProviderId, request: ChatRequest, task: TaskKind, exception = false, automatic?: { revision: number; difficulty: Difficulty; tier: Tier }): Reservation {
     const price = priceFor(provider, request.model), bound = upperCost(provider, request, price);
     const at = this.now().toISOString(), month = at.slice(0, 7), id = randomUUID();
     const reason = this.transaction(() => {
-      const block = this.checkBudget(provider, bound, month, exception);
+      let block = this.checkBudget(provider, bound, month, exception);
+      if (automatic) {
+        const settings = this.routingSettings();
+        if (settings.revision !== automatic.revision || !settings.policies[automatic.difficulty].includes(automatic.tier)) block = 'routing_policy_changed';
+        else if (bound !== null && bound > 0n && !settings.allowPaid) block = 'automatic_paid_disabled';
+      }
       this.db.prepare(`INSERT INTO requests(id,at,month,provider,model,task,status,settlement,cost_status,reserved,bound,price_version,price_json,exception,block_reason,updated_at)
         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, at, month, provider, request.model, task, block ? 'blocked' : 'pending', block ? 'not_sent' : 'reserved', 'unknown', block ? 0n : bound!, bound, priceVersion(price), JSON.stringify(price), exception ? 1 : 0, block, at);
       return block;

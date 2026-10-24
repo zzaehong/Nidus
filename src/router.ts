@@ -3,6 +3,9 @@ import type { Model, ProviderId } from './types.js';
 import { classifyModel } from './classification.js';
 import { money } from './money.js';
 export type Difficulty = 'simple' | 'normal' | 'complex';
+export type Tier = 0 | 1 | 2 | 3;
+export const defaultTierOrder: Record<Difficulty, Tier[]> = { simple: [1, 2], normal: [2, 1], complex: [3, 2] };
+export const gradeTier = (grade: Grade): Tier => ({ lightweight: 1, general: 2, advanced: 3, unknown: 0 } as const)[grade];
 export type Grade = 'lightweight' | 'general' | 'advanced' | 'unknown';
 export function difficulty(value: unknown = 'normal'): Difficulty {
   if (value !== 'simple' && value !== 'normal' && value !== 'complex') throw new NidusError('invalid_request', 'Difficulty must be simple, normal or complex.');
@@ -26,25 +29,25 @@ export function modelProfile(provider: ProviderId, id: string) {
 }
 export interface Candidate {
   model: Model;
+  tier?: Tier;
   profile: ReturnType<typeof modelProfile>;
   quote: { allowed: boolean; reason: string | null; boundUSD: string | null };
   health: { status: string | bigint; checkedAt: string | bigint | null; excludedUntil: string | bigint | null; available: boolean };
   pressure: boolean;
 }
-export function rankCandidates(candidates: Candidate[], task: Difficulty) {
-  const grades: Grade[] = task === 'simple' ? ['lightweight', 'general', 'advanced'] : task === 'normal' ? ['general', 'advanced'] : ['advanced'];
-  const pressure = candidates.some(c => c.pressure);
-  return candidates.filter(c => c.quote.allowed && c.quote.boundUSD !== null && c.health.available && c.model.capabilities.chat !== 'unsupported' && !['image', 'audio', 'video', 'live', 'embedding', 'moderation'].includes(classifyModel(c.model).kind) && grades.includes(c.profile.grade)
-    && (task !== 'complex' || (c.profile.coding && c.profile.reasoning)))
-    .map(c => ({ ...c, score: (c.quote.boundUSD !== null && money(c.quote.boundUSD) === 0n ? 1000 : 0) + (grades.length - grades.indexOf(c.profile.grade)) * 100,
-      reason: `${task}:${c.profile.grade}; ${money(c.quote.boundUSD!) === 0n ? 'verified-zero-bound' : 'paid-budget-checked'}; ${c.pressure ? 'budget-saving' : 'task-fit'}` }))
+export function rankCandidates(candidates: Candidate[], task: Difficulty, order: Tier[] = defaultTierOrder[task]) {
+  return candidates.map(c => ({ ...c, tier: c.tier ?? gradeTier(c.profile.grade) }))
+    .filter(c => c.tier !== 0 && order.includes(c.tier) && c.quote.allowed && c.quote.boundUSD !== null && c.health.available
+      && c.model.capabilities.chat !== 'unsupported'
+      && (classifyModel(c.model).kind === 'text' || c.health.status === 'passed' || c.profile.grade !== 'unknown')
+      && !['image', 'audio', 'video', 'live', 'embedding', 'moderation'].includes(classifyModel(c.model).kind))
+    .map(c => ({ ...c, score: (order.length - order.indexOf(c.tier)) * 100,
+      reason: `${task}:tier-${c.tier}; ${money(c.quote.boundUSD!) === 0n ? 'verified-zero-bound' : 'paid-budget-checked'}; ${c.pressure ? 'budget-saving' : 'task-fit'}` }))
     .sort((a, b) => {
-      // Free first; pressure moves cost ahead of grade, but never admits incompatible grades.
-      const free = Number(money(b.quote.boundUSD!) === 0n) - Number(money(a.quote.boundUSD!) === 0n);
-      if (free) return free;
+      // User tier order is absolute, including during budget warnings and for free candidates.
+      const tier = order.indexOf(a.tier) - order.indexOf(b.tier);
+      if (tier) return tier;
       const cost = money(a.quote.boundUSD!) < money(b.quote.boundUSD!) ? -1 : money(a.quote.boundUSD!) > money(b.quote.boundUSD!) ? 1 : 0;
-      if (pressure && cost) return cost;
-      if (a.score !== b.score) return b.score - a.score;
       if (cost) return cost;
       const date = (b.profile.updatedAt ?? b.profile.releasedAt ?? '').localeCompare(a.profile.updatedAt ?? a.profile.releasedAt ?? '');
       return date || `${a.model.provider}:${a.model.id}`.localeCompare(`${b.model.provider}:${b.model.id}`);

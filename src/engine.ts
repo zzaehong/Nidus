@@ -1,6 +1,6 @@
-import { dollars } from './money.js';
+import { dollars, money } from './money.js';
 import { randomUUID } from 'node:crypto';
-import { difficulty, modelProfile, rankCandidates, type Candidate } from './router.js';
+import { difficulty, modelProfile, rankCandidates, type Candidate, type Difficulty, type Tier } from './router.js';
 import { UsageLedger, type TaskKind } from "./ledger.js";
 import { deepseekBalance, usageCapabilities, accountReport, adminCredential } from "./provider-usage.js";
 import { validateChatRequest } from "./adapters/base.js";
@@ -63,51 +63,73 @@ export class ConnectivityEngine {
     return this.decorate(snapshot, "api");
   }
   private decorate(snapshot: ModelSnapshot, source: string) {
-    return { source, fetchedAt: snapshot.fetchedAt, models: snapshot.models.map(m => ({ ...m, classification: classifyModel(m), routingProfile: modelProfile(m.provider, m.id), health: this.usageLedger().health(m.provider, m.id), pricing: priceFor(snapshot.provider, m.id) })) };
+    return { source, fetchedAt: snapshot.fetchedAt, models: snapshot.models.map(m => ({ ...m, classification: classifyModel(m), routingProfile: modelProfile(m.provider, m.id), tierAssignment: this.usageLedger().modelTier(m.provider, m.id), health: { ...this.usageLedger().health(m.provider, m.id), available: this.usageLedger().health(m.provider, m.id).available && this.usageLedger().health(m.provider, '*').available }, pricing: priceFor(snapshot.provider, m.id) })) };
   }
   async detail(provider: ProviderId, model: string, options: RequestOptions = {}) {
     const detail = await this.registry[provider].getModel(await this.key(provider), model, options);
-    return { ...detail, classification: classifyModel(detail), pricing: priceFor(provider, model) };
+    return { ...detail, classification: classifyModel(detail), tierAssignment: this.usageLedger().modelTier(provider, model), routingProfile: modelProfile(provider, model), pricing: priceFor(provider, model) };
   }
   async pricing(provider: ProviderId) {
     const saved = await this.store.load(provider);
     return { provider, source: "reviewed-static-snapshot", autoRefresh: false, modelSource: saved ? "discovered-cache" : "reviewed-price-records-only", prices: saved ? saved.models.map(m => priceFor(provider, m.id)) : pricesFor(provider) };
   }
+  async routingSettings() {
+    const models = [];
+    for (const provider of providerIds) {
+      const cached = await this.cachedModels(provider);
+      models.push(...cached.models);
+    }
+    return { ...this.usageLedger().routingSettings(), models };
+  }
+  async setModelTier(provider: ProviderId, model: unknown, tier: unknown) {
+    const saved = await this.store.load(provider);
+    if (typeof model !== 'string' || !saved?.models.some(m => m.id === model)) throw new NidusError('invalid_request', 'Select a discovered model.');
+    this.usageLedger().setModelTier(provider, model, tier);
+    return this.routingSettings();
+  }
+  async setRoutingPolicy(task: unknown, tiers: unknown) {
+    this.usageLedger().setRoutingPolicy(task, tiers); return this.routingSettings();
+  }
+  async setAutomaticPaid(allowed: unknown) {
+    this.usageLedger().setAutomaticPaid(allowed); return this.routingSettings();
+  }
   async routePlan(request: ChatRequest, task: unknown = 'normal') {
     const level = difficulty(task);
     validateChatRequest({ ...request, model: 'automatic' });
-    const ledger = this.usageLedger(), budget = ledger.snapshot();
+    const ledger = this.usageLedger(), budget = ledger.snapshot(), settings = ledger.routingSettings();
     const candidates: Candidate[] = [];
     for (const provider of providerIds) {
       const saved = await this.store.load(provider);
       const providerHealth = ledger.health(provider, '*');
       for (const model of saved?.models ?? []) {
         const health = ledger.health(provider, model.id);
-        candidates.push({ model, profile: modelProfile(provider, model.id), health: { ...health, available: health.available && providerHealth.available },
-          quote: ledger.quote(provider, { ...request, model: model.id }),
+        const quote = ledger.quote(provider, { ...request, model: model.id });
+        if (!settings.allowPaid && quote.boundUSD !== null && money(quote.boundUSD) > 0n) { quote.allowed = false; quote.reason = 'automatic_paid_disabled'; }
+        candidates.push({ model, tier: ledger.modelTier(provider, model.id).tier, profile: modelProfile(provider, model.id), health: { ...health, available: health.available && providerHealth.available },
+          quote,
           pressure: [budget.total, budget.providers.find(p => p.scope === provider)!].some(p => ['warning', 'saving', 'blocked'].includes(p.level)) });
       }
     }
-    return { difficulty: level, candidates: rankCandidates(candidates, level), budget: budget.total,
-      excluded: candidates.filter(c => !rankCandidates([c], level).length).map(c => ({ provider: c.model.provider, model: c.model.id, reason: c.quote.reason ?? (!c.health.available ? 'temporarily_unavailable' : 'task_or_grade_incompatible') })) };
+    return { difficulty: level, settings, candidates: rankCandidates(candidates, level, settings.policies[level]), budget: budget.total,
+      excluded: candidates.filter(c => !rankCandidates([c], level, settings.policies[level]).length).map(c => ({ provider: c.model.provider, model: c.model.id, reason: c.quote.reason ?? (!c.health.available ? 'temporarily_unavailable' : 'task_or_grade_incompatible') })) };
   }
   async autoChat(request: ChatRequest, task: unknown = 'normal', options: RequestOptions = {}) {
     if (options.budgetException) throw new NidusError('invalid_request', 'Automatic routing cannot approve budget exceptions. Select a model manually.');
     const plan = await this.routePlan(request, task), ledger = this.usageLedger(), routeId = randomUUID();
     const excludedProviders = new Set<ProviderId>();
-    const transitions: { provider: ProviderId; model: string; reason: string; status: string; budget: string; boundUSD: string | null; requestId?: string }[] = [];
+    const transitions: { tier: Tier; provider: ProviderId; model: string; reason: string; status: string; budget: string; boundUSD: string | null; requestId?: string }[] = [];
     let reason = 'initial_selection';
     for (const candidate of plan.candidates) {
       const provider = candidate.model.provider, model = candidate.model.id;
       if (excludedProviders.has(provider) || !ledger.health(provider, '*').available || !ledger.health(provider, model).available) continue;
       if (options.signal?.aborted) throw new NidusError('cancelled', 'Automatic request cancelled.');
       const quote = ledger.quote(provider, { ...request, model });
-      const event = { provider, model, reason, status: quote.allowed ? 'selected' : 'blocked', budget: quote.reason ?? 'allowed', boundUSD: quote.boundUSD };
+      const event = { provider, model, tier: candidate.tier, reason, status: quote.allowed ? 'selected' : 'blocked', budget: quote.reason ?? 'allowed', boundUSD: quote.boundUSD };
       transitions.push(event); ledger.recordRoute(routeId, event);
       if (!quote.allowed) { reason = quote.reason!; continue; }
       let result;
       try {
-        result = await this.chat(provider, { ...request, model }, options);
+        result = await this.execute(provider, { ...request, model }, 'chat', options, { revision: plan.settings.revision, difficulty: plan.difficulty, tier: candidate.tier });
       } catch (error) {
         const code = error instanceof NidusError ? error.code : 'provider_error';
         const failed = { ...event, status: 'failed', reason: code, budget: code === 'budget' ? 'reservation_rejected' : event.budget };
@@ -127,7 +149,7 @@ export class ConnectivityEngine {
       // Storage errors after successful inference must never trigger fallback.
       const completed = { ...event, status: 'succeeded', requestId: result.requestId };
       transitions.push(completed); ledger.recordRoute(routeId, completed);
-      return { ...result, routing: { routeId, difficulty: plan.difficulty, reason: candidate.reason, boundUSD: quote.boundUSD, estimatedUSD: result.estimatedUSD, budgetLevel: result.budget.level, transitions } };
+      return { ...result, routing: { routeId, difficulty: plan.difficulty, tier: candidate.tier, reason: candidate.reason, boundUSD: quote.boundUSD, estimatedUSD: result.estimatedUSD, budgetLevel: result.budget.level, transitions } };
     }
     throw new NidusError('budget', `No eligible automatic candidate remains (${reason}; ${plan.excluded.map(c => c.reason).filter((v, i, a) => a.indexOf(v) === i).join(', ')}). Review Usage & Budget or select a compatible model manually.`);
   }
@@ -137,13 +159,13 @@ export class ConnectivityEngine {
     if (known?.capabilities.chat === "unsupported") throw new NidusError("unsupported", "This model does not support the adapter's text generation endpoint.");
     return this.execute(provider, request, "chat", options);
   }
-  private async execute(provider: ProviderId, request: ChatRequest, task: TaskKind, options: RequestOptions = {}) {
+  private async execute(provider: ProviderId, request: ChatRequest, task: TaskKind, options: RequestOptions = {}, automatic?: { revision: number; difficulty: Difficulty; tier: Tier }) {
     validateChatRequest(request);
     if (options.budgetException !== undefined && typeof options.budgetException !== "boolean") throw new NidusError("invalid_request", "Explicit exception approval must be boolean.");
     if (options.signal?.aborted) throw new NidusError("cancelled", "Request cancelled before dispatch.");
     const key = await this.key(provider);
     const ledger = this.usageLedger();
-    const reservation = ledger.reserve(provider, request, task, options.budgetException === true);
+    const reservation = ledger.reserve(provider, request, task, options.budgetException === true, automatic);
     let headers: Record<string, string> = {};
     let result;
     try {
