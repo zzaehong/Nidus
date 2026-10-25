@@ -64,7 +64,7 @@ struct RoutingResult: Codable {
         let budget: String
     }
     var summary: String {
-        transitions.map { "\($0.provider)/\($0.model): \($0.reason) · \($0.status) · \($0.budget)" }.joined(separator: " → ")
+        transitions.map { "\($0.provider)/\($0.model): \($0.reason) · \($0.status)" }.joined(separator: " → ")
     }
 }
 struct RoutePlanResult: Decodable {
@@ -83,7 +83,7 @@ struct RoutePlanResult: Decodable {
     struct Excluded: Decodable { let reason: String }
     var summary: String {
         guard let first = candidates.first else { return "자동 후보 없음: " + Array(Set(excluded.map(\.reason))).sorted().joined(separator: ", ") }
-        return "예상 Tier \(first.tier.map(String.init) ?? "미확인"): \(first.model.provider)/\(first.model.id) · 예약 상한 $\(first.quote.boundUSD ?? "미확인") · 예산 \(budget.level) · 잔여 $\(budget.remainingUSD ?? "미설정")"
+        return "예상 Tier \(first.tier.map(String.init) ?? "미확인"): \(first.model.provider)/\(first.model.id) · 참고 비용 상한 $\(first.quote.boundUSD ?? "미확인") · 지출 제한 없음"
     }
 }
 struct ProviderState {

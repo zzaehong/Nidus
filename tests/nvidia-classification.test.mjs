@@ -31,11 +31,11 @@ test('vision input is not image generation and unknown specialized models remain
  assert.equal(classifyModel(model('meta/llama-3.1-8b-instruct',{},'unsupported')).textProbe,'unsupported');
  assert.equal(classifyModel(model('meta/llama-3.1-8b-instruct',{},'supported')).textProbe,'supported');
 });
-test('cached NVIDIA models reclassify offline while Tier, free permissions and Budget Guard stay intact',async()=>{
+test('cached NVIDIA models reclassify offline while Tier and free metadata stay intact without budget gates',async()=>{
  const ledger=new UsageLedger(':memory:');let keys=0,calls=0;const id='openai/gpt-oss-20b';
- const engine=new ConnectivityEngine({get:async()=>{keys++;return 'mock';}}, {load:async p=>p==='nvidia'?{provider:p,version:1,fetchedAt:'2026-10-25',models:[model(id)]}:null}, {nvidia:{chat:async()=>{calls++;assert.fail('must not execute');}}},ledger);
+ const engine=new ConnectivityEngine({get:async()=>{keys++;return 'mock';}}, {load:async p=>p==='nvidia'?{provider:p,version:1,fetchedAt:'2026-10-25',models:[model(id)]}:null}, {nvidia:{chat:async()=>{calls++;return {text:'ok',usage:{inputTokens:1,outputTokens:1}};}}},ledger);
  const cached=await engine.cachedModels('nvidia');assert.equal(cached.models[0].classification.kind,'text');assert.equal(keys,0);assert.equal(cached.models[0].tierAssignment.tier,0);
  assert.equal(priceFor('nvidia',id).freeTier,'unknown');assert.equal(ledger.freeUse('nvidia',id).approved,false);
- await engine.setModelTier('nvidia',id,2);assert.equal((await engine.routePlan({model:id,messages:[{role:'user',content:'test'}]})).candidates.length,0);
- await assert.rejects(engine.chat('nvidia',{model:id,messages:[{role:'user',content:'test'}]}),e=>e.code==='budget');assert.equal(calls,0);ledger.close();
+ await engine.setModelTier('nvidia',id,2);assert.equal((await engine.routePlan({model:id,messages:[{role:'user',content:'test'}]})).candidates.length,1);
+ await engine.chat('nvidia',{model:id,messages:[{role:'user',content:'test'}]});assert.equal(calls,1);ledger.close();
 });

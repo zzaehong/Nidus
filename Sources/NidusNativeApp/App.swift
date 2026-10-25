@@ -81,7 +81,7 @@ struct DashboardView: View {
         }
         .toolbar {
             Button("Tier 및 라우팅", systemImage: "arrow.triangle.branch") { showRouting = true }.disabled(!dashboard.ready)
-            Button("사용량 및 예산", systemImage: "chart.bar") { showUsage = true }.disabled(!dashboard.ready)
+            Button("사용량 및 비용", systemImage: "chart.bar") { showUsage = true }.disabled(!dashboard.ready)
             Button("모델 일괄 검사", systemImage: "checkmark.shield") { showHealth = true }.disabled(!dashboard.ready)
                 .help("선택한 범위의 텍스트 모델을 순차 검사합니다. 실패해도 다음 모델로 진행하며 실제 API 비용이 발생할 수 있습니다. 실행 전 대상과 요청 한도를 확인합니다.")
             Button("채팅방", systemImage: "bubble.left.and.bubble.right") { showChat = true }.disabled(!dashboard.ready)
@@ -134,9 +134,9 @@ struct ProviderView: View {
             }
             if provider == .nvidia {
                 HStack {
-                    Text("용도 분류와 무료 호출 승인은 별도입니다. 검사 전에 무료 개발자 계정·모델을 확인하세요.").font(.caption)
+                    Text("용도 분류와 비용 추정은 별도입니다. 무료 계정 정보를 등록하면 비용 기록에 반영합니다.").font(.caption)
                     Spacer()
-                    Button("무료 개발자 API 설정") { showNvidiaFreeSetup = true }
+                    Button("무료 비용 기록 설정") { showNvidiaFreeSetup = true }
                 }.padding(12).background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 10))
             }
             HStack(spacing: 16) {

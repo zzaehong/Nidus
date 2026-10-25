@@ -35,7 +35,7 @@ test('ephemeral connect never writes credentials, unknown capabilities remain se
   const f = fixture(); await f.engine.connect('gemini', 'key', false); assert.equal(f.secrets.size, 0);
   f.secrets.set('gemini', 'key');
   f.cache.get('gemini').models[0].capabilities.chat = 'unknown';
-  await assert.rejects(f.engine.chat('gemini', { model: model.id, messages: [{ role: 'user', content: 'hi' }] }), e => e.code === 'budget');
+  await f.engine.chat('gemini', { model: model.id, messages: [{ role: 'user', content: 'hi' }] });
   f.cache.get('gemini').models[0].capabilities.chat = 'unsupported';
   await assert.rejects(f.engine.chat('gemini', { model: model.id, messages: [] }), e => e.code === 'unsupported');
 });

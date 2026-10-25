@@ -16,18 +16,14 @@ export const help = `Nidus API Connectivity MVP
   nidus routing
   nidus routing-policy <simple|normal|complex> --tiers 2,1
   nidus model-tier <provider> --model <id> --tier <0|1|2|3|default>
-  nidus automatic-paid <allow|deny>
   nidus usage
-  nidus budget <total|request|provider> --usd <decimal USD>
   nidus balance <provider>
   nidus account <openai|anthropic>  # separate session ADMIN_API_KEY
   nidus disconnect <provider>
 
 connect: hidden key entry, model discovery, macOS Keychain storage.
 --env: explicit NIDUS_<PROVIDER>_API_KEY session credential; never writes the key.
-Budget: set total and request before paid inference; provider limits are optional.
---approve-budget-exception: one explicit chat exception, recorded in the ledger;
-unknown prices/unsafe bounds still block. Reservations use full input capacity.
+Usage: local tokens and cost estimates only; no spending limit or price gate.
 chat: message from stdin or interactive prompt. JSON on stdout; errors on stderr.
 --timeout-ms 30000 (chat default: 120000). Ctrl-C cancels an HTTP request.
 `;
@@ -46,18 +42,18 @@ export async function main(argv = process.argv.slice(2), dependencies: CliDepend
     ({ values, positionals } = parseArgs({ args: argv, allowPositionals: true, strict: true, options: {
       "account-id": {type:"string"}, help: { type: "boolean", short: "h" }, refresh: { type: "boolean" }, env: { type: "boolean" },
       tiers: { type: "string" }, tier: { type: "string" }, auto: { type: "boolean" }, difficulty: { type: "string" }, provider: { type: "string" }, model: { type: "string" }, detail: { type: "string" },
-      "timeout-ms": { type: "string" }, "max-output-tokens": { type: "string" }, usd: { type: "string" }, "approve-budget-exception": { type: "boolean" }
+      "timeout-ms": { type: "string" }, "max-output-tokens": { type: "string" },
     } }));
   } catch { throw new NidusError("invalid_request", "Invalid arguments. Use nidus --help. API keys must never be command-line arguments."); }
   if (values.help || positionals.length === 0) { write(help); return; }
   const [command, argument] = positionals;
-  const commands = ["providers", "connect", "models", "pricing", "chat", "disconnect", "usage", "budget", "balance", "account", "routing", "routing-policy", "model-tier", "automatic-paid"];
+  const commands = ["providers", "connect", "models", "pricing", "chat", "disconnect", "usage", "balance", "account", "routing", "routing-policy", "model-tier"];
   if (!commands.includes(command!)) throw new NidusError("invalid_request", "Unknown command. Use nidus --help.");
   const expected = ["providers", "chat", "usage", "routing"].includes(command!) ? 1 : 2;
   if (positionals.length !== expected) throw new NidusError("invalid_request", "Unexpected positional arguments. Use nidus --help.");
   const allowed: Record<string, string[]> = {
-    routing: [], "routing-policy": ["tiers"], "model-tier": ["model", "tier"], "automatic-paid": [], usage: [], budget: ["usd"], balance: [], account: [], providers: [], connect: ["env", "timeout-ms", "account-id"], models: ["refresh", "detail", "timeout-ms"],
-    pricing: [], chat: ["auto", "difficulty", "provider", "model", "max-output-tokens", "timeout-ms", "approve-budget-exception"], disconnect: []
+    routing: [], "routing-policy": ["tiers"], "model-tier": ["model", "tier"], usage: [], balance: [], account: [], providers: [], connect: ["env", "timeout-ms", "account-id"], models: ["refresh", "detail", "timeout-ms"],
+    pricing: [], chat: ["auto", "difficulty", "provider", "model", "max-output-tokens", "timeout-ms"], disconnect: []
   };
   if (Object.keys(values).some(v => !allowed[command!]!.includes(v))) throw new NidusError("invalid_request", "Option is not valid for this command.");
   const persistent = new KeychainStore();
@@ -65,16 +61,11 @@ export async function main(argv = process.argv.slice(2), dependencies: CliDepend
   if (command === 'routing') { print(await engine.routingSettings()); return; }
   if (command === 'routing-policy') { print(await engine.setRoutingPolicy(argument, values.tiers === '' ? [] : values.tiers?.split(',').map(Number))); return; }
   if (command === 'model-tier') { print(await engine.setModelTier(providerId(argument ?? ''), values.model, values.tier === 'default' ? null : values.tier === undefined || values.tier === '' ? undefined : Number(values.tier))); return; }
-  if (command === 'automatic-paid') {
-    if (!['allow', 'deny'].includes(argument ?? '')) throw new NidusError('invalid_request', 'Use allow or deny.');
-    print(await engine.setAutomaticPaid(argument === 'allow')); return;
-  }
   if (command === "usage") { print(engine.usage()); return; }
-  if (command === "budget") { print(engine.setBudget(argument, values.usd)); return; }
   if (command === "account") { print(await engine.syncAccount(providerId(argument ?? ""))); return; }
   if (command === "balance") { print(await engine.syncBalance(providerId(argument ?? ""))); return; }
   if (command === "providers") { print(engine.providers()); return; }
-  if (values.auto && (values.provider || values.model || values['approve-budget-exception'])) throw new NidusError('invalid_request', 'Automatic chat cannot specify a manual model or budget exception.');
+  if (values.auto && (values.provider || values.model)) throw new NidusError('invalid_request', 'Automatic chat cannot specify a manual model.');
   if (values.difficulty && !values.auto) throw new NidusError('invalid_request', 'Difficulty requires --auto.');
   const provider = values.auto ? 'openai' : providerId(command === "chat" ? values.provider ?? "" : argument ?? "");
   const controller = new AbortController(); const cancel = () => controller.abort();
@@ -84,7 +75,7 @@ export async function main(argv = process.argv.slice(2), dependencies: CliDepend
     if (!values.env && process.env[credentialEnvironment[provider]]) throw new NidusError("invalid_request", "A session credential is active. Use connect --env, or unset it before changing the Keychain credential.");
     inputKey = values.env ? process.env[credentialEnvironment[provider]] : await (dependencies.readSecret ?? secretPrompt)();
   }
-  const options = { budgetException: values["approve-budget-exception"] === true, signal: controller.signal, timeoutMs: values["timeout-ms"] === undefined ? (command === "chat" ? 120_000 : 30_000) : Number(values["timeout-ms"]) };
+  const options = { signal: controller.signal, timeoutMs: values["timeout-ms"] === undefined ? (command === "chat" ? 120_000 : 30_000) : Number(values["timeout-ms"]) };
   process.once("SIGINT", cancel);
   try {
     switch (command) {

@@ -25,49 +25,47 @@ test('free project supports manual, probe common execution and automatic calls w
  assert.ok(rows.every(r=>r.billingMode==='free'&&r.inputTokens===12&&Number(r.reservedUSD)===0));
  assert.equal(f.ledger.geminiBilling().remainingFreeQuota,null);
 });
-test('unknown and paid retain existing policy and detailed rejection reasons',async()=>{
- for(const state of ['unknown','paid']) { const f=fixture();await f.engine.setGeminiBilling(state,'project-test',false,false);
- await assert.rejects(f.engine.chat('gemini',request),e=>e.reason==='budget_not_configured'&&e.toJSON().reason===e.reason);
- f.ledger.setBudget('total','10');f.ledger.setBudget('request','2');
- const r=await f.engine.chat('gemini',request);assert.equal(r.billingMode,'paid');assert.ok(Number(r.estimatedUSD)>0);
- await assert.rejects(f.engine.autoChat(request),e=>e.code==='budget'); }
+test('unknown and paid projects call without budget setup and retain paid cost estimates',async()=>{
+ for(const state of ['unknown','paid']){const f=fixture();await f.engine.setGeminiBilling(state,'project-test',false,false);
+ const r=await f.engine.chat('gemini',request);assert.equal(r.billingMode,'paid');assert.ok(Number(r.estimatedUSD)>0);await f.engine.autoChat(request);assert.equal(f.calls.length,2);}
 });
-test('free project rejects unsupported and unreviewed models even with budget exception',async()=>{
+
+test('free project does not falsely assign zero cost to unsupported or unreviewed free models',async()=>{
  const f=fixture();await free(f);
- for(const model of ['gemini-4-argon','new-model']) await assert.rejects(f.engine.chat('gemini',{...request,model},{budgetException:true}),e=>e.reason==='gemini_free_model_unverified');
- assert.equal(f.calls.length,0);
+ for(const model of ['gemini-4-argon','new-model']){const r=await f.engine.chat('gemini',{...request,model});assert.equal(r.billingMode,'paid');assert.notEqual(r.estimatedUSD,'0.000000000');}
+ assert.equal(f.calls.length,2);
 });
-test('free 429 falls back to free candidate and never escalates to paid even with global permission',async()=>{
- const f=fixture(undefined,(provider)=>{if(provider==='gemini')throw new NidusError('rate_limit','RESOURCE_EXHAUSTED',429);});
- await free(f);f.ledger.setAutomaticPaid(true);f.ledger.setBudget('total','10');f.ledger.setBudget('request','2');
- await assert.rejects(f.engine.autoChat(request),e=>e.code==='budget');
- assert.equal(f.calls.length,2);assert.ok(f.calls.every(([p])=>p==='gemini'));
- assert.ok(f.ledger.routes().filter(e=>e.status==='failed').every(e=>e.reason==='rate_limit'));
- assert.ok(f.ledger.snapshot().requests.every(r=>r.estimatedUSD===null&&r.costStatus==='unknown'&&Number(r.reservedUSD)===0));
+
+test('free 429 follows Tier fallback including paid models without the removed permission gate',async()=>{
+ const f=fixture(undefined,p=>{if(p==='gemini')throw new NidusError('rate_limit','RESOURCE_EXHAUSTED',429);});await free(f);
+ const r=await f.engine.autoChat(request);assert.equal(r.provider,'openai');assert.equal(r.billingMode,'paid');assert.equal(f.calls.length,3);
+ assert.ok(f.ledger.routes().filter(e=>e.status==='failed').every(e=>e.reason==='rate_limit'));assert.equal(Number(f.ledger.snapshot().total.reservedUSD),0);
 });
-test('credential changes, missing consent and known exhausted model block free execution',async()=>{
+
+test('credential change removes free estimate eligibility without blocking the request',async()=>{
  const f=fixture();await assert.rejects(f.engine.setGeminiBilling('free','project-test',true,false));await free(f);
- f.credentials.get=async()=> 'other-key';await assert.rejects(f.engine.chat('gemini',request),e=>e.reason==='gemini_project_credential_changed');assert.equal(f.calls.length,0);
+ f.credentials.get=async()=> 'other-key';const r=await f.engine.chat('gemini',request);assert.equal(r.billingMode,'paid');assert.ok(Number(r.estimatedUSD)>0);assert.equal(f.calls.length,1);
 });
+
 test('schema4 migration preserves liabilities and project setting survives restart',async t=>{
  const dir=mkdtempSync(join(tmpdir(),'nidus-gemini-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));const path=join(dir,'ledger.sqlite');
- let ledger=new UsageLedger(path);ledger.setBudget('total','10');ledger.setBudget('request','2');const old=ledger.reserve('gemini',request,'chat');ledger.close();
- const db=new DatabaseSync(path);db.exec('DROP TABLE gemini_project; DROP TABLE request_billing; PRAGMA user_version=4;');db.close();
+ let ledger=new UsageLedger(path);ledger.setBudget('total','10');ledger.setBudget('request','2');const old=ledger.recordRequest('gemini',request,'chat');ledger.close();
+ const db=new DatabaseSync(path);db.exec("UPDATE requests SET reserved=1000000,bound=1000000,settlement='reserved'");db.exec('DROP TABLE gemini_project; DROP TABLE request_billing; PRAGMA user_version=4;');db.close();
  ledger=new UsageLedger(path);const f=fixture(ledger);await free(f);ledger.close();ledger=new UsageLedger(path);t.after(()=>ledger.close());
  assert.equal(ledger.geminiBilling().state,'free');assert.ok(Number(ledger.snapshot().total.reservedUSD)>0);assert.equal(ledger.snapshot().requests[0].billingMode,'paid');
  ledger.settle(old,'succeeded',usage);assert.ok(Number(ledger.snapshot().requests[0].estimatedUSD)>0);
  const result=await fixture(ledger).engine.chat('gemini',request);assert.equal(result.billingMode,'free');
 });
-test('dashboard project setting and execution-time policy changes use same guard',async()=>{
+test('dashboard project setting and execution-time policy changes use same routing revision check',async()=>{
  const f=fixture();await dispatch({method:'gemini-billing-set',state:'free',project:'project-test',confirmed:true,riskAccepted:true},f.engine);
  f.credentials.get=async()=>{f.ledger.setGeminiBilling('paid','project-test',false,false,'');return 'mock-key';};
- await assert.rejects(f.engine.autoChat(request),e=>e.code==='budget');assert.equal(f.calls.length,0);
+ await assert.rejects(f.engine.autoChat(request),e=>e.code==='invalid_request');assert.equal(f.calls.length,0);
 });
-test('free model reported unavailable is excluded while another free model succeeds',async()=>{
+test('unavailable free metadata uses paid estimates without skipping the preferred Tier',async()=>{
  const f=fixture();await free(f);await f.engine.setFreeUse('gemini',request.model,'unavailable',false,true,false);
- const r=await f.engine.autoChat(request);assert.equal(r.model,'gemini-3.5-flash-lite');assert.equal(r.billingMode,'free');
+ const r=await f.engine.autoChat(request);assert.equal(r.model,request.model);assert.equal(r.billingMode,'paid');assert.ok(Number(r.estimatedUSD)>0);
 });
-test('successful free reservation keeps its original billing basis after settings change',async()=>{
+test('successful free request keeps its original billing basis after settings change',async()=>{
  const f=fixture(undefined,()=>f.ledger.setGeminiBilling('paid','project-test',false,false,''));await free(f);
  const r=await f.engine.chat('gemini',request);assert.equal(Number(r.estimatedUSD),0);assert.equal(f.ledger.snapshot().requests[0].billingMode,'free');
 });

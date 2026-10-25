@@ -1,6 +1,6 @@
 import { providerMetadata } from './providers.js';
 import { cloudflareCredential } from './adapters/cloudflare.js';
-import { dollars, money } from './money.js';
+import { dollars } from './money.js';
 import { randomUUID, createHash } from 'node:crypto';
 import { difficulty, modelProfile, rankCandidates, type Candidate, type Difficulty, type Tier } from './router.js';
 import { UsageLedger, type TaskKind } from "./ledger.js";
@@ -20,7 +20,7 @@ export class ConnectivityEngine {
   constructor(private readonly credentials: CredentialStore, private readonly store: ModelStore, private readonly registry: Record<ProviderId, ProviderAdapter> = adapters(), private ledger?: UsageLedger) {}
   private usageLedger() { return this.ledger ??= new UsageLedger(); }
   usage() { return { ...this.usageLedger().snapshot(), capabilities: usageCapabilities, routing: this.usageLedger().routes() }; }
-  setBudget(scope: unknown, usd: unknown) { this.usageLedger().setBudget(scope, usd); return this.usage(); }
+  setBudget(_scope: unknown, _usd: unknown) { throw new NidusError('unsupported', 'Budget Guard has been removed.'); }
   async syncAccount(provider: ProviderId) {
     if (provider !== 'openai' && provider !== 'anthropic') throw new NidusError('unsupported', 'No connected organization billing API for this provider.');
     const report = await accountReport(provider, adminCredential(provider));
@@ -112,7 +112,7 @@ export class ConnectivityEngine {
   async setFreeUse(provider: ProviderId, model: unknown, status: unknown, approved: unknown, accountConfirmed: unknown, chargeRiskAccepted: unknown) {
     const saved = await this.store.load(provider);
     if (typeof model !== 'string' || !saved?.models.some(m => m.id === model)) throw new NidusError('invalid_request', 'Select a discovered model.');
-    if (approved === true && chargeRiskAccepted !== true) throw new NidusError('invalid_request', 'Explicitly accept possible paid charges within your existing budgets for this model.');
+    if (approved === true && chargeRiskAccepted !== true) throw new NidusError('invalid_request', 'Explicitly accept possible paid charges when recording free cost estimates for this model.');
     const hash = createHash('sha256').update(await this.key(provider)).digest('hex');
     this.usageLedger().setFreeUse(provider, model, status, approved, accountConfirmed, hash);
     return this.routingSettings();
@@ -121,7 +121,7 @@ export class ConnectivityEngine {
     this.usageLedger().setRoutingPolicy(task, tiers); return this.routingSettings();
   }
   async setAutomaticPaid(allowed: unknown) {
-    this.usageLedger().setAutomaticPaid(allowed); return this.routingSettings();
+    void allowed; throw new NidusError('unsupported', 'Automatic paid permission gating has been removed.');
   }
   async routePlan(request: ChatRequest, task: unknown = 'normal') {
     const level = difficulty(task);
@@ -134,42 +134,36 @@ export class ConnectivityEngine {
       for (const model of saved?.models ?? []) {
         const health = ledger.health(provider, model.id);
         const quote = ledger.quote(provider, { ...request, model: model.id });
-        if (!settings.allowPaid && !ledger.scopedFreeApproval(provider, model.id) && quote.boundUSD !== null && money(quote.boundUSD) > 0n) { quote.allowed = false; quote.reason = 'automatic_paid_disabled'; }
         candidates.push({ model, tier: ledger.modelTier(provider, model.id).tier, profile: modelProfile(provider, model.id), health: { ...health, available: health.available && providerHealth.available },
           quote,
-          pressure: [budget.total, budget.providers.find(p => p.scope === provider)!].some(p => ['warning', 'saving', 'blocked'].includes(p.level)) });
+          pressure: false });
       }
     }
-    return { difficulty: level, settings, candidates: rankCandidates(candidates, level, settings.policies[level]), budget: budget.total,
+    return { difficulty: level, settings, candidates: rankCandidates(candidates, level, settings.policies[level]), budget: { ...budget.total, level: "disabled", remainingUSD: null },
       excluded: candidates.filter(c => !rankCandidates([c], level, settings.policies[level]).length).map(c => ({ provider: c.model.provider, model: c.model.id, reason: c.quote.reason ?? (!c.health.available ? 'temporarily_unavailable' : 'task_or_grade_incompatible') })) };
   }
   async autoChat(request: ChatRequest, task: unknown = 'normal', options: RequestOptions = {}) {
-    if (options.budgetException) throw new NidusError('invalid_request', 'Automatic routing cannot approve budget exceptions. Select a model manually.');
     const plan = await this.routePlan(request, task), ledger = this.usageLedger(), routeId = randomUUID();
     const excludedProviders = new Set<ProviderId>();
     const transitions: { tier: Tier; provider: ProviderId; model: string; reason: string; status: string; budget: string; boundUSD: string | null; requestId?: string }[] = [];
     let reason = 'initial_selection';
-    let freeOnly = false;
     for (const candidate of plan.candidates) {
       const provider = candidate.model.provider, model = candidate.model.id;
       if (excludedProviders.has(provider) || !ledger.health(provider, '*').available || !ledger.health(provider, model).available) continue;
       if (options.signal?.aborted) throw new NidusError('cancelled', 'Automatic request cancelled.');
       const quote = ledger.quote(provider, { ...request, model });
-      if (freeOnly && quote.billingMode !== 'free') continue;
-      if (quote.allowed && quote.billingMode === 'free') freeOnly = true;
-      const event = { billingMode: quote.billingMode, provider, model, freeUse: ledger.freeUse(provider, model), authorization: quote.billingMode === "free" ? "user-project-free-attestation" : plan.settings.allowPaid ? "global-paid-permission" : "model-scoped-charge-consent", tier: candidate.tier, reason, status: quote.allowed ? 'selected' : 'blocked', budget: quote.reason ?? 'allowed', boundUSD: quote.boundUSD };
+      const event = { billingMode: quote.billingMode, provider, model, freeUse: ledger.freeUse(provider, model), authorization: "budget-guard-removed", tier: candidate.tier, reason, status: 'selected', budget: 'disabled', boundUSD: quote.boundUSD };
       transitions.push(event); ledger.recordRoute(routeId, event);
-      if (!quote.allowed) { reason = quote.reason!; continue; }
       let result;
       try {
         result = await this.execute(provider, { ...request, model }, 'chat', options, { revision: plan.settings.revision, difficulty: plan.difficulty, tier: candidate.tier });
       } catch (error) {
         const code = error instanceof NidusError ? error.code : 'provider_error';
-        const failed = { ...event, status: 'failed', reason: code, budget: code === 'budget' ? 'reservation_rejected' : event.budget };
+        const failed = { ...event, status: 'failed', reason: code, budget: 'disabled' };
         transitions.push(failed); ledger.recordRoute(routeId, failed);
         // Only explicit rejection categories permit another distinct attempt. Ambiguous delivery stops.
-        if (!['budget', 'rate_limit', 'authentication', 'permission', 'missing_key', 'quota', 'not_found', 'unsupported'].includes(code))
-          throw new NidusError(code, `Automatic routing stopped (${transitions.filter(t => t.status === 'failed').map(t => t.reason).join(' → ')}). No further request sent; inspect Usage & Budget.`, error instanceof NidusError ? error.status : null);
+        if (!['rate_limit', 'authentication', 'permission', 'missing_key', 'quota', 'not_found', 'unsupported'].includes(code))
+          throw new NidusError(code, `Automatic routing stopped (${transitions.filter(t => t.status === 'failed').map(t => t.reason).join(' → ')}). No further request sent; inspect Usage.`, error instanceof NidusError ? error.status : null);
         reason = code;
         if (['authentication', 'permission', 'missing_key', 'quota'].includes(code)) {
           excludedProviders.add(provider); ledger.recordHealth(provider, '*', code, 60);
@@ -182,9 +176,9 @@ export class ConnectivityEngine {
       // Storage errors after successful inference must never trigger fallback.
       const completed = { ...event, status: 'succeeded', requestId: result.requestId };
       transitions.push(completed); ledger.recordRoute(routeId, completed);
-      return { ...result, routing: { routeId, difficulty: plan.difficulty, tier: candidate.tier, reason: candidate.reason, boundUSD: quote.boundUSD, estimatedUSD: result.estimatedUSD, budgetLevel: result.budget.level, transitions } };
+      return { ...result, routing: { routeId, difficulty: plan.difficulty, tier: candidate.tier, reason: candidate.reason, boundUSD: quote.boundUSD, estimatedUSD: result.estimatedUSD, budgetLevel: "disabled", transitions } };
     }
-    throw new NidusError('budget', `No eligible automatic candidate remains (${reason}; ${plan.excluded.map(c => c.reason).filter((v, i, a) => a.indexOf(v) === i).join(', ')}). Review Usage & Budget or select a compatible model manually.`);
+    throw new NidusError('unsupported', `No eligible automatic candidate remains (${reason}; ${plan.excluded.map(c => c.reason).filter((v, i, a) => a.indexOf(v) === i).join(', ')}). Select a compatible model or review Tier settings.`);
   }
   async chat(provider: ProviderId, request: ChatRequest, options: RequestOptions = {}) {
     const saved = await this.store.load(provider);
@@ -194,11 +188,10 @@ export class ConnectivityEngine {
   }
   private async execute(provider: ProviderId, request: ChatRequest, task: TaskKind, options: RequestOptions = {}, automatic?: { revision: number; difficulty: Difficulty; tier: Tier }) {
     validateChatRequest(request);
-    if (options.budgetException !== undefined && typeof options.budgetException !== "boolean") throw new NidusError("invalid_request", "Explicit exception approval must be boolean.");
     if (options.signal?.aborted) throw new NidusError("cancelled", "Request cancelled before dispatch.");
     const key = await this.key(provider);
     const ledger = this.usageLedger();
-    const reservation = ledger.reserve(provider, request, task, options.budgetException === true, automatic ? { ...automatic, credentialHash: createHash('sha256').update(key).digest('hex') } : undefined, createHash('sha256').update(key).digest('hex'));
+    const reservation = ledger.recordRequest(provider, request, task, automatic, createHash('sha256').update(key).digest('hex'));
     let headers: Record<string, string> = {};
     let result;
     try {
@@ -212,7 +205,7 @@ export class ConnectivityEngine {
     ledger.settle(reservation, "succeeded", result.usage, headers);
     ledger.recordHealth(provider, request.model, "passed");
     const cost = reservation.billingMode === 'free' ? (result.usage && Number.isSafeInteger(result.usage.inputTokens) && Number.isSafeInteger(result.usage.outputTokens) ? 0n : null) : calculatedCost(reservation.price, result.usage);
-    return { ...result, billingMode: reservation.billingMode, estimatedUSD: cost === null ? null : dollars(cost), requestId: reservation.id, budget: ledger.snapshot().total };
+    return { ...result, billingMode: reservation.billingMode, estimatedUSD: cost === null ? null : dollars(cost), requestId: reservation.id, budget: { ...ledger.snapshot().total, level: "disabled", remainingUSD: null } };
   }
 
   async disconnect(provider: ProviderId) { await this.credentials.delete(provider); await this.store.remove(provider); this.usageLedger().invalidateFreeUse(provider); return { provider, disconnected: true }; }

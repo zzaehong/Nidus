@@ -3,7 +3,7 @@ import XCTest
 
 final class TierSettingsTests: XCTestCase {
     private let fixture = #"{"allowPaid":false,"policies":{"simple":[1,2],"normal":[2,1],"complex":[3,2]},"models":[{"provider":"openai","id":"new-model","capabilities":{"chat":"unknown","vision":"unknown","tools":"unknown","streaming":"unknown"},"pricing":{"status":"unknown","sourceUrl":"https://example.test","rates":[]},"tierAssignment":{"tier":0,"source":null,"checkedAt":null,"userModified":false},"health":{"status":"unknown","available":true,"checkedAt":null}}]}"#
-    func testSettingsDecodePreservesUnclassifiedAndPaidDeny() throws {
+    func testSettingsDecodePreservesUnclassifiedAndLegacyPaidFlag() throws {
         let snapshot = try JSONDecoder().decode(RoutingSettingsSnapshot.self, from: Data(fixture.utf8))
         XCTAssertFalse(snapshot.allowPaid)
         XCTAssertEqual(snapshot.policies["complex"], [3, 2])
@@ -11,7 +11,7 @@ final class TierSettingsTests: XCTestCase {
         XCTAssertFalse(snapshot.models[0].tierAssignment.userModified)
         XCTAssertEqual(tierLabel(0), "Unclassified")
     }
-    @MainActor func testPolicyOrderAssignmentResetAndPaidToggleUseSharedTransport() async throws {
+    @MainActor func testPolicyOrderAndAssignmentResetUseSharedTransport() async throws {
         var calls: [[String: Any]] = []
         var fail = false
         let data = Data(fixture.utf8)
@@ -25,11 +25,11 @@ final class TierSettingsTests: XCTestCase {
         await model.policy("normal", [3, 1])
         await model.assign(item, 2)
         await model.assign(item, nil)
-        await model.perform(["method": "automatic-paid-set", "allowed": true])
+        await model.perform(["method": "routing-policy-set", "difficulty": "simple", "tiers": [1, 2]])
         XCTAssertEqual(calls[1]["tiers"] as? [Int], [3, 1])
         XCTAssertEqual(calls[2]["tier"] as? Int, 2)
         XCTAssertTrue(calls[3]["tier"] is NSNull)
-        XCTAssertEqual(calls[4]["allowed"] as? Bool, true)
+        XCTAssertEqual(calls[4]["tiers"] as? [Int], [1, 2])
         fail = true
         await model.policy("complex", [])
         XCTAssertEqual(model.error, "Save failed")

@@ -11,26 +11,25 @@ final class UsageBudgetTests: XCTestCase {
         XCTAssertEqual(value.total.stateLabel, "80% 경고")
         XCTAssertNil(value.lastProviderSyncAt)
     }
-    @MainActor func testBudgetSettingsUseCommonRuntimeBridgeAndShowErrors() async {
+    @MainActor func testUsageAndAccountSyncUseCommonRuntimeBridgeAndShowErrors() async {
         var calls: [[String: Any]] = []
         var shouldFail = false
         let data = Data(snapshot.utf8)
         let model = UsageBudgetModel { request in
             calls.append(request)
-            if shouldFail { throw DashboardError(message: "Budget Guard denied") }
+            if shouldFail { throw DashboardError(message: "Usage unavailable") }
             return data
         }
         await model.refresh()
-        await model.save(scope: "openai", usd: "2.50")
+        await model.syncBalance()
         XCTAssertEqual(calls[0]["method"] as? String, "usage")
-        XCTAssertEqual(calls[1]["method"] as? String, "budget-set")
-        XCTAssertEqual(calls[1]["scope"] as? String, "openai")
-        XCTAssertEqual(calls[1]["usd"] as? String, "2.50")
+        XCTAssertEqual(calls[1]["method"] as? String, "balance-sync")
+        XCTAssertEqual(calls[1]["provider"] as? String, "deepseek")
         await model.syncAccount("anthropic")
         XCTAssertEqual(calls[2]["method"] as? String, "account-sync")
         shouldFail = true
-        await model.save(scope: "request", usd: "invalid")
-        XCTAssertEqual(model.error, "Budget Guard denied")
+        await model.refresh()
+        XCTAssertEqual(model.error, "Usage unavailable")
         XCTAssertFalse(model.busy)
         XCTAssertEqual(model.snapshot?.requestBudgetUSD, "1.000000000")
     }

@@ -37,17 +37,18 @@ export interface Candidate {
 }
 export function rankCandidates(candidates: Candidate[], task: Difficulty, order: Tier[] = defaultTierOrder[task]) {
   return candidates.map(c => ({ ...c, tier: c.tier ?? gradeTier(c.profile.grade) }))
-    .filter(c => c.tier !== 0 && order.includes(c.tier) && c.quote.allowed && c.quote.boundUSD !== null && c.health.available
+    .filter(c => c.tier !== 0 && order.includes(c.tier) && c.quote.allowed && c.health.available
       && c.model.capabilities.chat !== 'unsupported'
       && (classifyModel(c.model).kind === 'text' || c.health.status === 'passed' || c.profile.grade !== 'unknown')
       && !['image', 'audio', 'video', 'live', 'embedding', 'moderation', 'reranking', 'document', 'detection', 'reward'].includes(classifyModel(c.model).kind))
     .map(c => ({ ...c, score: (order.length - order.indexOf(c.tier)) * 100,
-      reason: `${task}:tier-${c.tier}; ${money(c.quote.boundUSD!) === 0n ? 'verified-zero-bound' : 'paid-budget-checked'}; ${c.pressure ? 'budget-saving' : 'task-fit'}` }))
+      reason: `${task}:tier-${c.tier}; ${c.quote.boundUSD === null ? 'cost-unknown' : money(c.quote.boundUSD) === 0n ? 'free-estimate' : 'priced-estimate'}` }))
     .sort((a, b) => {
-      // User tier order is absolute, including during budget warnings and for free candidates.
+      // User tier order is absolute, regardless of estimated cost or free status.
       const tier = order.indexOf(a.tier) - order.indexOf(b.tier);
       if (tier) return tier;
-      const cost = money(a.quote.boundUSD!) < money(b.quote.boundUSD!) ? -1 : money(a.quote.boundUSD!) > money(b.quote.boundUSD!) ? 1 : 0;
+      const cost = a.quote.boundUSD === null ? (b.quote.boundUSD === null ? 0 : 1) : b.quote.boundUSD === null ? -1
+        : money(a.quote.boundUSD) < money(b.quote.boundUSD) ? -1 : money(a.quote.boundUSD) > money(b.quote.boundUSD) ? 1 : 0;
       if (cost) return cost;
       const date = (b.profile.updatedAt ?? b.profile.releasedAt ?? '').localeCompare(a.profile.updatedAt ?? a.profile.releasedAt ?? '');
       return date || `${a.model.provider}:${a.model.id}`.localeCompare(`${b.model.provider}:${b.model.id}`);

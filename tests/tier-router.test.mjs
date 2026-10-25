@@ -29,15 +29,12 @@ function fixture(ledger = new UsageLedger(':memory:'), fail = async () => {}) {
   return {engine,ledger,calls,credentials,models};
 }
 function allow(f) { f.ledger.setBudget('total','100'); f.ledger.setBudget('request','10'); f.ledger.setAutomaticPaid(true); }
-test('fresh settings: reviewed defaults, new unclassified, automatic paid default deny; manual still guarded',async()=>{
-  const f=fixture(); const s=await f.engine.routingSettings();
-  assert.deepEqual(s.policies,{simple:[1,2],normal:[2,1],complex:[3,2]}); assert.equal(s.allowPaid,false);
-  assert.equal(s.models.find(m=>m.id==='new-model').tierAssignment.tier,0);
-  assert.equal(s.models.find(m=>m.id==='gpt-4.1-mini').tierAssignment.tier,1);
-  f.ledger.setBudget('total','100');f.ledger.setBudget('request','10');
-  await assert.rejects(f.engine.autoChat(req),e=>e.code==='budget'); assert.equal(f.calls.length,0);
-  await f.engine.chat('openai',{...req,model:'gpt-4.1-mini'});assert.equal(f.calls.length,1);
+test('fresh defaults preserve Tier eligibility while manual and automatic calls need no budget setup',async()=>{
+ const f=fixture(),s=await f.engine.routingSettings();assert.deepEqual(s.policies,{simple:[1,2],normal:[2,1],complex:[3,2]});assert.equal(s.allowPaid,false);
+ assert.equal(s.models.find(m=>m.id==='new-model').tierAssignment.tier,0);assert.equal(s.models.find(m=>m.id==='gpt-4.1-mini').tierAssignment.tier,1);
+ await f.engine.autoChat(req);await f.engine.chat('openai',{...req,model:'gpt-4.1-mini'});assert.equal(f.calls.length,2);
 });
+
 test('user overrides and policies survive refresh, restart and reset to reviewed default',async t=>{
   const dir=mkdtempSync(join(tmpdir(),'nidus-tier-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));const path=join(dir,'ledger.sqlite');
   const f=fixture(new UsageLedger(path));allow(f);
@@ -67,42 +64,39 @@ test('exhausts current tier across providers before next tier; persisted logs in
   assert.deepEqual(f.calls.map(c=>c[0]),['gemini','deepseek']);assert.equal(result.routing.tier,2);
   assert.ok(f.ledger.routes().every(e=>e.tier===2));assert.ok(!JSON.stringify(f.ledger.routes()).includes('secret-prompt'));
 });
-test('provider budget zero skips that provider; fallback follows policy; global and single budgets cannot bypass',async()=>{
-  const f=fixture();allow(f);f.ledger.setBudget('gemini','0');
-  assert.equal((await f.engine.autoChat(req,'normal')).provider,'deepseek');
-  f.ledger.setBudget('deepseek','0');assert.equal((await f.engine.autoChat(req,'normal')).routing.tier,1);
-  await f.engine.setRoutingPolicy('normal',[2]);await assert.rejects(f.engine.autoChat(req,'normal'),e=>e.code==='budget');
-  f.ledger.setBudget('total','0');await assert.rejects(f.engine.autoChat(req,'simple'),e=>e.code==='budget');
-  assert.equal(f.calls.length,2);
+test('zero provider and global budgets do not skip the preferred Tier or provider',async()=>{
+ const f=fixture();for(const scope of ['gemini','total','request'])f.ledger.setBudget(scope,'0');
+ const r=await f.engine.autoChat(req);assert.equal(r.provider,'gemini');assert.equal(r.routing.tier,2);assert.equal(f.calls.length,1);
 });
-test('empty policy disables difficulty; assignment never proves price or text compatibility',async()=>{
+
+test('empty policy disables difficulty; unknown price is eligible but assignment never overrides text incompatibility',async()=>{
   const f=fixture();allow(f);await f.engine.setRoutingPolicy('simple',[]);
-  await assert.rejects(f.engine.autoChat(req,'simple'),e=>e.code==='budget');
+  await assert.rejects(f.engine.autoChat(req,'simple'),e=>e.code==='unsupported');
   await f.engine.setModelTier('openai','new-model',3);await f.engine.setRoutingPolicy('complex',[3]);
-  const plan=await f.engine.routePlan(req,'complex');assert.ok(!plan.candidates.some(c=>c.model.id==='new-model'));
+  const plan=await f.engine.routePlan(req,'complex');assert.ok(plan.candidates.some(c=>c.model.id==='new-model'&&c.quote.boundUSD===null));
   await f.engine.setModelTier('openai','gpt-4.1-mini',3);
   f.models.get('openai')[0].capabilities.chat='unsupported';
-  assert.ok(!(await f.engine.routePlan(req,'complex')).candidates.some(c=>c.model.provider==='openai'));
+  assert.ok(!(await f.engine.routePlan(req,'complex')).candidates.some(c=>c.model.id==='gpt-4.1-mini'));
 });
-test('free tier still paid; revoking permission or changing policy while awaiting key blocks atomic reservation',async()=>{
-  for(const mutate of [f=>f.ledger.setAutomaticPaid(false),f=>f.ledger.setRoutingPolicy('normal',[3]),f=>f.ledger.setModelTier('gemini','gemini-2.5-flash',0)]){
+test('Tier policy changes while awaiting credentials reject stale routing',async()=>{
+  for(const mutate of [f=>f.ledger.setRoutingPolicy('normal',[3]),f=>f.ledger.setModelTier('gemini','gemini-2.5-flash',0)]){
     const f=fixture();allow(f);let once=false;
     f.credentials.get=async()=>{if(!once){once=true;mutate(f);}return 'fake-key';};
-    await assert.rejects(f.engine.autoChat(req),e=>e.code==='budget');assert.equal(f.calls.length,0);
+    await assert.rejects(f.engine.autoChat(req),e=>e.code==='invalid_request');assert.equal(f.calls.length,0);
     assert.ok(f.ledger.snapshot().requests.every(r=>r.status==='blocked'));
   }
 });
 test('timeout and network never fall through to next configured tier',async()=>{
   for(const code of ['timeout','network']){const f=fixture(undefined,async()=>{throw new NidusError(code,'mock');});allow(f);
-    await assert.rejects(f.engine.autoChat(req),e=>e.code===code);assert.equal(f.calls.length,1);assert.ok(Number(f.ledger.snapshot().total.reservedUSD)>0);
+    await assert.rejects(f.engine.autoChat(req),e=>e.code===code);assert.equal(f.calls.length,1);assert.equal(Number(f.ledger.snapshot().total.reservedUSD),0);
   }
 });
 test('schema 1 and 2 migrate without deleting usage, pending reservations or transition logs',async t=>{
   for(const version of [1,2]){
     const dir=mkdtempSync(join(tmpdir(),'nidus-schema-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));const path=join(dir,'ledger.sqlite');
     const ledger=new UsageLedger(path);ledger.setBudget('total','100');ledger.setBudget('request','10');
-    ledger.reserve('openai',{...req,model:'gpt-4.1-mini'},'chat');ledger.recordRoute('old',{provider:'openai',model:'gpt-4.1-mini',reason:'initial_selection',status:'selected',budget:'allowed',boundUSD:'1'});ledger.close();
-    const db=new DatabaseSync(path);db.exec(`DROP TABLE model_tiers; DROP TABLE routing_settings; PRAGMA user_version=${version};`);db.close();
+    ledger.recordRequest('openai',{...req,model:'gpt-4.1-mini'},'chat');ledger.recordRoute('old',{provider:'openai',model:'gpt-4.1-mini',reason:'initial_selection',status:'selected',budget:'allowed',boundUSD:'1'});ledger.close();
+    const db=new DatabaseSync(path);db.exec("UPDATE requests SET reserved=1000000,bound=1000000,settlement='reserved'");db.exec(`DROP TABLE model_tiers; DROP TABLE routing_settings; PRAGMA user_version=${version};`);db.close();
     const restored=new UsageLedger(path);t.after(()=>restored.close());assert.equal(restored.snapshot().requests.length,1);assert.equal(restored.routes()[0].routeId,'old');
     assert.ok(Number(restored.snapshot().total.reservedUSD)>0);assert.equal(restored.routingSettings().allowPaid,false);
   }
@@ -115,7 +109,7 @@ test('CLI and SwiftUI update and consume identical persisted policy; invalid upd
   await dispatch({method:'routing-policy-set',difficulty:'normal',tiers:[3]},f.engine);
   let output='';await main(['chat','--auto'],{engine:f.engine,readPrompt:async()=> 'hello',write:s=>output+=s});assert.equal(JSON.parse(output).routing.tier,3);
   for(const tiers of [[1,1],[0],[4],'1,2',null])await assert.rejects(f.engine.setRoutingPolicy('normal',tiers),e=>e.code==='invalid_request');
-  await assert.rejects(f.engine.setAutomaticPaid('true'),e=>e.code==='invalid_request');
+  await assert.rejects(f.engine.setAutomaticPaid('true'),e=>e.code==='unsupported');
   await assert.rejects(f.engine.setModelTier('openai','not-discovered',2),e=>e.code==='invalid_request');
   assert.deepEqual((await f.engine.routingSettings()).policies.normal,[3]);
 });
@@ -123,7 +117,7 @@ test('policy revocation from a second SQLite connection is observed before dispa
   const dir=mkdtempSync(join(tmpdir(),'nidus-policy-race-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));const path=join(dir,'ledger.sqlite');
   const first=new UsageLedger(path),second=new UsageLedger(path);t.after(()=>{first.close();second.close();});
   const f=fixture(first);allow(f);
-  f.credentials.get=async()=>{second.setAutomaticPaid(false);return 'fake-key';};
-  await assert.rejects(f.engine.autoChat(req),e=>e.code==='budget');assert.equal(f.calls.length,0);
+  f.credentials.get=async()=>{second.setRoutingPolicy('normal',[3]);return 'fake-key';};
+  await assert.rejects(f.engine.autoChat(req),e=>e.code==='invalid_request');assert.equal(f.calls.length,0);
   assert.ok(first.snapshot().requests.every(r=>r.blockReason==='routing_policy_changed'));
 });

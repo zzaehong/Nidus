@@ -34,12 +34,12 @@ test('task policies select lightweight/general/advanced, default Normal, local p
   assert.equal((await f.engine.autoChat(request, 'complex')).model, 'deepseek-v4-pro');
   assert.equal(f.ledger.snapshot().requests.length, 1);
 });
-test('unknown grades/prices excluded; Complex never uses disallowed lightweight tier; invalid difficulty rejected', async () => {
+test('unclassified models excluded; Complex never uses disallowed lightweight tier; invalid difficulty rejected', async () => {
   const f = fixture({ models: [['openai', 'gpt-4.1-mini'], ['openai', 'new-unknown']] });
   assert.equal(modelProfile('openai', 'new-unknown').grade, 'unknown');
   assert.equal(modelProfile('openai', 'new-unknown').releasedAt, null);
   assert.equal((await f.engine.routePlan(request, 'simple')).candidates.length, 1);
-  await assert.rejects(f.engine.autoChat(request, 'complex'), e => e.code === 'budget');
+  await assert.rejects(f.engine.autoChat(request, 'complex'), e => e.code === 'unsupported');
   await assert.rejects(f.engine.autoChat(request, 'invalid'), e => e.code === 'invalid_request');
   assert.equal(f.calls.length, 0);
 });
@@ -55,35 +55,25 @@ test('verified zero bound wins, free-tier flag alone never makes Gemini free, re
   assert.equal(rankCandidates([old, free], 'simple')[0].model.id, 'reviewed-recent');
   assert.ok(Number(plan.candidates.find(c => c.model.provider === 'gemini').quote.boundUSD) > 0);
 });
-test('provider, global and single budgets exclude before dispatch; no budget exceptions in automatic mode', async () => {
-  const f = fixture(); f.ledger.setBudget('openai', '0');
-  assert.equal((await f.engine.autoChat(request, 'simple')).provider, 'gemini');
-  f.ledger.setBudget('total', '0');
-  await assert.rejects(f.engine.autoChat(request, 'simple'), e => e.code === 'budget');
-  await assert.rejects(f.engine.autoChat(request, 'simple', { budgetException: true }), e => e.code === 'invalid_request');
-  assert.equal(f.calls.length, 1);
-  const unconfigured = fixture({ ledger: new UsageLedger(':memory:') });
-  await assert.rejects(unconfigured.engine.autoChat(request), e => e.code === 'budget');
-  assert.equal(unconfigured.calls.length, 0);
+test('automatic routing ignores legacy zero budgets and disabled automatic paid flag', async () => {
+ const f=fixture({ledger:new UsageLedger(':memory:')});f.ledger.setAutomaticPaid(false);
+ for(const scope of ['openai','total','request'])f.ledger.setBudget(scope,'0');
+ const r=await f.engine.autoChat(request,'simple');assert.equal(r.provider,'openai');assert.equal(r.routing.budgetLevel,'disabled');assert.equal(f.calls.length,1);
 });
-test('80/90 percent pressure prefers cheaper compatible candidates and 100 blocks', async () => {
-  for (const used of ['8', '9', '10']) {
-    const f = fixture(); f.ledger.setBudget('total', '10');
-    const reservation = f.ledger.reserve('openai', { ...request, model: 'gpt-4.1-mini' }, 'chat');
-    f.ledger.settle(reservation, 'failed'); f.ledger.reconcile(reservation.id, used, { provider: 'openai', reference: 'mock-billing' });
-    const plan = await f.engine.routePlan(request, 'simple');
-    assert.equal(plan.budget.level, used === '8' ? 'warning' : used === '9' ? 'saving' : 'blocked');
-    if (used !== '10') assert.ok(plan.candidates.every(c => c.pressure)); else assert.equal(plan.candidates.length, 0);
-  }
+
+test('old spending thresholds do not alter candidates or create reservations', async () => {
+ for(const used of ['8','9','10']){const f=fixture();f.ledger.setBudget('total','10');const r=f.ledger.recordRequest('openai',{...request,model:'gpt-4.1-mini'},'chat');f.ledger.settle(r,'failed');f.ledger.reconcile(r.id,used,{provider:'openai',reference:'mock'});
+ const plan=await f.engine.routePlan(request,'simple');assert.ok(plan.candidates.length);assert.ok(plan.candidates.every(c=>!c.pressure));await f.engine.autoChat(request,'simple');assert.equal(f.calls.length,1);}
 });
-test('rate limit switches once, persists cooldown and records transitions without secrets; unresolved liability retained', async t => {
+
+test('rate limit switches once, persists cooldown and records transitions without secrets; unknown costs retained without reservation', async t => {
   const dir = mkdtempSync(join(tmpdir(), 'nidus-router-')); t.after(() => rmSync(dir, { recursive: true, force: true }));
   const path = join(dir, 'usage.sqlite'); const ledger = new UsageLedger(path); ledger.setBudget('total', '100'); ledger.setBudget('request', '10');
   const f = fixture({ ledger, fail: p => { if (p === 'openai') throw new NidusError('rate_limit', 'private-prompt private-key', 429, '120'); } });
   const result = await f.engine.autoChat(request, 'simple');
   assert.equal(result.provider, 'gemini'); assert.equal(f.calls.length, 2);
   assert.ok(result.routing.transitions.some(t => t.reason === 'rate_limit'));
-  assert.ok(Number(ledger.snapshot().total.reservedUSD) > 0);
+  assert.equal(Number(ledger.snapshot().total.reservedUSD), 0);
   const log = JSON.stringify(ledger.routes()); assert.ok(!log.includes('private-prompt')); assert.ok(!log.includes('private-key'));
   ledger.close(); const reopened = new UsageLedger(path); t.after(() => reopened.close());
   assert.equal(reopened.health('openai', 'gpt-4.1-mini').available, false); assert.equal(reopened.routes().length, 4);
@@ -101,18 +91,16 @@ test('timeout, network, invalid response, cancellation and unknown errors never 
     const f = fixture({ fail: () => { throw new NidusError(code, 'ambiguous'); } });
     await assert.rejects(f.engine.autoChat(request, 'simple'), e => e.code === code);
     assert.equal(f.calls.length, 1); assert.equal(f.ledger.snapshot().requests[0].costStatus, 'unknown');
-    assert.ok(Number(f.ledger.snapshot().total.reservedUSD) > 0);
+    assert.equal(Number(f.ledger.snapshot().total.reservedUSD), 0);
   }
 });
-test('parallel automatic requests cannot spend the same remaining budget', async () => {
-  let release; const gate = new Promise(resolve => { release = resolve; });
-  const f = fixture({ models: [['openai', 'gpt-4.1-mini']], fail: async () => { await gate; } });
-  f.ledger.setBudget('total', '0.5');
-  const first = f.engine.autoChat(request, 'simple');
-  while (!f.calls.length) await new Promise(resolve => setImmediate(resolve));
-  await assert.rejects(f.engine.autoChat(request, 'simple'), e => e.code === 'budget');
-  release(); await first; assert.equal(f.calls.length, 1);
+test('parallel automatic requests each record usage without reserving budget', async () => {
+ let release;const gate=new Promise(resolve=>{release=resolve;});const f=fixture({models:[['openai','gpt-4.1-mini']],fail:async()=>{await gate;}});f.ledger.setBudget('total','0');
+ const pending=[f.engine.autoChat(request,'simple'),f.engine.autoChat(request,'simple')];
+ while(f.calls.length<2)await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(f.ledger.snapshot().total.reservedUSD,'0.000000000');release();const results=await Promise.all(pending);assert.notEqual(results[0].requestId,results[1].requestId);assert.equal(f.ledger.snapshot().requests.length,2);
 });
+
 test('CLI and SwiftUI transport share automatic policy and preserve manual requests', async () => {
   const cli = fixture(), ui = fixture(); let output = '';
   await main(['chat', '--auto', '--difficulty', 'complex'], { engine: cli.engine, readPrompt: async () => 'private-prompt', write: s => { output += s; } });
@@ -129,11 +117,11 @@ test('schema 1 migration preserves Phase 3 reservations and expiry permits later
   const dir = mkdtempSync(join(tmpdir(), 'nidus-migrate-')); t.after(() => rmSync(dir, { recursive: true, force: true }));
   const path = join(dir, 'usage.sqlite'); const original = new UsageLedger(path);
   original.setBudget('total', '10'); original.setBudget('request', '5');
-  original.reserve('openai', { ...request, model: 'gpt-4.1-mini' }, 'chat'); original.close();
-  const old = new DatabaseSync(path); old.exec('DROP TABLE route_events; DROP TABLE model_health; PRAGMA user_version=1;'); old.close();
+  original.recordRequest('openai', { ...request, model: 'gpt-4.1-mini' }, 'chat'); original.close();
+  const old = new DatabaseSync(path); old.exec("UPDATE requests SET reserved=1000000,bound=1000000,settlement='reserved'");old.exec('DROP TABLE route_events; DROP TABLE model_health; PRAGMA user_version=1;'); old.close();
   let time = new Date('2026-10-24T12:00:00Z');
   const ledger = new UsageLedger(path, () => time); t.after(() => ledger.close());
-  assert.equal(ledger.snapshot().requests.length, 1); assert.ok(Number(ledger.snapshot().total.reservedUSD) > 0);
+  assert.equal(ledger.snapshot().requests.length, 1); assert.ok(Number(ledger.snapshot().total.reservedUSD)>0);
   ledger.recordHealth('openai', 'gpt-4.1-mini', 'rate_limit', 60);
   assert.equal(ledger.health('openai', 'gpt-4.1-mini').available, false);
   time = new Date('2026-10-24T12:01:01Z'); assert.equal(ledger.health('openai', 'gpt-4.1-mini').available, true);

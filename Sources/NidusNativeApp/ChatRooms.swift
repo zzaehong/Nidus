@@ -157,11 +157,11 @@ struct ChatRoomsView: View {
                     Text("Complex").tag("complex")
                 }.frame(width: 220).disabled(!(room.automaticRouting ?? false))
                 if room.automaticRouting ?? false {
-                    Button("후보·예산 확인") { preview(index: index) }.disabled(previewing || sending)
+                    Button("라우팅 후보 확인") { preview(index: index) }.disabled(previewing || sending)
                 }
             }.disabled(sending)
             if room.automaticRouting ?? false {
-                Text(routeSummary ?? "설정된 Tier 순서로 선택합니다. Tier 및 라우팅 설정에서 순서와 자동 유료 허용을 변경하세요. 무료 티어만으로 무료 사용을 보장하지 않습니다. 후보 확인은 API를 호출하지 않습니다.")
+                Text(routeSummary ?? "설정된 Tier 순서로 선택합니다. 후보 확인은 API를 호출하지 않습니다. 실제 전송과 Fallback에는 비용이 발생할 수 있으며 앱 내 지출 제한은 없습니다.")
                     .font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
             }
             TextField("이 채팅방의 system prompt (선택)", text: Binding(get: { rooms[index].systemPrompt }, set: { rooms[index].systemPrompt = $0; persist() }))
@@ -226,7 +226,7 @@ struct ChatRoomsView: View {
                 Text(message.createdAt.formatted(date: .omitted, time: .shortened)).font(.caption2).foregroundStyle(.tertiary)
             }
             if let routing = message.routing {
-                Text("자동 \(routing.difficulty) · Tier \(routing.tier.map(String.init) ?? "이전 기록") · 예약 상한 $\(routing.boundUSD ?? "미확인") · 추정 비용 $\(routing.estimatedUSD ?? "미확인") · 예산 \(routing.budgetLevel ?? "미확인") · \(routing.summary)")
+                Text("자동 \(routing.difficulty) · Tier \(routing.tier.map(String.init) ?? "이전 기록") · 참고 비용 상한 $\(routing.boundUSD ?? "미확인") · 추정 비용 $\(routing.estimatedUSD ?? "미확인") · \(routing.summary)")
                     .font(.caption2).foregroundStyle(.secondary).textSelection(.enabled)
             }
             Group {
@@ -301,7 +301,7 @@ struct ChatRoomsView: View {
                 let data = try await dashboard.transport(["method": "route-plan", "difficulty": room.difficulty ?? "normal",
                     "request": ["model": "automatic", "system": room.systemPrompt, "messages": messages, "maxOutputTokens": Int(maxTokens) ?? 1024]])
                 guard selectedID == room.id else { return }
-                routeSummary = try JSONDecoder().decode(RoutePlanResult.self, from: data).summary + " · 실제 전송 직전에 예산을 다시 검사합니다."
+                routeSummary = try JSONDecoder().decode(RoutePlanResult.self, from: data).summary + " · 전송 직전에 Tier 설정을 다시 확인합니다. 비용 제한은 적용하지 않습니다."
             } catch { routeSummary = error.localizedDescription }
         }
     }

@@ -27,23 +27,20 @@ function fixture(ledger=new UsageLedger(':memory:'), fail=()=>{}) {
   return {engine,ledger,credentials,calls};
 }
 const approve=(f,model=request.model,status='unverified')=>f.engine.setFreeUse('gemini',model,status,true,status==='verified',true);
-test('same-revision reservation rejects mismatched, missing and cross-provider tier assignments',()=>{
-  const f=fixture();f.ledger.setAutomaticPaid(true);
-  f.ledger.modelTier('gemini',request.model);
-  const revision=f.ledger.routingSettings().revision;
-  assert.throws(()=>f.ledger.reserve('gemini',request,'chat',false,{revision,difficulty:'normal',tier:1}),e=>e.code==='budget');
-  assert.equal(f.ledger.snapshot().requests[0].blockReason,'model_tier_mismatch');
-  assert.throws(()=>f.ledger.reserve('openai',{...request,model:'gpt-4.1-mini'},'chat',false,{revision,difficulty:'normal',tier:1}),e=>e.code==='budget');
-  assert.ok(f.ledger.snapshot().requests.every(r=>r.reservedUSD==='0.000000000'));
-  const r=f.ledger.reserve('gemini',request,'chat',false,{revision,difficulty:'normal',tier:2});assert.ok(r.bound>0n);
+test('same-revision request recording rejects mismatched and cross-provider Tier assignments atomically',()=>{
+ const f=fixture();f.ledger.modelTier('gemini',request.model);const revision=f.ledger.routingSettings().revision;
+ for(const [provider,model] of [['gemini',request.model],['openai','gpt-4.1-mini']])assert.throws(()=>f.ledger.recordRequest(provider,{...request,model},'chat',{revision,difficulty:'normal',tier:1}),e=>e.code==='invalid_request');
+ assert.equal(f.ledger.snapshot().requests.length,0);
+ const r=f.ledger.recordRequest('gemini',request,'chat',{revision,difficulty:'normal',tier:2});assert.equal(r.bound,null);
 });
+
 test('another connection changing model tier without revision cannot race the atomic model check',async t=>{
   const dir=mkdtempSync(join(tmpdir(),'nidus-tier-check-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));const path=join(dir,'ledger.sqlite');
   const ledger=new UsageLedger(path);t.after(()=>ledger.close());const f=fixture(ledger);f.ledger.setAutomaticPaid(true);await f.engine.setRoutingPolicy('normal',[2]);
   const other=new DatabaseSync(path);t.after(()=>other.close());
   f.credentials.get=async()=>{other.prepare("UPDATE model_tiers SET tier=1 WHERE provider='gemini'").run();return 'test-key';};
-  await assert.rejects(f.engine.autoChat(request),e=>e.code==='budget');assert.equal(f.calls.length,0);
-  assert.equal(f.ledger.snapshot().requests[0].blockReason,'model_tier_mismatch');
+  await assert.rejects(f.engine.autoChat(request),e=>e.code==='invalid_request');assert.equal(f.calls.length,0);
+  assert.equal(f.ledger.snapshot().requests.length,0);
 });
 test('free-tier defaults distinguish unsupported from account unverified and never invent remaining quota',()=>{
   const f=fixture();const gemini=f.ledger.freeUse('gemini',request.model),openai=f.ledger.freeUse('openai','gpt-4.1-mini');
@@ -51,46 +48,41 @@ test('free-tier defaults distinguish unsupported from account unverified and nev
   assert.equal(openai.status,'unsupported');assert.equal(f.ledger.freeUse('anthropic','unknown').status,'unverified');
   assert.equal(gemini.remainingRequests,undefined);
 });
-test('unverified free model requires scoped charge-risk consent; approval retains positive cost and budgets',async()=>{
-  const f=fixture();await assert.rejects(f.engine.autoChat(request),e=>e.code==='budget');
-  await assert.rejects(f.engine.setFreeUse('gemini',request.model,'unverified',true,false,false),e=>e.code==='invalid_request');
-  await approve(f);assert.equal(f.ledger.routingSettings().allowPaid,false);
-  const result=await f.engine.autoChat(request);assert.equal(result.provider,'gemini');assert.ok(Number(result.routing.boundUSD)>0);
-  assert.ok(Number(result.estimatedUSD)>0);assert.equal(f.ledger.freeUse('gemini',request.model).status,'unverified');
-  assert.equal(f.ledger.routes()[0].authorization,'model-scoped-charge-consent');
-  f.ledger.setBudget('gemini','0');await assert.rejects(f.engine.autoChat(request),e=>e.code==='budget');assert.equal(f.calls.length,1);
+test('unverified free metadata is optional and never makes paid cost zero',async()=>{
+ const f=fixture();const first=await f.engine.autoChat(request);assert.ok(Number(first.estimatedUSD)>0);
+ await assert.rejects(f.engine.setFreeUse('gemini',request.model,'unverified',true,false,false),e=>e.code==='invalid_request');
+ await approve(f);f.ledger.setBudget('gemini','0');const r=await f.engine.autoChat(request);assert.ok(Number(r.estimatedUSD)>0);
+ assert.equal(f.ledger.routes()[0].authorization,'budget-guard-removed');assert.equal(f.calls.length,2);
 });
+
 test('verified status requires account attestation and is not itself approval or a zero price',async()=>{
   const f=fixture();await assert.rejects(f.engine.setFreeUse('gemini',request.model,'verified',false,false,false),e=>e.code==='invalid_request');
   await f.engine.setFreeUse('gemini',request.model,'verified',false,true,false);
   const free=f.ledger.freeUse('gemini',request.model);assert.equal(free.verification,'user-account-attestation');assert.ok(free.checkedAt);
-  await assert.rejects(f.engine.autoChat(request),e=>e.code==='budget');
+  assert.ok(Number((await f.engine.autoChat(request)).estimatedUSD)>0);
   await approve(f,request.model,'verified');const result=await f.engine.autoChat(request);assert.ok(Number(result.estimatedUSD)>0);
 });
-test('free unavailable skips to another approved model and never an unapproved paid model',async()=>{
-  const f=fixture();await approve(f);await approve(f,'gemini-3.5-flash-lite');
-  await f.engine.setFreeUse('gemini',request.model,'unavailable',false,true,false);
-  const result=await f.engine.autoChat(request);assert.equal(result.model,'gemini-3.5-flash-lite');
-  await f.engine.setFreeUse('gemini','gemini-3.5-flash-lite','unavailable',false,true,false);
-  await assert.rejects(f.engine.autoChat(request),e=>e.code==='budget');assert.ok(f.calls.every(([p])=>p==='gemini'));
+test('unavailable free metadata does not block a paid estimate or change Tier priority',async()=>{
+ const f=fixture();await f.engine.setFreeUse('gemini',request.model,'unavailable',false,true,false);
+ const r=await f.engine.autoChat(request);assert.equal(r.model,request.model);assert.equal(r.billingMode,'paid');assert.ok(Number(r.estimatedUSD)>0);
 });
-test('rate-limit fallback uses only other approved candidates; no inferred free quota depletion',async()=>{
+
+test('rate-limit fallback follows Tier and cost without approval gates or inferred quota depletion',async()=>{
   const f=fixture(undefined,(p,m)=>{if(m===request.model)throw new NidusError('rate_limit','mock',429,'60');});
   await approve(f);await approve(f,'gemini-3.5-flash-lite');
-  const result=await f.engine.autoChat(request);assert.equal(result.model,'gemini-3.5-flash-lite');assert.equal(f.calls.length,2);
-  assert.equal(f.ledger.freeUse('gemini',request.model).status,'unverified');assert.ok(Number(f.ledger.snapshot().total.reservedUSD)>0);
+  const result=await f.engine.autoChat(request);assert.equal(result.model,'gpt-4.1-mini');assert.equal(f.calls.length,2);
+  assert.equal(f.ledger.freeUse('gemini',request.model).status,'unverified');assert.equal(Number(f.ledger.snapshot().total.reservedUSD),0);
   const alone=fixture(undefined,()=>{throw new NidusError('rate_limit','mock',429,'60');});await approve(alone);
-  await assert.rejects(alone.engine.autoChat(request),e=>e.code==='budget');assert.equal(alone.calls.length,1);
+  await assert.rejects(alone.engine.autoChat(request),e=>e.code==='unsupported');assert.equal(alone.calls.length,3);
 });
-test('scoped approval is bound to current credential and revocation during key retrieval is atomic',async()=>{
-  const f=fixture();await approve(f);f.credentials.get=async()=> 'different-account-key';
-  await assert.rejects(f.engine.autoChat(request),e=>e.code==='budget');assert.equal(f.calls.length,0);
-  f.credentials.get=async()=>{f.ledger.setFreeUse('gemini',request.model,'unverified',false,false,hash);return 'test-key';};
-  await assert.rejects(f.engine.autoChat(request),e=>e.code==='budget');assert.equal(f.calls.length,0);
+test('credential changes affect free estimates but never require new spending permission',async()=>{
+ const f=fixture();await approve(f);f.credentials.get=async()=> 'different-account-key';
+ const r=await f.engine.autoChat(request);assert.equal(r.billingMode,'paid');assert.ok(Number(r.estimatedUSD)>0);assert.equal(f.calls.length,1);
 });
+
 test('free approvals survive schema upgrade/restart without exposing key digests and invalidate on disconnect',async t=>{
   const dir=mkdtempSync(join(tmpdir(),'nidus-free-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));const path=join(dir,'ledger.sqlite');
-  const f=fixture(new UsageLedger(path));const pending=f.ledger.reserve('gemini',request,'chat');
+  const f=fixture(new UsageLedger(path));const pending=f.ledger.recordRequest('gemini',request,'chat');
   f.ledger.close();const old=new DatabaseSync(path);old.exec('DROP TABLE model_free_use; PRAGMA user_version=3;');old.close();
   const again=fixture(new UsageLedger(path));await approve(again);assert.equal(again.ledger.snapshot().requests[0].id,pending.id);
   again.ledger.close();const restored=fixture(new UsageLedger(path));t.after(()=>restored.ledger.close());
@@ -103,12 +95,9 @@ test('dashboard scoped consent validates exact discovered free model and existin
   await assert.rejects(dispatch({method:'free-use-set',provider:'openai',model:'gpt-4.1-mini',status:'verified',approved:true,accountConfirmed:true,chargeRiskAccepted:true},f.engine),e=>e.code==='invalid_request');
   const s=await dispatch({method:'free-use-set',provider:'gemini',model:request.model,status:'unverified',approved:true,accountConfirmed:false,chargeRiskAccepted:true},f.engine);
   assert.equal(s.allowPaid,false);assert.equal(s.models.find(m=>m.id===request.model).freeUse.approved,true);
-  f.ledger.setBudget('request','0');await assert.rejects(f.engine.autoChat(request),e=>e.code==='budget');assert.equal(f.calls.length,0);
+  f.ledger.setBudget('request','0');await f.engine.autoChat(request);assert.equal(f.calls.length,1);
 });
-test('scoped consent never permits automatic budget exceptions or ambiguous-delivery retry',async()=>{
-  const f=fixture(undefined,()=>{throw new NidusError('timeout','ambiguous');});await approve(f);await approve(f,'gemini-3.5-flash-lite');
-  await assert.rejects(f.engine.autoChat(request),e=>e.code==='timeout');assert.equal(f.calls.length,1);
-  const revision=f.ledger.routingSettings().revision;
-  assert.throws(()=>f.ledger.reserve('gemini',request,'chat',true,{revision,difficulty:'normal',tier:2,credentialHash:hash}),e=>e.code==='invalid_request');
-  assert.ok(Number(f.ledger.snapshot().total.reservedUSD)>0);
+test('ambiguous-delivery stops after one call without leaving a reservation',async()=>{
+ const f=fixture(undefined,()=>{throw new NidusError('timeout','ambiguous');});
+ await assert.rejects(f.engine.autoChat(request),e=>e.code==='timeout');assert.equal(f.calls.length,1);assert.equal(Number(f.ledger.snapshot().total.reservedUSD),0);assert.equal(f.ledger.snapshot().requests[0].estimatedUSD,null);
 });

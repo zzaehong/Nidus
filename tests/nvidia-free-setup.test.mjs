@@ -14,10 +14,12 @@ function fixture(){
  const engine=new ConnectivityEngine(credentials,{load:async p=>p==='nvidia'?{version:1,provider:p,models,fetchedAt:'2026-10-25'}:null}, {nvidia:{chat:async(k,r)=>{calls++;if(fail)throw new NidusError('rate_limit','limited',429);return {provider:'nvidia',model:r.model,text:'ok',usage:{inputTokens:5,outputTokens:2}};}}},ledger);
  return {engine,ledger,credentials,calls:()=>calls,setFailure:()=>fail=true};
 }
-test('actual NVIDIA no-plan/no-approval failure explains setup instead of unknown price',async()=>{
- const f=fixture();await assert.rejects(f.engine.chat('nvidia',request(ids[0])),e=>e.reason==='nvidia_free_setup_required'&&e.message.includes('무료 개발자 API 설정'));
- assert.equal(f.calls(),0);assert.equal(f.ledger.snapshot().requests[0].blockReason,'nvidia_free_setup_required');
+test('NVIDIA without plan, approval, price or budget calls normally and records unknown cost',async()=>{
+ const f=fixture();for(const id of ids){const r=await f.engine.chat('nvidia',request(id));assert.equal(r.billingMode,'paid');assert.equal(r.estimatedUSD,null);}
+ assert.equal(f.calls(),4);assert.ok(f.ledger.snapshot().requests.every(r=>r.blockReason===null&&r.costStatus==='unknown'&&Number(r.reservedUSD)===0));
+ for(const id of ids)await f.engine.setModelTier('nvidia',id,2);const automatic=await f.engine.autoChat(request('automatic'));assert.equal(automatic.provider,'nvidia');assert.equal(automatic.estimatedUSD,null);
 });
+
 test('explicit one-step setup enables four discovered official free endpoints without paid budgets',async()=>{
  const f=fixture();await dispatch({method:'nvidia-free-setup',models:ids,confirmed:true,riskAccepted:true},f.engine);assert.equal(f.calls(),0);
  for(const id of ids){const r=await f.engine.chat('nvidia',request(id));assert.equal(r.billingMode,'free');assert.equal(Number(r.estimatedUSD),0);assert.equal(priceFor('nvidia',id).rates.length,0);assert.equal(f.ledger.modelTier('nvidia',id).tier,0);}
@@ -28,11 +30,10 @@ test('unconfirmed, undiscovered, unreviewed and duplicate selections cannot chan
  const f=fixture();for(const [models,confirmed,risk] of [[ids,false,true],[ids,true,false],[['unknown'],true,true],[['writer/palmyra-med-70b'],true,true],[[ids[0],ids[0]],true,true],[[],true,true]])await assert.rejects(f.engine.approveNvidiaFreeModels(models,confirmed,risk),e=>e.code==='invalid_request');
  assert.equal(f.ledger.providerPlan('nvidia').state,'unknown');assert.equal(f.ledger.freeUse('nvidia',ids[0]).approved,false);assert.equal(f.calls(),0);
 });
-test('selected models only, key-bound consent and safe rate-limit fallback',async()=>{
+test('NVIDIA optional free metadata stays scoped and credential-bound; rate limits still exhaust candidates safely',async()=>{
  const f=fixture();await f.engine.approveNvidiaFreeModels([ids[0]],true,true);
- await assert.rejects(f.engine.chat('nvidia',request(ids[1])),e=>e.reason==='free_model_approval_required');
- await assert.rejects(f.engine.chat('nvidia',request('writer/palmyra-med-70b')),e=>e.reason==='free_model_unverified');
- f.credentials.get=async()=> 'changed-key';await assert.rejects(f.engine.chat('nvidia',request(ids[0])),e=>e.reason==='free_credential_changed');assert.equal(f.calls(),0);
+ for(const id of [ids[1],'writer/palmyra-med-70b']){const r=await f.engine.chat('nvidia',request(id));assert.equal(r.billingMode,'paid');assert.equal(r.estimatedUSD,null);}
+ f.credentials.get=async()=> 'changed-key';assert.equal((await f.engine.chat('nvidia',request(ids[0]))).billingMode,'paid');
  f.credentials.get=async()=> 'mock-key';await f.engine.approveNvidiaFreeModels(ids,true,true);for(const id of ids)await f.engine.setModelTier('nvidia',id,2);
- f.setFailure();await assert.rejects(f.engine.autoChat(request('automatic')),e=>e.code==='budget');assert.equal(f.calls(),4);assert.ok(f.ledger.routes().filter(r=>r.status==='failed').every(r=>r.reason==='rate_limit'));
+ f.setFailure();await assert.rejects(f.engine.autoChat(request('automatic')),e=>e.code==='unsupported');assert.equal(f.calls(),7);assert.ok(f.ledger.routes().filter(r=>r.status==='failed').every(r=>r.reason==='rate_limit'));
 });

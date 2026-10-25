@@ -50,9 +50,9 @@ for(const p of expandedProviders) {
   const f=fixture();await connect(f,p);const id=reviewedFreeModels[p][0];
   for(const state of ['unknown','paid','free']) {
    await f.engine.setProviderPlan(p,state,true,true);
-   await assert.rejects(f.engine.chat(p,request(id)),e=>e.code==='budget');
+   const r=await f.engine.chat(p,request(id));assert.equal(r.billingMode,'paid');assert.notEqual(r.estimatedUSD,'0.000000000');
   }
-  assert.equal(f.calls.length,1);await approve(f,p);
+  assert.equal(f.calls.length,4);await approve(f,p);
   for(const [status,code] of [[401,'authentication'],[403,'permission'],[429,'rate_limit']]) {
    f.setFailure(status);await assert.rejects(f.engine.chat(p,request(id)),e=>e.code===code&&!e.message.includes('secret'));
   }
@@ -64,7 +64,7 @@ test('Cloudflare account is validated, credential-bound and isolated from discov
  await connect(f,'cloudflare');assert.equal(f.calls[0].path,`/accounts/${account}/ai/models/search`);
  assert.equal(JSON.parse(f.keys.get('cloudflare')).accountId,account);assert.ok(!JSON.stringify([...f.snapshots.values()]).includes(account));
  await approve(f,'cloudflare');f.keys.set('cloudflare',cloudflareCredential(key,'b'.repeat(32)));
- await assert.rejects(f.engine.chat('cloudflare',request(reviewedFreeModels.cloudflare[0])),e=>e.reason==='free_credential_changed');
+ assert.equal((await f.engine.chat('cloudflare',request(reviewedFreeModels.cloudflare[0]))).billingMode,'paid');assert.ok(f.calls.at(-1).path.includes('b'.repeat(32)));
  const env=new EnvironmentCredentials(f.credentials,{NIDUS_CLOUDFLARE_API_KEY:key,NIDUS_CLOUDFLARE_ACCOUNT_ID:account});assert.equal(JSON.parse(await env.get('cloudflare')).accountId,account);
 });
 test('free fallback crosses new providers in allowed Tier and never pays',async()=>{
@@ -76,8 +76,8 @@ test('free fallback crosses new providers in allowed Tier and never pays',async(
 });
 test('schema5 upgrade preserves paid liabilities and free plans survive reopen',async t=>{
  const dir=mkdtempSync(join(tmpdir(),'nidus42-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));const path=join(dir,'ledger.sqlite');
- let ledger=new UsageLedger(path);ledger.setBudget('total','10');ledger.setBudget('request','2');ledger.reserve('gemini',request('gemini-2.5-flash'),'chat');ledger.close();
- const old=new DatabaseSync(path);old.exec('DROP TABLE provider_plans; PRAGMA user_version=5;');old.close();ledger=new UsageLedger(path);
+ let ledger=new UsageLedger(path);ledger.setBudget('total','10');ledger.setBudget('request','2');ledger.recordRequest('gemini',request('gemini-2.5-flash'),'chat');ledger.close();
+ const old=new DatabaseSync(path);old.exec("UPDATE requests SET reserved=1000000,bound=1000000,settlement='reserved'");old.exec('DROP TABLE provider_plans; PRAGMA user_version=5;');old.close();ledger=new UsageLedger(path);
  const f=fixture(ledger);await connect(f,'groq');await approve(f,'groq');ledger.close();ledger=new UsageLedger(path);t.after(()=>ledger.close());
  assert.equal(ledger.providerPlan('groq').state,'free');assert.ok(Number(ledger.snapshot().total.reservedUSD)>0);assert.equal(ledger.modelTier('groq',reviewedFreeModels.groq[0]).tier,2);
 });
@@ -94,14 +94,13 @@ test('Cloudflare paginates and rejects failure envelopes; Mistral text blocks no
  const adapter=new CompatibleAdapter('mistral','https://mock.invalid',new HttpClient(async()=>Response.json({...completion,choices:[{message:{content:[{type:'text',text:'hello'},{type:'thinking',thinking:'private'}]}}]})));
  assert.equal((await adapter.chat(key,request('mistral-small-2603'))).text,'hello');
 });
-test('reviewed paid Groq requests respect provider/global budgets and automatic permission',async()=>{
- const f=fixture();await connect(f,'groq');const id=reviewedFreeModels.groq[0];await f.engine.setModelTier('groq',id,2);
- await f.engine.setProviderPlan('groq','paid',false,false);f.ledger.setBudget('total','1');f.ledger.setBudget('request','1');f.ledger.setBudget('groq','0');
- await assert.rejects(f.engine.chat('groq',request(id)),e=>e.reason==='provider_budget');
- f.ledger.setBudget('groq','1');await assert.rejects(f.engine.autoChat(request(id)),e=>e.code==='budget');
- f.ledger.setAutomaticPaid(true);const r=await f.engine.autoChat(request(id));assert.equal(r.billingMode,'paid');assert.ok(Number(r.estimatedUSD)>0);
- f.ledger.setBudget('total','0');await assert.rejects(f.engine.autoChat(request(id)),e=>e.code==='budget');
+test('paid Groq calls ignore old zero limits and disabled automatic paid permission while recording costs',async()=>{
+ const f=fixture();await connect(f,'groq');const id=reviewedFreeModels.groq[0];await f.engine.setModelTier('groq',id,2);await f.engine.setProviderPlan('groq','paid',false,false);
+ for(const scope of ['total','request','groq'])f.ledger.setBudget(scope,'0');
+ for(const r of [await f.engine.chat('groq',request(id)),await f.engine.autoChat(request(id))]){assert.equal(r.billingMode,'paid');assert.ok(Number(r.estimatedUSD)>0);}
+ assert.equal(f.ledger.snapshot().requests.length,2);assert.equal(Number(f.ledger.snapshot().total.reservedUSD),0);
 });
+
 test('connection failure preserves previous key/cache; reconnect clears free consent',async()=>{
  const f=fixture();await connect(f,'groq');await approve(f,'groq');
  const original=f.registry.groq.listModels;f.registry.groq.listModels=async()=>{throw Error('mock');};
@@ -124,5 +123,5 @@ test('plan revocation at credential boundary blocks execution; concurrent free t
  const f=fixture();await connect(f,'groq');const id=await approve(f,'groq');const results=await Promise.all([f.engine.chat('groq',request(id)),f.engine.chat('groq',request(id))]);assert.notEqual(results[0].requestId,results[1].requestId);
  assert.equal(f.ledger.snapshot().requests.length,2);assert.ok(f.ledger.snapshot().requests.every(r=>r.inputTokens===10));
  f.credentials.get=async p=>{f.ledger.setProviderPlan('groq','unknown',false,false,'');return f.keys.get(p);};const count=f.calls.length;
- await assert.rejects(f.engine.autoChat(request(id)),e=>e.code==='budget');assert.equal(f.calls.length,count);
+ await assert.rejects(f.engine.autoChat(request(id)),e=>e.code==='invalid_request');assert.equal(f.calls.length,count);
 });

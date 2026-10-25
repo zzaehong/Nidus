@@ -14,7 +14,7 @@ import { providerIds, type ChatRequest, type ProviderId, type Usage } from './ty
 
 export type BudgetScope = 'total' | 'request' | ProviderId;
 export type TaskKind = 'chat' | 'probe';
-export interface Reservation { id: string; price: Price; bound: bigint; billingMode: 'free' | 'paid' }
+export interface TrackedRequest { id: string; price: Price; bound: bigint | null; billingMode: 'free' | 'paid' }
 type Row = Record<string, string | bigint | null>;
 export const ledgerPath = () => join(homedir(), '.local', 'share', 'nidus', 'usage.sqlite');
 export class UsageLedger {
@@ -60,6 +60,7 @@ export class UsageLedger {
     try { const result = work(); this.db.exec('COMMIT'); return result; }
     catch (error) { this.db.exec('ROLLBACK'); throw error; }
   }
+  // Legacy persistence API: retained for historical data compatibility, never consulted for dispatch.
   setBudget(scope: unknown, usd: unknown) {
     if (typeof scope !== 'string' || !['total', 'request', ...providerIds].includes(scope)) throw new NidusError('invalid_request', 'Invalid budget scope.');
     const amount = money(usd);
@@ -75,28 +76,18 @@ export class UsageLedger {
     return this.rows(`SELECT COALESCE(SUM(CASE WHEN month=? THEN COALESCE(confirmed,estimated,0) ELSE 0 END + reserved),0) AS n
       FROM requests WHERE (month=? OR reserved>0) ${provider ? 'AND provider=?' : ''}`, month, month, ...(provider ? [provider] : []))[0]!.n as bigint;
   }
-  private checkBudget(provider: ProviderId, bound: bigint | null, month: string, exception = false): string | null {
-    if (bound === null) return 'unknown_price_or_bound';
-    if (bound === 0n || exception) return null;
-    const total = this.budget('total'), single = this.budget('request'), specific = this.budget(provider);
-    if (total === null || single === null) return 'budget_not_configured';
-    if (bound > single) return 'request_budget';
-    if (this.exposure(month) >= total || this.exposure(month) + bound > total) return 'monthly_budget';
-    if (specific !== null && (this.exposure(month, provider) >= specific || this.exposure(month, provider) + bound > specific)) return 'provider_budget';
-    return null;
-  }
-  // Advisory only. reserve() rechecks this same policy under BEGIN IMMEDIATE.
+  // Advisory cost only. No reservation or execution permission is derived from this value.
   quote(provider: ProviderId, request: ChatRequest) {
-    return this.transaction(() => {
-      const billing = this.billing(provider, request), bound = billing.bound, reason = billing.reason ?? this.checkBudget(provider, bound, this.now().toISOString().slice(0, 7));
-      return { billingMode: billing.mode, allowed: reason === null, reason, boundUSD: bound === null ? null : dollars(bound) };
-    });
+    const billing = this.billing(provider, request);
+    const free = billing.mode === 'free' && billing.reason === null;
+    const bound = free ? 0n : upperCost(provider, request);
+    return { billingMode: free ? 'free' as const : 'paid' as const, allowed: true, reason: null as string | null, boundUSD: bound === null ? null : dollars(bound) };
   }
   geminiBilling() {
     const row = this.rows('SELECT * FROM gemini_project WHERE id=1')[0];
     return { state: String(row?.state ?? 'unknown'), project: String(row?.project ?? ''), checkedAt: row?.checked_at ?? null,
       source: 'user-project-attestation', remainingFreeQuota: null,
-      note: 'Not Google Billing verification. Incorrect settings can cause charges outside local budgets. Reconfirm after billing changes; reconnecting clears this setting.' };
+      note: 'Not Google Billing verification. Incorrect settings can cause charges. No local spending limit is enforced. Reconfirm after billing changes; reconnecting clears this setting.' };
   }
   setGeminiBilling(state: unknown, project: unknown, confirmed: unknown, riskAccepted: unknown, credentialHash: string) {
     if (!['free','paid','unknown'].includes(String(state)) || typeof state !== 'string' || typeof project !== 'string' || !/^[a-zA-Z0-9:_-]{0,128}$/.test(project))
@@ -183,6 +174,7 @@ export class UsageLedger {
       this.db.prepare('UPDATE routing_settings SET policies=?, revision=revision+1 WHERE id=1').run(JSON.stringify(settings.policies));
     });
   }
+  // Legacy preference only. It no longer grants or denies execution.
   setAutomaticPaid(value: unknown) {
     if (typeof value !== 'boolean') throw new NidusError('invalid_request', 'Automatic paid permission must be boolean.');
     this.db.prepare('UPDATE routing_settings SET allow_paid=?, revision=revision+1 WHERE id=1').run(value ? 1 : 0);
@@ -209,7 +201,7 @@ export class UsageLedger {
     const row = this.rows('SELECT * FROM model_free_use WHERE provider=? AND model=?', provider, model)[0];
     const status = price.freeTier === 'unavailable' ? 'unsupported' : String(row?.status ?? 'unverified');
     return { status, approved: row?.approved === 1n && price.freeTier === 'available', checkedAt: row?.checked_at ?? null,
-      source: String(row?.source ?? price.sourceUrl), conditions: String(row?.conditions ?? 'Account eligibility and remaining quota are not verified. Paid upper bound and all budgets still apply.'),
+      source: String(row?.source ?? price.sourceUrl), conditions: String(row?.conditions ?? 'Account eligibility and remaining quota are not verified. Cost is estimated using paid rates unless free eligibility is recorded; no spending limit is enforced.'),
       verification: status === 'verified' && row?.checked_at ? 'user-account-attestation' : status === 'unavailable' ? 'user-reported-unavailable' : 'not-verified', freeTier: price.freeTier,
       approvedForAutomatic: row?.approved === 1n && price.freeTier === 'available' && ['verified', 'unverified'].includes(status) };
   }
@@ -222,7 +214,7 @@ export class UsageLedger {
     if (status === 'unavailable' && approved) throw new NidusError('invalid_request', 'Unavailable free use cannot be approved.');
     const conditions = status === 'verified' ? 'User checked official free-tier terms and current account/project eligibility. Remaining quota is not synchronized; billing may still occur.'
       : status === 'unavailable' ? 'User confirmed free quota exhausted or account ineligible. Recheck account before approving again.'
-      : 'Current account eligibility and remaining quota are unknown. Scoped approval accepts possible paid charges within existing budgets.';
+      : 'Current account eligibility and remaining quota are unknown. Free-use metadata does not prevent paid charges. No spending limit is enforced.';
     this.transaction(() => {
       this.db.prepare(`INSERT INTO model_free_use VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(provider,model) DO UPDATE SET status=excluded.status,checked_at=excluded.checked_at,source=excluded.source,conditions=excluded.conditions,approved=excluded.approved,credential_hash=excluded.credential_hash`)
         .run(provider, model, status, this.now().toISOString(), priceFor(provider, model).sourceUrl, conditions, approved ? 1 : 0, credentialHash);
@@ -237,46 +229,34 @@ export class UsageLedger {
       this.db.prepare('UPDATE routing_settings SET revision=revision+1 WHERE id=1').run();
     });
   }
-  scopedFreeApproval(provider: ProviderId, model: string, credentialHash?: string) {
-    if (!this.freeUse(provider, model).approvedForAutomatic) return false;
-    return credentialHash === undefined || this.rows('SELECT credential_hash FROM model_free_use WHERE provider=? AND model=?', provider, model)[0]?.credential_hash === credentialHash;
-  }
-  reserve(provider: ProviderId, request: ChatRequest, task: TaskKind, exception = false, automatic?: { revision: number; difficulty: Difficulty; tier: Tier; credentialHash?: string }, credentialHash?: string): Reservation {
-    if (automatic && exception) throw new NidusError('invalid_request', 'Automatic reservations cannot use budget exceptions.');
-    const price = priceFor(provider, request.model);
-    let bound: bigint | null = null, billingMode: 'free' | 'paid' = 'paid';
-    const at = this.now().toISOString(), month = at.slice(0, 7), id = randomUUID();
-    const reason = this.transaction(() => {
-      const billing = this.billing(provider, request, credentialHash ?? automatic?.credentialHash, true);
-      bound = billing.bound; billingMode = billing.mode;
-      let block = billing.reason ?? this.checkBudget(provider, bound, month, exception);
+  recordRequest(provider: ProviderId, request: ChatRequest, task: TaskKind, automatic?: { revision: number; difficulty: Difficulty; tier: Tier }, credentialHash?: string): TrackedRequest {
+    const price = priceFor(provider, request.model), id = randomUUID(), at = this.now().toISOString();
+    return this.transaction(() => {
+      // Tier choices still apply; budget and paid/free permissions no longer gate dispatch.
       if (automatic) {
         const settings = this.routingSettings();
-        if (settings.revision !== automatic.revision || !settings.policies[automatic.difficulty].includes(automatic.tier)) block = 'routing_policy_changed';
-        else {
-          const assigned = this.rows('SELECT tier FROM model_tiers WHERE provider=? AND model=?', provider, request.model)[0];
-          if (!assigned || assigned.tier !== BigInt(automatic.tier) || automatic.tier === 0) block = 'model_tier_mismatch';
-          else if (bound !== null && bound > 0n && !settings.allowPaid && (!automatic.credentialHash || !this.scopedFreeApproval(provider, request.model, automatic.credentialHash))) block = 'automatic_paid_disabled';
-        }
+        const assigned = this.rows('SELECT tier FROM model_tiers WHERE provider=? AND model=?', provider, request.model)[0];
+        if (settings.revision !== automatic.revision || !settings.policies[automatic.difficulty].includes(automatic.tier) || !assigned || assigned.tier !== BigInt(automatic.tier) || automatic.tier === 0)
+          throw new NidusError('invalid_request', 'Routing settings changed. Select the task again before sending.');
       }
-      this.db.prepare(`INSERT INTO requests(id,at,month,provider,model,task,status,settlement,cost_status,reserved,bound,price_version,price_json,exception,block_reason,updated_at)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, at, month, provider, request.model, task, block ? 'blocked' : 'pending', block ? 'not_sent' : 'reserved', 'unknown', block ? 0n : bound!, bound, priceVersion(price), JSON.stringify(price), exception ? 1 : 0, block, at);
-      this.db.prepare('INSERT INTO request_billing VALUES(?,?,?)').run(id, billingMode, billingMode === 'free' ? JSON.stringify(provider === 'gemini' ? this.geminiBilling() : this.providerPlan(provider)) : 'paid-price-snapshot');
-      return block;
+      const billing = this.billing(provider, request, credentialHash, true);
+      const billingMode = billing.mode === 'free' && billing.reason === null ? 'free' : 'paid';
+      this.db.prepare(`INSERT INTO requests(id,at,month,provider,model,task,status,settlement,cost_status,reserved,bound,price_version,price_json,exception,updated_at)
+        VALUES(?,?,?,?,?,?,'pending','tracking','unknown',0,NULL,?,?,0,?)`).run(id, at, at.slice(0,7), provider, request.model, task, priceVersion(price), JSON.stringify(price), at);
+      this.db.prepare('INSERT INTO request_billing VALUES(?,?,?)').run(id, billingMode, billingMode === 'free' ? JSON.stringify(provider === 'gemini' ? this.geminiBilling() : this.providerPlan(provider)) : 'price-estimate-only; no budget enforcement');
+      return { id, price, bound: null, billingMode };
     });
-    if (reason) { const guidance = reason === 'nvidia_free_setup_required' ? ' NVIDIA 화면의 무료 개발자 API 설정에서 계정과 모델을 확인·승인하세요.' : reason === 'free_model_approval_required' ? ' 이 모델의 무료 사용 확인 및 승인이 필요합니다.' : reason === 'free_model_unverified' ? ' 이 모델의 공식 무료 엔드포인트 지원은 미확인입니다.' : ''; const error = new NidusError('budget', `Budget Guard blocked this request (${reason}).${guidance} No inference request was sent.`); error.reason = reason; throw error; }
-    return { id, price, bound: bound!, billingMode };
   }
-  settle(reservation: Reservation, status: 'succeeded' | 'failed' | 'cancelled', usage?: Usage | null, headers: Record<string, string> = {}) {
+  settle(request: TrackedRequest, status: 'succeeded' | 'failed' | 'cancelled', usage?: Usage | null, headers: Record<string, string> = {}) {
     const token = (n: unknown) => typeof n === 'number' && Number.isSafeInteger(n) && n >= 0 ? n : null;
     this.transaction(() => {
-      const saved = this.rows("SELECT price_json,bound FROM requests WHERE id=? AND status='pending'", reservation.id)[0];
+      const saved = this.rows("SELECT price_json,bound FROM requests WHERE id=? AND status='pending'", request.id)[0];
       if (!saved) throw new NidusError('storage', 'Request settlement was already recorded or is missing.');
-      const free = this.rows('SELECT mode FROM request_billing WHERE id=?', reservation.id)[0]?.mode === 'free';
+      const free = this.rows('SELECT mode FROM request_billing WHERE id=?', request.id)[0]?.mode === 'free';
       const cost = free && token(usage?.inputTokens) !== null && token(usage?.outputTokens) !== null ? 0n : free ? null : calculatedCost(JSON.parse(saved.price_json as string) as Price, usage);
       const result = this.db.prepare(`UPDATE requests SET status=?,settlement=?,cost_status=?,reserved=?,estimated=?,input=?,output=?,cached=?,writes=?,reasoning=?,headers=?,updated_at=?
-        WHERE id=? AND status='pending'`).run(status, cost === null ? 'unresolved' : 'estimated', cost === null ? 'unknown' : 'estimated', cost === null ? saved.bound as bigint : 0n, cost,
-        token(usage?.inputTokens), token(usage?.outputTokens), token(usage?.cachedInputTokens), token(usage?.cacheWriteTokens), token(usage?.reasoningTokens), JSON.stringify(rateLimitHeaders(new Headers(headers))), this.now().toISOString(), reservation.id);
+        WHERE id=? AND status='pending'`).run(status, cost === null ? 'unresolved' : 'estimated', cost === null ? 'unknown' : 'estimated', cost === null ? (saved.bound as bigint | null) ?? 0n : 0n, cost,
+        token(usage?.inputTokens), token(usage?.outputTokens), token(usage?.cachedInputTokens), token(usage?.cacheWriteTokens), token(usage?.reasoningTokens), JSON.stringify(rateLimitHeaders(new Headers(headers))), this.now().toISOString(), request.id);
       if (result.changes !== 1) throw new NidusError('storage', 'Request settlement was already recorded or is missing.');
     });
   }
@@ -336,11 +316,11 @@ export class UsageLedger {
     const models = this.rows(`SELECT provider,model,COUNT(*) AS count,SUM(input) AS input,SUM(output) AS output,SUM(estimated) AS estimated,SUM(confirmed) AS confirmed,SUM(reserved) AS reserved FROM requests WHERE month=? AND status!='blocked' GROUP BY provider,model`, month).map(r => ({
       provider: r.provider, model: r.model, requests: Number(r.count), inputTokens: r.input === null ? null : Number(r.input), outputTokens: r.output === null ? null : Number(r.output), estimatedUSD: r.estimated === null ? null : dollars(r.estimated as bigint), confirmedUSD: r.confirmed === null ? null : dollars(r.confirmed as bigint), reservedUSD: dollars(r.reserved as bigint)
     }));
-    return { currency: 'USD', month, source: 'nidus-local-ledger', updatedAt: this.rows('SELECT MAX(updated_at) AS at FROM requests')[0]?.at ?? null,
+    return { budgetGuardEnabled: false, currency: 'USD', month, source: 'nidus-local-ledger', updatedAt: this.rows('SELECT MAX(updated_at) AS at FROM requests')[0]?.at ?? null,
       accountReports: this.rows('SELECT report FROM account_reports WHERE month=?', month).map(r => JSON.parse(r.report as string) as AccountReport),
       lastProviderSyncAt: this.rows("SELECT MAX(at) AS at FROM (SELECT at FROM balances UNION ALL SELECT json_extract(report,'$.syncedAt') AS at FROM account_reports)")[0]?.at ?? null,
       total: overview(), providers: providerIds.map(p => overview(p)), requestBudgetUSD: this.budget('request') === null ? null : dollars(this.budget('request')!),
       requests, models, balances: this.rows('SELECT * FROM balances'),
-      note: 'Local Nidus requests only. Reservations may exceed expected cost. Provider invoices and external usage can differ. Pending costs never expire automatically.' };
+      note: 'Local Nidus requests only. Budget Guard is removed; new requests do not reserve funds. Existing budgets and reservations are historical metadata only. Provider invoices and external usage can differ. Unknown costs remain unknown.' };
   }
 }

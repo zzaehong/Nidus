@@ -71,15 +71,12 @@ struct RoutingSettingsView: View {
                 Button("로컬 설정 새로고침") { Task { await model.perform() } }.disabled(model.busy)
                 Button("닫기") { dismiss() }
             }
-            Text("Tier는 작업 적합성 분류이며 벤치마크 순위나 가격 등급이 아닙니다. 모델 탐색 목록과 예산 정책은 별도로 유지합니다.").font(.caption)
+            Text("Tier는 작업 적합성 분류이며 벤치마크 순위나 가격 등급이 아닙니다. 모델 탐색 목록과 비용 정보는 별도로 유지합니다.").font(.caption)
             if let error = model.error { Text(error).foregroundStyle(.red) }
             if let data = model.snapshot {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
-                        Toggle("자동 라우팅에서 유료 API 사용 허용", isOn: Binding(get: { data.allowPaid }, set: { value in
-                            Task { await model.perform(["method": "automatic-paid-set", "allowed": value]) }
-                        }))
-                        Text("허용해도 Provider·전체·단일 요청 예산을 모두 검사합니다. 무료 티어 표시는 실제 무료 할당량이 아닙니다. 수동 요청은 기존 Budget Guard를 따릅니다.").font(.caption).foregroundStyle(.secondary)
+                        Text("무료 상태는 비용 추정에만 사용합니다. 예산이나 무료 승인 여부로 호출 및 모델 전환을 차단하지 않습니다.").font(.caption)
                         Text("Gemini 프로젝트: \(data.geminiBilling?.state ?? "unknown") · \(data.geminiBilling?.project ?? "미설정")").font(.headline)
                         Text("확인 시각: \(data.geminiBilling?.checkedAt ?? "없음") · 남은 무료 할당량은 조회되지 않습니다.").font(.caption)
                         Button("Gemini 프로젝트 결제 상태 설정") { billingEditor = true }
@@ -162,7 +159,7 @@ struct RoutingSettingsView: View {
             Text(item.freeUse?.conditions ?? "현재 계정의 무료 사용 가능 여부는 미확인입니다.").font(.caption).foregroundStyle(.secondary)
             if item.freeUse?.status == "unverified" { Text("무료 할당량 미확인 — Gemini 프로젝트 Free 설정은 별도 관리됩니다. 모델별 승인 자체는 비용을 0원으로 바꾸지 않습니다.").font(.caption).foregroundStyle(.orange) }
             if let source = item.freeUse?.source, let url = URL(string: source) { Link("무료 사용 공식 조건", destination: url).font(.caption) }
-            Button(item.freeUse?.approved == true ? "무료 사용 상태 · 모델별 승인 변경" : "무료 사용 상태 확인 · 모델별 호출 승인") { freeUseSelection = item }
+            Button(item.freeUse?.approved == true ? "무료 비용 추정 설정 변경" : "무료 비용 추정 설정") { freeUseSelection = item }
                 .disabled(item.pricing.freeTier != "available")
         }.padding(12).frame(maxWidth: .infinity, alignment: .leading).background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 10))
     }
@@ -199,14 +196,14 @@ private struct FreeUseEditor: View {
                 Toggle("공식 조건과 현재 API 키의 계정·프로젝트 상태를 직접 확인했습니다", isOn: $accountConfirmed)
             }
             Text("사용자 확인 기록이며 Provider API 검증 결과가 아닙니다. 남은 무료 요청 수를 자동 조회하지 않습니다.").font(.caption)
-            Toggle("이 모델의 자동 호출 승인", isOn: $approved).disabled(status == "unavailable")
-            Text("신규 Provider 무료 실행에는 Free 플랜 설정과 이 모델의 verified·승인이 모두 필요합니다. 그 외에는 모델별 과금 동의이며 전체 자동 유료 허용이 꺼져 있어도 이 모델은 호출할 수 있습니다. 실제 과금될 수 있으며 유료 가격 상한과 Provider·전체·요청 예산을 그대로 적용합니다. 다른 미승인 유료 모델로는 전환하지 않습니다.").font(.callout)
-            if approved { Toggle("이 모델에 과금될 수 있음을 이해하고 기존 예산 내 호출을 승인합니다", isOn: $riskAccepted) }
+            Toggle("이 모델의 무료 사용 확인을 비용 추정에 반영", isOn: $approved).disabled(status == "unavailable")
+            Text("무료 비용 추정에는 계정 플랜과 모델의 무료 사용 확인이 필요합니다. 이 설정은 선택 사항이며 호출 허가나 지출 제한으로 사용하지 않습니다. 실제 과금될 수 있습니다.").font(.callout)
+            if approved { Toggle("이 설정이 실제 과금을 보증하지 않음을 이해합니다", isOn: $riskAccepted) }
             if let error = model.error { Text(error).foregroundStyle(.red) }
             HStack {
                 Spacer()
                 Button("취소") { dismiss() }
-                Button("상태 및 승인 저장") {
+                Button("무료 비용 정보 저장") {
                     Task {
                         await model.perform(["method": "free-use-set", "provider": item.provider, "model": item.modelID,
                             "status": status, "approved": approved, "accountConfirmed": accountConfirmed, "chargeRiskAccepted": riskAccepted])
@@ -237,10 +234,10 @@ private struct GeminiBillingEditor: View {
             }
             TextField("현재 API 키의 Google 프로젝트 ID", text: $project)
             Link("Google AI Studio에서 프로젝트 확인", destination: URL(string: "https://aistudio.google.com/projects")!)
-            Text("Free 설정 시 공식 무료 지원 모델만 유료 예산 예약 없이 실행합니다. Paid·Unknown은 기존 예산 검사를 유지합니다. 남은 할당량은 알 수 없습니다.")
+            Text("Free 설정 시 공식 무료 지원 모델의 비용을 무료로 추정합니다. Paid·Unknown은 유료 단가로 추정하며, 가격을 모르면 미확인으로 기록합니다. 남은 할당량은 알 수 없습니다.")
             if state == "free" {
                 Toggle("현재 API 키의 프로젝트가 Google에서 Free Tier임을 확인했습니다", isOn: $confirmed)
-                Toggle("실제 Billing 상태를 보증하지 않으며, 설정이 틀리면 로컬 예산 밖에서 과금될 수 있음을 이해합니다", isOn: $risk)
+                Toggle("실제 Billing 상태를 보증하지 않으며, 설정이 틀리면 과금될 수 있음을 이해합니다", isOn: $risk)
                 Text("Google에서 결제를 활성화하거나 프로젝트를 변경하면 이 설정을 즉시 변경하세요. API 키 재연결 시 초기화됩니다.").font(.caption).foregroundStyle(.orange)
             }
             if let error = model.error { Text(error).foregroundStyle(.red) }
@@ -275,10 +272,10 @@ private struct ProviderPlanEditor: View {
             }
             Text(plan.conditions)
             Link("공식 무료 사용 조건", destination: URL(string: plan.source)!)
-            Text("Free 저장 후 모델별 무료 상태를 verified로 확인하고 호출을 승인하세요. Tier도 별도로 배정해야 합니다. 확인되지 않은 모델은 자동 무료 호출하지 않습니다.")
+            Text("무료 비용 추정을 원하면 Free 플랜과 모델별 무료 상태를 확인하세요. 설정하지 않아도 호출할 수 있으며, 무료로 추정하지 않습니다. 자동 라우팅의 Tier는 별도로 배정합니다.")
             if state == "free" {
                 Toggle("현재 키의 계정이 무료 플랜이며 유료 초과 과금이 활성화되지 않았음을 확인했습니다", isOn: $confirmed)
-                Toggle("사용자 확인은 실제 Billing 보증이 아니며, 잘못 설정하면 로컬 예산 밖에서 과금될 수 있음을 이해합니다", isOn: $risk)
+                Toggle("사용자 확인은 실제 Billing 보증이 아니며, 잘못 설정하면 과금될 수 있음을 이해합니다", isOn: $risk)
             }
             Text("남은 할당량은 조회하지 않습니다. 플랜 변경 시 이 설정을 변경하세요. 키 재연결 시 무료 확인과 모델별 승인이 해제됩니다.").font(.caption)
             if let error = model.error { Text(error).foregroundStyle(.red) }
