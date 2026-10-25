@@ -237,3 +237,5 @@ nidus connect cloudflare --account-id <32자리-account-id>
 ```
 
 환경 자격 증명은 `NIDUS_NVIDIA_API_KEY`, `NIDUS_GROQ_API_KEY`, `NIDUS_MISTRAL_API_KEY`, `NIDUS_CLOUDFLARE_API_KEY`이며 Cloudflare에는 `NIDUS_CLOUDFLARE_ACCOUNT_ID`도 필요합니다. 실제 API 키를 CLI 인자로 넣지 않습니다.
+
+NVIDIA 모델 용도 분류는 공식 모델 자료와 게시자별 계열 규칙을 사용합니다. 추정 분류를 별도 표시하며 문서 추출·임베딩·안전성 검사 모델을 일반 채팅에서 제외합니다. 기존 캐시에도 재실행 시 적용됩니다. [분류 개선 및 검증](docs/NVIDIA_Model_Classification.md).
