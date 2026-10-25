@@ -176,7 +176,7 @@ CI 또는 macOS 외 환경에서는 `NIDUS_OPENAI_API_KEY`, `NIDUS_ANTHROPIC_API
 
 `src/pricing.ts`는 공식 가격표를 검토한 수동 스냅샷입니다. **모델 ID 등록과 가격 레코드는 분리**되어 있으며 가격표가 모델을 탐색 목록에 추가하지 않습니다. 정확한 Provider+모델 ID로만 매칭합니다.
 
-레코드는 입력·출력·캐시 입력 가격(USD/백만 토큰), 무료 티어 상태, 출처 URL, 마지막 확인 시각, 요금 조건을 포함합니다. 현재 스냅샷은 8개 정확한 ID를 포함합니다. 전체 공급자 가격표를 복제하지 않으며 미검토 모델은 `status: unknown`, `rates: []`, `checkedAt: null`로 반환합니다. 미확인은 무료나 0원이 아닙니다. `pricing`은 연결 후에는 탐색된 모델에 가격을 붙이고, 연결 전에는 검토된 레코드를 보여줍니다.
+레코드는 입력·출력·캐시 입력 가격(USD/백만 토큰), 무료 티어 상태, 출처 URL, 마지막 확인 시각, 요금 조건을 포함합니다. 현재 유료 가격 스냅샷은 9개 정확한 ID를 포함합니다. 신규 Provider의 별도 무료 지원 검토 목록은 유료 가격 확인과 독립적입니다. 전체 공급자 가격표를 복제하지 않으며 미검토 모델은 `status: unknown`, `rates: []`, `checkedAt: null`로 반환합니다. 미확인은 무료나 0원이 아닙니다. `pricing`은 연결 후에는 탐색된 모델에 가격을 붙이고, 연결 전에는 검토된 레코드를 보여줍니다.
 
 - 기준: 직접 API의 표준 텍스트 요금. 캐시 쓰기·저장·도구·Batch·지역/계약별 과금은 별도입니다.
 - DeepSeek는 피크·비피크를 모두 표시합니다. 중국 공휴일을 추측해서 요금을 자동 선택하지 않습니다.
@@ -221,3 +221,19 @@ Connectivity MVP 당시 검증: Mock/CLI/engine **42 PASS**, macOS Keychain synt
 ### Gemini Free Tier 프로젝트 설정
 
 Model Tier 및 Routing Policy의 **Gemini 프로젝트 결제 상태 설정**에서 현재 키의 프로젝트를 Free로 직접 확인할 수 있습니다. 공식 무료 지원 모델은 유료 예산을 예약하지 않으며, 무료 요청에서 유료 모델로 자동 승격하지 않습니다. Paid·Unknown은 기존 정책을 유지합니다. 사용자 설정은 Google Billing 상태를 보증하지 않으며 잘못 설정하면 과금될 수 있습니다. [지원 모델·설정·검증·한계](docs/Gemini_Free_Tier_Fix.md)를 확인하세요.
+
+
+### Phase 4.2: Provider 확장
+
+NVIDIA NIM, Groq, Mistral AI, Cloudflare Workers AI를 추가했습니다. 공통 Provider 카드에서 키 발급 링크, 연결·갱신·삭제, 모델 수와 마지막 조회 시각을 확인합니다. Cloudflare는 API Token과 Account ID를 함께 입력합니다. 키와 Account ID는 Keychain에 저장합니다.
+
+신규 모델은 Unclassified로 시작합니다. Tier 및 라우팅 화면에서 Tier를 배정하고, 무료 사용 시 **Provider Free 플랜 확인 → 모델별 verified 상태 및 호출 승인**을 설정하세요. 무료 계정·모델 확인은 실제 Billing 보증이 아닙니다. 검토되지 않은 모델을 자동 무료 처리하지 않으며, 유료 단가/상한이 없는 요청은 차단합니다. [지원 범위, 공식 근거와 검증 결과](docs/Phase4_2_Provider_Expansion.md).
+
+```sh
+nidus connect nvidia
+nidus connect groq
+nidus connect mistral
+nidus connect cloudflare --account-id <32자리-account-id>
+```
+
+환경 자격 증명은 `NIDUS_NVIDIA_API_KEY`, `NIDUS_GROQ_API_KEY`, `NIDUS_MISTRAL_API_KEY`, `NIDUS_CLOUDFLARE_API_KEY`이며 Cloudflare에는 `NIDUS_CLOUDFLARE_ACCOUNT_ID`도 필요합니다. 실제 API 키를 CLI 인자로 넣지 않습니다.
