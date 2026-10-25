@@ -53,7 +53,7 @@ const registry: Price[] = [
 ];
 export function priceFor(provider: ProviderId, model: string): Price {
   return structuredClone(registry.find(p => p.provider === provider && p.model === model) ?? {
-    provider, model, status: "unknown", currency: "USD", unit: "per_million_tokens", freeTier: reviewedFreeModels[provider]?.includes(model) ? "available" : "unknown", sourceUrl: pricingSources[provider], checkedAt: reviewedFreeModels[provider]?.includes(model) ? providerReviewAt : null, rates: [], notes: "No reviewed price record for this exact model ID. Unknown is not zero or free."
+    provider, model, status: "unknown", currency: "USD", unit: "per_million_tokens", freeTier: reviewedFreeModels[provider]?.includes(model) ? "available" : "unknown", sourceUrl: provider === "nvidia" && reviewedFreeModels.nvidia?.includes(model) ? `https://build.nvidia.com/${model}` : pricingSources[provider], checkedAt: reviewedFreeModels[provider]?.includes(model) ? providerReviewAt : null, rates: [], notes: "No reviewed price record for this exact model ID. Unknown is not zero or free."
   });
 }
 export function pricesFor(provider: ProviderId): Price[] { return structuredClone(registry.filter(p => p.provider === provider)); }

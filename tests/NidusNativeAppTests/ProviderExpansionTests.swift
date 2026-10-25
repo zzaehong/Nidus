@@ -27,4 +27,17 @@ final class ProviderExpansionTests: XCTestCase {
         XCTAssertEqual(settings.snapshot?.providerPlans?.first?.state,"free")
         XCTAssertEqual(settings.snapshot?.allowPaid,false)
     }
+    @MainActor func testNvidiaFreeSetupSendsOnlyExplicitSelectionAndConsent() async {
+        var sent: [String: Any] = [:]
+        let settings = RoutingSettingsModel { input in
+            sent = input
+            return Data(#"{"allowPaid":false,"policies":{},"models":[]}"#.utf8)
+        }
+        let selected = ["nvidia/nemotron-3-ultra-550b-a55b"]
+        await settings.perform(["method":"nvidia-free-setup", "models":selected, "confirmed":true, "riskAccepted":true])
+        XCTAssertEqual(sent["method"] as? String,"nvidia-free-setup")
+        XCTAssertEqual(sent["models"] as? [String],selected)
+        XCTAssertEqual(sent["confirmed"] as? Bool,true)
+        XCTAssertEqual(settings.snapshot?.allowPaid,false)
+    }
 }

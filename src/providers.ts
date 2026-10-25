@@ -12,7 +12,7 @@ export const providerMetadata: Record<ProviderId, { name: string; keyURL: string
 };
 // Exact reviewed text endpoints, not a model catalog or an account entitlement.
 export const reviewedFreeModels: Partial<Record<ProviderId, readonly string[]>> = {
-  nvidia: ['meta/llama-3.1-8b-instruct'],
+  nvidia: ['meta/llama-3.1-8b-instruct', 'nvidia/nemotron-3.5-super-vl-120b-a12b', 'nvidia/nemotron-3.5-lightning-30b-a3b', 'nvidia/nemotron-3-ultra-550b-a55b', 'deepseek-ai/deepseek-v4.1-flash'],
   groq: ['openai/gpt-oss-120b', 'openai/gpt-oss-20b'],
   mistral: ['mistral-small-2603'],
   cloudflare: ['@cf/meta/llama-3.1-8b-instruct']

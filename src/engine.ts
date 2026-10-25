@@ -85,6 +85,14 @@ export class ConnectivityEngine {
     }
     return { ...this.usageLedger().routingSettings(), geminiBilling: this.usageLedger().geminiBilling(), providerPlans: providerIds.map(p=>this.usageLedger().providerPlan(p)), models };
   }
+  async approveNvidiaFreeModels(models: unknown, confirmed: unknown, riskAccepted: unknown) {
+    const saved=await this.store.load('nvidia');
+    if (!Array.isArray(models) || models.some(m=>typeof m!=='string' || !saved?.models.some(item=>item.id===m && classifyModel(item).kind==='text' && item.capabilities.chat!=='unsupported')))
+      throw new NidusError('invalid_request','Select discovered NVIDIA text models.');
+    const hash=createHash('sha256').update(await this.key('nvidia')).digest('hex');
+    this.usageLedger().approveNvidiaFreeModels(models,confirmed,riskAccepted,hash);
+    return this.routingSettings();
+  }
   async setProviderPlan(provider: ProviderId, state: unknown, confirmed: unknown, riskAccepted: unknown) {
     const hash=state==='free' ? createHash('sha256').update(await this.key(provider)).digest('hex') : '';
     this.usageLedger().setProviderPlan(provider,state,confirmed,riskAccepted,hash);

@@ -10,6 +10,7 @@ import type { ChatRequest } from "./types.js";
 export async function dispatch(input: unknown, engine: ConnectivityEngine): Promise<unknown> {
   if (!input || typeof input !== "object") throw new NidusError("invalid_request", "Invalid dashboard request.");
   const r = input as Record<string, unknown>;
+  if (r.method === 'nvidia-free-setup') return engine.approveNvidiaFreeModels(r.models,r.confirmed,r.riskAccepted);
   if (r.method === 'provider-plan-set') return engine.setProviderPlan(providerId(typeof r.provider==='string'?r.provider:''),r.state,r.confirmed,r.riskAccepted);
   if (r.method === "ping") return { ready: true };
   if (r.method === "usage") return engine.usage();

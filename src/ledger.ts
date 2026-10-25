@@ -1,4 +1,4 @@
-import { expandedProviders, providerMetadata } from './providers.js';
+import { expandedProviders, providerMetadata, reviewedFreeModels } from './providers.js';
 import { modelProfile, gradeTier, difficulty, type Difficulty, type Tier } from './router.js';
 import type { AccountReport } from './provider-usage.js';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
@@ -122,12 +122,24 @@ export class UsageLedger {
       this.db.prepare('UPDATE routing_settings SET revision=revision+1 WHERE id=1').run();
     });
   }
+  approveNvidiaFreeModels(models: string[], confirmed: unknown, riskAccepted: unknown, credentialHash: string) {
+    if (!models.length || new Set(models).size !== models.length || models.some(m=>!reviewedFreeModels.nvidia?.includes(m)) || confirmed!==true || riskAccepted!==true || !credentialHash)
+      throw new NidusError('invalid_request','Select reviewed NVIDIA Free Endpoints and confirm this account’s free developer access and billing risk.');
+    this.transaction(()=>{
+      const at=this.now().toISOString();
+      this.db.prepare("INSERT INTO provider_plans VALUES('nvidia','free',?,?) ON CONFLICT(provider) DO UPDATE SET state='free',checked_at=excluded.checked_at,credential_hash=excluded.credential_hash").run(at,credentialHash);
+      for (const model of models) this.db.prepare(`INSERT INTO model_free_use VALUES('nvidia',?,'verified',?,?,?,1,?) ON CONFLICT(provider,model) DO UPDATE SET status=excluded.status,checked_at=excluded.checked_at,source=excluded.source,conditions=excluded.conditions,approved=1,credential_hash=excluded.credential_hash`)
+        .run(model,at,priceFor('nvidia',model).sourceUrl,'User confirmed this hosted Free Endpoint and current developer account eligibility. Remaining quota is unknown. Incorrect settings can cause charges.',credentialHash);
+      this.db.prepare('UPDATE routing_settings SET revision=revision+1 WHERE id=1').run();
+    });
+  }
   private billing(provider: ProviderId, request: ChatRequest, credentialHash?: string, execution = false) {
     const plan=this.rows('SELECT * FROM provider_plans WHERE provider=?',provider)[0];
+    if (provider==='nvidia' && (!plan || plan.state==='unknown')) return {mode:'paid' as const,bound:null,reason:'nvidia_free_setup_required'};
     if ((expandedProviders as readonly string[]).includes(provider) && plan?.state==='free') {
       const price=priceFor(provider,request.model), approval=this.rows('SELECT * FROM model_free_use WHERE provider=? AND model=?',provider,request.model)[0];
       let reason: string|null=null;
-      if (execution && (!credentialHash || plan.credential_hash!==credentialHash || approval?.credential_hash!==credentialHash)) reason='free_credential_changed';
+      if (execution && (!credentialHash || plan.credential_hash!==credentialHash || (approval && approval.credential_hash!==credentialHash))) reason='free_credential_changed';
       else if (price.freeTier!=='available' || !price.checkedAt || this.now().getTime()-Date.parse(price.checkedAt)>30*86400000) reason='free_model_unverified';
       else if (approval?.status!=='verified' || approval.approved!==1n) reason='free_model_approval_required';
       return {mode:'free' as const,bound:0n,reason};
@@ -252,7 +264,7 @@ export class UsageLedger {
       this.db.prepare('INSERT INTO request_billing VALUES(?,?,?)').run(id, billingMode, billingMode === 'free' ? JSON.stringify(provider === 'gemini' ? this.geminiBilling() : this.providerPlan(provider)) : 'paid-price-snapshot');
       return block;
     });
-    if (reason) { const error = new NidusError('budget', `Budget Guard blocked this request (${reason}). Review Usage & Budget. No inference request was sent.`); error.reason = reason; throw error; }
+    if (reason) { const guidance = reason === 'nvidia_free_setup_required' ? ' NVIDIA 화면의 무료 개발자 API 설정에서 계정과 모델을 확인·승인하세요.' : reason === 'free_model_approval_required' ? ' 이 모델의 무료 사용 확인 및 승인이 필요합니다.' : reason === 'free_model_unverified' ? ' 이 모델의 공식 무료 엔드포인트 지원은 미확인입니다.' : ''; const error = new NidusError('budget', `Budget Guard blocked this request (${reason}).${guidance} No inference request was sent.`); error.reason = reason; throw error; }
     return { id, price, bound: bound!, billingMode };
   }
   settle(reservation: Reservation, status: 'succeeded' | 'failed' | 'cancelled', usage?: Usage | null, headers: Record<string, string> = {}) {

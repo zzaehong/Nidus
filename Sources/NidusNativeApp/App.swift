@@ -111,6 +111,7 @@ struct ProviderView: View {
     @State private var kind = "all"
     @State private var showKey = false
     @State private var confirmDisconnect = false
+    @State private var showNvidiaFreeSetup = false
     @State private var tab = 0
     private var state: ProviderState { dashboard.states[provider] ?? ProviderState() }
     private var model: APIModel? { state.models.first { $0.id == state.selectedModel } }
@@ -130,6 +131,13 @@ struct ProviderView: View {
                 Spacer()
                 Button("API Key 등록 / 변경", systemImage: "key") { showKey = true }
                     .buttonStyle(.borderedProminent)
+            }
+            if provider == .nvidia {
+                HStack {
+                    Text("용도 분류와 무료 호출 승인은 별도입니다. 검사 전에 무료 개발자 계정·모델을 확인하세요.").font(.caption)
+                    Spacer()
+                    Button("무료 개발자 API 설정") { showNvidiaFreeSetup = true }
+                }.padding(12).background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 10))
             }
             HStack(spacing: 16) {
                 Label(state.status, systemImage: "network")
@@ -199,6 +207,7 @@ struct ProviderView: View {
             dashboard.states[provider]?.usage = ""
             dashboard.states[provider]?.detail = ""
         }
+        .sheet(isPresented: $showNvidiaFreeSetup) { NvidiaFreeSetupView() }
         .sheet(isPresented: $showKey, onDismiss: { key = "" }) {
             VStack(alignment: .leading, spacing: 18) {
                 Text("\(provider.name) 연결").font(.title2.bold())
