@@ -4,49 +4,23 @@ TypeScript 기반 **Multi-Provider API Connectivity 엔진**과 **SwiftUI macOS 
 
 OpenAI(GPT), Anthropic(Claude), Google Gemini, DeepSeek를 지원합니다. 작업 난이도 기반 자동 라우팅과 수동 선택을 지원합니다. Agent Loop, Tool 실행, Docker, Vault, Workflow는 구현 범위에 포함하지 않습니다.
 
-## Phase 3: 사용량 및 예산
+## 사용량 및 비용 기록
 
-새로운 유료 채팅·모델 검사는 **전체 월간 예산과 단일 요청 예산을 설정한 뒤** 사용할 수 있습니다.
-SwiftUI 툴바의 **사용량 및 예산** 또는 아래 CLI를 사용하세요.
+Budget Guard를 제거했습니다. 채팅·모델 검사는 예산 설정, 가격 정보, 무료 사용 승인 여부 때문에 차단되지 않습니다. CLI의 `budget`, `automatic-paid`, `--approve-budget-exception`과 SwiftUI 예산 설정도 제거했습니다.
 
-```sh
-nidus budget total --usd 20
-nidus budget request --usd 5
-nidus budget openai --usd 10
-nidus usage
-```
+SwiftUI **사용량 및 비용** 또는 `nidus usage`로 토큰·추정 비용·확인 비용·미확인 비용을 확인합니다. 모든 요청을 SQLite에 기록하며, 가격이나 실제 사용량을 모르면 비용은 0원이 아닌 미확인으로 남깁니다. 신규 비용 예약은 생성하지 않습니다. 기존 사용량·예약·예산·전환 기록은 그대로 보존합니다.
 
-모든 추론은 공통 SQLite 예약·정산 경로를 거칩니다. 가격/안전한 상한 미확인은 차단하고,
-실패·취소·사용량 누락의 비용은 0으로 간주하지 않습니다. 입력 용량 전체를 예약하므로
-예약액은 실제 예상 비용보다 클 수 있습니다. 무료 티어 표시도 무료 잔량을 의미하지 않습니다.
-예산과 기록은 UTC 월, USD 정수 nano 단위로 보존합니다.
+**앱 내 지출 제한은 없습니다.** 자동 라우팅과 Fallback도 유료 모델을 호출할 수 있습니다. 무료 계정 정보는 선택적인 비용 추정 자료이며 제공업체의 실제 과금을 보증하지 않습니다. 제공업체의 Billing 설정을 확인하세요.
 
-대시보드는 로컬 추정·확인·미확인·예약·잔여 예산을 구분합니다. 선택적 조직 조회는 별도
-관리자 세션 키를 사용하며 외부 사용이 섞인 조직 비용을 로컬 예산에 합산하지 않습니다.
-**이 기능은 제공업체 청구액의 절대 한도를 보장하지 않습니다.**
+변경 및 검증 결과는 [Budget Guard 제거](docs/Budget_Guard_Removal.md)에 정리했습니다. 이전 Phase 문서의 예산 차단·예약·승인 정책은 과거 구현 기록입니다.
 
-설정, 공식 가격 검증 출처, 관리자 키 정책, 테스트와 제한은
-[Phase 3 설계·검증 문서](docs/Phase3_Usage_Budget.md)를 참고하세요.
+## 사용자 설정 Tier 라우팅
 
-## Phase 4.1: 사용자 설정 Tier 라우팅
+채팅방에서 자동 라우팅과 Simple / Normal(기본) / Complex를 선택합니다. **라우팅 후보 확인**은 로컬 조회만 수행합니다. CLI는 `nidus chat --auto --difficulty normal`입니다.
 
-채팅방에서 **자동 라우팅**을 켜고 Simple / Normal(기본) / Complex를 선택할 수 있습니다.
-**후보·예산 확인**은 로컬 조회만 실행합니다. 실제 선택 모델과 전환 사유, 예약 상한·추정 비용을 표시하며
-모든 호출은 Phase 3 Budget Guard를 거칩니다. CLI는 `nidus chat --auto --difficulty normal`입니다.
+툴바 **Tier 및 라우팅**에서 모델 Tier와 난이도별 순서를 변경합니다. 기본 순서는 Simple 1→2, Normal 2→1, Complex 3→2입니다. Tier 순서는 비용보다 우선하며 허용하지 않은 Tier로 전환하지 않습니다. 같은 Tier에서는 참고 비용·최신성 등을 사용합니다. 가격 미확인은 호출을 막지 않지만 Unclassified 모델은 자동 선택하지 않습니다.
 
-툴바 **Tier 및 라우팅**에서 모델 Tier와 난이도별 순서를 변경합니다. 기본 순서는 Simple 1→2,
-Normal 2→1, Complex 3→2이며, Tier 순서는 비용보다 우선합니다. 허용하지 않은 Tier로 전환하지 않습니다.
-
-**자동 유료 API 사용 허용**은 초기 꺼짐입니다. 전체 유료 호출을 허용하거나, 무료 티어 지원 모델에
-대해서만 과금 가능성을 확인하고 별도로 호출을 승인할 수 있습니다. 어느 경우에도 기존 예산을 검사하고
-유료 상한을 예약하며, 승인이 비용을 0으로 바꾸지는 않습니다. Provider별 예산을 우선 표시하며
-전체·단일 요청 예산은 고급 설정에 있습니다.
-가격 또는 Tier 미확인은 자동 선택에서 제외합니다.
-타임아웃·네트워크 오류에서는 자동 전환을 중단합니다. 무료 티어만으로 무료 사용을 가정하지 않습니다.
-현재 설정·정책·마이그레이션은 [Phase 4.1 문서](docs/Phase4_1_Tier_Router.md), 기존 검증 이력과
-공식 출처는 [Phase 4 문서](docs/Phase4_Model_Router.md)에 정리했습니다.
-모델 Tier의 실행 직전 재검증, 무료 상태·계정별 승인, Tier 순서 드래그는
-[Phase 4.1 추가 개선 문서](docs/Phase4_1_Free_Use.md)를 참고하세요.
+실행 직전 Tier와 라우팅 설정을 재검증합니다. Rate Limit·인증·모델 미지원 등 명시적 거절은 허용 Tier 안에서 Fallback하고, 타임아웃·네트워크 오류처럼 처리 여부가 불명확하면 중복 호출을 하지 않습니다. 실제 선택 모델, 전환 사유, 추정 비용을 표시합니다. 참고 비용 상한은 예약액이나 지출 제한이 아닙니다.
 
 ## 설치와 시작
 
@@ -220,14 +194,14 @@ Connectivity MVP 당시 검증: Mock/CLI/engine **42 PASS**, macOS Keychain synt
 
 ### Gemini Free Tier 프로젝트 설정
 
-Model Tier 및 Routing Policy의 **Gemini 프로젝트 결제 상태 설정**에서 현재 키의 프로젝트를 Free로 직접 확인할 수 있습니다. 공식 무료 지원 모델은 유료 예산을 예약하지 않으며, 무료 요청에서 유료 모델로 자동 승격하지 않습니다. Paid·Unknown은 기존 정책을 유지합니다. 사용자 설정은 Google Billing 상태를 보증하지 않으며 잘못 설정하면 과금될 수 있습니다. [지원 모델·설정·검증·한계](docs/Gemini_Free_Tier_Fix.md)를 확인하세요.
+Model Tier 및 Routing Policy의 **Gemini 프로젝트 결제 상태 설정**에서 현재 키의 프로젝트를 Free로 직접 확인할 수 있습니다. 공식 무료 지원 모델의 비용 기록에 이 정보를 사용합니다. Paid·Unknown은 유료 단가로 추정하고 가격 미확인은 미확인으로 남깁니다. 이 설정은 호출이나 Fallback을 제한하지 않습니다. 사용자 설정은 Google Billing 상태를 보증하지 않으며 잘못 설정하면 과금될 수 있습니다. [지원 모델·설정·검증·한계](docs/Gemini_Free_Tier_Fix.md)를 확인하세요.
 
 
 ### Phase 4.2: Provider 확장
 
 NVIDIA NIM, Groq, Mistral AI, Cloudflare Workers AI를 추가했습니다. 공통 Provider 카드에서 키 발급 링크, 연결·갱신·삭제, 모델 수와 마지막 조회 시각을 확인합니다. Cloudflare는 API Token과 Account ID를 함께 입력합니다. 키와 Account ID는 Keychain에 저장합니다.
 
-신규 모델은 Unclassified로 시작합니다. Tier 및 라우팅 화면에서 Tier를 배정하고, 무료 사용 시 **Provider Free 플랜 확인 → 모델별 verified 상태 및 호출 승인**을 설정하세요. 무료 계정·모델 확인은 실제 Billing 보증이 아닙니다. 검토되지 않은 모델을 자동 무료 처리하지 않으며, 유료 단가/상한이 없는 요청은 차단합니다. [지원 범위, 공식 근거와 검증 결과](docs/Phase4_2_Provider_Expansion.md).
+신규 모델은 Unclassified로 시작합니다. Tier 및 라우팅 화면에서 Tier를 배정하고, 무료 비용 추정이 필요하면 **Provider Free 플랜 확인 → 모델별 무료 상태 확인**을 선택적으로 설정하세요. 무료 계정·모델 확인은 실제 Billing 보증이 아닙니다. 검토되지 않은 모델을 자동 무료 처리하지 않으며, 유료 단가가 없는 요청은 비용 미확인으로 기록합니다. [지원 범위, 공식 근거와 검증 결과](docs/Phase4_2_Provider_Expansion.md).
 
 ```sh
 nidus connect nvidia
@@ -240,4 +214,4 @@ nidus connect cloudflare --account-id <32자리-account-id>
 
 NVIDIA 모델 용도 분류는 공식 모델 자료와 게시자별 계열 규칙을 사용합니다. 추정 분류를 별도 표시하며 문서 추출·임베딩·안전성 검사 모델을 일반 채팅에서 제외합니다. 기존 캐시에도 재실행 시 적용됩니다. [분류 개선 및 검증](docs/NVIDIA_Model_Classification.md).
 
-NVIDIA 요청이 전부 Budget Guard로 막히면 NVIDIA 연결 화면의 **무료 개발자 API 설정**에서 현재 계정과 사용할 Free Endpoint를 확인·승인하세요. 설정 저장만으로 API를 호출하지 않습니다. [실제 차단 원인과 지원 모델](docs/NVIDIA_Free_Setup_Fix.md).
+NVIDIA도 Budget Guard 차단 없이 호출합니다. **무료 비용 기록 설정**은 선택 사항이며, 확인된 무료 계정·모델 조건을 비용 추정에 반영합니다. 이전 차단 원인과 대응 기록은 [과거 NVIDIA 무료 설정 문서](docs/NVIDIA_Free_Setup_Fix.md)에 남겨두었습니다.
