@@ -1,3 +1,4 @@
+import { providerMetadata, reviewedFreeModels, providerReviewAt } from './providers.js';
 import type { ProviderId } from "./types.js";
 
 export interface Rate {
@@ -20,6 +21,7 @@ export interface Price {
   notes: string;
 }
 export const pricingSources: Record<ProviderId, string> = {
+  nvidia: providerMetadata.nvidia.source, groq: providerMetadata.groq.source, mistral: providerMetadata.mistral.source, cloudflare: providerMetadata.cloudflare.source,
   openai: "https://developers.openai.com/api/docs/pricing",
   anthropic: "https://platform.claude.com/docs/en/about-claude/pricing",
   gemini: "https://ai.google.dev/gemini-api/docs/pricing",
@@ -33,6 +35,7 @@ const standard = (input: number, output: number, cachedInput: number): Rate[] =>
 // Explicit price records are not a model catalog and never create available models.
 // Exact IDs only: no fuzzy aliases, prefix matches, or guessed snapshot prices.
 const registry: Price[] = [
+  { ...entry("groq", "openai/gpt-oss-120b", [{ tier:"standard", input:0.15, output:0.60, cachedInput:null, conditions:"Standard text completions; no tools, batch, flex or performance tier." }], "available", "https://console.groq.com/docs/models"), checkedAt:providerReviewAt },
   entry("openai", "gpt-4.1-mini", standard(0.4, 1.6, 0.1), "unavailable", "https://developers.openai.com/api/docs/models/gpt-4.1-mini"),
   entry("openai", "gpt-4.1-mini-2025-04-14", standard(0.4, 1.6, 0.1), "unavailable", "https://developers.openai.com/api/docs/models/gpt-4.1-mini"),
   entry("anthropic", "claude-sonnet-4-6", standard(3, 15, 0.3)),
@@ -50,7 +53,7 @@ const registry: Price[] = [
 ];
 export function priceFor(provider: ProviderId, model: string): Price {
   return structuredClone(registry.find(p => p.provider === provider && p.model === model) ?? {
-    provider, model, status: "unknown", currency: "USD", unit: "per_million_tokens", freeTier: "unknown", sourceUrl: pricingSources[provider], checkedAt: null, rates: [], notes: "No reviewed price record for this exact model ID. Unknown is not zero or free."
+    provider, model, status: "unknown", currency: "USD", unit: "per_million_tokens", freeTier: reviewedFreeModels[provider]?.includes(model) ? "available" : "unknown", sourceUrl: pricingSources[provider], checkedAt: reviewedFreeModels[provider]?.includes(model) ? providerReviewAt : null, rates: [], notes: "No reviewed price record for this exact model ID. Unknown is not zero or free."
   });
 }
 export function pricesFor(provider: ProviderId): Price[] { return structuredClone(registry.filter(p => p.provider === provider)); }
@@ -62,6 +65,7 @@ import { createHash } from 'node:crypto';
 import { tokenCost } from './money.js';
 import type { ChatRequest, Usage } from './types.js';
 export const pricingLimits: Record<string, { input: number; output: number; source: string }> = {
+  'groq:openai/gpt-oss-120b': { input:131_072, output:65_536, source:'https://console.groq.com/docs/models' },
   'openai:gpt-4.1-mini': { input: 1_047_576, output: 32_768, source: 'https://developers.openai.com/api/docs/models/gpt-4.1-mini' },
   'openai:gpt-4.1-mini-2025-04-14': { input: 1_047_576, output: 32_768, source: 'https://developers.openai.com/api/docs/models/gpt-4.1-mini' },
   'anthropic:claude-sonnet-4-6': { input: 1_000_000, output: 128_000, source: 'https://platform.claude.com/docs/en/build-with-claude/context-windows' },
@@ -81,7 +85,7 @@ export function upperCost(provider: ProviderId, request: ChatRequest, price = pr
       Date.now() - Date.parse(price.checkedAt) > 30 * 86400_000) return null;
   const output = request.maxOutputTokens ?? 1024;
   if (!Number.isSafeInteger(output) || output <= 0 || output > limits.output) return null;
-  const outputBound = provider === 'gemini' || provider === 'deepseek' ? limits.output : output;
+  const outputBound = provider === 'gemini' || provider === 'deepseek' || provider === 'groq' ? limits.output : output;
   return tokenCost(limits.input, Math.max(...price.rates.map(r => r.input))) + tokenCost(outputBound, Math.max(...price.rates.map(r => r.output)));
 }
 export function calculatedCost(price: Price, usage: Usage | null | undefined): bigint | null {

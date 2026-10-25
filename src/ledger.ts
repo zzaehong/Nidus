@@ -1,3 +1,4 @@
+import { expandedProviders, providerMetadata } from './providers.js';
 import { modelProfile, gradeTier, difficulty, type Difficulty, type Tier } from './router.js';
 import type { AccountReport } from './provider-usage.js';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
@@ -23,7 +24,7 @@ export class UsageLedger {
     this.db = new DatabaseSync(path);
     if (path !== ':memory:') chmodSync(path, 0o600);
     const schema = this.db.prepare('PRAGMA user_version').get() as { user_version: number };
-    if (schema.user_version > 5) { this.db.close(); throw new NidusError('storage', 'Usage ledger schema is newer than this app.'); }
+    if (schema.user_version > 6) { this.db.close(); throw new NidusError('storage', 'Usage ledger schema is newer than this app.'); }
     this.db.exec('PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;');
     this.transaction(() => this.db.exec(`
       CREATE TABLE IF NOT EXISTS budgets(scope TEXT PRIMARY KEY, amount INTEGER NOT NULL CHECK(amount>=0));
@@ -46,7 +47,8 @@ export class UsageLedger {
       CREATE TABLE IF NOT EXISTS model_free_use(provider TEXT NOT NULL, model TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('verified','unverified','unavailable','unsupported')), checked_at TEXT, source TEXT NOT NULL, conditions TEXT NOT NULL, approved INTEGER NOT NULL, credential_hash TEXT, PRIMARY KEY(provider,model));
       CREATE TABLE IF NOT EXISTS gemini_project(id INTEGER PRIMARY KEY CHECK(id=1), state TEXT NOT NULL, project TEXT NOT NULL, checked_at TEXT NOT NULL, credential_hash TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS request_billing(id TEXT PRIMARY KEY, mode TEXT NOT NULL, basis TEXT NOT NULL);
-      PRAGMA user_version=5;`));
+      CREATE TABLE IF NOT EXISTS provider_plans(provider TEXT PRIMARY KEY, state TEXT NOT NULL CHECK(state IN ('free','paid','unknown')), checked_at TEXT NOT NULL, credential_hash TEXT NOT NULL);
+      PRAGMA user_version=6;`));
   }
   close() { this.db.close(); }
   private rows(sql: string, ...params: SQLInputValue[]): Row[] {
@@ -107,7 +109,29 @@ export class UsageLedger {
       this.db.prepare('UPDATE routing_settings SET revision=revision+1 WHERE id=1').run();
     });
   }
+  providerPlan(provider: ProviderId) {
+    const row=this.rows('SELECT * FROM provider_plans WHERE provider=?',provider)[0];
+    return { provider, state:String(row?.state ?? 'unknown'), checkedAt:row?.checked_at ?? null, source:providerMetadata[provider].source,
+      conditions:providerMetadata[provider].freeConditions, verification:'user-account-attestation', remainingFreeQuota:null };
+  }
+  setProviderPlan(provider: ProviderId, state: unknown, confirmed: unknown, riskAccepted: unknown, credentialHash: string) {
+    if (!(expandedProviders as readonly string[]).includes(provider) || typeof state!=='string' || !['free','paid','unknown'].includes(state)) throw new NidusError('invalid_request','Invalid provider plan.');
+    if (state==='free' && (confirmed!==true || riskAccepted!==true || !credentialHash)) throw new NidusError('invalid_request','Confirm Free plan, no paid overage, and acknowledge billing risk.');
+    this.transaction(()=>{
+      this.db.prepare('INSERT INTO provider_plans VALUES(?,?,?,?) ON CONFLICT(provider) DO UPDATE SET state=excluded.state,checked_at=excluded.checked_at,credential_hash=excluded.credential_hash').run(provider,state,this.now().toISOString(),credentialHash);
+      this.db.prepare('UPDATE routing_settings SET revision=revision+1 WHERE id=1').run();
+    });
+  }
   private billing(provider: ProviderId, request: ChatRequest, credentialHash?: string, execution = false) {
+    const plan=this.rows('SELECT * FROM provider_plans WHERE provider=?',provider)[0];
+    if ((expandedProviders as readonly string[]).includes(provider) && plan?.state==='free') {
+      const price=priceFor(provider,request.model), approval=this.rows('SELECT * FROM model_free_use WHERE provider=? AND model=?',provider,request.model)[0];
+      let reason: string|null=null;
+      if (execution && (!credentialHash || plan.credential_hash!==credentialHash || approval?.credential_hash!==credentialHash)) reason='free_credential_changed';
+      else if (price.freeTier!=='available' || !price.checkedAt || this.now().getTime()-Date.parse(price.checkedAt)>30*86400000) reason='free_model_unverified';
+      else if (approval?.status!=='verified' || approval.approved!==1n) reason='free_model_approval_required';
+      return {mode:'free' as const,bound:0n,reason};
+    }
     const project = this.rows('SELECT * FROM gemini_project WHERE id=1')[0];
     if (provider !== 'gemini' || project?.state !== 'free') return { mode: 'paid' as const, bound: upperCost(provider, request), reason: null as string | null };
     const price = priceFor(provider, request.model);
@@ -195,6 +219,7 @@ export class UsageLedger {
   }
   invalidateFreeUse(provider: ProviderId) {
     this.transaction(() => {
+      this.db.prepare("UPDATE provider_plans SET state='unknown',credential_hash='' WHERE provider=?").run(provider);
       if (provider === 'gemini') this.db.prepare("UPDATE gemini_project SET state='unknown',credential_hash='' WHERE id=1").run();
       this.db.prepare("UPDATE model_free_use SET status='unverified',checked_at=NULL,approved=0,credential_hash=NULL WHERE provider=?").run(provider);
       this.db.prepare('UPDATE routing_settings SET revision=revision+1 WHERE id=1').run();
@@ -224,7 +249,7 @@ export class UsageLedger {
       }
       this.db.prepare(`INSERT INTO requests(id,at,month,provider,model,task,status,settlement,cost_status,reserved,bound,price_version,price_json,exception,block_reason,updated_at)
         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, at, month, provider, request.model, task, block ? 'blocked' : 'pending', block ? 'not_sent' : 'reserved', 'unknown', block ? 0n : bound!, bound, priceVersion(price), JSON.stringify(price), exception ? 1 : 0, block, at);
-      this.db.prepare('INSERT INTO request_billing VALUES(?,?,?)').run(id, billingMode, billingMode === 'free' ? JSON.stringify(this.geminiBilling()) : 'paid-price-snapshot');
+      this.db.prepare('INSERT INTO request_billing VALUES(?,?,?)').run(id, billingMode, billingMode === 'free' ? JSON.stringify(provider === 'gemini' ? this.geminiBilling() : this.providerPlan(provider)) : 'paid-price-snapshot');
       return block;
     });
     if (reason) { const error = new NidusError('budget', `Budget Guard blocked this request (${reason}). Review Usage & Budget. No inference request was sent.`); error.reason = reason; throw error; }

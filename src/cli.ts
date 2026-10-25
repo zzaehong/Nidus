@@ -8,7 +8,7 @@ import { secretPrompt, chatPrompt } from "./prompt.js";
 
 export const help = `Nidus API Connectivity MVP
   nidus providers
-  nidus connect <openai|anthropic|gemini|deepseek> [--env]
+  nidus connect <provider> [--env] [--account-id <cloudflare-account-id>]
   nidus models <provider> [--refresh | --detail <model-id>]
   nidus pricing <provider>
   nidus chat --provider <provider> --model <model-id> [--max-output-tokens 1024]
@@ -44,7 +44,7 @@ export async function main(argv = process.argv.slice(2), dependencies: CliDepend
   let values, positionals;
   try {
     ({ values, positionals } = parseArgs({ args: argv, allowPositionals: true, strict: true, options: {
-      help: { type: "boolean", short: "h" }, refresh: { type: "boolean" }, env: { type: "boolean" },
+      "account-id": {type:"string"}, help: { type: "boolean", short: "h" }, refresh: { type: "boolean" }, env: { type: "boolean" },
       tiers: { type: "string" }, tier: { type: "string" }, auto: { type: "boolean" }, difficulty: { type: "string" }, provider: { type: "string" }, model: { type: "string" }, detail: { type: "string" },
       "timeout-ms": { type: "string" }, "max-output-tokens": { type: "string" }, usd: { type: "string" }, "approve-budget-exception": { type: "boolean" }
     } }));
@@ -56,7 +56,7 @@ export async function main(argv = process.argv.slice(2), dependencies: CliDepend
   const expected = ["providers", "chat", "usage", "routing"].includes(command!) ? 1 : 2;
   if (positionals.length !== expected) throw new NidusError("invalid_request", "Unexpected positional arguments. Use nidus --help.");
   const allowed: Record<string, string[]> = {
-    routing: [], "routing-policy": ["tiers"], "model-tier": ["model", "tier"], "automatic-paid": [], usage: [], budget: ["usd"], balance: [], account: [], providers: [], connect: ["env", "timeout-ms"], models: ["refresh", "detail", "timeout-ms"],
+    routing: [], "routing-policy": ["tiers"], "model-tier": ["model", "tier"], "automatic-paid": [], usage: [], budget: ["usd"], balance: [], account: [], providers: [], connect: ["env", "timeout-ms", "account-id"], models: ["refresh", "detail", "timeout-ms"],
     pricing: [], chat: ["auto", "difficulty", "provider", "model", "max-output-tokens", "timeout-ms", "approve-budget-exception"], disconnect: []
   };
   if (Object.keys(values).some(v => !allowed[command!]!.includes(v))) throw new NidusError("invalid_request", "Option is not valid for this command.");
@@ -88,7 +88,7 @@ export async function main(argv = process.argv.slice(2), dependencies: CliDepend
   process.once("SIGINT", cancel);
   try {
     switch (command) {
-      case "connect": print(await engine.connect(provider, inputKey ?? "", !values.env, options)); break;
+      case "connect": print(await engine.connect(provider, inputKey ?? "", !values.env, options, values["account-id"] ?? (provider === "cloudflare" ? process.env.NIDUS_CLOUDFLARE_ACCOUNT_ID : undefined))); break;
       case "models":
         if (values.detail && values.refresh) throw new NidusError("invalid_request", "Use --detail or --refresh, not both.");
         print(values.detail ? await engine.detail(provider, values.detail, options) : await engine.models(provider, values.refresh || !!process.env[credentialEnvironment[provider]], options)); break;

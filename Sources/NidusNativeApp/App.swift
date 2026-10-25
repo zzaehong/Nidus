@@ -69,8 +69,9 @@ struct DashboardView: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(provider.name).font(.headline)
                             Text(dashboard.states[provider]?.status ?? "연결 전").font(.caption2).foregroundStyle(.secondary)
+                            Text("\(dashboard.states[provider]?.models.count ?? 0)개 모델").font(.caption2)
                         }
-                    }.padding(.vertical, 9).tag(provider)
+                    }.padding(9).frame(maxWidth: .infinity, alignment: .leading).background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 10)).tag(provider)
                 }.listStyle(.sidebar)
                 Label(dashboard.ready ? "연결 엔진 준비됨" : "연결 엔진 준비 중", systemImage: dashboard.ready ? "checkmark.circle" : "circle.dotted")
                     .font(.caption).foregroundStyle(.secondary).padding()
@@ -105,6 +106,7 @@ struct ProviderView: View {
     let provider: Provider
     @EnvironmentObject var dashboard: Dashboard
     @State private var key = ""
+    @State private var accountID = ""
     @State private var search = ""
     @State private var kind = "all"
     @State private var showKey = false
@@ -123,7 +125,7 @@ struct ProviderView: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(provider.name).font(.largeTitle.bold())
-                    Text("API 키 하나로 연결하고, 계정에서 조회한 모델을 관리하세요.").foregroundStyle(.secondary)
+                    Text("공식 API로 연결하고, 조회된 모델 카탈로그를 관리하세요.").foregroundStyle(.secondary)
                 }
                 Spacer()
                 Button("API Key 등록 / 변경", systemImage: "key") { showKey = true }
@@ -201,6 +203,11 @@ struct ProviderView: View {
             VStack(alignment: .leading, spacing: 18) {
                 Text("\(provider.name) 연결").font(.title2.bold())
                 Text("공식 API 키를 입력하세요. 인증 후 모델을 자동 조회하고 macOS Keychain에 저장합니다. 구독형 채팅 서비스 계정과 API 요금은 별개입니다.").foregroundStyle(.secondary)
+                Link("API Key 발급 / 관리 페이지", destination: provider.keyURL)
+                if provider.requiresAccountID {
+                    TextField("Cloudflare Account ID (32자리)", text: $accountID).textFieldStyle(.roundedBorder)
+                    Text("Workers AI Read 및 Edit 권한이 필요합니다. Account ID와 토큰은 Keychain에 함께 저장됩니다.").font(.caption)
+                }
                 APIKeyInput(value: $key).frame(height: 28)
                 HStack {
                     Text("키는 로그나 일반 설정 파일에 저장되지 않습니다.").font(.caption).foregroundStyle(.secondary)
@@ -209,8 +216,8 @@ struct ProviderView: View {
                     Button("연결 및 모델 조회") {
                         let submitted = key.trimmingCharacters(in: .whitespacesAndNewlines)
                         key = ""; showKey = false
-                        run("connect", extra: ["key": submitted])
-                    }.buttonStyle(.borderedProminent).disabled(key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        run("connect", extra: provider.requiresAccountID ? ["key": submitted, "accountId": accountID] : ["key": submitted])
+                    }.buttonStyle(.borderedProminent).disabled(key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (provider.requiresAccountID && accountID.count != 32))
                 }
             }.padding(28).frame(width: 570)
         }

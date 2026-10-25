@@ -4,6 +4,11 @@ func tierLabel(_ tier: Int) -> String {
     switch tier { case 1: return "Tier 1 · Lightweight"; case 2: return "Tier 2 · General"; case 3: return "Tier 3 · Advanced"; default: return "Unclassified" }
 }
 struct RoutingSettingsSnapshot: Decodable {
+    let providerPlans: [ProviderPlan]?
+    struct ProviderPlan: Decodable, Identifiable {
+        var id: String { provider }
+        let provider: String; let state: String; let checkedAt: String?; let source: String; let conditions: String
+    }
     let geminiBilling: GeminiBilling?
     struct GeminiBilling: Decodable { let state: String; let project: String; let checkedAt: String? }
     let allowPaid: Bool
@@ -56,6 +61,7 @@ struct RoutingSettingsView: View {
     @StateObject private var model = RoutingSettingsModel()
     @State private var search = ""
     @State private var billingEditor = false
+    @State private var planSelection: RoutingSettingsSnapshot.ProviderPlan?
     @State private var freeUseSelection: RoutingSettingsSnapshot.TierModel?
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -77,6 +83,14 @@ struct RoutingSettingsView: View {
                         Text("Gemini 프로젝트: \(data.geminiBilling?.state ?? "unknown") · \(data.geminiBilling?.project ?? "미설정")").font(.headline)
                         Text("확인 시각: \(data.geminiBilling?.checkedAt ?? "없음") · 남은 무료 할당량은 조회되지 않습니다.").font(.caption)
                         Button("Gemini 프로젝트 결제 상태 설정") { billingEditor = true }
+                        ForEach((data.providerPlans ?? []).filter { ["nvidia", "groq", "mistral", "cloudflare"].contains($0.provider) }) { plan in
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("\(Provider(rawValue: plan.provider)?.name ?? plan.provider) · \(plan.state)").font(.headline)
+                                Text(plan.conditions).font(.caption)
+                                Text("사용자 확인: \(plan.checkedAt ?? "없음") · 남은 무료 할당량 미조회").font(.caption)
+                                Button("계정 플랜 확인 / 변경") { planSelection = plan }
+                            }.padding(12).frame(maxWidth: .infinity, alignment: .leading).background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 10))
+                        }
                         ForEach(["simple", "normal", "complex"], id: \.self) { difficulty in
                             policy(difficulty, data.policies[difficulty] ?? [])
                         }
@@ -94,6 +108,7 @@ struct RoutingSettingsView: View {
             }
             if model.busy { ProgressView().controlSize(.small) }
         }.padding(24).frame(width: 940, height: 760).task { await model.perform() }
+        .sheet(item: $planSelection) { ProviderPlanEditor(plan: $0, model: model) }
         .sheet(isPresented: $billingEditor) { GeminiBillingEditor(model: model) }
         .sheet(item: $freeUseSelection) { item in
             FreeUseEditor(item: item, model: model)
@@ -138,7 +153,7 @@ struct RoutingSettingsView: View {
             Text("최근 실행: \(item.health.status) · \(item.health.checkedAt ?? "검사 없음") · \(item.health.available ? "일시 제외 없음 (실행 성공 미보장)" : "일시 제외 중")").font(.caption)
             if let source = item.tierAssignment.source, source != "user", let url = URL(string: source) { Link("Tier 근거 · \(item.tierAssignment.checkedAt ?? "미확인")", destination: url).font(.caption) }
             if item.tierAssignment.source == nil { Text("공식 Tier 근거 미확인").font(.caption).foregroundStyle(.secondary) }
-            if item.pricing.rates.isEmpty { Text("가격 미확인 — Tier를 배정해도 자동 호출하지 않습니다.").font(.caption).foregroundStyle(.orange) }
+            if item.pricing.rates.isEmpty { Text("유료 가격 미확인 — 무료 실행은 별도의 계정·모델 조건 확인이 필요합니다.").font(.caption).foregroundStyle(.orange) }
             ForEach(Array(item.pricing.rates.enumerated()), id: \.offset) { _, rate in
                 Text("\(rate.tier): 입력 $\(rate.input.formatted()) / 출력 $\(rate.output.formatted()) · USD/백만 토큰").font(.caption)
             }
@@ -185,7 +200,7 @@ private struct FreeUseEditor: View {
             }
             Text("사용자 확인 기록이며 Provider API 검증 결과가 아닙니다. 남은 무료 요청 수를 자동 조회하지 않습니다.").font(.caption)
             Toggle("이 모델의 자동 호출 승인", isOn: $approved).disabled(status == "unavailable")
-            Text("승인하면 전체 자동 유료 허용이 꺼져 있어도 이 모델은 호출할 수 있습니다. 실제 과금될 수 있으며 유료 가격 상한과 Provider·전체·요청 예산을 그대로 적용합니다. 다른 미승인 유료 모델로는 전환하지 않습니다.").font(.callout)
+            Text("신규 Provider 무료 실행에는 Free 플랜 설정과 이 모델의 verified·승인이 모두 필요합니다. 그 외에는 모델별 과금 동의이며 전체 자동 유료 허용이 꺼져 있어도 이 모델은 호출할 수 있습니다. 실제 과금될 수 있으며 유료 가격 상한과 Provider·전체·요청 예산을 그대로 적용합니다. 다른 미승인 유료 모델로는 전환하지 않습니다.").font(.callout)
             if approved { Toggle("이 모델에 과금될 수 있음을 이해하고 기존 예산 내 호출을 승인합니다", isOn: $riskAccepted) }
             if let error = model.error { Text(error).foregroundStyle(.red) }
             HStack {
@@ -240,5 +255,42 @@ private struct GeminiBillingEditor: View {
         .onAppear { state = model.snapshot?.geminiBilling?.state ?? "unknown"; project = model.snapshot?.geminiBilling?.project ?? "" }
         .onChange(of: state) { _ in confirmed = false; risk = false }
         .onChange(of: project) { _ in confirmed = false; risk = false }
+    }
+}
+
+private struct ProviderPlanEditor: View {
+    let plan: RoutingSettingsSnapshot.ProviderPlan
+    @ObservedObject var model: RoutingSettingsModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var state = "unknown"
+    @State private var confirmed = false
+    @State private var risk = false
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("\(plan.provider) 계정 플랜").font(.headline)
+            Picker("플랜", selection: $state) {
+                Text("Unknown · 미확인").tag("unknown")
+                Text("Free · 무료 / 실험 플랜").tag("free")
+                Text("Paid · 유료 플랜").tag("paid")
+            }
+            Text(plan.conditions)
+            Link("공식 무료 사용 조건", destination: URL(string: plan.source)!)
+            Text("Free 저장 후 모델별 무료 상태를 verified로 확인하고 호출을 승인하세요. Tier도 별도로 배정해야 합니다. 확인되지 않은 모델은 자동 무료 호출하지 않습니다.")
+            if state == "free" {
+                Toggle("현재 키의 계정이 무료 플랜이며 유료 초과 과금이 활성화되지 않았음을 확인했습니다", isOn: $confirmed)
+                Toggle("사용자 확인은 실제 Billing 보증이 아니며, 잘못 설정하면 로컬 예산 밖에서 과금될 수 있음을 이해합니다", isOn: $risk)
+            }
+            Text("남은 할당량은 조회하지 않습니다. 플랜 변경 시 이 설정을 변경하세요. 키 재연결 시 무료 확인과 모델별 승인이 해제됩니다.").font(.caption)
+            if let error = model.error { Text(error).foregroundStyle(.red) }
+            HStack {
+                Button("취소") { dismiss() }
+                Button("저장") { Task {
+                    await model.perform(["method":"provider-plan-set", "provider":plan.provider, "state":state, "confirmed":confirmed, "riskAccepted":risk])
+                    if model.error == nil { dismiss() }
+                }}.disabled(model.busy || (state == "free" && (!confirmed || !risk)))
+            }
+        }.padding(24).frame(width: 650)
+        .onAppear { state = plan.state }
+        .onChange(of: state) { _ in confirmed = false; risk = false }
     }
 }

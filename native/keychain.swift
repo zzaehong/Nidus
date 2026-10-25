@@ -6,7 +6,7 @@ func run() throws {
     let data = FileHandle.standardInput.readDataToEndOfFile()
     guard data.count <= 65536,
           let request = try JSONSerialization.jsonObject(with: data) as? [String: String],
-          let provider = request["provider"], ["openai", "anthropic", "gemini", "deepseek"].contains(provider),
+          let provider = request["provider"], ["openai", "anthropic", "gemini", "deepseek", "nvidia", "groq", "mistral", "cloudflare"].contains(provider),
           let action = request["action"] else { throw NSError(domain: "nidus", code: 1) }
     let service = request["service"] ?? "com.nidus.connectivity"
     guard service == "com.nidus.connectivity" || service.hasPrefix("com.nidus.connectivity.test.") else { throw NSError(domain: "nidus", code: 4) }

@@ -10,6 +10,7 @@ import type { ChatRequest } from "./types.js";
 export async function dispatch(input: unknown, engine: ConnectivityEngine): Promise<unknown> {
   if (!input || typeof input !== "object") throw new NidusError("invalid_request", "Invalid dashboard request.");
   const r = input as Record<string, unknown>;
+  if (r.method === 'provider-plan-set') return engine.setProviderPlan(providerId(typeof r.provider==='string'?r.provider:''),r.state,r.confirmed,r.riskAccepted);
   if (r.method === "ping") return { ready: true };
   if (r.method === "usage") return engine.usage();
   if (r.method === 'gemini-billing-set') return engine.setGeminiBilling(r.state, r.project, r.confirmed, r.riskAccepted);
@@ -31,7 +32,7 @@ export async function dispatch(input: unknown, engine: ConnectivityEngine): Prom
     case "cached": return engine.cachedModels(provider);
     case "connect":
       if (typeof r.key !== "string") throw new NidusError("missing_key", "API Key is required.");
-      return engine.connect(provider, r.key);
+      return engine.connect(provider, r.key, true, {}, r.accountId);
     case "models": return engine.models(provider, true);
     case "detail":
       if (typeof r.model !== "string") throw new NidusError("invalid_request", "Select a model.");

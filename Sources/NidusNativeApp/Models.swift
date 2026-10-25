@@ -1,14 +1,20 @@
 import Foundation
 
 enum Provider: String, CaseIterable, Identifiable, Codable {
-    case openai, anthropic, gemini, deepseek
+    case openai, anthropic, gemini, deepseek, nvidia, groq, mistral, cloudflare
     var id: String { rawValue }
     var name: String {
-        switch self { case .openai: return "OpenAI · GPT"; case .anthropic: return "Anthropic · Claude"; case .gemini: return "Google Gemini"; case .deepseek: return "DeepSeek" }
+        switch self { case .openai: return "OpenAI · GPT"; case .anthropic: return "Anthropic · Claude"; case .gemini: return "Google Gemini"; case .deepseek: return "DeepSeek"; case .nvidia: return "NVIDIA NIM"; case .groq: return "Groq"; case .mistral: return "Mistral AI"; case .cloudflare: return "Cloudflare Workers AI" }
     }
     var symbol: String {
-        switch self { case .openai: return "sparkles"; case .anthropic: return "sun.max"; case .gemini: return "diamond"; case .deepseek: return "water.waves" }
+        switch self { case .openai: return "sparkles"; case .anthropic: return "sun.max"; case .gemini: return "diamond"; case .deepseek: return "water.waves"; case .nvidia: return "cpu"; case .groq: return "bolt"; case .mistral: return "wind"; case .cloudflare: return "cloud" }
     }
+    var requiresAccountID: Bool { self == .cloudflare }
+    var keyURL: URL {
+        let links: [Provider: String] = [.openai:"https://platform.openai.com/api-keys", .anthropic:"https://platform.claude.com/settings/keys", .gemini:"https://aistudio.google.com/api-keys", .deepseek:"https://platform.deepseek.com/api_keys", .nvidia:"https://build.nvidia.com/", .groq:"https://console.groq.com/keys", .mistral:"https://console.mistral.ai/", .cloudflare:"https://dash.cloudflare.com/"]
+        return URL(string: links[self]!)!
+    }
+
 }
 struct APIModel: Decodable, Identifiable {
     let id: String
@@ -32,7 +38,7 @@ struct APIModel: Decodable, Identifiable {
         struct Rate: Decodable { let tier: String; let input: Double; let output: Double; let cachedInput: Double?; let conditions: String }
     }
 }
-struct ModelResult: Decodable { let source: String; let fetchedAt: String?; let models: [APIModel] }
+struct ModelResult: Decodable { let authentication: String?; let source: String; let fetchedAt: String?; let models: [APIModel] }
 struct ChatResult: Decodable {
     let provider: Provider?
     let model: String?
@@ -142,7 +148,7 @@ struct ProviderState {
                 let result = try JSONDecoder().decode(ModelResult.self, from: data)
                 states[provider]?.models = result.models
                 states[provider]?.fetchedAt = result.fetchedAt
-                states[provider]?.status = result.source == "api" ? "연결 확인됨 · Models API" : (result.source == "cache" ? "저장된 목록 · 재확인 필요" : "연결 전")
+                states[provider]?.status = result.authentication == "catalog-access-only" ? "카탈로그 조회됨 · 키 실행 권한 미확인" : result.source == "api" ? "연결 확인됨 · Models API" : (result.source == "cache" ? "저장된 목록 · 재확인 필요" : "연결 전")
                 if !result.models.contains(where: { $0.id == states[provider]?.selectedModel }) {
                     states[provider]?.selectedModel = result.models.first(where: { $0.capabilities.chat != "unsupported" })?.id
                 }

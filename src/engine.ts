@@ -1,3 +1,5 @@
+import { providerMetadata } from './providers.js';
+import { cloudflareCredential } from './adapters/cloudflare.js';
 import { dollars, money } from './money.js';
 import { randomUUID, createHash } from 'node:crypto';
 import { difficulty, modelProfile, rankCandidates, type Candidate, type Difficulty, type Tier } from './router.js';
@@ -31,15 +33,16 @@ export class ConnectivityEngine {
     this.usageLedger().saveBalance(provider, balance.usd, balance.source);
     return this.usage();
   }
-  providers() { return providerIds.map(id => ({ id, authentication: "api-key", streamingImplemented: false, toolExecutionImplemented: false })); }
+  providers() { return providerIds.map(id => ({ id, ...providerMetadata[id], authentication: "api-key", streamingImplemented: false, toolExecutionImplemented: false })); }
   async cachedModels(provider: ProviderId) {
     const saved = await this.store.load(provider);
     return saved ? this.decorate(saved, "cache") : { source: "empty", fetchedAt: null, models: [] };
   }
   private async key(provider: ProviderId): Promise<string> { return keyValue(await this.credentials.get(provider) ?? ""); }
   private snapshot(provider: ProviderId, models: ModelSnapshot["models"]): ModelSnapshot { return { version: 1, provider, fetchedAt: new Date().toISOString(), models }; }
-  async connect(provider: ProviderId, inputKey: string, persist = true, options: RequestOptions = {}) {
-    const key = keyValue(inputKey);
+  async connect(provider: ProviderId, inputKey: string, persist = true, options: RequestOptions = {}, accountId?: unknown) {
+    if (provider !== "cloudflare" && accountId !== undefined) throw new NidusError("invalid_request", "Account ID is only supported for Cloudflare.");
+    const key = provider === "cloudflare" ? cloudflareCredential(inputKey,accountId) : keyValue(inputKey);
     const models = await this.registry[provider].listModels(key, options);
     const snapshot = this.snapshot(provider, models);
     const previousKey = persist ? await this.credentials.get(provider) : null;
@@ -54,7 +57,7 @@ export class ConnectivityEngine {
     }
     this.usageLedger().invalidateFreeUse(provider);
     this.usageLedger().recordHealth(provider, "*", "connected");
-    return { provider, authentication: "models-api-verified", chatVerification: "not-run", credentialStorage: persist ? "macos-keychain" : "environment-session", ...this.decorate(snapshot, "api") };
+    return { provider, authentication: provider === "nvidia" ? "catalog-access-only" : "models-api-verified", chatVerification: "not-run", credentialStorage: persist ? "macos-keychain" : "environment-session", ...this.decorate(snapshot, "api") };
   }
   async models(provider: ProviderId, refresh = false, options: RequestOptions = {}) {
     if (!refresh) { const saved = await this.store.load(provider); if (saved) return this.decorate(saved, "cache"); }
@@ -80,7 +83,12 @@ export class ConnectivityEngine {
       const cached = await this.cachedModels(provider);
       models.push(...cached.models);
     }
-    return { ...this.usageLedger().routingSettings(), geminiBilling: this.usageLedger().geminiBilling(), models };
+    return { ...this.usageLedger().routingSettings(), geminiBilling: this.usageLedger().geminiBilling(), providerPlans: providerIds.map(p=>this.usageLedger().providerPlan(p)), models };
+  }
+  async setProviderPlan(provider: ProviderId, state: unknown, confirmed: unknown, riskAccepted: unknown) {
+    const hash=state==='free' ? createHash('sha256').update(await this.key(provider)).digest('hex') : '';
+    this.usageLedger().setProviderPlan(provider,state,confirmed,riskAccepted,hash);
+    return this.routingSettings();
   }
   async setGeminiBilling(state: unknown, project: unknown, confirmed: unknown, riskAccepted: unknown) {
     const hash = state === 'free' ? createHash('sha256').update(await this.key('gemini')).digest('hex') : '';

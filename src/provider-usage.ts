@@ -1,7 +1,13 @@
+import { providerMetadata } from './providers.js';
 import type { ProviderId, RequestOptions } from './types.js';
 import { bounded, HttpClient, array, object, keyValue } from './http.js';
 import { NidusError } from './errors.js';
 export const usageCapabilities = {
+  nvidia: { requestTokens: true, accountUsage: 'local-only', actualCosts: 'not-connected', credits: 'not-connected', source: providerMetadata.nvidia.source, credential: 'Inference token only; no billing privilege or free balance inferred.' },
+  groq: { requestTokens: true, accountUsage: 'local-only', actualCosts: 'not-connected', credits: 'not-connected', source: providerMetadata.groq.source, credential: 'Inference token only; no billing privilege or free balance inferred.' },
+  mistral: { requestTokens: true, accountUsage: 'local-only', actualCosts: 'not-connected', credits: 'not-connected', source: providerMetadata.mistral.source, credential: 'Inference token only; no billing privilege or free balance inferred.' },
+  cloudflare: { requestTokens: true, accountUsage: 'local-only', actualCosts: 'not-connected', credits: 'not-connected', source: providerMetadata.cloudflare.source, credential: 'Inference token only; no billing privilege or free balance inferred.' },
+
   openai: { requestTokens: true, accountUsage: 'optional-session-admin-api', actualCosts: 'organization-costs-admin-api', credits: 'not-connected', source: 'https://developers.openai.com/api/reference/resources/admin/subresources/organization/subresources/usage/methods/costs', credential: 'Separate organization Admin API key required; inference credentials are never reused.' },
   anthropic: { requestTokens: true, accountUsage: 'optional-session-admin-api', actualCosts: 'organization-cost-report-admin-api', credits: 'not-connected', source: 'https://platform.claude.com/docs/en/manage-claude/usage-cost-api', credential: 'Separate Admin API key required; inference credentials are never reused.' },
   gemini: { requestTokens: true, accountUsage: 'cloud-billing-not-connected', actualCosts: 'cloud-billing-export-not-connected', credits: 'not-connected', source: 'https://ai.google.dev/gemini-api/docs/billing', credential: 'Cloud Billing IAM is separate from the inference API key.' },

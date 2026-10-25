@@ -1,4 +1,4 @@
-export const providerIds = ["openai", "anthropic", "gemini", "deepseek"] as const;
+export const providerIds = ["openai", "anthropic", "gemini", "deepseek", "nvidia", "groq", "mistral", "cloudflare"] as const;
 export type ProviderId = typeof providerIds[number];
 export type Support = "supported" | "unsupported" | "unknown";
 export interface Model {

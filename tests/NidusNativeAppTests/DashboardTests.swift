@@ -53,7 +53,7 @@ final class DashboardTests: XCTestCase {
             return Data((method == "ping" ? "{\"ready\":true}" : method == "cached" ? "{\"source\":\"empty\",\"fetchedAt\":null,\"models\":[]}" : modelJSON).utf8)
         }
         await dashboard.start()
-        XCTAssertTrue(dashboard.ready); XCTAssertEqual(calls, ["ping", "cached", "cached", "cached", "cached"])
+        XCTAssertTrue(dashboard.ready); XCTAssertEqual(calls, ["ping"] + Array(repeating: "cached", count: Provider.allCases.count))
         await dashboard.operation("connect", .gemini, extra: ["key": "synthetic"])
         XCTAssertEqual(dashboard.states[.gemini]?.selectedModel, "discovered")
         XCTAssertEqual(dashboard.states[.gemini]?.models.count, 1)
