@@ -1,7 +1,10 @@
+import { nvidiaPurpose } from "./nvidia-classification.js";
 import type { Model } from "./types.js";
 
-export type ModelKind = "text" | "image" | "video" | "live" | "audio" | "embedding" | "moderation" | "unknown";
+export type ModelKind = "text" | "image" | "video" | "live" | "audio" | "embedding" | "moderation" | "reranking" | "document" | "detection" | "reward" | "unknown";
 export interface Classification {
+  source?: string;
+  checkedAt?: string;
   kind: ModelKind;
   confidence: "metadata" | "inferred" | "unknown";
   reason: string;
@@ -22,6 +25,11 @@ export function classifyModel(model: Model): Classification {
   if (methods.some(s => /^(batch)?embed(contents?)?$/.test(s))) return result("embedding", "metadata", "Models API: embedding method.");
   for (const kind of ["video", "image", "audio"] as const) {
     if (output.includes(kind)) return result(kind, "metadata", `Models API output modality: ${kind}.`);
+  }
+  if (model.provider === 'nvidia') {
+    const purpose = nvidiaPurpose(model.id.toLowerCase());
+    if (purpose) return { ...purpose, textProbe: model.capabilities.chat === 'unsupported' ? 'unsupported'
+      : purpose.kind === 'text' && purpose.confidence === 'metadata' && model.capabilities.chat === 'supported' ? 'supported' : purpose.textProbe };
   }
   // Recognizable specialized names are exclusion hints even when generateContent exists.
   const id = model.id.toLowerCase();

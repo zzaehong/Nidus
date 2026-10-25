@@ -1,6 +1,8 @@
 import Foundation
 
 struct ModelClassification: Decodable {
+    let source: String?
+    let checkedAt: String?
     let kind: String
     let confidence: String
     let reason: String
@@ -8,7 +10,7 @@ struct ModelClassification: Decodable {
     var label: String { modelKindLabel(kind) + (confidence == "inferred" ? " · 추정" : "") }
 }
 func modelKindLabel(_ kind: String) -> String {
-    ["text": "텍스트", "image": "이미지 생성", "video": "영상 생성", "live": "라이브", "audio": "음성/음악", "embedding": "임베딩", "moderation": "모더레이션", "unknown": "기타/미확인"][kind] ?? "기타/미확인"
+    ["text": "텍스트", "image": "이미지 생성", "video": "영상 생성", "live": "라이브", "audio": "음성/음악", "embedding": "임베딩", "moderation": "모더레이션", "reranking": "검색 재정렬", "document": "문서 추출/OCR", "detection": "탐지/판별", "reward": "보상 평가", "unknown": "기타/미확인"][kind] ?? "기타/미확인"
 }
 enum CheckStatus: String, Codable {
     case queued, running, passed, failed, skipped, cancelled

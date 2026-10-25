@@ -153,7 +153,7 @@ struct ProviderView: View {
                     TextField("모델 검색", text: $search).textFieldStyle(.roundedBorder)
                     Picker("용도", selection: $kind) {
                         Text("전체 (\(state.models.count))").tag("all")
-                        ForEach(["text", "image", "video", "live", "audio", "embedding", "moderation", "unknown"], id: \.self) { category in
+                        ForEach(["text", "image", "video", "live", "audio", "embedding", "moderation", "reranking", "document", "detection", "reward", "unknown"], id: \.self) { category in
                             Text("\(modelKindLabel(category)) (\(state.models.filter { ($0.classification?.kind ?? "unknown") == category }.count))").tag(category)
                         }
                     }
@@ -232,6 +232,9 @@ struct ProviderView: View {
                 Text(model.id).font(.callout.monospaced()).textSelection(.enabled)
                 if let classification = model.classification {
                     Text("분류: \(classification.label)").font(.headline)
+                    if let source = classification.source, let url = URL(string: source) {
+                        Link("분류 근거 · \(classification.checkedAt ?? "미확인")", destination: url).font(.caption)
+                    }
                     Text(classification.reason).font(.caption).foregroundStyle(.secondary)
                 }
                 if let result = dashboard.healthHistory[provider.rawValue + ":" + model.id] {

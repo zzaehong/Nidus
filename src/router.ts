@@ -40,7 +40,7 @@ export function rankCandidates(candidates: Candidate[], task: Difficulty, order:
     .filter(c => c.tier !== 0 && order.includes(c.tier) && c.quote.allowed && c.quote.boundUSD !== null && c.health.available
       && c.model.capabilities.chat !== 'unsupported'
       && (classifyModel(c.model).kind === 'text' || c.health.status === 'passed' || c.profile.grade !== 'unknown')
-      && !['image', 'audio', 'video', 'live', 'embedding', 'moderation'].includes(classifyModel(c.model).kind))
+      && !['image', 'audio', 'video', 'live', 'embedding', 'moderation', 'reranking', 'document', 'detection', 'reward'].includes(classifyModel(c.model).kind))
     .map(c => ({ ...c, score: (order.length - order.indexOf(c.tier)) * 100,
       reason: `${task}:tier-${c.tier}; ${money(c.quote.boundUSD!) === 0n ? 'verified-zero-bound' : 'paid-budget-checked'}; ${c.pressure ? 'budget-saving' : 'task-fit'}` }))
     .sort((a, b) => {
