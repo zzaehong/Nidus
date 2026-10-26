@@ -23,3 +23,9 @@
 - NOT RUN: 실제 무료/유료 API 호출, 실제 앱 창의 수동 시각 검증.
 
 작업 브랜치: `feature/usage-ledger-budget-guard`. develop 시작/종료 HEAD: `85ab4a8609e6a9f0a5a6a4064f02a346ffc2df5b`. main: `723c03b59dcecaae27d9fe0a9f97b464c785d706` (변경 없음). develop 병합은 승인 대기이며 원격 push/PR은 수행하지 않았다.
+
+## 목록 영역 크기 제한 후속 수정
+
+Model Tier / Routing Policy의 스크롤 영역을 GeometryReader가 제공하는 창 내부 크기로 제한하고, 카드 너비를 스크롤바 여백을 제외한 가용 너비에 맞췄다. NVIDIA 무료 모델 목록도 높이 220pt의 고정된 내부 스크롤 영역과 지연 생성 목록으로 변경했다. Tier 편집 요소는 세로로 배치하여 카드의 최소 가로 폭이 커지는 문제를 줄였다. 설정 창 크기는 화면의 사용 가능 영역을 넘지 않도록 상한을 적용했다.
+
+검증: Swift 40개 테스트 PASS, 앱 빌드 PASS, diff 검사 PASS. 실제 앱 창에서 대량 목록을 이용한 수동 시각 검증 및 실제 API 호출은 NOT RUN. UI 크기 변경만 있으므로 Node 테스트는 재실행하지 않았다.

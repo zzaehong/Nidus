@@ -20,8 +20,9 @@ struct NvidiaFreeSetupView: View {
                 Spacer()
                 Text("\(selected.count) / \(candidates.count)개 선택").fixedSize(horizontal: false, vertical: true)
             }.disabled(model.busy)
-            ScrollView {
-                VStack(alignment: .leading, spacing: 10) {
+            GeometryReader { viewport in
+            ScrollView(.vertical) {
+                LazyVStack(alignment: .leading, spacing: 10) {
                     ForEach(candidates) { item in
                         VStack(alignment: .leading) {
                             Toggle(item.modelID, isOn: Binding(get: { selected.contains(item.modelID) }, set: { if $0 { selected.insert(item.modelID) } else { selected.remove(item.modelID) } })).fixedSize(horizontal: false, vertical: true)
@@ -30,8 +31,9 @@ struct NvidiaFreeSetupView: View {
                         }
                     }
                     if candidates.isEmpty { Text("현재 조회 목록에 검토된 무료 텍스트 모델이 없습니다. 모델 목록을 새로고침하세요. 목록 밖의 모델을 임의로 무료 처리하지 않습니다.").fixedSize(horizontal: false, vertical: true) }
-                }
-            }.frame(maxHeight: 250)
+                }.frame(width: max(0, viewport.size.width - 16), alignment: .leading)
+            }.frame(width: viewport.size.width, height: viewport.size.height).clipped()
+            }.frame(height: 220)
             Toggle("현재 키에 무료 개발자 계정 권한이 있으며 선택 모델의 Free Endpoint를 확인했습니다", isOn: $confirmed).fixedSize(horizontal: false, vertical: true)
             Toggle("사용자 확인은 실제 Billing 보증이 아니며 잘못 설정하면 과금될 수 있음을 이해합니다", isOn: $riskAccepted).fixedSize(horizontal: false, vertical: true)
             Text("개발·평가용 NVIDIA 호스팅 API에 한정합니다. 남은 할당량은 미조회입니다. 다른 모델·유료 플랜·자체 호스팅에는 무료 추정을 적용하지 않습니다. 자동 라우팅의 Tier는 별도로 배정하세요.").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)

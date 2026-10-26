@@ -91,7 +91,8 @@ struct RoutingSettingsView: View {
             Text("Tier는 작업 적합성 분류이며 벤치마크 순위나 가격 등급이 아닙니다. 모델 탐색 목록과 비용 정보는 별도로 유지합니다.").font(.caption).fixedSize(horizontal: false, vertical: true)
             if let error = model.error { Text(error).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true) }
             if let data = model.snapshot {
-                ScrollView {
+                GeometryReader { viewport in
+                ScrollView(.vertical) {
                     VStack(alignment: .leading, spacing: 18) {
                         if policyOnly {
                             Text("계정 과금 유형과 Provider 실행 권한을 적용합니다. 금액 예산과 비용 예약은 사용하지 않습니다.").font(.caption).fixedSize(horizontal: false, vertical: true)
@@ -119,11 +120,14 @@ struct RoutingSettingsView: View {
                                 }
                             }
                         }
-                    }.frame(maxWidth: .infinity, alignment: .leading)
+                    }.frame(width: max(0, viewport.size.width - 16), alignment: .leading)
+                        .padding(.trailing, 16)
+                }.frame(width: viewport.size.width, height: viewport.size.height).clipped()
                 }.disabled(model.busy)
             }
             if model.busy { ProgressView().controlSize(.small) }
-        }.padding(24).frame(width: 940, height: 760).task { await model.perform() }
+        }.padding(24).frame(width: min(940, (NSScreen.main?.visibleFrame.width ?? 1040) - 80),
+                                  height: min(760, (NSScreen.main?.visibleFrame.height ?? 860) - 100)).task { await model.perform() }
         .sheet(isPresented: $showBulkFreeUse) { FreeUseEditor(items: selectedModels, model: model) }
         .sheet(item: $freeUseSelection) { item in
             FreeUseEditor(items: [item], model: model)
@@ -167,10 +171,10 @@ struct RoutingSettingsView: View {
             Toggle(isOn: Binding(get: { selected.contains(item.id) }, set: { if $0 { selected.insert(item.id) } else { selected.remove(item.id) } })) {
                 Text("\(item.provider) / \(item.modelID)").font(.headline).fixedSize(horizontal: false, vertical: true)
             }.disabled(item.pricing.freeTier != "available")
-            HStack {
+            VStack(alignment: .leading, spacing: 6) {
                 Picker("Tier", selection: Binding(get: { item.tierAssignment.tier }, set: { value in Task { await model.assign(item, value) } })) {
                     ForEach(0...3, id: \.self) { Text(tierLabel($0)).tag($0) }
-                }.frame(width: 320)
+                }.frame(maxWidth: 320)
                 Button("기본 분류 복원") { Task { await model.assign(item, nil) } }.disabled(!item.tierAssignment.userModified)
                 Text(item.tierAssignment.userModified ? "사용자 지정" : "공식 자료 기반 기본 분류").font(.caption).fixedSize(horizontal: false, vertical: true)
             }
