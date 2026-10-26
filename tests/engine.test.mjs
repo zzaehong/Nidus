@@ -33,7 +33,7 @@ test('connect validates before persisting, refresh updates, failure preserves ol
 });
 test('ephemeral connect never writes credentials, unknown capabilities remain selectable', async () => {
   const f = fixture(); await f.engine.connect('gemini', 'key', false); assert.equal(f.secrets.size, 0);
-  f.secrets.set('gemini', 'key');
+  f.secrets.set('gemini', 'key');await f.engine.setAccountPermission('gemini','paid_only',true,true,true);
   f.cache.get('gemini').models[0].capabilities.chat = 'unknown';
   await f.engine.chat('gemini', { model: model.id, messages: [{ role: 'user', content: 'hi' }] });
   f.cache.get('gemini').models[0].capabilities.chat = 'unsupported';

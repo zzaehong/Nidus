@@ -11,9 +11,9 @@ struct NvidiaFreeSetupView: View {
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("NVIDIA 무료 비용 기록 설정").font(.title2.bold())
+            Text("NVIDIA Free Only 계정 확인").font(.title2.bold())
             Text("계정: \(model.snapshot?.providerPlans?.first(where: { $0.provider == "nvidia" })?.state ?? "unknown") · 공식 무료 지원이 확인된 현재 조회 모델 \(candidates.count)개")
-            Text("선택 모델의 무료 계정 정보를 비용 추정에 반영합니다. 선택 사항이며, 이 설정 없이도 호출할 수 있습니다. 저장만으로 API를 호출하지 않습니다.")
+            Text("현재 계정을 Free Only로 확인하고 선택 모델의 무료 상태를 기록합니다. 공식 무료 지원 모델만 실행하며 저장만으로 API를 호출하지 않습니다.")
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
                     ForEach(candidates) { item in
@@ -33,7 +33,7 @@ struct NvidiaFreeSetupView: View {
             HStack {
                 Button("닫기") { dismiss() }
                 Spacer()
-                Button("선택 모델 무료 비용 정보 저장") { Task {
+                Button("Free Only 확인 및 모델 상태 저장") { Task {
                     await model.perform(["method":"nvidia-free-setup", "models":selected.sorted(), "confirmed":confirmed, "riskAccepted":riskAccepted])
                     if model.error == nil { dismiss() }
                 }}.disabled(model.busy || selected.isEmpty || !confirmed || !riskAccepted)

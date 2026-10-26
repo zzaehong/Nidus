@@ -1,3 +1,4 @@
+import {authorize,recordApproved} from './helpers/permissions.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm, readFile, stat } from 'node:fs/promises';
@@ -10,9 +11,10 @@ import { dispatch } from '../dist/dashboard.js';
 import { main } from '../dist/cli.js';
 const request = { model: 'gpt-4.1-mini', messages: [{ role: 'user', content: 'private-prompt-never-store' }], maxOutputTokens: 100 };
 const tokens = (inputTokens = 100, outputTokens = 10, cachedInputTokens = 20) => ({ inputTokens, outputTokens, cachedInputTokens, cacheWriteTokens: null, reasoningTokens: 5, totalTokens: inputTokens + outputTokens, providerUsage: { secret: 'do-not-save' } });
-const reserve = l => l.recordRequest('openai', request, 'chat');
+const reserve = l => recordApproved(l,'openai', request, 'chat');
 function engine(ledger, action) {
   const model = { id: request.model, provider: 'openai', capabilities: { chat: 'supported' }, limits: {}, details: {}, name: 'Mini' };
+  authorize(ledger,'private-key-never-store');
   return new ConnectivityEngine({ get: async () => 'private-key-never-store' }, { load: async () => ({ models: [model] }) }, { openai: { chat: action } }, ledger);
 }
 test('integer decimal cost, cache pricing, reasoning not counted twice, and unknown writes', () => {
@@ -30,7 +32,7 @@ test('unconfigured, zero budgets and unknown pricing never block or reserve; unk
  const l=new UsageLedger(':memory:');
  for(const scope of ['total','request','openai']) l.setBudget(scope,'0');
  for(const model of [request.model,'unknown']) {
-   const r=l.recordRequest('openai',{...request,model},'chat');assert.equal(r.bound,null);
+   const r=recordApproved(l,'openai',{...request,model},'chat');assert.equal(r.bound,null);
    l.settle(r,'succeeded',tokens());
    const row=l.snapshot().requests.find(x=>x.id===r.id);
    assert.equal(row.reservedUSD,'0.000000000');assert.equal(row.status,'succeeded');
@@ -113,7 +115,8 @@ test('concurrent processes record distinct pending requests without reservations
  const dir=await mkdtemp(join(tmpdir(),'nidus-race-'));t.after(()=>rm(dir,{recursive:true,force:true}));const path=join(dir,'usage.sqlite');const l=new UsageLedger(path);
  l.setBudget('total','0');l.setBudget('request','0');
  const moduleURL=new URL('../dist/ledger.js',import.meta.url).href;
- const script=`import {UsageLedger} from ${JSON.stringify(moduleURL)};const l=new UsageLedger(process.argv[1]);console.log(l.recordRequest('openai',${JSON.stringify(request)},'chat').id);l.close();`;
+ const helperURL=new URL('./helpers/permissions.mjs',import.meta.url).href;
+ const script=`import {recordApproved} from ${JSON.stringify(helperURL)};import {UsageLedger} from ${JSON.stringify(moduleURL)};const l=new UsageLedger(process.argv[1]);console.log(recordApproved(l,'openai',${JSON.stringify(request)},'chat').id);l.close();`;
  const run=()=>new Promise((resolve,reject)=>{const p=spawn(process.execPath,['--input-type=module','-e',script,path]);let out='',err='';p.stdout.on('data',d=>out+=d);p.stderr.on('data',d=>err+=d);p.on('error',reject);p.on('close',code=>code===0?resolve(out.trim()):reject(new Error(err)));});
  const ids=await Promise.all(Array.from({length:8},run));assert.equal(new Set(ids).size,8);assert.equal(l.snapshot().requests.length,8);assert.equal(l.snapshot().total.reservedUSD,'0.000000000');l.close();
 });

@@ -161,7 +161,7 @@ struct ChatRoomsView: View {
                 }
             }.disabled(sending)
             if room.automaticRouting ?? false {
-                Text(routeSummary ?? "설정된 Tier 순서로 선택합니다. 후보 확인은 API를 호출하지 않습니다. 실제 전송과 Fallback에는 비용이 발생할 수 있으며 앱 내 지출 제한은 없습니다.")
+                Text(routeSummary ?? "설정된 Tier 순서로 선택합니다. 후보 확인은 API를 호출하지 않습니다. Provider 과금 유형과 실행 권한을 적용합니다. 유료 승인된 호출에는 비용이 발생할 수 있으며 금액 제한은 없습니다.")
                     .font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
             }
             TextField("이 채팅방의 system prompt (선택)", text: Binding(get: { rooms[index].systemPrompt }, set: { rooms[index].systemPrompt = $0; persist() }))
@@ -269,7 +269,7 @@ struct ChatRoomsView: View {
         Task { @MainActor in
             defer { sending = false }
             do {
-                let data = try await dashboard.transport(["method": automatic ? "auto-chat" : "chat", "provider": provider.rawValue, "difficulty": difficulty,
+                let data = try await dashboard.manualCall(["method": automatic ? "auto-chat" : "chat", "provider": provider.rawValue, "difficulty": difficulty,
                     "request": ["model": model, "system": system, "messages": messages, "maxOutputTokens": tokenLimit]])
                 let result = try JSONDecoder().decode(ChatResult.self, from: data)
                 guard let roomIndex = rooms.firstIndex(where: { $0.id == roomID }) else { return }

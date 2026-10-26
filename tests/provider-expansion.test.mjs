@@ -1,3 +1,4 @@
+import {authorize,recordApproved} from './helpers/permissions.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { HttpClient } from '../dist/http.js';
@@ -50,9 +51,9 @@ for(const p of expandedProviders) {
   const f=fixture();await connect(f,p);const id=reviewedFreeModels[p][0];
   for(const state of ['unknown','paid','free']) {
    await f.engine.setProviderPlan(p,state,true,true);
-   const r=await f.engine.chat(p,request(id));assert.equal(r.billingMode,'paid');assert.notEqual(r.estimatedUSD,'0.000000000');
+   if(state==='free')assert.equal((await f.engine.chat(p,request(id))).billingMode,'free');else await assert.rejects(f.engine.chat(p,request(id)),e=>e.reason==='account_unknown');
   }
-  assert.equal(f.calls.length,4);await approve(f,p);
+  assert.equal(f.calls.length,2);await approve(f,p);
   for(const [status,code] of [[401,'authentication'],[403,'permission'],[429,'rate_limit']]) {
    f.setFailure(status);await assert.rejects(f.engine.chat(p,request(id)),e=>e.code===code&&!e.message.includes('secret'));
   }
@@ -64,7 +65,7 @@ test('Cloudflare account is validated, credential-bound and isolated from discov
  await connect(f,'cloudflare');assert.equal(f.calls[0].path,`/accounts/${account}/ai/models/search`);
  assert.equal(JSON.parse(f.keys.get('cloudflare')).accountId,account);assert.ok(!JSON.stringify([...f.snapshots.values()]).includes(account));
  await approve(f,'cloudflare');f.keys.set('cloudflare',cloudflareCredential(key,'b'.repeat(32)));
- assert.equal((await f.engine.chat('cloudflare',request(reviewedFreeModels.cloudflare[0]))).billingMode,'paid');assert.ok(f.calls.at(-1).path.includes('b'.repeat(32)));
+ await assert.rejects(f.engine.chat('cloudflare',request(reviewedFreeModels.cloudflare[0])),e=>e.reason==='account_unknown');
  const env=new EnvironmentCredentials(f.credentials,{NIDUS_CLOUDFLARE_API_KEY:key,NIDUS_CLOUDFLARE_ACCOUNT_ID:account});assert.equal(JSON.parse(await env.get('cloudflare')).accountId,account);
 });
 test('free fallback crosses new providers in allowed Tier and never pays',async()=>{
@@ -76,7 +77,7 @@ test('free fallback crosses new providers in allowed Tier and never pays',async(
 });
 test('schema5 upgrade preserves paid liabilities and free plans survive reopen',async t=>{
  const dir=mkdtempSync(join(tmpdir(),'nidus42-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));const path=join(dir,'ledger.sqlite');
- let ledger=new UsageLedger(path);ledger.setBudget('total','10');ledger.setBudget('request','2');ledger.recordRequest('gemini',request('gemini-2.5-flash'),'chat');ledger.close();
+ let ledger=new UsageLedger(path);ledger.setBudget('total','10');ledger.setBudget('request','2');recordApproved(ledger,'gemini',request('gemini-2.5-flash'),'chat');ledger.close();
  const old=new DatabaseSync(path);old.exec("UPDATE requests SET reserved=1000000,bound=1000000,settlement='reserved'");old.exec('DROP TABLE provider_plans; PRAGMA user_version=5;');old.close();ledger=new UsageLedger(path);
  const f=fixture(ledger);await connect(f,'groq');await approve(f,'groq');ledger.close();ledger=new UsageLedger(path);t.after(()=>ledger.close());
  assert.equal(ledger.providerPlan('groq').state,'free');assert.ok(Number(ledger.snapshot().total.reservedUSD)>0);assert.equal(ledger.modelTier('groq',reviewedFreeModels.groq[0]).tier,2);
@@ -95,7 +96,7 @@ test('Cloudflare paginates and rejects failure envelopes; Mistral text blocks no
  assert.equal((await adapter.chat(key,request('mistral-small-2603'))).text,'hello');
 });
 test('paid Groq calls ignore old zero limits and disabled automatic paid permission while recording costs',async()=>{
- const f=fixture();await connect(f,'groq');const id=reviewedFreeModels.groq[0];await f.engine.setModelTier('groq',id,2);await f.engine.setProviderPlan('groq','paid',false,false);
+ const f=fixture();await connect(f,'groq');const id=reviewedFreeModels.groq[0];await f.engine.setModelTier('groq',id,2);await f.engine.setAccountPermission('groq','paid_only',true,true,true);
  for(const scope of ['total','request','groq'])f.ledger.setBudget(scope,'0');
  for(const r of [await f.engine.chat('groq',request(id)),await f.engine.autoChat(request(id))]){assert.equal(r.billingMode,'paid');assert.ok(Number(r.estimatedUSD)>0);}
  assert.equal(f.ledger.snapshot().requests.length,2);assert.equal(Number(f.ledger.snapshot().total.reservedUSD),0);

@@ -1,3 +1,4 @@
+import {authorize,recordApproved} from './helpers/permissions.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -14,6 +15,7 @@ const request = { model: 'automatic', messages: [{ role: 'user', content: 'priva
 const pairs = [['openai', 'gpt-4.1-mini'], ['gemini', 'gemini-3.5-flash-lite'], ['gemini', 'gemini-2.5-flash'], ['deepseek', 'deepseek-flash'], ['deepseek', 'deepseek-v4-pro'], ['anthropic', 'claude-sonnet-4-6'], ['anthropic', 'claude-opus-4-6']];
 const model = (provider, id) => ({ provider, id, name: id, capabilities: { chat: 'supported', tools: 'unknown', vision: 'unknown', streaming: 'unknown' }, limits: { inputTokens: null, outputTokens: null, contextTokens: null }, details: {}, capabilitySource: 'mock' });
 function fixture({ ledger = fundedLedger(), models = pairs, fail = () => {} } = {}) {
+  authorize(ledger,'private-key');
   ledger.setAutomaticPaid(true);
   const calls = []; let discovery = 0;
   const registry = Object.fromEntries(['openai', 'gemini', 'deepseek', 'anthropic'].map(provider => [provider, {
@@ -62,7 +64,7 @@ test('automatic routing ignores legacy zero budgets and disabled automatic paid 
 });
 
 test('old spending thresholds do not alter candidates or create reservations', async () => {
- for(const used of ['8','9','10']){const f=fixture();f.ledger.setBudget('total','10');const r=f.ledger.recordRequest('openai',{...request,model:'gpt-4.1-mini'},'chat');f.ledger.settle(r,'failed');f.ledger.reconcile(r.id,used,{provider:'openai',reference:'mock'});
+ for(const used of ['8','9','10']){const f=fixture();f.ledger.setBudget('total','10');const r=recordApproved(f.ledger,'openai',{...request,model:'gpt-4.1-mini'},'chat');f.ledger.settle(r,'failed');f.ledger.reconcile(r.id,used,{provider:'openai',reference:'mock'});
  const plan=await f.engine.routePlan(request,'simple');assert.ok(plan.candidates.length);assert.ok(plan.candidates.every(c=>!c.pressure));await f.engine.autoChat(request,'simple');assert.equal(f.calls.length,1);}
 });
 
@@ -76,7 +78,7 @@ test('rate limit switches once, persists cooldown and records transitions withou
   assert.equal(Number(ledger.snapshot().total.reservedUSD), 0);
   const log = JSON.stringify(ledger.routes()); assert.ok(!log.includes('private-prompt')); assert.ok(!log.includes('private-key'));
   ledger.close(); const reopened = new UsageLedger(path); t.after(() => reopened.close());
-  assert.equal(reopened.health('openai', 'gpt-4.1-mini').available, false); assert.equal(reopened.routes().length, 4);
+  assert.equal(reopened.health('openai', 'gpt-4.1-mini').available, false); assert.equal(reopened.routes().filter(e=>e.status!=='excluded').length, 4);
   assert.ok(!(await fixture({ ledger: reopened }).engine.routePlan(request, 'simple')).candidates.some(c => c.model.provider === 'openai'));
 });
 test('authentication, permission, quota and missing key exclude provider; unavailable model falls back', async () => {
@@ -117,7 +119,7 @@ test('schema 1 migration preserves Phase 3 reservations and expiry permits later
   const dir = mkdtempSync(join(tmpdir(), 'nidus-migrate-')); t.after(() => rmSync(dir, { recursive: true, force: true }));
   const path = join(dir, 'usage.sqlite'); const original = new UsageLedger(path);
   original.setBudget('total', '10'); original.setBudget('request', '5');
-  original.recordRequest('openai', { ...request, model: 'gpt-4.1-mini' }, 'chat'); original.close();
+  recordApproved(original,'openai', { ...request, model: 'gpt-4.1-mini' }, 'chat'); original.close();
   const old = new DatabaseSync(path); old.exec("UPDATE requests SET reserved=1000000,bound=1000000,settlement='reserved'");old.exec('DROP TABLE route_events; DROP TABLE model_health; PRAGMA user_version=1;'); old.close();
   let time = new Date('2026-10-24T12:00:00Z');
   const ledger = new UsageLedger(path, () => time); t.after(() => ledger.close());

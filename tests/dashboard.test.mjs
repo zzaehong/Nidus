@@ -20,7 +20,7 @@ test('dashboard connects with key, returns discovered models, refreshes, chats a
   const engine = new ConnectivityEngine(credentials, store, { gemini: adapter }, fundedLedger());
   const call = (method, extra = {}) => dispatch({ method, provider: 'gemini', ...extra }, engine);
   assert.deepEqual((await call('cached')).models, []); assert.equal(requests, 0);
-  const connected = await call('connect', { key: 'synthetic-dashboard-key' });
+  const connected = await call('connect', { key: 'synthetic-dashboard-key',billing:{state:'paid_only',paidAllowed:true,confirmed:true,riskAccepted:true} });
   assert.equal(connected.models[0].id, 'gemini-2.5-flash');
   assert.equal(connected.source, 'api');
   assert.equal(JSON.stringify(connected).includes('synthetic-dashboard-key'), false);

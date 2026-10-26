@@ -10,6 +10,9 @@ import type { ChatRequest } from "./types.js";
 export async function dispatch(input: unknown, engine: ConnectivityEngine): Promise<unknown> {
   if (!input || typeof input !== "object") throw new NidusError("invalid_request", "Invalid dashboard request.");
   const r = input as Record<string, unknown>;
+  if (r.method === 'account-permission') return engine.accountPermission(providerId(String(r.provider ?? '')));
+  if (r.method === 'account-permission-set') return engine.setAccountPermission(providerId(String(r.provider ?? '')),r.state,r.paidAllowed,r.confirmed,r.riskAccepted,r.accountId ?? '',r.expectedRevision);
+  if (r.method === 'request-consent') return engine.issueConsent(providerId(String(r.provider ?? '')),r.model,r.task,r.riskAccepted);
   if (r.method === 'nvidia-free-setup') return engine.approveNvidiaFreeModels(r.models,r.confirmed,r.riskAccepted);
   if (r.method === 'provider-plan-set') return engine.setProviderPlan(providerId(typeof r.provider==='string'?r.provider:''),r.state,r.confirmed,r.riskAccepted);
   if (r.method === "ping") return { ready: true };
@@ -33,7 +36,7 @@ export async function dispatch(input: unknown, engine: ConnectivityEngine): Prom
     case "cached": return engine.cachedModels(provider);
     case "connect":
       if (typeof r.key !== "string") throw new NidusError("missing_key", "API Key is required.");
-      return engine.connect(provider, r.key, true, {}, r.accountId);
+      return engine.connect(provider, r.key, true, {}, r.accountId, r.billing as Parameters<ConnectivityEngine["connect"]>[5]);
     case "models": return engine.models(provider, true);
     case "detail":
       if (typeof r.model !== "string") throw new NidusError("invalid_request", "Select a model.");
@@ -42,10 +45,10 @@ export async function dispatch(input: unknown, engine: ConnectivityEngine): Prom
     case "probe":
       if (typeof r.model !== "string" || r.confirmed !== true || (r.allowInferred !== undefined && typeof r.allowInferred !== "boolean"))
         throw new NidusError("invalid_request", "Confirm probe cost and select a discovered model.");
-      return engine.probe(provider, r.model, r.allowInferred === true);
+      return engine.probe(provider, r.model, r.allowInferred === true, typeof r.consentToken==='string'?r.consentToken:undefined);
     case "chat":
       if (!r.request || typeof r.request !== "object") throw new NidusError("invalid_request", "Invalid chat request.");
-      return engine.chat(provider, r.request as ChatRequest, { timeoutMs: 120_000 });
+      return engine.chat(provider, r.request as ChatRequest, { timeoutMs: 120_000, consentToken: typeof r.consentToken==='string'?r.consentToken:undefined });
     case "disconnect": return engine.disconnect(provider);
     default: throw new NidusError("invalid_request", "Unknown dashboard operation.");
   }

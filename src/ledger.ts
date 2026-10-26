@@ -15,6 +15,12 @@ import { providerIds, type ChatRequest, type ProviderId, type Usage } from './ty
 export type BudgetScope = 'total' | 'request' | ProviderId;
 export type TaskKind = 'chat' | 'probe';
 export interface TrackedRequest { id: string; price: Price; bound: bigint | null; billingMode: 'free' | 'paid' }
+export function validateAccountPermission(state: unknown, paidAllowed: unknown, confirmed: unknown, riskAccepted: unknown, fingerprint: string, accountId: unknown = '') {
+    if (!['free_only','hybrid','paid_only','unknown'].includes(String(state)) || typeof state !== 'string' || typeof paidAllowed !== 'boolean' || typeof accountId !== 'string' || !/^[a-zA-Z0-9:_-]{0,128}$/.test(accountId))
+      throw new NidusError('invalid_request', 'Invalid account billing settings.');
+    if (!fingerprint || (state !== 'unknown' && (confirmed !== true || riskAccepted !== true)) || (paidAllowed && !['hybrid','paid_only'].includes(state)))
+      throw new NidusError('invalid_request', 'Confirm account billing type and charge risk; paid permission requires Hybrid or Paid Only.');
+}
 type Row = Record<string, string | bigint | null>;
 export const ledgerPath = () => join(homedir(), '.local', 'share', 'nidus', 'usage.sqlite');
 export class UsageLedger {
@@ -24,7 +30,7 @@ export class UsageLedger {
     this.db = new DatabaseSync(path);
     if (path !== ':memory:') chmodSync(path, 0o600);
     const schema = this.db.prepare('PRAGMA user_version').get() as { user_version: number };
-    if (schema.user_version > 6) { this.db.close(); throw new NidusError('storage', 'Usage ledger schema is newer than this app.'); }
+    if (schema.user_version > 7) { this.db.close(); throw new NidusError('storage', 'Usage ledger schema is newer than this app.'); }
     this.db.exec('PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;');
     this.transaction(() => this.db.exec(`
       CREATE TABLE IF NOT EXISTS budgets(scope TEXT PRIMARY KEY, amount INTEGER NOT NULL CHECK(amount>=0));
@@ -48,7 +54,10 @@ export class UsageLedger {
       CREATE TABLE IF NOT EXISTS gemini_project(id INTEGER PRIMARY KEY CHECK(id=1), state TEXT NOT NULL, project TEXT NOT NULL, checked_at TEXT NOT NULL, credential_hash TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS request_billing(id TEXT PRIMARY KEY, mode TEXT NOT NULL, basis TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS provider_plans(provider TEXT PRIMARY KEY, state TEXT NOT NULL CHECK(state IN ('free','paid','unknown')), checked_at TEXT NOT NULL, credential_hash TEXT NOT NULL);
-      PRAGMA user_version=6;`));
+      CREATE TABLE IF NOT EXISTS account_permissions(provider TEXT PRIMARY KEY, state TEXT NOT NULL, fingerprint TEXT NOT NULL, account_id TEXT NOT NULL, checked_at TEXT NOT NULL, source TEXT NOT NULL, paid_allowed INTEGER NOT NULL DEFAULT 0, revision INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS execution_consents(token TEXT PRIMARY KEY, provider TEXT NOT NULL, model TEXT NOT NULL, task TEXT NOT NULL, fingerprint TEXT NOT NULL, revision INTEGER NOT NULL, expires_at TEXT NOT NULL, consumed INTEGER NOT NULL DEFAULT 0);
+      CREATE TABLE IF NOT EXISTS permission_events(id INTEGER PRIMARY KEY, provider TEXT NOT NULL, at TEXT NOT NULL, event TEXT NOT NULL);
+      PRAGMA user_version=7;`));
   }
   close() { this.db.close(); }
   private rows(sql: string, ...params: SQLInputValue[]): Row[] {
@@ -76,12 +85,71 @@ export class UsageLedger {
     return this.rows(`SELECT COALESCE(SUM(CASE WHEN month=? THEN COALESCE(confirmed,estimated,0) ELSE 0 END + reserved),0) AS n
       FROM requests WHERE (month=? OR reserved>0) ${provider ? 'AND provider=?' : ''}`, month, month, ...(provider ? [provider] : []))[0]!.n as bigint;
   }
-  // Advisory cost only. No reservation or execution permission is derived from this value.
-  quote(provider: ProviderId, request: ChatRequest) {
-    const billing = this.billing(provider, request);
-    const free = billing.mode === 'free' && billing.reason === null;
-    const bound = free ? 0n : upperCost(provider, request);
-    return { billingMode: free ? 'free' as const : 'paid' as const, allowed: true, reason: null as string | null, boundUSD: bound === null ? null : dollars(bound) };
+  accountPermission(provider: ProviderId, fingerprint?: string) {
+    const row = this.rows('SELECT * FROM account_permissions WHERE provider=?', provider)[0];
+    const matches = !!row && (fingerprint === undefined || row.fingerprint === fingerprint);
+    return { provider, state: matches ? String(row.state) : 'unknown', paidAllowed: matches && row.paid_allowed === 1n,
+      accountId: matches ? String(row.account_id) : '', checkedAt: matches && row.state!=='unknown' ? String(row.checked_at) : null,
+      verification: matches && row.state !== 'unknown' ? 'user-declared' : 'unverified', source: providerMetadata[provider].source,
+      revision: Number(row?.revision ?? 0n), needsConfirmation: !matches || row.state === 'unknown',
+      legacyHint: !matches || row.state==='unknown' ? (provider==='gemini' ? this.geminiBilling().state : this.providerPlan(provider).state) : null,
+      officialVerification: 'not-connected', verificationNote: 'Current inference credentials do not provide a connected authoritative billing-type lookup. Catalog access, balances and rate limits do not verify billing type.',
+      officialTerms: providerMetadata[provider].freeConditions };
+  }
+  setAccountPermission(provider: ProviderId, state: unknown, paidAllowed: unknown, confirmed: unknown, riskAccepted: unknown, fingerprint: string, accountId: unknown = '', expectedRevision?: unknown) {
+    validateAccountPermission(state,paidAllowed,confirmed,riskAccepted,fingerprint,accountId);
+    this.transaction(() => {
+      const current=this.accountPermission(provider);
+      if(expectedRevision!==undefined && expectedRevision!==current.revision)throw new NidusError('execution_permission','Account changed while settings were open. Reload and confirm the current account.');
+      const revision = current.revision + 1;
+      this.db.prepare(`INSERT INTO account_permissions VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(provider) DO UPDATE SET state=excluded.state,fingerprint=excluded.fingerprint,account_id=excluded.account_id,checked_at=excluded.checked_at,source=excluded.source,paid_allowed=excluded.paid_allowed,revision=excluded.revision`)
+        .run(provider,state as string,fingerprint,accountId as string,this.now().toISOString(),providerMetadata[provider].source,paidAllowed?1:0,revision);
+      this.db.prepare('DELETE FROM execution_consents WHERE provider=?').run(provider);
+      this.db.prepare('INSERT INTO permission_events(provider,at,event) VALUES(?,?,?)').run(provider,this.now().toISOString(),JSON.stringify({state,paidAllowed,revision,verification:'user-declared'}));
+    });
+  }
+  observeCredential(provider: ProviderId, fingerprint: string) {
+    this.transaction(() => {
+      const row=this.rows('SELECT fingerprint,revision FROM account_permissions WHERE provider=?',provider)[0];
+      if ((!row && !fingerprint) || row?.fingerprint===fingerprint) return;
+      const revision=Number(row?.revision ?? 0n)+1;
+      this.db.prepare(`INSERT INTO account_permissions VALUES(?,'unknown',?,'',?,?,0,?) ON CONFLICT(provider) DO UPDATE SET state='unknown',paid_allowed=0,fingerprint=excluded.fingerprint,revision=excluded.revision`)
+        .run(provider,fingerprint,this.now().toISOString(),providerMetadata[provider].source,revision);
+      this.db.prepare('DELETE FROM execution_consents WHERE provider=?').run(provider);
+      this.db.prepare('INSERT INTO permission_events(provider,at,event) VALUES(?,?,?)').run(provider,this.now().toISOString(),JSON.stringify({state:'unknown',paidAllowed:false,revision,reason:'credential_changed'}));
+    });
+  }
+  invalidateAccount(provider: ProviderId) {
+    this.transaction(() => {
+      this.db.prepare("UPDATE account_permissions SET state='unknown',paid_allowed=0,fingerprint='',revision=revision+1 WHERE provider=?").run(provider);
+      this.db.prepare('DELETE FROM execution_consents WHERE provider=?').run(provider);
+    });
+  }
+  issueConsent(provider: ProviderId, model: string, task: TaskKind, fingerprint: string, riskAccepted: unknown) {
+    return this.transaction(() => {
+      const account=this.accountPermission(provider,fingerprint);
+      if (riskAccepted !== true || account.state !== 'unknown' || !model || !['chat','probe'].includes(task)) throw new NidusError('invalid_request','Request-specific consent is only for Unknown accounts and requires explicit charge-risk acceptance.');
+      const token=randomUUID(), expiresAt=new Date(this.now().getTime()+300_000).toISOString();
+      this.db.prepare('INSERT INTO execution_consents VALUES(?,?,?,?,?,?,?,0)').run(token,provider,model,task,fingerprint,account.revision,expiresAt);
+      return {token,expiresAt,provider,model,task};
+    });
+  }
+  executionPermission(provider: ProviderId, model: string, fingerprint?: string) {
+    const account=this.accountPermission(provider,fingerprint), price=priceFor(provider,model);
+    const free=account.state==='free_only';
+    const freeRow=this.rows('SELECT status,credential_hash FROM model_free_use WHERE provider=? AND model=?',provider,model)[0];
+    const currentHash=fingerprint ?? this.rows('SELECT fingerprint FROM account_permissions WHERE provider=?',provider)[0]?.fingerprint;
+    const exhausted=freeRow?.status==='unavailable' && freeRow.credential_hash===currentHash;
+    const reason=account.state==='unknown' ? 'account_unknown' : free
+      ? price.freeTier!=='available' ? 'free_model_unverified' : exhausted ? 'free_unavailable' : null
+      : !account.paidAllowed ? 'provider_paid_not_approved' : null;
+    return {allowed:reason===null,reason,billingMode:free?'free' as const:'paid' as const,account};
+  }
+  // Cost is advisory: execution permissions never compare monetary limits.
+  quote(provider: ProviderId, request: ChatRequest, fingerprint?: string) {
+    const permission=this.executionPermission(provider,request.model,fingerprint);
+    const bound=permission.billingMode==='free' && permission.allowed ? 0n : upperCost(provider,request);
+    return {...permission,boundUSD:bound===null?null:dollars(bound)};
   }
   geminiBilling() {
     const row = this.rows('SELECT * FROM gemini_project WHERE id=1')[0];
@@ -123,26 +191,6 @@ export class UsageLedger {
         .run(model,at,priceFor('nvidia',model).sourceUrl,'User confirmed this hosted Free Endpoint and current developer account eligibility. Remaining quota is unknown. Incorrect settings can cause charges.',credentialHash);
       this.db.prepare('UPDATE routing_settings SET revision=revision+1 WHERE id=1').run();
     });
-  }
-  private billing(provider: ProviderId, request: ChatRequest, credentialHash?: string, execution = false) {
-    const plan=this.rows('SELECT * FROM provider_plans WHERE provider=?',provider)[0];
-    if (provider==='nvidia' && (!plan || plan.state==='unknown')) return {mode:'paid' as const,bound:null,reason:'nvidia_free_setup_required'};
-    if ((expandedProviders as readonly string[]).includes(provider) && plan?.state==='free') {
-      const price=priceFor(provider,request.model), approval=this.rows('SELECT * FROM model_free_use WHERE provider=? AND model=?',provider,request.model)[0];
-      let reason: string|null=null;
-      if (execution && (!credentialHash || plan.credential_hash!==credentialHash || (approval && approval.credential_hash!==credentialHash))) reason='free_credential_changed';
-      else if (price.freeTier!=='available' || !price.checkedAt || this.now().getTime()-Date.parse(price.checkedAt)>30*86400000) reason='free_model_unverified';
-      else if (approval?.status!=='verified' || approval.approved!==1n) reason='free_model_approval_required';
-      return {mode:'free' as const,bound:0n,reason};
-    }
-    const project = this.rows('SELECT * FROM gemini_project WHERE id=1')[0];
-    if (provider !== 'gemini' || project?.state !== 'free') return { mode: 'paid' as const, bound: upperCost(provider, request), reason: null as string | null };
-    const price = priceFor(provider, request.model);
-    let reason: string | null = null;
-    if (execution && (!credentialHash || project.credential_hash !== credentialHash)) reason = 'gemini_project_credential_changed';
-    else if (price.freeTier !== 'available' || !price.checkedAt || this.now().getTime() - Date.parse(price.checkedAt) > 30 * 86400000) reason = 'gemini_free_model_unverified';
-    else if (this.freeUse(provider, request.model).status === 'unavailable') reason = 'gemini_free_unavailable';
-    return { mode: 'free' as const, bound: 0n, reason };
   }
   recordRoute(routeId: string, event: { provider: ProviderId; model: string; reason: string; status: string; budget: string; boundUSD: string | null; requestId?: string; tier?: Tier }) {
     this.db.prepare('INSERT INTO route_events(route_id,at,event) VALUES(?,?,?)').run(routeId, this.now().toISOString(), JSON.stringify(event));
@@ -229,23 +277,38 @@ export class UsageLedger {
       this.db.prepare('UPDATE routing_settings SET revision=revision+1 WHERE id=1').run();
     });
   }
-  recordRequest(provider: ProviderId, request: ChatRequest, task: TaskKind, automatic?: { revision: number; difficulty: Difficulty; tier: Tier }, credentialHash?: string): TrackedRequest {
+  recordRequest(provider: ProviderId, request: ChatRequest, task: TaskKind, automatic?: { revision: number; difficulty: Difficulty; tier: Tier; accountRevision?: number; billingMode?: string }, credentialHash?: string, consentToken?: string): TrackedRequest {
     const price = priceFor(provider, request.model), id = randomUUID(), at = this.now().toISOString();
-    return this.transaction(() => {
-      // Tier choices still apply; budget and paid/free permissions no longer gate dispatch.
+    const recorded = this.transaction(() => {
+      // Permission and Tier validation share the request-record transaction.
       if (automatic) {
         const settings = this.routingSettings();
         const assigned = this.rows('SELECT tier FROM model_tiers WHERE provider=? AND model=?', provider, request.model)[0];
         if (settings.revision !== automatic.revision || !settings.policies[automatic.difficulty].includes(automatic.tier) || !assigned || assigned.tier !== BigInt(automatic.tier) || automatic.tier === 0)
           throw new NidusError('invalid_request', 'Routing settings changed. Select the task again before sending.');
       }
-      const billing = this.billing(provider, request, credentialHash, true);
-      const billingMode = billing.mode === 'free' && billing.reason === null ? 'free' : 'paid';
+      const permission=this.executionPermission(provider,request.model,credentialHash ?? '');
+      let reason=automatic && (automatic.accountRevision!==permission.account.revision || automatic.billingMode!==permission.billingMode) ? 'account_changed' : permission.reason;
+      let consentUsed=false;
+      if (reason==='account_unknown' && !automatic && consentToken) {
+        const used=this.db.prepare(`UPDATE execution_consents SET consumed=1 WHERE token=? AND provider=? AND model=? AND task=? AND fingerprint=? AND revision=? AND expires_at>? AND consumed=0`)
+          .run(consentToken,provider,request.model,task,credentialHash ?? '',permission.account.revision,at);
+        if(used.changes===1){reason=null;consentUsed=true;}
+      }
+      const billingMode=permission.billingMode;
+      if(reason){
+        this.db.prepare(`INSERT INTO requests(id,at,month,provider,model,task,status,settlement,cost_status,reserved,bound,price_version,price_json,exception,block_reason,updated_at) VALUES(?,?,?,?,?,?,'blocked','not_sent','unknown',0,NULL,?,?,0,?,?)`)
+          .run(id,at,at.slice(0,7),provider,request.model,task,priceVersion(price),JSON.stringify(price),reason,at);
+        this.db.prepare('INSERT INTO request_billing VALUES(?,?,?)').run(id,billingMode,JSON.stringify({account:permission.account,authorization:'blocked',reason}));
+        return {reason};
+      }
       this.db.prepare(`INSERT INTO requests(id,at,month,provider,model,task,status,settlement,cost_status,reserved,bound,price_version,price_json,exception,updated_at)
         VALUES(?,?,?,?,?,?,'pending','tracking','unknown',0,NULL,?,?,0,?)`).run(id, at, at.slice(0,7), provider, request.model, task, priceVersion(price), JSON.stringify(price), at);
-      this.db.prepare('INSERT INTO request_billing VALUES(?,?,?)').run(id, billingMode, billingMode === 'free' ? JSON.stringify(provider === 'gemini' ? this.geminiBilling() : this.providerPlan(provider)) : 'price-estimate-only; no budget enforcement');
+      this.db.prepare('INSERT INTO request_billing VALUES(?,?,?)').run(id, billingMode, JSON.stringify({account:permission.account,authorization:consentUsed?'request-consent':billingMode==='free'?'free-only-account':'provider-paid-permission'}));
       return { id, price, bound: null, billingMode };
     });
+    if('reason' in recorded){const error=new NidusError('execution_permission',`Execution permission denied (${recorded.reason}). No API request sent.`);error.reason=recorded.reason!;throw error;}
+    return recorded;
   }
   settle(request: TrackedRequest, status: 'succeeded' | 'failed' | 'cancelled', usage?: Usage | null, headers: Record<string, string> = {}) {
     const token = (n: unknown) => typeof n === 'number' && Number.isSafeInteger(n) && n >= 0 ? n : null;

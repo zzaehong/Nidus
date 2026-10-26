@@ -1,3 +1,4 @@
+import {authorize,recordApproved} from './helpers/permissions.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -13,6 +14,7 @@ import { dispatch } from '../dist/dashboard.js';
 const pairs = [['openai','gpt-4.1-mini'],['gemini','gemini-2.5-flash'],['deepseek','deepseek-flash'],['anthropic','claude-opus-4-6'],['openai','new-model']];
 const req = { model: 'automatic', messages: [{ role:'user', content:'secret-prompt' }], maxOutputTokens:128 };
 function fixture(ledger = new UsageLedger(':memory:'), fail = async () => {}) {
+  authorize(ledger,'fake-key');
   const models = new Map(), calls = [];
   for (const [provider,id] of pairs) {
     const list = models.get(provider) ?? [];
@@ -62,7 +64,7 @@ test('exhausts current tier across providers before next tier; persisted logs in
   const f=fixture(undefined,async p=>{if(p==='gemini')throw new NidusError('rate_limit','mock',429,'10');});allow(f);
   const result=await f.engine.autoChat(req,'normal');
   assert.deepEqual(f.calls.map(c=>c[0]),['gemini','deepseek']);assert.equal(result.routing.tier,2);
-  assert.ok(f.ledger.routes().every(e=>e.tier===2));assert.ok(!JSON.stringify(f.ledger.routes()).includes('secret-prompt'));
+  assert.ok(f.ledger.routes().filter(e=>e.status!=='excluded').every(e=>e.tier===2));assert.ok(!JSON.stringify(f.ledger.routes()).includes('secret-prompt'));
 });
 test('zero provider and global budgets do not skip the preferred Tier or provider',async()=>{
  const f=fixture();for(const scope of ['gemini','total','request'])f.ledger.setBudget(scope,'0');
@@ -95,7 +97,7 @@ test('schema 1 and 2 migrate without deleting usage, pending reservations or tra
   for(const version of [1,2]){
     const dir=mkdtempSync(join(tmpdir(),'nidus-schema-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));const path=join(dir,'ledger.sqlite');
     const ledger=new UsageLedger(path);ledger.setBudget('total','100');ledger.setBudget('request','10');
-    ledger.recordRequest('openai',{...req,model:'gpt-4.1-mini'},'chat');ledger.recordRoute('old',{provider:'openai',model:'gpt-4.1-mini',reason:'initial_selection',status:'selected',budget:'allowed',boundUSD:'1'});ledger.close();
+    recordApproved(ledger,'openai',{...req,model:'gpt-4.1-mini'},'chat');ledger.recordRoute('old',{provider:'openai',model:'gpt-4.1-mini',reason:'initial_selection',status:'selected',budget:'allowed',boundUSD:'1'});ledger.close();
     const db=new DatabaseSync(path);db.exec("UPDATE requests SET reserved=1000000,bound=1000000,settlement='reserved'");db.exec(`DROP TABLE model_tiers; DROP TABLE routing_settings; PRAGMA user_version=${version};`);db.close();
     const restored=new UsageLedger(path);t.after(()=>restored.close());assert.equal(restored.snapshot().requests.length,1);assert.equal(restored.routes()[0].routeId,'old');
     assert.ok(Number(restored.snapshot().total.reservedUSD)>0);assert.equal(restored.routingSettings().allowPaid,false);

@@ -19,7 +19,7 @@ test('CLI connect → discover → cached models → refresh → detail → pric
   });
   const engine = new ConnectivityEngine(credentials, store, { gemini: new GeminiAdapter('https://example.invalid', http) }, fundedLedger());
   const dependencies = { engine, readSecret: async () => key, readPrompt: async () => 'Hello', write: text => output.push(JSON.parse(text)) };
-  await main(['connect', 'gemini'], dependencies);
+  await main(['connect', 'gemini','--billing-type','paid_only','--allow-paid','--confirm-billing','--accept-charge-risk'], dependencies);
   assert.equal(storedKey, key); assert.equal(httpCalls.length, 1);
   await main(['models', 'gemini'], dependencies); assert.equal(httpCalls.length, 1);
   await main(['models', 'gemini', '--refresh'], dependencies); assert.equal(httpCalls.length, 2);

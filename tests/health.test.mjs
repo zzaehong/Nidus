@@ -1,3 +1,4 @@
+import {authorize} from './helpers/permissions.mjs';
 import { fundedLedger } from './helpers/ledger.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -67,7 +68,7 @@ test('engine reclassifies legacy cache; probe requires discovered ID, confirmati
   const models = [model('gpt-4.1-mini', 'openai'), model('gpt-image-example', 'openai')];
   const engine = new ConnectivityEngine({ get: async () => { readKeys++; return 'synthetic'; } },
     { load: async () => ({ version: 1, provider: 'openai', fetchedAt: '2026-10-24', models }) },
-    { openai: { chat: async () => { requests++; return { text: 'OK', usage }; } } }, fundedLedger());
+    { openai: { chat: async () => { requests++; return { text: 'OK', usage }; } } }, authorize(fundedLedger(),'synthetic'));
   assert.equal((await engine.cachedModels('openai')).models[0].classification.kind, 'text'); assert.equal(readKeys, 0);
   await assert.rejects(dispatch({ method: 'probe', provider: 'openai', model: 'gpt-4.1-mini' }, engine));
   await assert.rejects(dispatch({ method: 'probe', provider: 'openai', model: 'gpt-4.1-mini', confirmed: true, allowInferred: 'yes' }, engine));

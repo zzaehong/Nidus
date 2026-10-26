@@ -1,3 +1,4 @@
+import {authorize,recordApproved} from './helpers/permissions.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { classifyModel } from '../dist/classification.js';
@@ -33,6 +34,7 @@ test('vision input is not image generation and unknown specialized models remain
 });
 test('cached NVIDIA models reclassify offline while Tier and free metadata stay intact without budget gates',async()=>{
  const ledger=new UsageLedger(':memory:');let keys=0,calls=0;const id='openai/gpt-oss-20b';
+ authorize(ledger,'mock');
  const engine=new ConnectivityEngine({get:async()=>{keys++;return 'mock';}}, {load:async p=>p==='nvidia'?{provider:p,version:1,fetchedAt:'2026-10-25',models:[model(id)]}:null}, {nvidia:{chat:async()=>{calls++;return {text:'ok',usage:{inputTokens:1,outputTokens:1}};}}},ledger);
  const cached=await engine.cachedModels('nvidia');assert.equal(cached.models[0].classification.kind,'text');assert.equal(keys,0);assert.equal(cached.models[0].tierAssignment.tier,0);
  assert.equal(priceFor('nvidia',id).freeTier,'unknown');assert.equal(ledger.freeUse('nvidia',id).approved,false);

@@ -1,3 +1,4 @@
+import {authorize,recordApproved} from './helpers/permissions.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -22,6 +23,7 @@ function fixture(ledger=new UsageLedger(':memory:'), fail=()=>{}) {
     calls.push([provider,r.model]);await fail(provider,r.model);
     return {provider,model:r.model,text:'OK',usage:{inputTokens:10,outputTokens:2,totalTokens:12,cachedInputTokens:0,cacheWriteTokens:0,reasoningTokens:0,providerUsage:{}}};
   }}]));
+  authorize(ledger,'test-key');
   const engine=new ConnectivityEngine(credentials,store,adapters,ledger);
   ledger.setBudget('total','10');ledger.setBudget('request','5');
   return {engine,ledger,credentials,calls};
@@ -29,16 +31,16 @@ function fixture(ledger=new UsageLedger(':memory:'), fail=()=>{}) {
 const approve=(f,model=request.model,status='unverified')=>f.engine.setFreeUse('gemini',model,status,true,status==='verified',true);
 test('same-revision request recording rejects mismatched and cross-provider Tier assignments atomically',()=>{
  const f=fixture();f.ledger.modelTier('gemini',request.model);const revision=f.ledger.routingSettings().revision;
- for(const [provider,model] of [['gemini',request.model],['openai','gpt-4.1-mini']])assert.throws(()=>f.ledger.recordRequest(provider,{...request,model},'chat',{revision,difficulty:'normal',tier:1}),e=>e.code==='invalid_request');
+ for(const [provider,model] of [['gemini',request.model],['openai','gpt-4.1-mini']])assert.throws(()=>recordApproved(f.ledger,provider,{...request,model},'chat',{revision,difficulty:'normal',tier:1}),e=>e.code==='invalid_request');
  assert.equal(f.ledger.snapshot().requests.length,0);
- const r=f.ledger.recordRequest('gemini',request,'chat',{revision,difficulty:'normal',tier:2});assert.equal(r.bound,null);
+ const r=recordApproved(f.ledger,'gemini',request,'chat',{revision,difficulty:'normal',tier:2});assert.equal(r.bound,null);
 });
 
 test('another connection changing model tier without revision cannot race the atomic model check',async t=>{
   const dir=mkdtempSync(join(tmpdir(),'nidus-tier-check-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));const path=join(dir,'ledger.sqlite');
   const ledger=new UsageLedger(path);t.after(()=>ledger.close());const f=fixture(ledger);f.ledger.setAutomaticPaid(true);await f.engine.setRoutingPolicy('normal',[2]);
   const other=new DatabaseSync(path);t.after(()=>other.close());
-  f.credentials.get=async()=>{other.prepare("UPDATE model_tiers SET tier=1 WHERE provider='gemini'").run();return 'test-key';};
+  let reads=0;f.credentials.get=async p=>{if(p==='gemini' && ++reads>2)other.prepare("UPDATE model_tiers SET tier=1 WHERE provider='gemini'").run();return 'test-key';};
   await assert.rejects(f.engine.autoChat(request),e=>e.code==='invalid_request');assert.equal(f.calls.length,0);
   assert.equal(f.ledger.snapshot().requests.length,0);
 });
@@ -52,7 +54,7 @@ test('unverified free metadata is optional and never makes paid cost zero',async
  const f=fixture();const first=await f.engine.autoChat(request);assert.ok(Number(first.estimatedUSD)>0);
  await assert.rejects(f.engine.setFreeUse('gemini',request.model,'unverified',true,false,false),e=>e.code==='invalid_request');
  await approve(f);f.ledger.setBudget('gemini','0');const r=await f.engine.autoChat(request);assert.ok(Number(r.estimatedUSD)>0);
- assert.equal(f.ledger.routes()[0].authorization,'budget-guard-removed');assert.equal(f.calls.length,2);
+ assert.equal(f.ledger.routes()[0].authorization,'provider-paid-permission');assert.equal(f.calls.length,2);
 });
 
 test('verified status requires account attestation and is not itself approval or a zero price',async()=>{
@@ -75,14 +77,14 @@ test('rate-limit fallback follows Tier and cost without approval gates or inferr
   const alone=fixture(undefined,()=>{throw new NidusError('rate_limit','mock',429,'60');});await approve(alone);
   await assert.rejects(alone.engine.autoChat(request),e=>e.code==='unsupported');assert.equal(alone.calls.length,3);
 });
-test('credential changes affect free estimates but never require new spending permission',async()=>{
+test('credential changes require new account confirmation before automatic calls',async()=>{
  const f=fixture();await approve(f);f.credentials.get=async()=> 'different-account-key';
- const r=await f.engine.autoChat(request);assert.equal(r.billingMode,'paid');assert.ok(Number(r.estimatedUSD)>0);assert.equal(f.calls.length,1);
+ await assert.rejects(f.engine.autoChat(request),e=>e.code==='unsupported');assert.equal(f.calls.length,0);
 });
 
 test('free approvals survive schema upgrade/restart without exposing key digests and invalidate on disconnect',async t=>{
   const dir=mkdtempSync(join(tmpdir(),'nidus-free-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));const path=join(dir,'ledger.sqlite');
-  const f=fixture(new UsageLedger(path));const pending=f.ledger.recordRequest('gemini',request,'chat');
+  const f=fixture(new UsageLedger(path));const pending=recordApproved(f.ledger,'gemini',request,'chat');
   f.ledger.close();const old=new DatabaseSync(path);old.exec('DROP TABLE model_free_use; PRAGMA user_version=3;');old.close();
   const again=fixture(new UsageLedger(path));await approve(again);assert.equal(again.ledger.snapshot().requests[0].id,pending.id);
   again.ledger.close();const restored=fixture(new UsageLedger(path));t.after(()=>restored.ledger.close());

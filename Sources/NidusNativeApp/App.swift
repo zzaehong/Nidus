@@ -105,6 +105,10 @@ struct DashboardView: View {
 struct ProviderView: View {
     let provider: Provider
     @EnvironmentObject var dashboard: Dashboard
+    @State private var billingType = "unknown"
+    @State private var paidAllowed = false
+    @State private var billingConfirmed = false
+    @State private var billingRisk = false
     @State private var key = ""
     @State private var accountID = ""
     @State private var search = ""
@@ -132,11 +136,12 @@ struct ProviderView: View {
                 Button("API Key 등록 / 변경", systemImage: "key") { showKey = true }
                     .buttonStyle(.borderedProminent)
             }
+            AccountPermissionCard(provider: provider).id(provider.rawValue + (state.fetchedAt ?? "") + String(state.busy))
             if provider == .nvidia {
                 HStack {
-                    Text("용도 분류와 비용 추정은 별도입니다. 무료 계정 정보를 등록하면 비용 기록에 반영합니다.").font(.caption)
+                    Text("무료 계정은 Free Only로 재확인해야 합니다. 공식 무료 지원 모델만 실행합니다.").font(.caption)
                     Spacer()
-                    Button("무료 비용 기록 설정") { showNvidiaFreeSetup = true }
+                    Button("무료 전용 계정 확인") { showNvidiaFreeSetup = true }
                 }.padding(12).background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 10))
             }
             HStack(spacing: 16) {
@@ -218,6 +223,7 @@ struct ProviderView: View {
                     Text("Workers AI Read 및 Edit 권한이 필요합니다. Account ID와 토큰은 Keychain에 함께 저장됩니다.").font(.caption)
                 }
                 APIKeyInput(value: $key).frame(height: 28)
+                AccountPermissionFields(state: $billingType, paid: $paidAllowed, confirmed: $billingConfirmed, risk: $billingRisk)
                 HStack {
                     Text("키는 로그나 일반 설정 파일에 저장되지 않습니다.").font(.caption).foregroundStyle(.secondary)
                     Spacer()
@@ -225,8 +231,11 @@ struct ProviderView: View {
                     Button("연결 및 모델 조회") {
                         let submitted = key.trimmingCharacters(in: .whitespacesAndNewlines)
                         key = ""; showKey = false
-                        run("connect", extra: provider.requiresAccountID ? ["key": submitted, "accountId": accountID] : ["key": submitted])
-                    }.buttonStyle(.borderedProminent).disabled(key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (provider.requiresAccountID && accountID.count != 32))
+                        var extra: [String:Any] = ["key":submitted, "billing":["state":billingType,"paidAllowed":paidAllowed,"confirmed":billingConfirmed,"riskAccepted":billingRisk]]
+                        if provider.requiresAccountID { extra["accountId"] = accountID }
+                        run("connect", extra: extra)
+                        billingType = "unknown"; paidAllowed = false; billingConfirmed = false; billingRisk = false
+                    }.buttonStyle(.borderedProminent).disabled(key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (provider.requiresAccountID && accountID.count != 32) || (billingType != "unknown" && (!billingConfirmed || !billingRisk)))
                 }
             }.padding(28).frame(width: 570)
         }

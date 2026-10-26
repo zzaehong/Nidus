@@ -26,7 +26,7 @@ export async function probeModel(model: Model, allowInferred: boolean,
     return { ...base, status: passed ? "passed" : "failed", reason: passed ? "Non-empty text response received; text endpoint only." : "No visible text within the probe budget; model health is inconclusive.", usage: response.usage, durationMs: Date.now() - started };
   } catch (error) {
     const safe = publicError(error);
-    return { ...base, status: "failed", reason: "Probe request failed; this does not establish that the model is broken.", error: safe.toJSON(),
+    return { ...base, status: safe.code === "execution_permission" ? "skipped" : "failed", reason: "Probe request failed; this does not establish that the model is broken.", error: safe.toJSON(),
       // A failed probe applies only to this model. Keep the field for bridge compatibility.
       stopProvider: false, durationMs: Date.now() - started };
   }

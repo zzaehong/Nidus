@@ -142,7 +142,8 @@ struct ProviderState {
         do {
             // Invalidate before any credential mutation, including an uncertain transport outcome.
             if ["connect", "disconnect"].contains(method) { try clearHealthResults(provider) }
-            let data = try await transport(extra.merging(["method": method, "provider": provider.rawValue]) { _, new in new })
+            let request = extra.merging(["method": method, "provider": provider.rawValue]) { _, new in new }
+            let data = try await (["chat","probe"].contains(method) ? manualCall(request) : transport(request))
             switch method {
             case "connect", "models", "cached":
                 let result = try JSONDecoder().decode(ModelResult.self, from: data)
