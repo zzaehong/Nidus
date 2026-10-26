@@ -78,7 +78,13 @@ struct DashboardView: View {
                     .font(.caption).fixedSize(horizontal: false, vertical: true).foregroundStyle(.secondary).padding()
             }.navigationSplitViewColumnWidth(min: 220, ideal: 250)
         } detail: {
-            if let selected { ProviderView(provider: selected).id(selected) }
+            GeometryReader { viewport in
+                if let selected {
+                    ProviderView(provider: selected).id(selected)
+                        .frame(width: viewport.size.width, height: viewport.size.height)
+                        .clipped()
+                }
+            }
         }
         .toolbar {
             Button("Model Tier", systemImage: "square.stack.3d.up") { showModelTier = true }.disabled(!dashboard.ready)
@@ -164,49 +170,52 @@ struct ProviderView: View {
                 Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red).font(.callout).textSelection(.enabled)
             }
             if let date = state.fetchedAt { Text("마지막 모델 조회: \(date) · 목록 조회 성공은 개별 모델의 유료 채팅 권한을 보장하지 않습니다.").font(.caption).fixedSize(horizontal: false, vertical: true).foregroundStyle(.secondary) }
-            HSplitView {
-                VStack(alignment: .leading, spacing: 10) {
-                    TextField("모델 검색", text: $search).textFieldStyle(.roundedBorder)
-                    Picker("용도", selection: $kind) {
-                        Text("전체 (\(state.models.count))").tag("all")
-                        ForEach(["text", "image", "video", "live", "audio", "embedding", "moderation", "reranking", "document", "detection", "reward", "unknown"], id: \.self) { category in
-                            Text("\(modelKindLabel(category)) (\(state.models.filter { ($0.classification?.kind ?? "unknown") == category }.count))").tag(category)
+            GeometryReader { viewport in
+                HSplitView {
+                    VStack(alignment: .leading, spacing: 10) {
+                        TextField("모델 검색", text: $search).textFieldStyle(.roundedBorder)
+                        Picker("용도", selection: $kind) {
+                            Text("전체 (\(state.models.count))").tag("all")
+                            ForEach(["text", "image", "video", "live", "audio", "embedding", "moderation", "reranking", "document", "detection", "reward", "unknown"], id: \.self) { category in
+                                Text("\(modelKindLabel(category)) (\(state.models.filter { ($0.classification?.kind ?? "unknown") == category }.count))").tag(category)
+                            }
                         }
-                    }
-                    if state.models.isEmpty {
-                        VStack(spacing: 14) {
-                            Image(systemName: "square.stack.3d.up").font(.system(size: 34)).foregroundStyle(.secondary)
-                            Text("아직 조회된 모델이 없습니다").font(.headline)
-                            Text(state.fetchedAt == nil ? "API Key를 등록하면 모델 목록을 자동으로 가져옵니다. 이미 등록했다면 새로고침을 눌러주세요." : "조회 결과가 비어 있습니다. 계정의 API 권한을 확인한 뒤 새로고침하세요.")
-                                .foregroundStyle(.secondary).multilineTextAlignment(.center)
-                        }.frame(maxWidth: .infinity, maxHeight: .infinity).padding()
-                    } else {
-                        List(filtered, selection: binding(\.selectedModel)) { item in
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(item.name).fontWeight(.medium)
-                                Text(item.id).font(.caption.monospaced()).foregroundStyle(.secondary)
-                                Text(item.classification?.label ?? "기타/미확인").font(.caption2)
-                                if let checked = dashboard.healthHistory[provider.rawValue + ":" + item.id] {
-                                    Text(checked.status.label).font(.caption2).foregroundStyle(.secondary)
-                                        .help("최근 검사: \(checked.checkedAt ?? "미확인") · \(checked.reason)")
-                                }
-                            }.padding(.vertical, 5).tag(item.id)
-                        }.listStyle(.inset)
-                        Text("미확인 모델은 텍스트 응답을 보장하지 않습니다.").font(.caption).fixedSize(horizontal: false, vertical: true).foregroundStyle(.secondary)
-                    }
-                }.frame(minWidth: 260, idealWidth: 320)
-                VStack(alignment: .leading, spacing: 14) {
-                    Picker("보기", selection: $tab) {
-                        Text("모델 정보").tag(0); Text("응답 테스트").tag(1); Text("원본 데이터").tag(2)
-                    }.pickerStyle(.segmented).labelsHidden()
-                    if tab == 2 {
-                        ScrollView { Text(state.detail.isEmpty ? "모델 상세 또는 전체 가격 데이터를 조회하세요." : state.detail).font(.caption.monospaced()).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }
-                    } else if let model {
-                        if tab == 0 { modelInfo(model) } else { chat(model) }
-                    } else {
-                        Text("모델 목록에서 모델을 선택하세요.").foregroundStyle(.secondary).frame(maxWidth: .infinity, maxHeight: .infinity)
-                    }
-                }.padding(.leading, 16).frame(minWidth: 340, maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        if state.models.isEmpty {
+                            VStack(spacing: 14) {
+                                Image(systemName: "square.stack.3d.up").font(.system(size: 34)).foregroundStyle(.secondary)
+                                Text("아직 조회된 모델이 없습니다").font(.headline)
+                                Text(state.fetchedAt == nil ? "API Key를 등록하면 모델 목록을 자동으로 가져옵니다. 이미 등록했다면 새로고침을 눌러주세요." : "조회 결과가 비어 있습니다. 계정의 API 권한을 확인한 뒤 새로고침하세요.")
+                                    .foregroundStyle(.secondary).multilineTextAlignment(.center)
+                            }.frame(maxWidth: .infinity, maxHeight: .infinity).padding()
+                        } else {
+                            List(filtered, selection: binding(\.selectedModel)) { item in
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text(item.name).fontWeight(.medium)
+                                    Text(item.id).font(.caption.monospaced()).foregroundStyle(.secondary)
+                                    Text(item.classification?.label ?? "기타/미확인").font(.caption2)
+                                    if let checked = dashboard.healthHistory[provider.rawValue + ":" + item.id] {
+                                        Text(checked.status.label).font(.caption2).foregroundStyle(.secondary)
+                                            .help("최근 검사: \(checked.checkedAt ?? "미확인") · \(checked.reason)")
+                                    }
+                                }.padding(.vertical, 5).tag(item.id)
+                            }.listStyle(.inset)
+                            Text("미확인 모델은 텍스트 응답을 보장하지 않습니다.").font(.caption).fixedSize(horizontal: false, vertical: true).foregroundStyle(.secondary)
+                        }
+                    }.frame(minWidth: 260, idealWidth: 320)
+                        .frame(height: viewport.size.height, alignment: .top).clipped()
+                    VStack(alignment: .leading, spacing: 14) {
+                        Picker("보기", selection: $tab) {
+                            Text("모델 정보").tag(0); Text("응답 테스트").tag(1); Text("원본 데이터").tag(2)
+                        }.pickerStyle(.segmented).labelsHidden()
+                        if tab == 2 {
+                            ScrollView { Text(state.detail.isEmpty ? "모델 상세 또는 전체 가격 데이터를 조회하세요." : state.detail).font(.caption.monospaced()).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }
+                        } else if let model {
+                            if tab == 0 { modelInfo(model) } else { chat(model) }
+                        } else {
+                            Text("모델 목록에서 모델을 선택하세요.").foregroundStyle(.secondary).frame(maxWidth: .infinity, maxHeight: .infinity)
+                        }
+                    }.padding(.leading, 16).frame(minWidth: 340, maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                }.frame(width: viewport.size.width, height: viewport.size.height).clipped()
             }
         }.padding(26)
         .disabled(!dashboard.ready || state.busy || dashboard.healthRunning)
