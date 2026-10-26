@@ -29,16 +29,16 @@ struct AccountPermissionFields: View {
             Picker("계정 과금 유형", selection: $state) {
                 ForEach(["unknown","free_only","hybrid","paid_only"], id: \.self) { Text(billingLabel($0)).tag($0) }
             }.onChange(of: state) { _ in paid = false; confirmed = false; risk = false }
-            Text("Provider 요금 체계와 현재 계정 상태는 다릅니다. 이 설정은 사용자 선언이며 공식 Billing 검증이 아닙니다.").font(.caption)
+            Text("Provider 요금 체계와 현재 계정 상태는 다릅니다. 이 설정은 사용자 선언이며 공식 Billing 검증이 아닙니다.").font(.caption).fixedSize(horizontal: false, vertical: true)
             if state != "unknown" {
-                Toggle(state == "free_only" ? "이 계정은 유료 과금이 비활성화된 무료 전용 계정입니다" : "현재 계정의 과금 유형을 확인했습니다", isOn: $confirmed)
-                Toggle("잘못 설정하면 과금될 수 있으며 앱 내 금액 제한은 없음을 이해합니다", isOn: $risk)
+                Toggle(state == "free_only" ? "이 계정은 유료 과금이 비활성화된 무료 전용 계정입니다" : "현재 계정의 과금 유형을 확인했습니다", isOn: $confirmed).fixedSize(horizontal: false, vertical: true)
+                Toggle("잘못 설정하면 과금될 수 있으며 앱 내 금액 제한은 없음을 이해합니다", isOn: $risk).fixedSize(horizontal: false, vertical: true)
             }
             if ["hybrid","paid_only"].contains(state) {
-                Toggle("이 Provider의 현재·향후 모든 모델에 유료 호출 허용", isOn: $paid)
-                Text("승인은 현재 키·계정에만 적용합니다. 자동 Fallback에도 적용되며 언제든 철회할 수 있습니다.").font(.caption).foregroundStyle(.orange)
+                Toggle("이 Provider의 현재·향후 모든 모델에 유료 호출 허용", isOn: $paid).fixedSize(horizontal: false, vertical: true)
+                Text("승인은 현재 키·계정에만 적용합니다. 자동 Fallback에도 적용되며 언제든 철회할 수 있습니다.").font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
             }
-            if state == "unknown" { Text("모델 목록은 조회할 수 있습니다. 자동 호출은 차단되며 수동 실행은 요청별 승인이 필요합니다.").font(.caption) }
+            if state == "unknown" { Text("모델 목록은 조회할 수 있습니다. 자동 호출은 차단되며 수동 실행은 요청별 승인이 필요합니다.").font(.caption).fixedSize(horizontal: false, vertical: true) }
         }
     }
 }
@@ -50,12 +50,12 @@ struct AccountPermissionCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text("\(provider.name) · \(account?.label ?? "Unknown") · 유료 호출 \(account?.paidAllowed == true ? "승인됨" : "미승인")")
+                Text("\(provider.name) · \(account?.label ?? "Unknown") · 유료 호출 \(account?.paidAllowed == true ? "승인됨" : "미승인")").fixedSize(horizontal: false, vertical: true)
                 Spacer()
                 Button("과금 유형 / 실행 권한 설정") { editing = true }
             }
-            Text("\(account?.verification == "user-declared" ? "사용자 선언 · 공식 검증 아님" : "계정 상태 미확인") · 확인 시각 \(account?.checkedAt ?? "없음")").font(.caption)
-            if let error { Text(error).foregroundStyle(.red).font(.caption) }
+            Text("\(account?.verification == "user-declared" ? "사용자 선언 · 공식 검증 아님" : "계정 상태 미확인") · 확인 시각 \(account?.checkedAt ?? "없음")").font(.caption).fixedSize(horizontal: false, vertical: true)
+            if let error { Text(error).foregroundStyle(.red).font(.caption).fixedSize(horizontal: false, vertical: true) }
         }.padding(10).background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
             .task { await refresh() }
             .sheet(isPresented: $editing, onDismiss: { Task { await refresh() } }) { AccountPermissionEditor(provider: provider) }
@@ -78,16 +78,16 @@ struct AccountPermissionEditor: View {
     @State private var busy = true
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("\(provider.name) 계정 및 실행 권한").font(.title2.bold())
+            Text("\(provider.name) 계정 및 실행 권한").font(.title2.bold()).fixedSize(horizontal: false, vertical: true)
             AccountPermissionFields(state: $state, paid: $paid, confirmed: $confirmed, risk: $risk)
             TextField("프로젝트 / 계정 식별자 (선택)", text: $accountId).textFieldStyle(.roundedBorder)
             if let account {
-                if let hint = account.legacyHint, hint != "unknown" { Text("이전 설정: \(hint) · 실행 권한으로 승계하지 않습니다. 현재 계정을 다시 확인하세요.").font(.caption).foregroundStyle(.orange) }
-                Text("공식 요금 조건: \(account.officialTerms)").font(.caption)
+                if let hint = account.legacyHint, hint != "unknown" { Text("이전 설정: \(hint) · 실행 권한으로 승계하지 않습니다. 현재 계정을 다시 확인하세요.").font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true) }
+                Text("공식 요금 조건: \(account.officialTerms)").font(.caption).fixedSize(horizontal: false, vertical: true)
                 if let url = URL(string: account.source) { Link("공식 문서에서 계정 조건 확인", destination: url) }
-                Text("현재 연결 권한으로 계정 과금 유형 자동 검증은 연결되어 있지 않습니다. 잔액이나 모델 목록 성공을 계정 유형의 증거로 사용하지 않습니다.").font(.caption)
+                Text("현재 연결 권한으로 계정 과금 유형 자동 검증은 연결되어 있지 않습니다. 잔액이나 모델 목록 성공을 계정 유형의 증거로 사용하지 않습니다.").font(.caption).fixedSize(horizontal: false, vertical: true)
             }
-            if let error { Text(error).foregroundStyle(.red) }
+            if let error { Text(error).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true) }
             HStack {
                 Button("닫기") { dismiss() }
                 Spacer()

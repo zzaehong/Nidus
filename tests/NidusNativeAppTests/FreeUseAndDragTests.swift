@@ -53,4 +53,35 @@ final class FreeUseAndDragTests: XCTestCase {
         XCTAssertEqual(model.snapshot?.geminiBilling?.project, "test-project")
         XCTAssertEqual(model.snapshot?.allowPaid, false)
     }
+    @MainActor func testBulkFreeStatusStopsOnFailureAndRetriesOnlyRemainingWithoutPaidApproval() async throws {
+        let template = #"{"provider":"gemini","id":"MODEL","capabilities":{"chat":"supported","vision":"unknown","tools":"unknown","streaming":"unknown"},"pricing":{"status":"known","sourceUrl":"https://example.test","freeTier":"available","rates":[]},"tierAssignment":{"tier":2,"source":null,"checkedAt":null,"userModified":false},"health":{"status":"unknown","available":true,"checkedAt":null}}"#
+        let models = try ["first", "second", "third"].map { id in
+            try JSONDecoder().decode(RoutingSettingsSnapshot.TierModel.self, from: Data(template.replacingOccurrences(of: "MODEL", with: id).utf8))
+        }
+        let unknown = try JSONDecoder().decode(RoutingSettingsSnapshot.TierModel.self, from: Data(template.replacingOccurrences(of: #""freeTier":"available""#, with: #""freeTier":"unknown""#).utf8))
+        XCTAssertEqual(freeStatusSelection(models + [unknown]), Set(models.map(\.id)))
+        var calls: [[String: Any]] = []
+        var fail = true
+        let model = RoutingSettingsModel { input in
+            calls.append(input)
+            if fail && input["model"] as? String == "second" { throw DashboardError(message: "Storage unavailable") }
+            return Data(#"{"allowPaid":false,"policies":{},"models":[]}"#.utf8)
+        }
+        let saved = await model.recordFreeUse(models, status: "verified", confirmed: true, completed: [])
+        XCTAssertEqual(saved, ["gemini:first"])
+        XCTAssertEqual(calls.count, 2)
+        XCTAssertNotNil(model.error)
+        XCTAssertFalse(model.busy)
+        fail = false
+        let retried = await model.recordFreeUse(models, status: "verified", confirmed: true, completed: saved)
+        XCTAssertEqual(retried, Set(models.map(\.id)))
+        XCTAssertEqual(calls.compactMap { $0["model"] as? String }, ["first", "second", "second", "third"])
+        XCTAssertNil(model.error)
+        for call in calls {
+            XCTAssertEqual(call["method"] as? String, "free-use-set")
+            XCTAssertEqual(call["approved"] as? Bool, false)
+            XCTAssertEqual(call["chargeRiskAccepted"] as? Bool, false)
+            XCTAssertEqual(call["accountConfirmed"] as? Bool, true)
+        }
+    }
 }
