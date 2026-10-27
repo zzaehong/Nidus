@@ -33,4 +33,18 @@ final class UsageBudgetTests: XCTestCase {
         XCTAssertFalse(model.busy)
         XCTAssertEqual(model.snapshot?.requestBudgetUSD, "1.000000000")
     }
+    @MainActor func testSoftBudgetSaveDeleteAndUnknownUsage() async throws {
+        var calls: [[String: Any]] = []
+        let model = UsageBudgetModel { request in calls.append(request); return Data(self.snapshot.utf8) }
+        await model.setSoftBudget("gemini", usd: "1.123456789")
+        await model.setSoftBudget("gemini", usd: nil)
+        XCTAssertEqual(calls[0]["method"] as? String, "soft-budget-set")
+        XCTAssertEqual(calls[0]["usd"] as? String, "1.123456789")
+        XCTAssertTrue(calls[1]["usd"] is NSNull)
+        let raw = #"{"provider":"gemini","targetUSD":"1.000000000","updatedAt":null,"usage":{"requests":2,"inputTokens":10,"outputTokens":null,"estimatedUSD":"0.500000000","confirmedUSD":null,"knownSpendUSD":"0.500000000","unknownCostRequests":1},"utilizationPercent":null,"knownUtilizationPercent":50,"state":"incomplete"}"#
+        let item = try JSONDecoder().decode(SoftBudgetOverview.self, from: Data(raw.utf8))
+        XCTAssertNil(item.utilizationPercent)
+        XCTAssertEqual(item.knownUtilizationPercent, 50)
+        XCTAssertEqual(item.usage.unknownCostRequests, 1)
+    }
 }

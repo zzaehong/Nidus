@@ -74,7 +74,27 @@ struct AccountUsageReport: Decodable, Identifiable {
     let end: String
     let source: String
 }
+struct SoftBudgetOverview: Decodable, Identifiable {
+    var id: String { provider }
+    let provider: String
+    let targetUSD: String?
+    let updatedAt: String?
+    let usage: Usage
+    let utilizationPercent: Double?
+    let knownUtilizationPercent: Double?
+    let state: String
+    struct Usage: Decodable {
+        let requests: Int
+        let inputTokens: Int?
+        let outputTokens: Int?
+        let estimatedUSD: String?
+        let confirmedUSD: String?
+        let knownSpendUSD: String?
+        let unknownCostRequests: Int
+    }
+}
 struct UsageSnapshot: Decodable {
+    let softBudgets: [SoftBudgetOverview]?
     let month: String
     let source: String
     let updatedAt: String?
@@ -94,6 +114,9 @@ struct UsageSnapshot: Decodable {
     @Published var busy = false
     private let call: ([String: Any]) async throws -> Data
     init(call: @escaping ([String: Any]) async throws -> Data = { try await Runtime.shared.call($0) }) { self.call = call }
+    func setSoftBudget(_ provider: String, usd: String?) async {
+        await perform(["method": "soft-budget-set", "provider": provider, "usd": usd.map { $0 as Any } ?? NSNull()])
+    }
     func refresh() async { await perform(["method": "usage"]) }
     func syncAccount(_ provider: String) async { await perform(["method": "account-sync", "provider": provider]) }
     func syncBalance() async { await perform(["method": "balance-sync", "provider": "deepseek"]) }
@@ -124,7 +147,15 @@ struct UsageBudgetView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
                         Text(data.month + " / USD").font(.headline)
-                        ForEach(data.providers) { overview($0) }
+                        Text("Provider별 월간 목표 예산 · 참고용").font(.headline)
+                        Text("목표를 초과해도 호출을 차단하거나 모델을 강제로 전환하지 않습니다. 외부 API 사용량은 포함하지 않습니다.")
+                            .font(.caption).fixedSize(horizontal: false, vertical: true)
+                        ForEach(data.softBudgets ?? []) { item in
+                            SoftBudgetCard(item: item, model: model)
+                        }
+                        DisclosureGroup("기존 Provider 사용량 및 과거 예약 기록") {
+                            ForEach(data.providers) { overview($0) }
+                        }
                         DisclosureGroup("전체 월간 사용량") { overview(data.total) }
                         Divider()
                         Text("데이터 출처: \(data.source)").font(.caption)
@@ -180,5 +211,38 @@ struct UsageBudgetView: View {
             if item.unknownCount > 0 { Text("비용 미확인 \(item.unknownCount)건 — 진행 중·중단·응답 누락 포함").font(.caption).foregroundStyle(.orange) }
             if item.unknownPriceCount > 0 { Text("이전 가격 미확인 차단 기록 \(item.unknownPriceCount)건").font(.caption).foregroundStyle(.orange) }
         }.padding(12).background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+private struct SoftBudgetCard: View {
+    let item: SoftBudgetOverview
+    @ObservedObject var model: UsageBudgetModel
+    @State private var amount = ""
+    private func usd(_ value: String?) -> String { value.map { "$" + $0 } ?? "미확인" }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(item.provider.capitalized).font(.headline)
+                Spacer()
+                TextField("월간 목표 USD · 미설정 가능", text: $amount).textFieldStyle(.roundedBorder).frame(width: 240)
+                Button("저장") { Task { await model.setSoftBudget(item.provider, usd: amount.trimmingCharacters(in: .whitespaces)) } }
+                    .disabled(model.busy || amount.trimmingCharacters(in: .whitespaces).isEmpty)
+                Button("삭제") { Task { await model.setSoftBudget(item.provider, usd: nil) } }.disabled(model.busy || item.targetUSD == nil)
+            }
+            Text("현재 목표: \(item.targetUSD.map { "$" + $0 } ?? "미설정") · 이번 달 \(item.usage.requests)회")
+            Text("추정 비용 \(usd(item.usage.estimatedUSD)) · 확인된 비용 \(usd(item.usage.confirmedUSD)) · 중복 제외 사용액 \(usd(item.usage.knownSpendUSD))").font(.caption)
+            if let percent = item.utilizationPercent {
+                Text("기록된 사용액 기준 \(percent.formatted())% · 최종 청구와 다를 수 있음").font(.caption)
+            } else if let percent = item.knownUtilizationPercent {
+                Text("알려진 비용만 기준 \(percent.formatted())% · 비용 누락으로 전체 사용률 미확정").font(.caption).foregroundStyle(.orange)
+            } else { Text("사용률 미확정 · 예산 미설정, 0 USD 목표 또는 사용 기록 없음").font(.caption) }
+            if item.state == "exceeded" { Text("목표 예산 초과 · 참고 경고이며 실행을 차단하지 않습니다.").foregroundStyle(.orange) }
+            if item.usage.unknownCostRequests > 0 { Text("비용 미확인 \(item.usage.unknownCostRequests)건").font(.caption).foregroundStyle(.orange) }
+            Text("입력 \(item.usage.inputTokens.map(String.init) ?? "미확인") · 출력 \(item.usage.outputTokens.map(String.init) ?? "미확인") 토큰 · 설정 변경 \(item.updatedAt ?? "없음")").font(.caption)
+        }.fixedSize(horizontal: false, vertical: true).padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 10))
+            .onAppear { amount = item.targetUSD ?? "" }
+            .onChange(of: item.targetUSD) { value in amount = value ?? "" }
     }
 }

@@ -4,6 +4,20 @@ TypeScript 기반 **Multi-Provider API Connectivity 엔진**과 **SwiftUI macOS 
 
 OpenAI(GPT), Anthropic(Claude), Google Gemini, DeepSeek를 지원합니다. 작업 난이도 기반 자동 라우팅과 수동 선택을 지원합니다. Agent Loop, Tool 실행, Docker, Vault, Workflow는 구현 범위에 포함하지 않습니다.
 
+## Phase 4.4: Routing Decision Context와 Soft Budget
+
+`nidus routing-context --difficulty normal`로 작업·모델·Tier·가용성·로컬 사용량·비용·정책을 JSON으로 조회합니다. 생성 중 Provider API를 호출하지 않으며 프롬프트·응답·API Key를 내보내지 않습니다. JEV 연결과 모델 선택 로직 변경은 포함하지 않습니다.
+
+**사용량 및 비용** 화면에서 Provider별 월간 목표 예산을 저장·삭제할 수 있습니다. Soft Budget은 참고 정보이며 초과해도 호출이나 Fallback을 제한하지 않습니다. 기존 Phase 4.3 실행 권한은 그대로 적용됩니다.
+
+```sh
+nidus routing-context --difficulty normal
+nidus soft-budget gemini --usd 5.00
+nidus soft-budget gemini --delete
+```
+
+비용 누락이 있으면 전체 사용률은 `null`이고 알려진 비용 기준 사용률을 별도로 제공합니다. 기존 예산·예약 기록은 새 목표로 자동 승계하지 않습니다. [데이터 계약과 검증](docs/Phase4_4_Routing_Context.md), [JSON Schema](schemas/routing-decision-context.schema.json)를 참고하세요.
+
 ## Phase 4.3: 계정 과금 유형과 실행 권한
 
 API Key 등록 화면 또는 **과금 유형 / 실행 권한 설정**에서 현재 계정을 확인합니다. 기존 계정은 최초 1회 재확인이 필요하며, 이전 무료 확인이나 유료 허용 설정을 자동 승계하지 않습니다.
@@ -33,7 +47,7 @@ nidus chat --provider gemini --model gemini-2.5-flash --approve-once
 
 채팅방에서 자동 라우팅과 Simple / Normal(기본) / Complex를 선택합니다. **라우팅 후보 확인**은 로컬 조회만 수행합니다. CLI는 `nidus chat --auto --difficulty normal`입니다.
 
-툴바 **Tier 및 라우팅**에서 모델 Tier와 난이도별 순서를 변경합니다. 기본 순서는 Simple 1→2, Normal 2→1, Complex 3→2입니다. Tier 순서는 비용보다 우선하며 허용하지 않은 Tier로 전환하지 않습니다. 같은 Tier에서는 참고 비용·최신성 등을 사용합니다. 유료 승인된 계정에서는 가격 미확인만으로 호출을 막지 않습니다. Free Only는 공식 무료 지원이 필요하며, Unclassified 모델은 자동 선택하지 않습니다.
+툴바 **Model Tier**에서 모델 Tier를, **Routing Policy**에서 난이도별 순서와 계정 실행 권한을 변경합니다. 기본 순서는 Simple 1→2, Normal 2→1, Complex 3→2입니다. Tier 순서는 비용보다 우선하며 허용하지 않은 Tier로 전환하지 않습니다. 같은 Tier에서는 참고 비용·최신성 등을 사용합니다. 유료 승인된 계정에서는 가격 미확인만으로 호출을 막지 않습니다. Free Only는 공식 무료 지원이 필요하며, Unclassified 모델은 자동 선택하지 않습니다.
 
 실행 직전 Tier, 라우팅 설정, 계정 과금 유형과 실행 권한을 재검증합니다. Rate Limit·인증·모델 미지원 등 명시적 거절은 허용 Tier 안에서 Fallback하고, 타임아웃·네트워크 오류처럼 처리 여부가 불명확하면 중복 호출을 하지 않습니다. 실제 선택 모델, 전환 사유, 추정 비용을 표시합니다. 참고 비용 상한은 예약액이나 지출 제한이 아닙니다.
 
