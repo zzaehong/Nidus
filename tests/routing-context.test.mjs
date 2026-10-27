@@ -136,3 +136,31 @@ test('UTC monthly scope differs from recent rolling window and per-provider tota
  assert.equal(c.month,'2026-10');assert.equal(m.usage.requests,1);assert.equal(m.recent.completedRequests,2);assert.equal(m.recent.lastCallAt,now.toISOString());
  assert.equal(c.providers.find(p=>p.provider==='openai').usage.requests,0);check(c);
 });
+test('coverage distinguishes absent, unknown, partial and attested free costs', async()=>{
+ const f=fixture();
+ const context=async()=>{const c=await f.engine.buildRoutingDecisionContext(task);check(c);assert.equal(c.schemaVersion,2);return c;};
+ const budget=c=>c.providers.find(p=>p.provider==='gemini');
+ let c=await context();assert.equal(budget(c).state,'unset');assert.equal(budget(c).usage.costCoverage,null);
+ assert.ok(c.models.every(m=>m.usage.costCoverage===null));
+ f.engine.setSoftBudget('gemini','1');c=await context();assert.equal(budget(c).state,'insufficient_data');assert.equal(budget(c).knownUtilizationPercent,null);
+ f.engine.setSoftBudget('gemini','0');c=await context();assert.equal(budget(c).state,'insufficient_data');
+ await f.permit('gemini');f.snapshots.get('gemini').models.push(model('gemini','text-future'));
+ await f.chat('gemini','text-future');c=await context();
+ assert.equal(budget(c).usage.costCoverage,0);assert.equal(budget(c).state,'insufficient_data');
+ assert.equal(c.models.find(m=>m.model==='text-future').usage.costCoverage,0);
+ f.engine.setSoftBudget('gemini','1');c=await context();assert.equal(budget(c).state,'insufficient_data');
+ await f.chat();c=await context();
+ assert.equal(budget(c).usage.costCoverage,0.5);assert.equal(budget(c).state,'incomplete');
+ assert.equal(budget(c).utilizationPercent,null);assert.equal(typeof budget(c).knownUtilizationPercent,'number');
+ assert.equal(c.models.find(m=>m.model==='gemini-2.5-flash').usage.costCoverage,1);
+ for(const value of [-0.1,1.1]) {
+  const invalid=structuredClone(c);invalid.providers[0].usage.costCoverage=value;assert.equal(validate(invalid),false);
+  const invalidModel=structuredClone(c);invalidModel.models[0].usage.costCoverage=value;assert.equal(validate(invalidModel),false);
+ }
+ const free=fixture();await free.engine.setAccountPermission('gemini','free_only',false,true,true);await free.chat();
+ let fc=await free.engine.buildRoutingDecisionContext(task);check(fc);
+ let b=budget(fc);assert.equal(b.usage.costCoverage,1);assert.equal(b.usage.freeAttestedRequests,1);assert.equal(b.usage.confirmedRequests,0);assert.equal(b.usage.confirmedUSD,null);assert.equal(b.usage.knownSpendUSD,'0.000000000');
+ assert.equal(fc.models.find(m=>m.provider==='gemini').usage.costCoverage,1);
+ free.engine.setSoftBudget('gemini','0');fc=await free.engine.buildRoutingDecisionContext(task);b=budget(fc);assert.equal(b.state,'insufficient_data');assert.equal(b.utilizationPercent,null);assert.equal(b.knownUtilizationPercent,null);
+ free.engine.setSoftBudget('gemini','1');fc=await free.engine.buildRoutingDecisionContext(task);b=budget(fc);assert.equal(b.state,'within');assert.equal(b.utilizationPercent,0);
+});

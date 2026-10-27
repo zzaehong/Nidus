@@ -16,12 +16,13 @@ export interface TaskContext {
 export interface UsageContext {
   requests: number; inputTokens: number | null; outputTokens: number | null; unknownTokenRequests: number;
   estimatedUSD: string | null; confirmedUSD: string | null; knownSpendUSD: string | null;
-  unknownCostRequests: number; estimatedRequests: number; confirmedRequests: number; freeAttestedRequests: number; priceVersions: string[];
+  /** Completeness of recorded cost values, not billing accuracy; includes attested free zeros. */
+  costCoverage: number | null; unknownCostRequests: number; estimatedRequests: number; confirmedRequests: number; freeAttestedRequests: number; priceVersions: string[];
 }
 export interface SoftBudgetContext {
   provider: ProviderId; targetUSD: string | null; updatedAt: string | null;
   usage: UsageContext; utilizationPercent: number | null; knownUtilizationPercent: number | null;
-  state: 'unset' | 'incomplete' | 'within' | 'exceeded'; enforcement: 'none';
+  state: 'unset' | 'insufficient_data' | 'incomplete' | 'within' | 'exceeded'; enforcement: 'none';
 }
 export interface ModelContext {
   provider: ProviderId; model: string; tier: Tier; tierSource: string | null; tierCheckedAt: string | null; userModified: boolean;
@@ -36,7 +37,7 @@ export interface ModelContext {
   requiredCapabilitiesSatisfied: boolean;
 }
 export interface RoutingDecisionContext {
-  schemaVersion: 1; generatedAt: string; dataAsOf: { ledger: string | null; catalog: Record<ProviderId, string | null> };
+  schemaVersion: 2; generatedAt: string; dataAsOf: { ledger: string | null; catalog: Record<ProviderId, string | null> };
   month: string; scope: 'nidus-local-only'; task: TaskContext; models: ModelContext[];
   providers: SoftBudgetContext[];
   routingPolicy: { revision: number; tierPriorities: Record<Difficulty, Tier[]>; allowedModels: string[]; executableCandidates: string[]; semantics: 'advisory-snapshot-recheck-before-execution' };
@@ -58,7 +59,8 @@ export function taskContext(value: unknown): TaskContext {
 const number = (v: Row[string] | undefined) => v == null ? null : Number(v);
 const usd = (v: Row[string] | undefined) => v == null ? null : dollars(v as bigint);
 export function usageContext(row?: Row): UsageContext {
-  return { requests: Number(row?.requests ?? 0), inputTokens: number(row?.input), outputTokens: number(row?.output), unknownTokenRequests: Number(row?.unknown_tokens ?? 0),
+  const requests = Number(row?.requests ?? 0), unknown = Number(row?.unknown ?? 0);
+  return { costCoverage: requests === 0 ? null : (requests - unknown) / requests, requests, inputTokens: number(row?.input), outputTokens: number(row?.output), unknownTokenRequests: Number(row?.unknown_tokens ?? 0),
     estimatedUSD: usd(row?.estimated), confirmedUSD: usd(row?.confirmed), knownSpendUSD: usd(row?.spend), unknownCostRequests: Number(row?.unknown ?? 0), estimatedRequests: Number(row?.estimated_count ?? 0), confirmedRequests: Number(row?.confirmed_count ?? 0), freeAttestedRequests: Number(row?.free_count ?? 0), priceVersions: row?.versions ? String(row.versions).split(',') : [] };
 }
 export function softBudgets(data: DecisionData): SoftBudgetContext[] {
@@ -68,7 +70,7 @@ export function softBudgets(data: DecisionData): SoftBudgetContext[] {
     const known = target != null && target > 0n && spent != null ? Number(spent * 10000n / target) / 100 : null;
     return { provider, targetUSD: usd(target), updatedAt: row?.updated_at as string ?? null, usage, knownUtilizationPercent: known,
       utilizationPercent: usage.unknownCostRequests ? null : known,
-      state: target == null ? 'unset' : spent != null && spent > target ? 'exceeded' : usage.unknownCostRequests ? 'incomplete' : 'within', enforcement: 'none' };
+      state: target == null ? 'unset' : spent != null && spent > target ? 'exceeded' : spent == null || target === 0n ? 'insufficient_data' : usage.unknownCostRequests ? 'incomplete' : 'within', enforcement: 'none' };
   });
 }
 export interface ContextSources {
@@ -108,6 +110,6 @@ export function buildContext(task: TaskContext, sources: ContextSources): Routin
   const allowed = models.filter(m => data.settings.policies[task.difficulty].includes(m.tier) && m.tier !== 0);
   const eligible = allowed.filter(m => m.connection === 'credential-present-unverified' && m.permission.allowed && m.requiredCapabilitiesSatisfied);
   const ranked = rankCandidates(eligible.map(m => ({ model: originals.get(`${m.provider}:${m.model}`)!, tier: m.tier, profile: modelProfile(m.provider,m.model), quote: { allowed: true, reason: null, boundUSD: null }, health: { status: m.health.status, checkedAt: m.health.checkedAt, excludedUntil: m.health.cooldownUntil, available: m.health.available }, pressure: false })), task.difficulty, data.settings.policies[task.difficulty]);
-  return { schemaVersion: 1, generatedAt: data.at, dataAsOf: { ledger: data.ledgerUpdatedAt as string | null, catalog: dates }, month: data.month, scope: 'nidus-local-only', task, models, providers: softBudgets(data),
+  return { schemaVersion: 2, generatedAt: data.at, dataAsOf: { ledger: data.ledgerUpdatedAt as string | null, catalog: dates }, month: data.month, scope: 'nidus-local-only', task, models, providers: softBudgets(data),
     routingPolicy: { revision: data.settings.revision, tierPriorities: data.settings.policies, allowedModels: allowed.map(m => `${m.provider}:${m.model}`), executableCandidates: ranked.map(m => `${m.model.provider}:${m.model.id}`), semantics: 'advisory-snapshot-recheck-before-execution' } };
 }

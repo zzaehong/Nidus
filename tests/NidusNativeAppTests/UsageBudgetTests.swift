@@ -47,4 +47,17 @@ final class UsageBudgetTests: XCTestCase {
         XCTAssertEqual(item.knownUtilizationPercent, 50)
         XCTAssertEqual(item.usage.unknownCostRequests, 1)
     }
+    func testCoverageAndInsufficientDataDecodeWithLegacyCompatibility() throws {
+        let raw = #"{"provider":"gemini","targetUSD":"0.000000000","updatedAt":null,"usage":{"requests":1,"inputTokens":10,"outputTokens":2,"estimatedUSD":"0.000000000","confirmedUSD":null,"knownSpendUSD":"0.000000000","unknownCostRequests":0,"costCoverage":1},"utilizationPercent":null,"knownUtilizationPercent":null,"state":"insufficient_data"}"#
+        let item = try JSONDecoder().decode(SoftBudgetOverview.self, from: Data(raw.utf8))
+        XCTAssertEqual(item.state, "insufficient_data")
+        XCTAssertEqual(item.usage.costCoverage, 1)
+        XCTAssertNil(item.usage.confirmedUSD)
+        XCTAssertNil(item.utilizationPercent)
+        let legacy = raw.replacingOccurrences(of: #","costCoverage":1"#, with: "")
+        XCTAssertNil(try JSONDecoder().decode(SoftBudgetOverview.self, from: Data(legacy.utf8)).usage.costCoverage)
+        let unknown = raw.replacingOccurrences(of: #""costCoverage":1"#, with: #""costCoverage":null"#)
+        XCTAssertNil(try JSONDecoder().decode(SoftBudgetOverview.self, from: Data(unknown.utf8)).usage.costCoverage)
+    }
+
 }

@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Nidus Routing Decision Context v1",
+  "title": "Nidus Routing Decision Context v2",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -16,7 +16,7 @@
   ],
   "properties": {
     "schemaVersion": {
-      "const": 1
+      "const": 2
     },
     "generatedAt": {
       "type": "string"
@@ -401,7 +401,8 @@
               "estimatedRequests",
               "confirmedRequests",
               "freeAttestedRequests",
-              "priceVersions"
+              "priceVersions",
+              "costCoverage"
             ],
             "properties": {
               "requests": {
@@ -468,6 +469,15 @@
                 "items": {
                   "type": "string"
                 }
+              },
+              "costCoverage": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Recorded cost value completeness, including user-attested free zeros; not billing verification or accuracy."
               }
             }
           },
@@ -741,7 +751,8 @@
               "estimatedRequests",
               "confirmedRequests",
               "freeAttestedRequests",
-              "priceVersions"
+              "priceVersions",
+              "costCoverage"
             ],
             "properties": {
               "requests": {
@@ -808,6 +819,15 @@
                 "items": {
                   "type": "string"
                 }
+              },
+              "costCoverage": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Recorded cost value completeness, including user-attested free zeros; not billing verification or accuracy."
               }
             }
           },
@@ -826,6 +846,7 @@
           "state": {
             "enum": [
               "unset",
+              "insufficient_data",
               "incomplete",
               "within",
               "exceeded"

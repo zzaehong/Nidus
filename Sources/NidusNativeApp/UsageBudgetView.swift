@@ -90,6 +90,7 @@ struct SoftBudgetOverview: Decodable, Identifiable {
         let estimatedUSD: String?
         let confirmedUSD: String?
         let knownSpendUSD: String?
+        let costCoverage: Double?
         let unknownCostRequests: Int
     }
 }
@@ -235,7 +236,9 @@ private struct SoftBudgetCard: View {
                 Text("기록된 사용액 기준 \(percent.formatted())% · 최종 청구와 다를 수 있음").font(.caption)
             } else if let percent = item.knownUtilizationPercent {
                 Text("알려진 비용만 기준 \(percent.formatted())% · 비용 누락으로 전체 사용률 미확정").font(.caption).foregroundStyle(.orange)
-            } else { Text("사용률 미확정 · 예산 미설정, 0 USD 목표 또는 사용 기록 없음").font(.caption) }
+            } else { Text("사용률 미확정 · 예산 미설정, 0 USD 목표 또는 알려진 비용 데이터 없음").font(.caption) }
+            if item.state == "insufficient_data" { Text("사용률 계산 불가 · 알려진 비용 데이터가 없거나 목표가 0 USD입니다.").font(.caption) }
+            if let coverage = item.usage.costCoverage { Text("비용 값 기록률 \( (coverage * 100).formatted())% · 사용자 무료 선언 포함, 실제 청구 검증률이 아닙니다.").font(.caption) }
             if item.state == "exceeded" { Text("목표 예산 초과 · 참고 경고이며 실행을 차단하지 않습니다.").foregroundStyle(.orange) }
             if item.usage.unknownCostRequests > 0 { Text("비용 미확인 \(item.usage.unknownCostRequests)건").font(.caption).foregroundStyle(.orange) }
             Text("입력 \(item.usage.inputTokens.map(String.init) ?? "미확인") · 출력 \(item.usage.outputTokens.map(String.init) ?? "미확인") 토큰 · 설정 변경 \(item.updatedAt ?? "없음")").font(.caption)
