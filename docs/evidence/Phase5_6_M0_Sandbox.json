@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 1,
+  "phase": "M0",
+  "platform": "darwin",
+  "arch": "arm64",
+  "generatedAt": "2026-10-27T23:47:10.068Z",
+  "backend": "sandbox-exec-candidate",
+  "eligible": false,
+  "checks": [
+    {
+      "name": "minimal-process-start",
+      "status": "PASS",
+      "evidence": {
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "launchError": false
+      }
+    },
+    {
+      "name": "vault-read",
+      "status": "PASS",
+      "evidence": {
+        "code": 0,
+        "signal": null
+      }
+    },
+    {
+      "name": "outside-read-denied",
+      "status": "PASS",
+      "evidence": {
+        "code": 1,
+        "signal": null
+      }
+    },
+    {
+      "name": "metadata-protected",
+      "status": "PASS",
+      "evidence": {
+        "code": 1,
+        "signal": null
+      }
+    },
+    {
+      "name": "secret-protected",
+      "status": "PASS",
+      "evidence": {
+        "code": 1,
+        "signal": null
+      }
+    },
+    {
+      "name": "symlink-escape-denied",
+      "status": "PASS",
+      "evidence": {
+        "code": 1,
+        "signal": null
+      }
+    },
+    {
+      "name": "vault-write",
+      "status": "PASS",
+      "evidence": {
+        "code": 0
+      }
+    },
+    {
+      "name": "outside-write-denied",
+      "status": "PASS",
+      "evidence": {
+        "code": 1
+      }
+    },
+    {
+      "name": "network-denied",
+      "status": "PASS",
+      "evidence": {
+        "code": 77,
+        "connectionsReceived": 0,
+        "scope": "loopback fixture only; EPERM/EACCES required; no external network tested"
+      }
+    },
+    {
+      "name": "descendant-cleanup",
+      "status": "FAIL",
+      "evidence": {
+        "strategy": "terminate-process-group",
+        "detachedChildSurvived": true
+      }
+    },
+    {
+      "name": "native-build",
+      "status": "NOT_RUN",
+      "evidence": "Separate security qualification required; not inferred from file tests"
+    },
+    {
+      "name": "browser-isolation",
+      "status": "NOT_RUN",
+      "evidence": "Separate security qualification required; not inferred from file tests"
+    }
+  ],
+  "limitations": [
+    "Diagnostic only; no backend activation",
+    "Browser isolation and descendant containment require independent verification"
+  ]
+}
