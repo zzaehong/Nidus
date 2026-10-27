@@ -3,8 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22.13.0" },
-  "bin": { "nidus": "bin/nidus.mjs" },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "bin": {
+    "nidus": "bin/nidus.mjs"
+  },
   "scripts": {
     "build:app": "npm run build && npm run build:keychain && node scripts/build-app.mjs",
     "build": "tsc -p tsconfig.json",
@@ -14,5 +18,9 @@
     "test:keychain": "npm run build && npm run build:keychain && node --test tests/keychain/*.test.mjs",
     "start": "node bin/nidus.mjs"
   },
-  "devDependencies": { "@types/node": "^22.0.0", "typescript": "~5.9.3" }
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "ajv": "^8.20.0",
+    "typescript": "~5.9.3"
+  }
 }

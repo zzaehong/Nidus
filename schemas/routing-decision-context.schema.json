@@ -1,0 +1,917 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Nidus Routing Decision Context v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "dataAsOf",
+    "month",
+    "scope",
+    "task",
+    "models",
+    "providers",
+    "routingPolicy"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "generatedAt": {
+      "type": "string"
+    },
+    "dataAsOf": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ledger",
+        "catalog"
+      ],
+      "properties": {
+        "ledger": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "catalog": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "openai",
+            "anthropic",
+            "gemini",
+            "deepseek",
+            "nvidia",
+            "groq",
+            "mistral",
+            "cloudflare"
+          ],
+          "properties": {
+            "openai": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "anthropic": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "gemini": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "deepseek": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "nvidia": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "groq": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "mistral": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "cloudflare": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "month": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}$"
+    },
+    "scope": {
+      "const": "nidus-local-only"
+    },
+    "task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "difficulty",
+        "requiredCapabilities",
+        "inputCharacters",
+        "estimatedInputTokens"
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "chat",
+            "probe",
+            "coding",
+            "analysis",
+            "summary",
+            "other"
+          ]
+        },
+        "difficulty": {
+          "enum": [
+            "simple",
+            "normal",
+            "complex"
+          ]
+        },
+        "requiredCapabilities": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "text",
+              "reasoning",
+              "coding",
+              "vision",
+              "tools",
+              "streaming"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "inputCharacters": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "estimatedInputTokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        }
+      }
+    },
+    "models": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "provider",
+          "model",
+          "tier",
+          "tierSource",
+          "tierCheckedAt",
+          "userModified",
+          "capabilities",
+          "limits",
+          "catalogFetchedAt",
+          "catalogAgeSeconds",
+          "connection",
+          "health",
+          "usage",
+          "recent",
+          "cost",
+          "permission",
+          "requiredCapabilitiesSatisfied"
+        ],
+        "properties": {
+          "provider": {
+            "enum": [
+              "openai",
+              "anthropic",
+              "gemini",
+              "deepseek",
+              "nvidia",
+              "groq",
+              "mistral",
+              "cloudflare"
+            ]
+          },
+          "model": {
+            "type": "string"
+          },
+          "tier": {
+            "enum": [
+              0,
+              1,
+              2,
+              3
+            ]
+          },
+          "tierSource": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tierCheckedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "userModified": {
+            "type": "boolean"
+          },
+          "capabilities": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "chat",
+              "streaming",
+              "tools",
+              "vision",
+              "coding",
+              "reasoning"
+            ],
+            "properties": {
+              "chat": {
+                "enum": [
+                  "supported",
+                  "unsupported",
+                  "unknown"
+                ]
+              },
+              "streaming": {
+                "enum": [
+                  "supported",
+                  "unsupported",
+                  "unknown"
+                ]
+              },
+              "tools": {
+                "enum": [
+                  "supported",
+                  "unsupported",
+                  "unknown"
+                ]
+              },
+              "vision": {
+                "enum": [
+                  "supported",
+                  "unsupported",
+                  "unknown"
+                ]
+              },
+              "coding": {
+                "enum": [
+                  "supported",
+                  "unknown"
+                ]
+              },
+              "reasoning": {
+                "enum": [
+                  "supported",
+                  "unknown"
+                ]
+              }
+            }
+          },
+          "limits": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "inputTokens",
+              "outputTokens",
+              "contextTokens"
+            ],
+            "properties": {
+              "inputTokens": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "outputTokens": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "contextTokens": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0
+              }
+            }
+          },
+          "catalogFetchedAt": {
+            "type": "string"
+          },
+          "catalogAgeSeconds": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "connection": {
+            "enum": [
+              "credential-present-unverified",
+              "disconnected",
+              "unknown"
+            ]
+          },
+          "health": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "status",
+              "checkedAt",
+              "cooldownUntil",
+              "providerCooldownUntil",
+              "providerStatus",
+              "providerCheckedAt",
+              "available",
+              "verifiedAvailable"
+            ],
+            "properties": {
+              "status": {
+                "type": "string"
+              },
+              "checkedAt": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "cooldownUntil": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "providerCooldownUntil": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "providerStatus": {
+                "type": "string"
+              },
+              "providerCheckedAt": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "available": {
+                "type": "boolean"
+              },
+              "verifiedAvailable": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              }
+            }
+          },
+          "usage": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "requests",
+              "inputTokens",
+              "outputTokens",
+              "unknownTokenRequests",
+              "estimatedUSD",
+              "confirmedUSD",
+              "knownSpendUSD",
+              "unknownCostRequests",
+              "estimatedRequests",
+              "confirmedRequests",
+              "freeAttestedRequests",
+              "priceVersions"
+            ],
+            "properties": {
+              "requests": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "inputTokens": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "outputTokens": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "unknownTokenRequests": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "estimatedUSD": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[0-9]+\\.[0-9]{9}$"
+              },
+              "confirmedUSD": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[0-9]+\\.[0-9]{9}$"
+              },
+              "knownSpendUSD": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[0-9]+\\.[0-9]{9}$"
+              },
+              "unknownCostRequests": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "estimatedRequests": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "confirmedRequests": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "freeAttestedRequests": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "priceVersions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "recent": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "since",
+              "completedRequests",
+              "successRate",
+              "failures",
+              "cancelled",
+              "lastCallAt",
+              "lastError",
+              "lastErrorAt",
+              "observedRoutingFailures",
+              "observedRateLimitEvents",
+              "errorHistoryScope"
+            ],
+            "properties": {
+              "since": {
+                "type": "string"
+              },
+              "completedRequests": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "successRate": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "failures": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "cancelled": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "lastCallAt": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "lastError": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "lastErrorAt": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "observedRoutingFailures": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "observedRateLimitEvents": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "errorHistoryScope": {
+                "const": "automatic-route-events-only"
+              }
+            }
+          },
+          "cost": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "officialPrice",
+              "basis",
+              "unknown"
+            ],
+            "properties": {
+              "officialPrice": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "provider",
+                  "model",
+                  "status",
+                  "currency",
+                  "unit",
+                  "freeTier",
+                  "sourceUrl",
+                  "checkedAt",
+                  "rates",
+                  "notes"
+                ],
+                "properties": {
+                  "provider": {
+                    "enum": [
+                      "openai",
+                      "anthropic",
+                      "gemini",
+                      "deepseek",
+                      "nvidia",
+                      "groq",
+                      "mistral",
+                      "cloudflare"
+                    ]
+                  },
+                  "model": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "enum": [
+                      "verified_snapshot",
+                      "unknown"
+                    ]
+                  },
+                  "currency": {
+                    "const": "USD"
+                  },
+                  "unit": {
+                    "const": "per_million_tokens"
+                  },
+                  "freeTier": {
+                    "enum": [
+                      "available",
+                      "unavailable",
+                      "unknown"
+                    ]
+                  },
+                  "sourceUrl": {
+                    "type": "string"
+                  },
+                  "checkedAt": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "rates": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "tier",
+                        "input",
+                        "output",
+                        "cachedInput",
+                        "conditions"
+                      ],
+                      "properties": {
+                        "tier": {
+                          "type": "string"
+                        },
+                        "input": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "output": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "cachedInput": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "conditions": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "notes": {
+                    "type": "string"
+                  }
+                }
+              },
+              "basis": {
+                "const": "stored-ledger-estimates-including-free-attestation"
+              },
+              "unknown": {
+                "type": "boolean"
+              }
+            }
+          },
+          "permission": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "allowed",
+              "reason"
+            ],
+            "properties": {
+              "allowed": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "reason": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "requiredCapabilitiesSatisfied": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "providers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "provider",
+          "targetUSD",
+          "updatedAt",
+          "usage",
+          "utilizationPercent",
+          "knownUtilizationPercent",
+          "state",
+          "enforcement"
+        ],
+        "properties": {
+          "provider": {
+            "enum": [
+              "openai",
+              "anthropic",
+              "gemini",
+              "deepseek",
+              "nvidia",
+              "groq",
+              "mistral",
+              "cloudflare"
+            ]
+          },
+          "targetUSD": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9]+\\.[0-9]{9}$"
+          },
+          "updatedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "usage": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "requests",
+              "inputTokens",
+              "outputTokens",
+              "unknownTokenRequests",
+              "estimatedUSD",
+              "confirmedUSD",
+              "knownSpendUSD",
+              "unknownCostRequests",
+              "estimatedRequests",
+              "confirmedRequests",
+              "freeAttestedRequests",
+              "priceVersions"
+            ],
+            "properties": {
+              "requests": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "inputTokens": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "outputTokens": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "unknownTokenRequests": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "estimatedUSD": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[0-9]+\\.[0-9]{9}$"
+              },
+              "confirmedUSD": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[0-9]+\\.[0-9]{9}$"
+              },
+              "knownSpendUSD": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[0-9]+\\.[0-9]{9}$"
+              },
+              "unknownCostRequests": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "estimatedRequests": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "confirmedRequests": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "freeAttestedRequests": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "priceVersions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "utilizationPercent": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "knownUtilizationPercent": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "state": {
+            "enum": [
+              "unset",
+              "incomplete",
+              "within",
+              "exceeded"
+            ]
+          },
+          "enforcement": {
+            "const": "none"
+          }
+        }
+      }
+    },
+    "routingPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "revision",
+        "tierPriorities",
+        "allowedModels",
+        "executableCandidates",
+        "semantics"
+      ],
+      "properties": {
+        "revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tierPriorities": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "simple",
+            "normal",
+            "complex"
+          ],
+          "properties": {
+            "simple": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  0,
+                  1,
+                  2,
+                  3
+                ]
+              }
+            },
+            "normal": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  0,
+                  1,
+                  2,
+                  3
+                ]
+              }
+            },
+            "complex": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  0,
+                  1,
+                  2,
+                  3
+                ]
+              }
+            }
+          }
+        },
+        "allowedModels": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "executableCandidates": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "semantics": {
+          "const": "advisory-snapshot-recheck-before-execution"
+        }
+      }
+    }
+  }
+}

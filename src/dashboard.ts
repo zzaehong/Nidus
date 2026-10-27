@@ -16,6 +16,8 @@ export async function dispatch(input: unknown, engine: ConnectivityEngine): Prom
   if (r.method === 'nvidia-free-setup') return engine.approveNvidiaFreeModels(r.models,r.confirmed,r.riskAccepted);
   if (r.method === 'provider-plan-set') return engine.setProviderPlan(providerId(typeof r.provider==='string'?r.provider:''),r.state,r.confirmed,r.riskAccepted);
   if (r.method === "ping") return { ready: true };
+  if (r.method === 'routing-context') return engine.buildRoutingDecisionContext(r.task as import('./routing-context.js').TaskContext);
+  if (r.method === 'soft-budget-set') return engine.setSoftBudget(providerId(String(r.provider ?? '')), r.usd);
   if (r.method === "usage") return engine.usage();
   if (r.method === 'gemini-billing-set') return engine.setGeminiBilling(r.state, r.project, r.confirmed, r.riskAccepted);
   if (r.method === 'routing-settings') return engine.routingSettings();

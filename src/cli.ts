@@ -14,6 +14,8 @@ export const help = `Nidus API Connectivity MVP
   nidus chat --provider <provider> --model <model-id> [--max-output-tokens 1024]
   nidus chat --auto [--difficulty simple|normal|complex]
   nidus routing
+  nidus routing-context [--difficulty normal]
+  nidus soft-budget <provider> --usd <amount> | --delete
   nidus routing-policy <simple|normal|complex> --tiers 2,1
   nidus model-tier <provider> --model <id> --tier <0|1|2|3|default>
   nidus billing <provider>
@@ -43,6 +45,7 @@ export async function main(argv = process.argv.slice(2), dependencies: CliDepend
   let values, positionals;
   try {
     ({ values, positionals } = parseArgs({ args: argv, allowPositionals: true, strict: true, options: {
+      usd: { type: "string" }, delete: { type: "boolean" },
       "billing-type": {type:"string"}, "allow-paid": {type:"boolean"}, "confirm-billing": {type:"boolean"}, "accept-charge-risk": {type:"boolean"}, "approve-once": {type:"boolean"},
       "account-id": {type:"string"}, help: { type: "boolean", short: "h" }, refresh: { type: "boolean" }, env: { type: "boolean" },
       tiers: { type: "string" }, tier: { type: "string" }, auto: { type: "boolean" }, difficulty: { type: "string" }, provider: { type: "string" }, model: { type: "string" }, detail: { type: "string" },
@@ -51,17 +54,22 @@ export async function main(argv = process.argv.slice(2), dependencies: CliDepend
   } catch { throw new NidusError("invalid_request", "Invalid arguments. Use nidus --help. API keys must never be command-line arguments."); }
   if (values.help || positionals.length === 0) { write(help); return; }
   const [command, argument] = positionals;
-  const commands = ["billing", "billing-set","providers", "connect", "models", "pricing", "chat", "disconnect", "usage", "balance", "account", "routing", "routing-policy", "model-tier"];
+  const commands = ["routing-context", "soft-budget","billing", "billing-set","providers", "connect", "models", "pricing", "chat", "disconnect", "usage", "balance", "account", "routing", "routing-policy", "model-tier"];
   if (!commands.includes(command!)) throw new NidusError("invalid_request", "Unknown command. Use nidus --help.");
-  const expected = ["providers", "chat", "usage", "routing"].includes(command!) ? 1 : 2;
+  const expected = ["providers", "chat", "usage", "routing", "routing-context"].includes(command!) ? 1 : 2;
   if (positionals.length !== expected) throw new NidusError("invalid_request", "Unexpected positional arguments. Use nidus --help.");
   const allowed: Record<string, string[]> = {
-    billing: [], "billing-set": ["billing-type", "allow-paid", "confirm-billing", "accept-charge-risk", "account-id"], routing: [], "routing-policy": ["tiers"], "model-tier": ["model", "tier"], usage: [], balance: [], account: [], providers: [], connect: ["env", "timeout-ms", "account-id", "billing-type", "allow-paid", "confirm-billing", "accept-charge-risk"], models: ["refresh", "detail", "timeout-ms"],
+    "routing-context": ["difficulty"], "soft-budget": ["usd", "delete"], billing: [], "billing-set": ["billing-type", "allow-paid", "confirm-billing", "accept-charge-risk", "account-id"], routing: [], "routing-policy": ["tiers"], "model-tier": ["model", "tier"], usage: [], balance: [], account: [], providers: [], connect: ["env", "timeout-ms", "account-id", "billing-type", "allow-paid", "confirm-billing", "accept-charge-risk"], models: ["refresh", "detail", "timeout-ms"],
     pricing: [], chat: ["approve-once", "auto", "difficulty", "provider", "model", "max-output-tokens", "timeout-ms"], disconnect: []
   };
   if (Object.keys(values).some(v => !allowed[command!]!.includes(v))) throw new NidusError("invalid_request", "Option is not valid for this command.");
   const persistent = new KeychainStore();
   const engine = dependencies.engine ?? new ConnectivityEngine(new EnvironmentCredentials(persistent), new FileModelStore());
+  if (command === 'routing-context') { print(await engine.buildRoutingDecisionContext({type:'chat',difficulty:(values.difficulty ?? 'normal') as import('./router.js').Difficulty,requiredCapabilities:['text'],inputCharacters:null,estimatedInputTokens:null})); return; }
+  if (command === 'soft-budget') {
+    if ((values.delete === true) === (values.usd !== undefined)) throw new NidusError('invalid_request','Specify either --usd or --delete.');
+    print(engine.setSoftBudget(providerId(argument ?? ''), values.delete ? null : values.usd)); return;
+  }
   if (command === 'billing') {print(await engine.accountPermission(providerId(argument ?? '')));return;}
   if (command === 'billing-set') {print(await engine.setAccountPermission(providerId(argument ?? ''),values['billing-type'],values['allow-paid']===true,values['confirm-billing']===true,values['accept-charge-risk']===true,values['account-id'] ?? ''));return;}
   if (command === 'routing') { print(await engine.routingSettings()); return; }

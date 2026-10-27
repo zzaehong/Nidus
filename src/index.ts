@@ -15,3 +15,5 @@ export * from "./provider-usage.js";
 
 export { modelProfile, rankCandidates, difficulty } from './router.js';
 export type { Difficulty, Grade, Tier, Candidate } from './router.js';
+
+export * from './routing-context.js';

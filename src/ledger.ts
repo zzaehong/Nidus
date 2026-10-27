@@ -30,7 +30,7 @@ export class UsageLedger {
     this.db = new DatabaseSync(path);
     if (path !== ':memory:') chmodSync(path, 0o600);
     const schema = this.db.prepare('PRAGMA user_version').get() as { user_version: number };
-    if (schema.user_version > 7) { this.db.close(); throw new NidusError('storage', 'Usage ledger schema is newer than this app.'); }
+    if (schema.user_version > 8) { this.db.close(); throw new NidusError('storage', 'Usage ledger schema is newer than this app.'); }
     this.db.exec('PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;');
     this.transaction(() => this.db.exec(`
       CREATE TABLE IF NOT EXISTS budgets(scope TEXT PRIMARY KEY, amount INTEGER NOT NULL CHECK(amount>=0));
@@ -57,7 +57,8 @@ export class UsageLedger {
       CREATE TABLE IF NOT EXISTS account_permissions(provider TEXT PRIMARY KEY, state TEXT NOT NULL, fingerprint TEXT NOT NULL, account_id TEXT NOT NULL, checked_at TEXT NOT NULL, source TEXT NOT NULL, paid_allowed INTEGER NOT NULL DEFAULT 0, revision INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS execution_consents(token TEXT PRIMARY KEY, provider TEXT NOT NULL, model TEXT NOT NULL, task TEXT NOT NULL, fingerprint TEXT NOT NULL, revision INTEGER NOT NULL, expires_at TEXT NOT NULL, consumed INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE IF NOT EXISTS permission_events(id INTEGER PRIMARY KEY, provider TEXT NOT NULL, at TEXT NOT NULL, event TEXT NOT NULL);
-      PRAGMA user_version=7;`));
+      CREATE TABLE IF NOT EXISTS soft_budgets(provider TEXT PRIMARY KEY, amount INTEGER NOT NULL CHECK(amount>=0), updated_at TEXT NOT NULL);
+      PRAGMA user_version=8;`));
   }
   close() { this.db.close(); }
   private rows(sql: string, ...params: SQLInputValue[]): Row[] {
@@ -78,6 +79,47 @@ export class UsageLedger {
       this.db.prepare('INSERT INTO budget_changes(at,scope,amount) VALUES(?,?,?)').run(this.now().toISOString(), scope, amount);
     });
     return this.snapshot();
+  }
+  setSoftBudget(provider: ProviderId, usd: unknown) {
+    if (!providerIds.includes(provider)) throw new NidusError('invalid_request', 'Invalid Provider.');
+    if (usd === null) this.db.prepare('DELETE FROM soft_budgets WHERE provider=?').run(provider);
+    else this.db.prepare('INSERT INTO soft_budgets VALUES(?,?,?) ON CONFLICT(provider) DO UPDATE SET amount=excluded.amount,updated_at=excluded.updated_at')
+      .run(provider, money(usd), this.now().toISOString());
+  }
+  // Read only, bounded query count; no credential observation, reservation or policy mutation.
+  decisionData() {
+    const at = this.now().toISOString(), month = at.slice(0, 7);
+    const since = new Date(this.now().getTime() - 30 * 86400_000).toISOString();
+    const aggregate = (group: string) => this.rows(`SELECT ${group}, COUNT(*) AS requests,
+      SUM(input) AS input, SUM(output) AS output,
+      SUM(CASE WHEN input IS NULL OR output IS NULL THEN 1 ELSE 0 END) AS unknown_tokens,
+      SUM(estimated) AS estimated, SUM(confirmed) AS confirmed,
+      COUNT(estimated) AS estimated_count, COUNT(confirmed) AS confirmed_count,
+      SUM(CASE WHEN b.mode='free' THEN 1 ELSE 0 END) AS free_count,
+      SUM(COALESCE(confirmed,estimated)) AS spend,
+      SUM(CASE WHEN estimated IS NULL AND confirmed IS NULL THEN 1 ELSE 0 END) AS unknown,
+      MAX(at) AS last_at, MAX(updated_at) AS updated_at,
+      GROUP_CONCAT(DISTINCT price_version) AS versions
+      FROM requests LEFT JOIN request_billing b ON b.id=requests.id WHERE month=? AND status!='blocked' GROUP BY ${group}`, month);
+    this.db.exec('BEGIN');
+    try {
+      const result = { at, month, since, models: aggregate('provider,model'), providers: aggregate('provider'),
+        recent: this.rows(`SELECT provider,model,COUNT(*) AS requests,
+          SUM(CASE WHEN status='succeeded' THEN 1 ELSE 0 END) AS successes,
+          SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) AS failures,
+          SUM(CASE WHEN status='cancelled' THEN 1 ELSE 0 END) AS cancelled,
+          MAX(at) AS last_at FROM requests WHERE at>=? AND status IN ('succeeded','failed','cancelled') GROUP BY provider,model`, since),
+        routeFailures: this.rows(`SELECT json_extract(event,'$.provider') AS provider, json_extract(event,'$.model') AS model,
+          COUNT(*) AS failures, SUM(CASE WHEN json_extract(event,'$.reason')='rate_limit' THEN 1 ELSE 0 END) AS rate_limits,
+          MAX(at) AS at FROM route_events WHERE at>=? AND json_extract(event,'$.status')='failed' GROUP BY provider,model`, since),
+        lastCalls: this.rows("SELECT provider,model,MAX(at) AS at FROM requests WHERE status!='blocked' GROUP BY provider,model"),
+        health: this.rows('SELECT provider,model,status,at,until_at FROM model_health'),
+        tiers: this.rows('SELECT provider,model,tier,source,checked_at,user_modified,updated_at FROM model_tiers'),
+        budgets: this.rows('SELECT provider,amount,updated_at FROM soft_budgets'),
+        settings: this.routingSettings(),
+        ledgerUpdatedAt: this.rows('SELECT MAX(updated_at) AS at FROM requests')[0]?.at ?? null };
+      this.db.exec('COMMIT'); return result;
+    } catch (error) { this.db.exec('ROLLBACK'); throw error; }
   }
   private budget(scope: string): bigint | null { return this.rows('SELECT amount FROM budgets WHERE scope=?', scope)[0]?.amount as bigint ?? null; }
   private exposure(month: string, provider?: ProviderId): bigint {

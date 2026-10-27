@@ -1,3 +1,4 @@
+import { buildContext, taskContext, softBudgets, type TaskContext } from './routing-context.js';
 import { providerMetadata } from './providers.js';
 import { cloudflareCredential } from './adapters/cloudflare.js';
 import { dollars } from './money.js';
@@ -19,7 +20,27 @@ import { providerIds, type ChatRequest, type ProviderAdapter, type ProviderId, t
 export class ConnectivityEngine {
   constructor(private readonly credentials: CredentialStore, private readonly store: ModelStore, private readonly registry: Record<ProviderId, ProviderAdapter> = adapters(), private ledger?: UsageLedger) {}
   private usageLedger() { return this.ledger ??= new UsageLedger(); }
-  usage() { return { ...this.usageLedger().snapshot(), capabilities: usageCapabilities, routing: this.usageLedger().routes() }; }
+  usage() { return { softBudgets: softBudgets(this.usageLedger().decisionData()), ...this.usageLedger().snapshot(), capabilities: usageCapabilities, routing: this.usageLedger().routes() }; }
+  setSoftBudget(provider: ProviderId, usd: unknown) { this.usageLedger().setSoftBudget(provider, usd); return this.usage(); }
+  async buildRoutingDecisionContext(task: TaskContext) {
+    const normalized = taskContext(task), hashes = new Map<ProviderId, string>();
+    const catalogs = await Promise.all(providerIds.map(async provider => {
+      let connection: 'credential-present-unverified' | 'disconnected' | 'unknown' = 'unknown';
+      try {
+        const key = await this.credentials.get(provider);
+        hashes.set(provider, key ? createHash('sha256').update(key).digest('hex') : '');
+        connection = key ? 'credential-present-unverified' : 'disconnected';
+      } catch { /* Missing keychain access is metadata, never a context prerequisite. */ }
+      return { provider, snapshot: await this.store.load(provider), connection };
+    }));
+    const ledger = this.usageLedger();
+    return buildContext(normalized, { data: ledger.decisionData(), catalogs,
+      permission: (provider, model) => {
+        if (!hashes.has(provider)) return { allowed: null, reason: 'credential-unavailable' };
+        const p = ledger.executionPermission(provider, model, hashes.get(provider));
+        return { allowed: p.allowed, reason: p.reason };
+      } });
+  }
   setBudget(_scope: unknown, _usd: unknown) { throw new NidusError('unsupported', 'Budget Guard has been removed.'); }
   async accountPermission(provider: ProviderId) {
     const key=await this.credentials.get(provider);
