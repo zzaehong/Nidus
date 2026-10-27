@@ -1,14 +1,20 @@
 import Foundation
 
 enum Provider: String, CaseIterable, Identifiable, Codable {
-    case openai, anthropic, gemini, deepseek
+    case openai, anthropic, gemini, deepseek, nvidia, groq, mistral, cloudflare
     var id: String { rawValue }
     var name: String {
-        switch self { case .openai: return "OpenAI · GPT"; case .anthropic: return "Anthropic · Claude"; case .gemini: return "Google Gemini"; case .deepseek: return "DeepSeek" }
+        switch self { case .openai: return "OpenAI · GPT"; case .anthropic: return "Anthropic · Claude"; case .gemini: return "Google Gemini"; case .deepseek: return "DeepSeek"; case .nvidia: return "NVIDIA NIM"; case .groq: return "Groq"; case .mistral: return "Mistral AI"; case .cloudflare: return "Cloudflare Workers AI" }
     }
     var symbol: String {
-        switch self { case .openai: return "sparkles"; case .anthropic: return "sun.max"; case .gemini: return "diamond"; case .deepseek: return "water.waves" }
+        switch self { case .openai: return "sparkles"; case .anthropic: return "sun.max"; case .gemini: return "diamond"; case .deepseek: return "water.waves"; case .nvidia: return "cpu"; case .groq: return "bolt"; case .mistral: return "wind"; case .cloudflare: return "cloud" }
     }
+    var requiresAccountID: Bool { self == .cloudflare }
+    var keyURL: URL {
+        let links: [Provider: String] = [.openai:"https://platform.openai.com/api-keys", .anthropic:"https://platform.claude.com/settings/keys", .gemini:"https://aistudio.google.com/api-keys", .deepseek:"https://platform.deepseek.com/api_keys", .nvidia:"https://build.nvidia.com/", .groq:"https://console.groq.com/keys", .mistral:"https://console.mistral.ai/", .cloudflare:"https://dash.cloudflare.com/"]
+        return URL(string: links[self]!)!
+    }
+
 }
 struct APIModel: Decodable, Identifiable {
     let id: String
@@ -32,11 +38,53 @@ struct APIModel: Decodable, Identifiable {
         struct Rate: Decodable { let tier: String; let input: Double; let output: Double; let cachedInput: Double?; let conditions: String }
     }
 }
-struct ModelResult: Decodable { let source: String; let fetchedAt: String?; let models: [APIModel] }
+struct ModelResult: Decodable { let authentication: String?; let source: String; let fetchedAt: String?; let models: [APIModel] }
 struct ChatResult: Decodable {
+    let provider: Provider?
+    let model: String?
+    let routing: RoutingResult?
     let text: String
     let usage: Usage
     struct Usage: Decodable { let inputTokens: Int?; let outputTokens: Int?; let totalTokens: Int? }
+}
+struct RoutingResult: Codable {
+    let tier: Int?
+    let difficulty: String
+    let reason: String
+    let boundUSD: String?
+    let estimatedUSD: String?
+    let budgetLevel: String?
+    let transitions: [Transition]
+    struct Transition: Codable {
+        let tier: Int?
+        let provider: String
+        let model: String
+        let reason: String
+        let status: String
+        let budget: String
+    }
+    var summary: String {
+        transitions.map { "\($0.provider)/\($0.model): \($0.reason) · \($0.status)" }.joined(separator: " → ")
+    }
+}
+struct RoutePlanResult: Decodable {
+    let candidates: [Candidate]
+    let budget: Budget
+    let excluded: [Excluded]
+    struct Candidate: Decodable {
+        let tier: Int?
+        let model: SelectedModel
+        let quote: Quote
+        let reason: String
+    }
+    struct SelectedModel: Decodable { let provider: String; let id: String }
+    struct Quote: Decodable { let boundUSD: String? }
+    struct Budget: Decodable { let level: String; let remainingUSD: String? }
+    struct Excluded: Decodable { let reason: String }
+    var summary: String {
+        guard let first = candidates.first else { return "자동 후보 없음: " + Array(Set(excluded.map(\.reason))).sorted().joined(separator: ", ") }
+        return "예상 Tier \(first.tier.map(String.init) ?? "미확인"): \(first.model.provider)/\(first.model.id) · 참고 비용 상한 $\(first.quote.boundUSD ?? "미확인") · 지출 제한 없음"
+    }
 }
 struct ProviderState {
     var models: [APIModel] = []
@@ -94,13 +142,14 @@ struct ProviderState {
         do {
             // Invalidate before any credential mutation, including an uncertain transport outcome.
             if ["connect", "disconnect"].contains(method) { try clearHealthResults(provider) }
-            let data = try await transport(extra.merging(["method": method, "provider": provider.rawValue]) { _, new in new })
+            let request = extra.merging(["method": method, "provider": provider.rawValue]) { _, new in new }
+            let data = try await (["chat","probe"].contains(method) ? manualCall(request) : transport(request))
             switch method {
             case "connect", "models", "cached":
                 let result = try JSONDecoder().decode(ModelResult.self, from: data)
                 states[provider]?.models = result.models
                 states[provider]?.fetchedAt = result.fetchedAt
-                states[provider]?.status = result.source == "api" ? "연결 확인됨 · Models API" : (result.source == "cache" ? "저장된 목록 · 재확인 필요" : "연결 전")
+                states[provider]?.status = result.authentication == "catalog-access-only" ? "카탈로그 조회됨 · 키 실행 권한 미확인" : result.source == "api" ? "연결 확인됨 · Models API" : (result.source == "cache" ? "저장된 목록 · 재확인 필요" : "연결 전")
                 if !result.models.contains(where: { $0.id == states[provider]?.selectedModel }) {
                     states[provider]?.selectedModel = result.models.first(where: { $0.capabilities.chat != "unsupported" })?.id
                 }

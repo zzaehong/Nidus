@@ -2,11 +2,58 @@
 
 TypeScript 기반 **Multi-Provider API Connectivity 엔진**과 **SwiftUI macOS 대시보드**입니다. Provider와 API Key로 모델을 자동 탐색하고, 선택한 모델에 텍스트 요청을 보내며 사용량을 공통 포맷으로 반환합니다. 기존 CLI도 그대로 사용할 수 있습니다.
 
-OpenAI(GPT), Anthropic(Claude), Google Gemini, DeepSeek를 지원합니다. 자동 라우팅, Agent Loop, Tool 실행, Docker, Vault, Workflow는 구현 범위에 포함하지 않습니다.
+OpenAI(GPT), Anthropic(Claude), Google Gemini, DeepSeek를 지원합니다. 작업 난이도 기반 자동 라우팅과 수동 선택을 지원합니다. Agent Loop, Tool 실행, Docker, Vault, Workflow는 구현 범위에 포함하지 않습니다.
+
+## Phase 4.4: Routing Decision Context와 Soft Budget
+
+`nidus routing-context --difficulty normal`로 작업·모델·Tier·가용성·로컬 사용량·비용·정책을 JSON으로 조회합니다. 생성 중 Provider API를 호출하지 않으며 프롬프트·응답·API Key를 내보내지 않습니다. JEV 연결과 모델 선택 로직 변경은 포함하지 않습니다.
+
+**사용량 및 비용** 화면에서 Provider별 월간 목표 예산을 저장·삭제할 수 있습니다. Soft Budget은 참고 정보이며 초과해도 호출이나 Fallback을 제한하지 않습니다. 기존 Phase 4.3 실행 권한은 그대로 적용됩니다.
+
+```sh
+nidus routing-context --difficulty normal
+nidus soft-budget gemini --usd 5.00
+nidus soft-budget gemini --delete
+```
+
+비용 누락이 있으면 전체 사용률은 `null`이고 알려진 비용 기준 사용률을 별도로 제공합니다. 기존 예산·예약 기록은 새 목표로 자동 승계하지 않습니다. [데이터 계약과 검증](docs/Phase4_4_Routing_Context.md), [JSON Schema](schemas/routing-decision-context.schema.json)를 참고하세요.
+
+## Phase 4.3: 계정 과금 유형과 실행 권한
+
+API Key 등록 화면 또는 **과금 유형 / 실행 권한 설정**에서 현재 계정을 확인합니다. 기존 계정은 최초 1회 재확인이 필요하며, 이전 무료 확인이나 유료 허용 설정을 자동 승계하지 않습니다.
+
+- **Free Only**: 유료 과금이 비활성화된 계정입니다. 공식 무료 지원이 확인된 모델만 실행하고 무료 후보로만 Fallback합니다.
+- **Hybrid**: 무료 할당량 이후 과금 가능 요청을 유료 요청으로 판단합니다. Provider 유료 승인이 필요합니다.
+- **Paid Only**: Provider 유료 승인이 있어야 실행합니다.
+- **Unknown**: 자동 호출과 일괄 검사는 차단합니다. 수동 채팅·단일 검사는 과금 위험을 확인하고 이번 요청만 승인할 수 있습니다.
+
+유료 승인은 **Provider 전체의 현재·향후 모델**에 적용합니다. 키·계정 변경 시 다시 확인하며 승인 철회는 실행 직전 공통 경로에 반영됩니다. 이미 전송된 요청은 소급 취소하지 않습니다. 현재 계정 확인은 사용자 선언이며, 공식 결제 상태 자동 검증으로 표시하지 않습니다. 남은 무료 할당량을 만들어내지 않습니다.
+
+```sh
+nidus billing gemini
+nidus billing-set gemini --billing-type free_only --confirm-billing --accept-charge-risk
+nidus billing-set openai --billing-type paid_only --allow-paid --confirm-billing --accept-charge-risk
+# 유료 승인 철회: --allow-paid 없이 동일 과금 유형 저장
+nidus billing-set openai --billing-type paid_only --confirm-billing --accept-charge-risk
+# Unknown 계정에서 비용 발생 가능성을 받아들이고 단 한 번 실행
+nidus chat --provider gemini --model gemini-2.5-flash --approve-once
+```
+
+**금액 Budget Guard와 비용 예약은 없습니다.** 승인된 유료 요청에는 지출 한도가 없고 가격 미확인 모델도 실행할 수 있습니다. 가격/사용량을 모르면 비용을 0원 대신 미확인으로 기록합니다. SwiftUI **사용량 및 비용** 또는 `nidus usage`로 기록을 확인합니다. 기존 SQLite 사용량·예산·예약·전환 기록과 Tier 설정은 보존합니다.
+
+변경·공식 자료·검증·제약은 [Phase 4.3 문서](docs/Phase4_3_Account_Permissions.md)를 참고하세요. [Budget Guard 제거 기록](docs/Budget_Guard_Removal.md)의 무조건 호출 허용 정책은 이번 계정 권한 정책으로 대체되었습니다. 금액 제한 제거는 유지됩니다.
+
+## 사용자 설정 Tier 라우팅
+
+채팅방에서 자동 라우팅과 Simple / Normal(기본) / Complex를 선택합니다. **라우팅 후보 확인**은 로컬 조회만 수행합니다. CLI는 `nidus chat --auto --difficulty normal`입니다.
+
+툴바 **Model Tier**에서 모델 Tier를, **Routing Policy**에서 난이도별 순서와 계정 실행 권한을 변경합니다. 기본 순서는 Simple 1→2, Normal 2→1, Complex 3→2입니다. Tier 순서는 비용보다 우선하며 허용하지 않은 Tier로 전환하지 않습니다. 같은 Tier에서는 참고 비용·최신성 등을 사용합니다. 유료 승인된 계정에서는 가격 미확인만으로 호출을 막지 않습니다. Free Only는 공식 무료 지원이 필요하며, Unclassified 모델은 자동 선택하지 않습니다.
+
+실행 직전 Tier, 라우팅 설정, 계정 과금 유형과 실행 권한을 재검증합니다. Rate Limit·인증·모델 미지원 등 명시적 거절은 허용 Tier 안에서 Fallback하고, 타임아웃·네트워크 오류처럼 처리 여부가 불명확하면 중복 호출을 하지 않습니다. 실제 선택 모델, 전환 사유, 추정 비용을 표시합니다. 참고 비용 상한은 예약액이나 지출 제한이 아닙니다.
 
 ## 설치와 시작
 
-Node.js 22 이상(검증: 24.21.0), npm이 필요합니다. macOS Keychain 사용에는 Xcode Command Line Tools의 `swiftc`가 필요합니다. 대시보드는 macOS 13 이상을 대상으로 하며 Swift 5.9 이상으로 빌드합니다. API 연결 엔진과 CLI는 TypeScript이고, UI는 SwiftUI/AppKit입니다. 외부 npm 런타임 라이브러리는 없습니다.
+Node.js 22.13 이상(검증: 24.21.0), npm이 필요합니다. macOS Keychain 사용에는 Xcode Command Line Tools의 `swiftc`가 필요합니다. 대시보드는 macOS 13 이상을 대상으로 하며 Swift 5.9 이상으로 빌드합니다. API 연결 엔진과 CLI는 TypeScript이고, UI는 SwiftUI/AppKit입니다. 외부 npm 런타임 라이브러리는 없습니다.
 
 ## macOS 대시보드
 
@@ -108,7 +155,7 @@ nidus disconnect gemini
 - macOS Keychain service: `com.nidus.connectivity`, account: Provider ID. 기기 전용·잠금 해제 시 접근하며 동기화하지 않습니다.
 - 키 입력은 터미널에 표시하지 않습니다. 키를 CLI 인자, Git, 로그, 일반 설정 파일에 저장하지 않습니다.
 - helper는 stdin/stdout 전용 Pipe로 키를 전달하며 키 값을 프로세스 인자에 넣지 않습니다. helper가 없으면 평문 저장으로 우회하지 않고 오류를 반환합니다.
-- 캐시: `~/.local/share/nidus/<provider>.json`. 모델 메타데이터만 저장하며 파일 권한은 `0600`, 생성 디렉터리는 `0700`입니다. 프롬프트·응답·사용량은 디스크에 저장하지 않습니다.
+- 캐시: `~/.local/share/nidus/<provider>.json`. 모델 메타데이터만 저장하며 파일 권한은 `0600`, 생성 디렉터리는 `0700`입니다. 모델 캐시에는 프롬프트·응답·사용량을 저장하지 않습니다. 채팅 기록과 사용량 장부는 위에 설명한 별도 저장소를 사용합니다.
 - 키는 요청 중 프로세스 메모리에 존재합니다. JavaScript 문자열의 완전한 메모리 소거는 보장하지 않습니다.
 
 CI 또는 macOS 외 환경에서는 `NIDUS_OPENAI_API_KEY`, `NIDUS_ANTHROPIC_API_KEY`, `NIDUS_GEMINI_API_KEY`, `NIDUS_DEEPSEEK_API_KEY`를 외부 Secret Manager에서 환경변수로 주입하고 `nidus connect <provider> --env`를 사용할 수 있습니다. 이 모드는 키를 영구 저장하지 않습니다. 환경변수는 Keychain보다 우선하며, 해당 환경에서 `models`는 다른 계정 캐시 사용을 피하기 위해 API를 다시 조회합니다. 키를 셸 명령에 직접 적으면 history에 남을 수 있으므로 피합니다.
@@ -132,7 +179,7 @@ CI 또는 macOS 외 환경에서는 `NIDUS_OPENAI_API_KEY`, `NIDUS_ANTHROPIC_API
 
 `src/pricing.ts`는 공식 가격표를 검토한 수동 스냅샷입니다. **모델 ID 등록과 가격 레코드는 분리**되어 있으며 가격표가 모델을 탐색 목록에 추가하지 않습니다. 정확한 Provider+모델 ID로만 매칭합니다.
 
-레코드는 입력·출력·캐시 입력 가격(USD/백만 토큰), 무료 티어 상태, 출처 URL, 마지막 확인 시각, 요금 조건을 포함합니다. 현재 스냅샷은 8개 정확한 ID를 포함합니다. 전체 공급자 가격표를 복제하지 않으며 미검토 모델은 `status: unknown`, `rates: []`, `checkedAt: null`로 반환합니다. 미확인은 무료나 0원이 아닙니다. `pricing`은 연결 후에는 탐색된 모델에 가격을 붙이고, 연결 전에는 검토된 레코드를 보여줍니다.
+레코드는 입력·출력·캐시 입력 가격(USD/백만 토큰), 무료 티어 상태, 출처 URL, 마지막 확인 시각, 요금 조건을 포함합니다. 현재 유료 가격 스냅샷은 9개 정확한 ID를 포함합니다. 신규 Provider의 별도 무료 지원 검토 목록은 유료 가격 확인과 독립적입니다. 전체 공급자 가격표를 복제하지 않으며 미검토 모델은 `status: unknown`, `rates: []`, `checkedAt: null`로 반환합니다. 미확인은 무료나 0원이 아닙니다. `pricing`은 연결 후에는 탐색된 모델에 가격을 붙이고, 연결 전에는 검토된 레코드를 보여줍니다.
 
 - 기준: 직접 API의 표준 텍스트 요금. 캐시 쓰기·저장·도구·Batch·지역/계약별 과금은 별도입니다.
 - DeepSeek는 피크·비피크를 모두 표시합니다. 중국 공휴일을 추측해서 요금을 자동 선택하지 않습니다.
@@ -146,7 +193,7 @@ CI 또는 macOS 외 환경에서는 `NIDUS_OPENAI_API_KEY`, `NIDUS_ANTHROPIC_API
 
 오류는 stderr에 `{error: {code, message, status, retryAfter}}`로 출력하고 종료 코드 1(취소 130)을 반환합니다. 인증, 권한, 잔액/한도, Rate Limit, 네트워크, 타임아웃, 취소, 잘못된 응답을 구분합니다. Gemini `API_KEY_INVALID`와 OpenAI `insufficient_quota`도 공통 코드로 변환합니다. 키·프롬프트가 포함될 수 있는 공급자 원문 오류와 stack trace는 출력하지 않습니다.
 
-`--timeout-ms` 기본값은 모델 조회 30초, 채팅 120초이며 본문 읽기와 전체 페이지 조회에도 적용합니다. Ctrl-C로 요청을 취소합니다. HTTP 리다이렉트를 따라 인증정보를 전달하지 않습니다. 자동 재시도는 없으므로 채팅 중복 과금을 유발하지 않습니다. 가격 계산·결제 내역 수집은 이번 범위가 아닙니다.
+`--timeout-ms` 기본값은 모델 조회 30초, 채팅 120초이며 본문 읽기와 전체 페이지 조회에도 적용합니다. Ctrl-C로 요청을 취소합니다. HTTP 리다이렉트를 따라 인증정보를 전달하지 않습니다. 수동 요청은 자동 재시도하지 않습니다. 자동 라우팅은 명시적 거절 오류에서만 다른 후보를 시도하며, 타임아웃·네트워크 오류는 중단합니다. 가격 계산과 선택적 계정 조회는 Phase 3 문서를 참고하세요.
 
 ## 공식 자료와 확인 시점
 
@@ -172,4 +219,28 @@ swift test               # 앱 상태, 경로 탐색, Pipe 분리, 종료 및 �
 
 실제 모델 조회 테스트는 Secret Manager 등에서 해당 환경 키를 주입한 후 `NIDUS_LIVE=1 npm run test:live`로 실행합니다. 실제 채팅에는 추가로 `NIDUS_LIVE_CHAT=1` 및 `NIDUS_<PROVIDER>_MODEL`에 조회된 모델 ID를 지정해야 합니다. 실제 요청에는 과금이 발생할 수 있습니다. 테스트는 사용자의 기존 Keychain API 키를 자동으로 읽지 않습니다.
 
-현재 검증: Mock/CLI/engine **42 PASS**, macOS Keychain synthetic **1 PASS**, 실제 터미널 숨김 입력 **PASS**, 실제 Provider 모델 조회·채팅 **8 NOT RUN**. 인증정보가 제공되지 않은 Provider는 실제 검증 완료로 표시하지 않습니다. 자세한 결과는 [검증 기록](docs/CONNECTIVITY_VALIDATION.md), 모듈 경계는 [아키텍처](docs/API_CONNECTIVITY.md)를 참고하세요.
+Connectivity MVP 당시 검증: Mock/CLI/engine **42 PASS**, macOS Keychain synthetic **1 PASS**, 실제 터미널 숨김 입력 **PASS**, 실제 Provider 모델 조회·채팅 **8 NOT RUN**. 인증정보가 제공되지 않은 Provider는 실제 검증 완료로 표시하지 않습니다. 자세한 결과는 [검증 기록](docs/CONNECTIVITY_VALIDATION.md), 모듈 경계는 [아키텍처](docs/API_CONNECTIVITY.md)를 참고하세요.
+
+### Gemini Free Tier 프로젝트 설정
+
+공통 **과금 유형 / 실행 권한 설정**에서 현재 키의 프로젝트를 Free Only로 확인할 수 있습니다. 공식 무료 지원 모델만 실행합니다. Hybrid·Paid Only에는 Provider 유료 승인이 필요하고 Unknown은 요청별 수동 승인만 허용합니다. 사용자 설정은 Google Billing 상태를 보증하지 않으며 잘못 설정하면 과금될 수 있습니다. [지원 모델·설정·검증·한계](docs/Gemini_Free_Tier_Fix.md)를 확인하세요.
+
+
+### Phase 4.2: Provider 확장
+
+NVIDIA NIM, Groq, Mistral AI, Cloudflare Workers AI를 추가했습니다. 공통 Provider 카드에서 키 발급 링크, 연결·갱신·삭제, 모델 수와 마지막 조회 시각을 확인합니다. Cloudflare는 API Token과 Account ID를 함께 입력합니다. 키와 Account ID는 Keychain에 저장합니다.
+
+신규 모델은 Unclassified로 시작합니다. Tier 및 라우팅 화면에서 Tier를 배정하고, 사용 전 공통 설정에서 계정 과금 유형과 실행 권한을 확인하세요. 무료 계정·모델 확인은 실제 Billing 보증이 아닙니다. 검토되지 않은 모델을 자동 무료 처리하지 않으며, 승인된 유료 요청에서 단가를 모르면 비용 미확인으로 기록합니다. [지원 범위, 공식 근거와 검증 결과](docs/Phase4_2_Provider_Expansion.md).
+
+```sh
+nidus connect nvidia
+nidus connect groq
+nidus connect mistral
+nidus connect cloudflare --account-id <32자리-account-id>
+```
+
+환경 자격 증명은 `NIDUS_NVIDIA_API_KEY`, `NIDUS_GROQ_API_KEY`, `NIDUS_MISTRAL_API_KEY`, `NIDUS_CLOUDFLARE_API_KEY`이며 Cloudflare에는 `NIDUS_CLOUDFLARE_ACCOUNT_ID`도 필요합니다. 실제 API 키를 CLI 인자로 넣지 않습니다.
+
+NVIDIA 모델 용도 분류는 공식 모델 자료와 게시자별 계열 규칙을 사용합니다. 추정 분류를 별도 표시하며 문서 추출·임베딩·안전성 검사 모델을 일반 채팅에서 제외합니다. 기존 캐시에도 재실행 시 적용됩니다. [분류 개선 및 검증](docs/NVIDIA_Model_Classification.md).
+
+NVIDIA도 금액 Budget Guard는 적용하지 않습니다. **과금 유형 / 실행 권한 설정** 또는 **무료 전용 계정 확인**에서 현재 계정을 재확인해야 합니다. Free Only는 공식 무료 지원 모델만 실행합니다. 이전 차단 원인과 대응 기록은 [과거 NVIDIA 무료 설정 문서](docs/NVIDIA_Free_Setup_Fix.md)에 남겨두었습니다.

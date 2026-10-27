@@ -129,3 +129,12 @@ test('Local request validation fails before any HTTP call', async t => {
   await assert.rejects(adapter.chat('key', { model: 'x', messages: [] }), e => e.code === 'invalid_request');
   assert.equal(mock.requests.length, 0);
 });
+
+test('Gemini Free Tier RESOURCE_EXHAUSTED stays rate_limit rather than balance shortage', async t => {
+  const mock = await server(t, (r, res) => {
+    res.statusCode = 429;
+    json(res, { error: { code: 429, status: 'RESOURCE_EXHAUSTED', message: 'FreeTier quota exceeded', details: [{ '@type': 'type.googleapis.com/google.rpc.QuotaFailure', violations: [{ quotaId: 'GenerateRequestsPerDayPerProjectPerModel-FreeTier' }] }] } });
+  });
+  await assert.rejects(new GeminiAdapter(mock.url).chat('mock-key', request), e => e.code === 'rate_limit' && e.status === 429);
+  assert.equal(mock.requests.length, 1);
+});

@@ -10,13 +10,35 @@ import type { ChatRequest } from "./types.js";
 export async function dispatch(input: unknown, engine: ConnectivityEngine): Promise<unknown> {
   if (!input || typeof input !== "object") throw new NidusError("invalid_request", "Invalid dashboard request.");
   const r = input as Record<string, unknown>;
+  if (r.method === 'account-permission') return engine.accountPermission(providerId(String(r.provider ?? '')));
+  if (r.method === 'account-permission-set') return engine.setAccountPermission(providerId(String(r.provider ?? '')),r.state,r.paidAllowed,r.confirmed,r.riskAccepted,r.accountId ?? '',r.expectedRevision);
+  if (r.method === 'request-consent') return engine.issueConsent(providerId(String(r.provider ?? '')),r.model,r.task,r.riskAccepted);
+  if (r.method === 'nvidia-free-setup') return engine.approveNvidiaFreeModels(r.models,r.confirmed,r.riskAccepted);
+  if (r.method === 'provider-plan-set') return engine.setProviderPlan(providerId(typeof r.provider==='string'?r.provider:''),r.state,r.confirmed,r.riskAccepted);
   if (r.method === "ping") return { ready: true };
+  if (r.method === 'routing-context') return engine.buildRoutingDecisionContext(r.task as import('./routing-context.js').TaskContext);
+  if (r.method === 'soft-budget-set') return engine.setSoftBudget(providerId(String(r.provider ?? '')), r.usd);
+  if (r.method === "usage") return engine.usage();
+  if (r.method === 'gemini-billing-set') return engine.setGeminiBilling(r.state, r.project, r.confirmed, r.riskAccepted);
+  if (r.method === 'routing-settings') return engine.routingSettings();
+  if (r.method === 'routing-policy-set') return engine.setRoutingPolicy(r.difficulty, r.tiers);
+  if (r.method === 'automatic-paid-set') return engine.setAutomaticPaid(r.allowed);
+  if (r.method === 'free-use-set') return engine.setFreeUse(providerId(typeof r.provider === 'string' ? r.provider : ''), r.model, r.status, r.approved, r.accountConfirmed, r.chargeRiskAccepted);
+  if (r.method === 'model-tier-set') return engine.setModelTier(providerId(typeof r.provider === 'string' ? r.provider : ''), r.model, r.tier);
+  if (r.method === "budget-set") return engine.setBudget(r.scope, r.usd);
+  if (r.method === "route-plan" || r.method === "auto-chat") {
+    if (!r.request || typeof r.request !== 'object') throw new NidusError('invalid_request', 'Invalid chat request.');
+    return r.method === 'route-plan' ? engine.routePlan(r.request as ChatRequest, r.difficulty)
+      : engine.autoChat(r.request as ChatRequest, r.difficulty, { timeoutMs: 120_000 });
+  }
   const provider = providerId(typeof r.provider === "string" ? r.provider : "");
   switch (r.method) {
+    case "account-sync": return engine.syncAccount(provider);
+    case "balance-sync": return engine.syncBalance(provider);
     case "cached": return engine.cachedModels(provider);
     case "connect":
       if (typeof r.key !== "string") throw new NidusError("missing_key", "API Key is required.");
-      return engine.connect(provider, r.key);
+      return engine.connect(provider, r.key, true, {}, r.accountId, r.billing as Parameters<ConnectivityEngine["connect"]>[5]);
     case "models": return engine.models(provider, true);
     case "detail":
       if (typeof r.model !== "string") throw new NidusError("invalid_request", "Select a model.");
@@ -25,10 +47,10 @@ export async function dispatch(input: unknown, engine: ConnectivityEngine): Prom
     case "probe":
       if (typeof r.model !== "string" || r.confirmed !== true || (r.allowInferred !== undefined && typeof r.allowInferred !== "boolean"))
         throw new NidusError("invalid_request", "Confirm probe cost and select a discovered model.");
-      return engine.probe(provider, r.model, r.allowInferred === true);
+      return engine.probe(provider, r.model, r.allowInferred === true, typeof r.consentToken==='string'?r.consentToken:undefined);
     case "chat":
       if (!r.request || typeof r.request !== "object") throw new NidusError("invalid_request", "Invalid chat request.");
-      return engine.chat(provider, r.request as ChatRequest, { timeoutMs: 120_000 });
+      return engine.chat(provider, r.request as ChatRequest, { timeoutMs: 120_000, consentToken: typeof r.consentToken==='string'?r.consentToken:undefined });
     case "disconnect": return engine.disconnect(provider);
     default: throw new NidusError("invalid_request", "Unknown dashboard operation.");
   }

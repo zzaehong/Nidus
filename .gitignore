@@ -6,3 +6,7 @@ dist/
 .DS_Store
 .build/
 .swiftpm/
+
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm

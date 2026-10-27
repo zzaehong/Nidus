@@ -36,12 +36,13 @@ export async function bounded<T>(options: RequestOptions, action: (signal: Abort
 
 export class HttpClient {
   constructor(private readonly fetcher: typeof fetch = fetch) {}
-  async json(url: string | URL, headers: Record<string, string>, signal: AbortSignal, body?: unknown): Promise<Record<string, unknown>> {
+  async json(url: string | URL, headers: Record<string, string>, signal: AbortSignal, body?: unknown, onHeaders?: (headers: Record<string, string>) => void, exactCostValues = false): Promise<Record<string, unknown>> {
     try {
       const response = await this.fetcher(url, {
         method: body === undefined ? "GET" : "POST", headers: { ...headers, "content-type": "application/json" },
         body: body === undefined ? undefined : JSON.stringify(body), signal, redirect: "error"
       });
+      onHeaders?.(rateLimitHeaders(response.headers));
       if (!response.ok) {
         // Never expose raw provider errors: they can echo keys, headers or prompts.
         const status = response.status;
@@ -59,7 +60,16 @@ export class HttpClient {
       }
       // Bound response memory, including chunked bodies. Timeout covers body reads too.
       const text = await readBody(response, 16 * 1024 * 1024);
-      try { return object(JSON.parse(text)); }
+      try {
+        return object(JSON.parse(text, (key, value, context?: { source: string }) => {
+          // Preserve the exact JSON decimal spelling before conversion to integer USD.
+          if (exactCostValues && key === 'value' && typeof value === 'number') {
+            if (!context?.source) throw new NidusError('invalid_response', 'Runtime cannot preserve billing decimal precision.');
+            return context.source;
+          }
+          return value;
+        }));
+      }
       catch { throw new NidusError("invalid_response", "Provider returned invalid JSON."); }
     } catch (error) {
       if (error instanceof NidusError) throw error;
@@ -82,4 +92,18 @@ async function readBody(response: Response, limit: number): Promise<string> {
     }
   } finally { reader.releaseLock(); }
   return Buffer.concat(chunks).toString("utf8");
+}
+
+// Only numeric limits / documented reset formats; never persist arbitrary response headers.
+export function rateLimitHeaders(headers: Headers): Record<string, string> {
+  const result: Record<string, string> = {};
+  const names = ['retry-after', ...['x-ratelimit', 'anthropic-ratelimit'].flatMap(prefix =>
+    ['requests', 'tokens', 'input-tokens', 'output-tokens'].flatMap(kind => prefix === 'x-ratelimit'
+      ? ['limit', 'remaining', 'reset'].map(field => `${prefix}-${field}-${kind}`)
+      : ['limit', 'remaining', 'reset'].map(field => `${prefix}-${kind}-${field}`)))];
+  for (const name of names) {
+    const value = headers.get(name);
+    if (value && value.length <= 64 && /^(?:[0-9]+(?:\.[0-9]+)?(?:ms|s|m|h|d)?)+$|^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/.test(value)) result[name] = value;
+  }
+  return result;
 }

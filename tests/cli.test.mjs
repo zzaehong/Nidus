@@ -5,7 +5,7 @@ const run = (...args) => spawnSync(process.execPath, ['bin/nidus.mjs', ...args],
 test('CLI help and providers work without keys, network, or Keychain', () => {
   assert.equal(run('--help').status, 0);
   const result = run('providers'); assert.equal(result.status, 0);
-  assert.deepEqual(JSON.parse(result.stdout).map(p => p.id), ['openai', 'anthropic', 'gemini', 'deepseek']);
+  assert.deepEqual(JSON.parse(result.stdout).map(p => p.id), ['openai', 'anthropic', 'gemini', 'deepseek', 'nvidia', 'groq', 'mistral', 'cloudflare']);
 });
 test('CLI rejects secrets in arguments without echoing them', () => {
   const result = run('connect', 'gemini', '--api-key', 'secret-should-not-appear');

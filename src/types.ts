@@ -1,4 +1,4 @@
-export const providerIds = ["openai", "anthropic", "gemini", "deepseek"] as const;
+export const providerIds = ["openai", "anthropic", "gemini", "deepseek", "nvidia", "groq", "mistral", "cloudflare"] as const;
 export type ProviderId = typeof providerIds[number];
 export type Support = "supported" | "unsupported" | "unknown";
 export interface Model {
@@ -32,7 +32,7 @@ export interface ChatResponse {
   finishReason: string | null;
   usage: Usage;
 }
-export interface RequestOptions { signal?: AbortSignal; timeoutMs?: number }
+export interface RequestOptions { consentToken?: string; onHeaders?: (headers: Record<string, string>) => void; signal?: AbortSignal; timeoutMs?: number }
 export interface ProviderAdapter {
   readonly id: ProviderId;
   listModels(key: string, options?: RequestOptions): Promise<Model[]>;

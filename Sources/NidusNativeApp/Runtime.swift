@@ -21,7 +21,7 @@ struct RuntimeLocation {
             + (environment["PATH"] ?? "").split(separator: ":").map { "\($0)/node" }
             + ["/opt/homebrew/bin/node", "/usr/local/bin/node", "/usr/bin/node"]
         guard let node = candidates.first(where: { fm.isExecutableFile(atPath: $0) }) else {
-            throw DashboardError(message: "Node.js 22 이상이 필요합니다. Node가 활성화된 터미널에서 실행하거나 NIDUS_NODE_PATH에 node의 절대 경로를 지정하세요.")
+            throw DashboardError(message: "Node.js 22.13 이상이 필요합니다. Node가 활성화된 터미널에서 실행하거나 NIDUS_NODE_PATH에 node의 절대 경로를 지정하세요.")
         }
         guard fm.isExecutableFile(atPath: script.deletingLastPathComponent().appendingPathComponent("nidus-keychain").path) else {
             throw DashboardError(message: "Keychain helper가 없습니다. npm run build:keychain을 실행하세요.")
