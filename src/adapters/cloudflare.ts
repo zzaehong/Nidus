@@ -1,16 +1,25 @@
-import { baseModel, array, object, string, validateChatRequest } from './base.js';
+import { baseModel, array, object, string, validateModelID, validateChatRequest } from './base.js';
 import { bounded, HttpClient, keyValue, optionalObject } from '../http.js';
 import { NidusError } from '../errors.js';
 import { completionBody, completionResponse } from './compatible.js';
 import { reviewedFreeModels } from '../providers.js';
 import type { ChatRequest, Model, RequestOptions } from '../types.js';
-export function cloudflareCredential(key: string, accountId: unknown): string {
-  if(typeof accountId!=='string'||!/^[a-fA-F0-9]{32}$/.test(accountId)) throw new NidusError('invalid_request','Cloudflare requires a 32-character hexadecimal Account ID.');
-  return JSON.stringify({token:keyValue(key),accountId});
+function validatedCredential(key: string, accountId: unknown) {
+  if (typeof accountId !== 'string' || !/^[a-fA-F0-9]{32}$/.test(accountId)) {
+    throw new NidusError('invalid_request', 'Cloudflare requires a 32-character hexadecimal Account ID.');
+  }
+  return { token: keyValue(key), accountId };
 }
-function unpack(key:string) {
-  try { const r=object(JSON.parse(key));const packed=cloudflareCredential(string(r.token),r.accountId);return JSON.parse(packed) as {token:string;accountId:string}; }
-  catch { throw new NidusError('invalid_request','Reconnect Cloudflare with API token and Account ID.'); }
+export function cloudflareCredential(key: string, accountId: unknown): string {
+  return JSON.stringify(validatedCredential(key, accountId));
+}
+function unpack(key: string) {
+  try {
+    const raw = object(JSON.parse(key));
+    return validatedCredential(string(raw.token), raw.accountId);
+  } catch {
+    throw new NidusError('invalid_request', 'Reconnect Cloudflare with API token and Account ID.');
+  }
 }
 export class CloudflareAdapter {
   readonly id='cloudflare' as const;
@@ -37,6 +46,7 @@ export class CloudflareAdapter {
     });
   }
   async getModel(key:string, model:string, options:RequestOptions={}) {
+    validateModelID(model);
     const match=(await this.listModels(key,options)).find(m=>m.id===model);
     if(!match) throw new NidusError('not_found','Model was not returned by the provider.');return match;
   }

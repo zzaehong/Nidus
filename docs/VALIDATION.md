@@ -9,6 +9,15 @@
 - 최근 기록(2026-10-28): Node 171개 PASS, Swift 42개 PASS, 기존 macOS 앱 빌드 PASS. 이 결과를 Agent E2E나 실제 Provider 성공으로 해석하지 않습니다.
 - 실제 무료·유료 Provider 인증·추론·청구 확인은 아래 개발 검증에서 NOT RUN입니다. 캐시 표시·분류 평가는 라이브 연결 검증이 아닙니다.
 
+## Ponytail 원칙 적용 점검 (2026-10-30)
+
+- Provider Adapter, 실행·라우팅 경로, Ledger/Context, SwiftUI 연결 구조를 검토하고 변경은 중복 제거와 입력 검증 보완에 한정했습니다. 전면 재작성이나 전체 보안 감사는 아닙니다.
+- 모델 ID 검증을 공통 함수로 통합하고 Cloudflare 조회에도 적용했습니다. DeepSeek 요청 구성은 기존 호환 API helper를 재사용하되 Provider별 사용량 해석은 유지했습니다.
+- Cloudflare 자격 증명 검증의 JSON 재직렬화·재파싱과 라우팅 제외 후보의 중복 정책 계산을 제거했습니다. 신규 의존성, DB 마이그레이션, 권한·예산 정책 변경은 없습니다.
+- PASS: Node 173개, Swift 42개, macOS unsigned 앱 빌드, `git diff --check`. 추가 Mock은 잘못된 모델 ID·저장 자격 증명의 네트워크 전송 차단과 정상 조회/미발견 처리를 검증합니다.
+- 최초 제한 환경의 Node 실행은 localhost 바인딩 EPERM으로 실패했고, 로컬 Mock 서버 실행 권한을 부여한 전체 재실행은 통과했습니다.
+- NOT RUN: 실제 Provider API, 수동 GUI 검증, M0 재진단. 기존 M0 종료 안전성 FAIL과 backend 미채택 상태는 그대로입니다.
+
 ## 단계별 결과
 
 Node는 `npm test`, Swift는 `swift test` 또는 당시 임시 scratch 경로를 사용했습니다. 앱 빌드는 표시된 각 단계에서 로컬 unsigned 번들 기준 PASS이며, API Connectivity MVP 행은 앱 도입 전입니다.

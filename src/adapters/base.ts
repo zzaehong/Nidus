@@ -48,11 +48,8 @@ export abstract class BaseAdapter implements ProviderAdapter {
     });
   }
   async getModel(key: string, model: string, options: RequestOptions = {}): Promise<Model> {
-    this.validateModelID(model);
+    validateModelID(model);
     return bounded(options, async signal => this.normalizeModel(await this.http.json(`${this.endpoint}/models/${encodeURIComponent(model)}`, this.headers(keyValue(key)), signal)));
-  }
-  protected validateModelID(model: string): void {
-    if (typeof model !== "string" || !model.trim() || model.length > 512 || /[\r\n\0]/.test(model)) throw new NidusError("invalid_request", "A valid model ID is required.");
   }
   async chat(key: string, request: ChatRequest, options: RequestOptions = {}): Promise<ChatResponse> {
     const headers = this.headers(keyValue(key));
@@ -73,8 +70,12 @@ export function response(provider: ProviderId, model: string, text: string, fini
 }
 export { array, count, object, string };
 
+export function validateModelID(model: unknown): void {
+  if (typeof model !== "string" || !model.trim() || model.length > 512 || /[\r\n\0]/.test(model)) throw new NidusError("invalid_request", "A valid model ID is required.");
+}
+
 export function validateChatRequest(request: ChatRequest): void {
-    if (!request || typeof request.model !== "string" || !request.model.trim() || request.model.length > 512 || /[\r\n\0]/.test(request.model)) throw new NidusError("invalid_request", "A valid model ID is required.");
+    validateModelID(request?.model);
     if (!Array.isArray(request.messages) || !request.messages.length || request.messages.some(m => !m || !["user", "assistant"].includes(m.role) || typeof m.content !== "string" || !m.content.trim())) throw new NidusError("invalid_request", "Nonempty user/assistant messages are required.");
     if (request.system !== undefined && typeof request.system !== "string") throw new NidusError("invalid_request", "System prompt must be a string.");
     if (request.maxOutputTokens !== undefined && (!Number.isSafeInteger(request.maxOutputTokens) || request.maxOutputTokens <= 0)) throw new NidusError("invalid_request", "maxOutputTokens must be a positive integer.");
