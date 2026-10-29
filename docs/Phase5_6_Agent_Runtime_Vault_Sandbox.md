@@ -171,14 +171,6 @@ Home/Desk/Library, 정체성, 지속 Task 상태/Next Action, 장기 Memory, RAG
 
 재현 보고서: [M0 JSON evidence](evidence/Phase5_6_M0_Sandbox.json). 민감한 경로·키·본문·PID는 포함하지 않는다. `eligible: false`는 이 진단이 제품 backend를 활성화할 수 없다는 뜻이며, 파일 테스트 일부가 성공해도 전체 자격으로 승격하지 않는다.
 
-### 회귀 및 패키징 결과
+### 회귀 및 검증 이력
 
-- PASS: `npm test` 171개 (기존 169개 + M0 진단 단위 테스트 2개).
-- PASS: `swift test --scratch-path /tmp/nidus-phase43` 42개.
-- PASS: `npm run build:app` — 기존 앱 패키징. Agent UI/Runtime 완료를 의미하지 않음.
-- PASS: `node --check scripts/agent-sandbox/probe.mjs`, `git diff --check`.
-- M0 GATE FAIL: 재현 보고서의 descendant-cleanup. 검증 중 발견한 실패를 회귀 테스트 PASS와 혼동하지 않는다.
-- NOT RUN: 실제 무료·유료 Provider 요청, 실제 웹 검색, M1–M6 E2E.
-
-변경 범위: 이 설계·검증 문서, JSON evidence, 진단 스크립트와 C fixture 2개, 진단 단위 테스트. 제품 런타임·Provider·SQLite 마이그레이션·SwiftUI 변경 없음.
-develop 시작/종료 `81ecb887cd2f2b8803ead55c0c50d945aacbf15a`, main `723c03b59dcecaae27d9fe0a9f97b464c785d706` 변경 없음. 원격 반영·병합 없음.
+단계별 테스트 수와 앱 빌드·실제 API 미검증 기록은 [검증 이력](VALIDATION.md)에 통합했다. Node·Swift 회귀와 기존 앱 빌드 PASS를 M0 보안 게이트 또는 Agent 기능 완료로 간주하지 않는다. 위 M0 실패와 원본 evidence는 그대로 유지한다.
