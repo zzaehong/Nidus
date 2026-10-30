@@ -326,3 +326,55 @@ python3 scripts/agent-vm/test_workspace.py
 ```
 
 전체 M0 미자격이므로 진단 exit 1은 예상 결과다. 환경은 macOS 27.0.1 (26A434), Linux 6.18.58-0-virt, 2 vCPU/512MiB로 유지한다. 신규 [Manager Evidence](evidence/Phase5_6_M0_VM_Manager.json)에 source hash와 회귀 결과를 저장한다. Node 174개, Swift 42개, 파일 테스트 6개, Manager 정책 테스트 4개 PASS. 첫 Node 실행은 sandbox의 localhost listen EPERM으로 실패했고 로컬 mock listener 허용 후 통과했다. 실제 API 호출, 제품 앱 packaging, 제품 서명 변경은 수행하지 않았다.
+
+## M0 Lifecycle Reliability & Recovery — 2026-10-31
+
+### OS·Framework 조사와 판단
+
+SDK 27.2 `VZVirtualMachine.h`와 Apple 공개 문서에서 확인한 종료 근거는 **소유 객체의 성공한 stop callback 또는 guest-stop delegate와 stopped 상태**다. `requestStop`은 요청일 뿐이며 프로세스 종료나 조용한 heartbeat를 대체 근거로 사용하지 않는다. 조사한 공개 인터페이스에는 실행 중인 다른 프로세스의 VM을 실행 ID로 열거·인계·재연결하는 API가 없었다. save/restore는 저장한 정지 상태를 복원하는 API로, 기존 실행 인계가 아니다. 이는 조사한 SDK/문서의 범위이며 비공개 구현의 수명 보장을 추측하지 않는다.
+
+Manager SIGKILL 전후 `ps`의 Virtualization XPC 서비스 PID·시작 시각도 독립 관측한다. 해당 서비스가 사라지는 결과는 OS 수준의 보조 관측이지만, 공개 API로 우리 run ID와 대응시킨 증거는 아니다. 다른 VM이 있을 수 있고 프로세스 재사용·순간적인 목록 변화도 있으므로 이 결과만으로 STOP_CONFIRMED를 만들지 않는다.
+
+launchd는 프로세스 장애 감지·재시작에 활용할 수 있지만 VM 인계나 이전 VM 종료 확인을 제공한다는 근거는 없다. **새 상주 Supervisor는 추가하지 않았다.** 향후 제품에서 필요하면 on-demand Manager를 시작하고 먼저 reconciliation만 수행하도록 구성한다. KeepAlive 재시작마다 start를 자동 호출하거나 Task를 재개해서는 안 된다. launchd 설치·실행 자체는 NOT_RUN이다.
+
+공식 근거: [stop callback](https://developer.apple.com/documentation/virtualization/vzvirtualmachine/stop(completionhandler:)), [VM state](https://developer.apple.com/documentation/virtualization/vzvirtualmachine/state-swift.property), [launchd jobs](https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPSystemStartup/Chapters/CreatingLaunchdJobs.html). 실제 관측치는 아래 별도 Evidence를 따른다.
+
+### 최소 상태 대조와 실패 시 차단
+
+`lifecycle.py`는 Host journal에서 관리 상태를 재구성한다. 실제 Framework 상태는 별도 필드로 유지한다. 기존 `recovered_stop`/신규 실행 admission도 같은 판정을 사용한다. 마지막 stop-confirmed 문자열만 신뢰하던 검사를 강화해 동일 실행의 callback/stopped 증거를 요구한다.
+
+| 관리 상태 | 근거 / 재시작 시 처리 |
+|---|---|
+| CREATED | Manager 준비, VM 시작 전; 종료 증거가 없으면 재시작 시 미확인 |
+| STARTING | start 요청; 재시작 시 미확인 |
+| RUNNING | start 완료; 재시작 시 미확인 |
+| STOP_REQUESTED | 취소·종료 요청; 완료로 처리하지 않음 |
+| FAILED | 시작·종료 오류; stopped 증거가 아님 |
+| STOP_CONFIRMED | 동일 실행 callback과 stopped 확인 기록; 현재 상태와 모순되면 차단 |
+| STOP_UNCONFIRMED | 기록 없음·손상·불일치·timeout·소유자 상실 후 종료 증거 없음 |
+
+미확인 상태에서는 동일 Workspace 재실행을 포함한 신규 실행, 원본 반영, 임시 데이터 삭제를 거부하고 autoResume=false를 유지한다. CLI `manager_probe.py recover <journal> <runID>`는 상태와 원인을 JSON으로 출력한다. 이는 실행 안전 기록이며 프롬프트·Task 진행 상황·Memory는 저장하지 않는다. 기록은 게스트에 공유하지 않으며 악성 동일 사용자 Host가 기록을 위조하는 상황은 현재 신뢰 모델 밖이다. registry 초기화는 새로운 합성 suite 생성에만 허용되며 복구 시 초기화하면 안 된다.
+
+### 검증 기준과 재현
+
+`reliability_probe.py`는 기존 Manager/Worker 구조를 재사용한다. Manager SIGKILL을 동일 setsid·로컬 datagram 조건에서 5회 반복한다. 각 실행의 실제 파일 증가와 approved UDP payload를 먼저 관측하고, 종료 후 300ms 정착 뒤 5초 동안 파일 크기와 프레임 증가를 센다. 패킷은 로컬 sink에서 폐기하며 외부 네트워크로 전달하지 않는다. 무활동 관측과 framework 종료 증명을 각각 판정한다.
+
+추가 검증은 정상 강제 종료/취소·중복 취소, Worker SIGKILL, 중복 시작, Supervisor SIGKILL, 합성 앱 제어 프로세스 종료, 기록 재읽기 및 실제 실행 admission 차단이다. 오류·callback 미도착은 **prototype의 명시적 fault injection**으로 재현한다. 실제 Apple framework가 오류를 발생시켰다는 의미가 아니다. 주입 상태에서는 stop 호출을 생략하고 timeout 시 미확인으로 끝내므로 게스트가 계속 실행될 수 있으며, Manager 소멸 후 관측과 차단 정책을 따로 기록한다.
+
+정상 종료 PASS는 framework 근거와 무활동 관측을 모두 요구한다. Manager SIGKILL은 무활동이더라도 UNCONFIRMED이며, 주입 실패 시 종료 증명은 NOT_RUN이다. 반면 해당 상황의 차단 정책은 별도로 PASS/FAIL 판정한다. 실제 SwiftUI crash, 실제 framework 내부 고장, 외부 네트워크 정책, 일반 파일 merge는 NOT_RUN이다. 제품 앱과 Provider/Router는 변경하지 않는다.
+
+```sh
+swiftc scripts/agent-vm/VMProbe.swift -framework Virtualization -o /private/tmp/nidus-vm-m0-assets/vm-manager
+codesign --force --sign - --entitlements scripts/agent-vm/probe.entitlements /private/tmp/nidus-vm-m0-assets/vm-manager
+cp /private/tmp/nidus-vm-m0-assets/vm-manager /private/tmp/nidus-vm-m0-assets/vm-probe
+python3 scripts/agent-vm/reliability_probe.py /private/tmp/nidus-vm-m0-assets > /tmp/nidus-reliability-final.json
+python3 scripts/agent-vm/test_lifecycle.py
+python3 scripts/agent-vm/test_manager.py
+python3 scripts/agent-vm/test_workspace.py
+```
+
+진단 exit 1은 M0 미자격을 의미한다. 각 반복은 독립된 합성 suite이며, 이전 미확인 작업의 registry를 초기화하거나 같은 Workspace에서 재실행하지 않는다. 임시 진단 자료는 보존한다. 결과는 [Lifecycle Recovery Evidence](evidence/Phase5_6_M0_VM_Recovery.json)에 별도로 저장한다. 기존 Evidence는 수정하지 않는다.
+
+**결론: 소유자 상실 후 종료의 공개 API 근거가 확보되지 않아 M0 전체 통과 및 M1~M6 착수는 보류한다.** 확인 가능한 상태 조회·재연결 기능이 필요하면 Apple에 해당 수명 계약을 확인하거나, 안정적인 실행 ID 기반 재조회와 종료 확인을 제공하는 Backend를 별도 검증해야 한다. Supervisor를 하나 더 쌓거나 재시작 성공을 종료 증거로 삼는 것은 해결책으로 인정하지 않는다.
+
+최종 결과: Manager SIGKILL **5 UNCONFIRMED**(각각 5초간 파일/패킷 증가 0, OS 서비스 관측 1→0), 정상/중복 요청·Worker/Supervisor·합성 앱 연결 검증 **5 PASS**, 종료 장애 주입 **2 NOT_RUN**(종료 증명 기준; 차단 정책은 2 PASS). Node 174, Swift 42, 파일 6, Manager 4, lifecycle 4개 테스트 PASS. 기록/현재 상태 불일치는 단위 테스트 입력으로 검증했으며 실제 Framework 상태 위조를 수행하지 않았다.

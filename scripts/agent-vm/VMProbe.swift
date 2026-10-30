@@ -14,6 +14,7 @@ final class LinuxVMBackend: NSObject, SandboxBackend, VZVirtualMachineDelegate {
     private var machine: VZVirtualMachine!
     var exitWhenStopped = false
     var managerMode = false
+    var stopFault = "none"
     var stopping = false
     var stopConfirmed = false
     var lastHeartbeat = ProcessInfo.processInfo.systemUptime
@@ -78,6 +79,10 @@ final class LinuxVMBackend: NSObject, SandboxBackend, VZVirtualMachineDelegate {
     }
     func forceStop() {
         event("forceStop-request")
+        if managerMode && stopFault != "none" {
+            event(stopFault == "error" ? "forceStop-failed" : "injected-stop-no-completion", ["injected":true])
+            return // Diagnostic fault injection; no claim of an actual framework failure.
+        }
         machine.stop { [weak self] error in
             if let error { self?.event("forceStop-failed",["error":error.localizedDescription]) }
             else {
@@ -114,16 +119,17 @@ final class LinuxVMBackend: NSObject, SandboxBackend, VZVirtualMachineDelegate {
     func virtualMachine(_ virtualMachine: VZVirtualMachine, didStopWithError error: Error) { event("failed",["error":error.localizedDescription]) }
 }
 let args = CommandLine.arguments
-let managerMode = args.count == 9 && args[6] == "manager"
+let managerMode = (9...11).contains(args.count) && args[6] == "manager"
 if !managerMode && args.count != 6 && args.count != 7 { fputs("kernel initrd workspace serial mode [networkFD]\n",stderr); exit(2) }
 var backend: LinuxVMBackend!
 var managerTimer: DispatchSourceTimer?
 var started = false
 do {
-    backend = try LinuxVMBackend(kernel:args[1],ramdisk:args[2],workspace:args[3],serial:args[4],mode:args[5],networkFD:args.count==7 ? Int32(args[6]) : nil)
+    backend = try LinuxVMBackend(kernel:args[1],ramdisk:args[2],workspace:args[3],serial:args[4],mode:args[5],networkFD:managerMode && args.count>=10 ? Int32(args[9]) : (args.count==7 ? Int32(args[6]) : nil))
 } catch { fputs("VM configuration failed: \(error)\n",stderr); exit(2) }
 if managerMode {
     backend.managerMode = true
+    backend.stopFault = args.count==11 ? args[10] : "none"
     backend.runID = args[7]
     backend.event("manager-ready")
     let timeout = Double(args[8]) ?? 15

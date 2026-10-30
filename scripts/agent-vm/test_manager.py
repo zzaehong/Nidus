@@ -14,7 +14,7 @@ class RecoveryTests(unittest.TestCase):
             registry=pathlib.Path(d)/'registry';journal=pathlib.Path(d)/'events'
             registry.write_text('null');begin_run(registry,journal,'one')
             with self.assertRaises(ValueError):begin_run(registry,journal,'two')
-            journal.write_text(json.dumps({'runID':'one','action':'stop-confirmed','actualState':0}))
+            journal.write_text(json.dumps({'runID':'one','action':'forceStop-completed','actualState':0})+'\n'+json.dumps({'runID':'one','action':'stop-confirmed','actualState':0}))
             begin_run(registry,journal,'two')
             registry.write_text('{')
             with self.assertRaises(ValueError):begin_run(registry,journal,'three')
@@ -36,7 +36,7 @@ class RecoveryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             p=pathlib.Path(d)/'events'
             for state in (0,1):
-                p.write_text(json.dumps({'runID':'run','action':'stop-confirmed','actualState':state}))
+                p.write_text(json.dumps({'runID':'run','action':'forceStop-completed','actualState':0})+'\n'+json.dumps({'runID':'run','action':'stop-confirmed','actualState':state}))
                 self.assertEqual(recovered_stop(p,'run'),state==0)
             p.write_text(json.dumps({'runID':'run','action':'stop-confirmed','actualState':0})+'\n{')
             self.assertFalse(recovered_stop(p,'run'))

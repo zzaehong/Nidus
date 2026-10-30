@@ -110,3 +110,9 @@ Node 174개, Swift 42개, workspace 6개 PASS. 제품 앱 packaging·실제 API�
 작업 Worker와 VM 소유 Manager를 분리한 실제 VM 검증은 8 PASS / 1 NOT_RUN이다. Worker SIGKILL·연결 단절·heartbeat 만료·timeout 후 Manager가 VM 종료를 확인했다. Manager 자체 SIGKILL은 종료 미확인으로 남고 신규 실행을 차단한다. M0 전체 자격 및 M1~M6 보류는 유지한다.
 
 Node 174, Swift 42, workspace 6, Manager 정책 4개 PASS. 기존 VM 모드 회귀는 9 PASS / 1 NOT_RUN, 보안 검사 7 PASS. 최초 Node 실행의 localhost EPERM은 환경 제한으로 기록하고 권한 허용 후 재검증했다. 상세 제한과 원시 이벤트는 [Manager Evidence](evidence/Phase5_6_M0_VM_Manager.json)를 참조한다. 기존 실패 Evidence는 수정하지 않았다.
+
+## VM Lifecycle Recovery (2026-10-31)
+
+실제 Manager SIGKILL 5회: 5초간 파일·로컬 패킷 추가 활동 없음, 관측된 Virtualization 서비스 소멸. 활동 관측은 모두 PASS지만 권위 있는 종료 근거는 **5 UNCONFIRMED**다. 정상 취소/중복 종료, 중복 시작 차단, Worker 종료, Supervisor 종료, 합성 앱 연결 상실은 **5 PASS**. 종료 오류·완료 미도착 주입 2건은 종료 증명 NOT_RUN, 미확인 처리·재실행 차단 정책은 PASS다. 실제 framework 내부 오류와 실제 SwiftUI crash로 확대 해석하지 않는다.
+
+Node 174, Swift 42, workspace 6, Manager 4, lifecycle 4개 PASS. 상태 불일치는 단위 테스트에서 현재 상태를 주입해 검증한다. launchd는 공식 기능을 검토했으며 설치하지 않았다. M0 전체 미통과 및 M1~M6 보류를 유지한다. [Recovery Evidence](evidence/Phase5_6_M0_VM_Recovery.json)에 원시 관측과 판정 근거를 보존한다.
