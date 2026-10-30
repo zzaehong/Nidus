@@ -44,6 +44,7 @@ async function descendantCheck(profile, vault, directory) {
   if (build.code !== 0) return { status: 'NOT_RUN', evidence: 'Could not compile synthetic lifecycle fixture' };
   const marker = join(vault, 'child.pid');
   const child = spawn('/usr/bin/sandbox-exec', ['-f', profile, binary, marker], { cwd: vault, detached: true, stdio: 'ignore', env: { PATH: '/usr/bin:/bin', HOME: vault, TMPDIR: vault } });
+  const startedAt = Date.now();
   let launchError = false; child.on('error', () => { launchError = true; });
   const closed = new Promise(resolve => child.on('close', resolve));
   let descendant = null;
@@ -63,9 +64,9 @@ async function descendantCheck(profile, vault, directory) {
     const survived = (await readFile(marker, 'utf8')).length > before.length;
     return { status: survived ? 'FAIL' : 'PASS', evidence: { strategy: 'terminate-process-group', detachedChildSurvived: survived } };
   } finally {
-    // Only a PID emitted by our just-built fixture is used. The fixture also exits after 10s.
-    if (descendant) { try { process.kill(descendant, 'SIGKILL'); } catch {} }
-    if (child.pid) { try { process.kill(-child.pid, 'SIGKILL'); } catch {} }
+    // Never signal a saved descendant PID: it may have been reused. The synthetic
+    // child expires independently after 10s; keep its temporary directory until then.
+    await new Promise(r => setTimeout(r, Math.max(0, 10500 - (Date.now() - startedAt))));
   }
 }
 async function networkCheck(run, directory, vault) {

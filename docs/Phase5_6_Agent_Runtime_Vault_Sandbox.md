@@ -174,3 +174,65 @@ Home/Desk/Library, 정체성, 지속 Task 상태/Next Action, 장기 Memory, RAG
 ### 회귀 및 검증 이력
 
 단계별 테스트 수와 앱 빌드·실제 API 미검증 기록은 [검증 이력](VALIDATION.md)에 통합했다. Node·Swift 회귀와 기존 앱 빌드 PASS를 M0 보안 게이트 또는 Agent 기능 완료로 간주하지 않는다. 위 M0 실패와 원본 evidence는 그대로 유지한다.
+
+## M0 생명주기 재검증 — 2026-10-30
+
+**채택 가능한 backend 없음. M0 미통과이며 M1–M6 착수·제품 Shell 활성화를 계속 보류한다.** 독립 Supervisor prototype도 분리된 자식의 종료를 보장하지 못했다. 이는 검증한 PGID 전략의 실패이며 모든 macOS 격리 방식이 불가능하다는 결론은 아니다. Provider·Router·Ledger·앱 서명/공증 설정은 변경하지 않았다.
+
+### 실패 원인과 대안 비교
+
+`setsid()`는 새 세션과 프로세스 그룹을 만든다. 따라서 원래 `kill(-pgid, SIGKILL)`의 대상에서 제외된다. 이중 fork 후 부모가 종료되면 현재 PPID를 순회하는 방법도 원래 소유 관계를 잃는다. PID/시작 시각 확인 후 kill 사이에는 재사용 경쟁이 남으며, 순차 PID 조회는 fork·exit와 원자적이지 않다. Supervisor의 SIGKILL에는 종료 handler가 실행되지 않는다.
+
+| 후보 | 검토 결과 | 채택 상태 |
+|---|---|---|
+| sandbox-exec + 독립 Supervisor + PGID 종료 | 일반 자식의 취소·Worker 종료·시간 제한은 처리하지만 setsid/이중 fork/감독자 사망에는 부족. 실제 fixture 실패 | 부적합 |
+| App Sandbox + XPC Helper | 권한 분리·서비스 관리 수단. XPC 연결 무효화가 서비스가 만든 모든 자식의 종료 증거는 아님. 동일 생명주기 fixture와 서명된 패키지 검증 필요 | NOT_RUN, 미채택 |
+| launchd 감독 + PID 목록/kqueue 추적 | 로컬 SDK `launchd.plist(5)`의 AbandonProcessGroup은 같은 PGID의 잔여 프로세스만 설명. `sys/event.h`는 NOTE_TRACK/NOTE_CHILD를 macOS 10.5부터 미지원으로 명시. 이벤트 관측 자체도 원자적 종료나 감독자 사망 처리가 아님 | 해결책으로 채택하지 않음 |
+| Endpoint Security 기반 추적 | fork/exec/signal 관측·승인 API이나 전용 entitlement·배포 설계가 필요. 관측만으로 원자적인 트리 종료를 보장한다고 할 수 없음 | NOT_RUN, 범위 밖 설치 없음 |
+| macOS VM / Linux VM·컨테이너 | 개별 PID 대신 게스트 전체의 실행 수명을 종료하는 경계를 검증할 수 있는 다음 후보. VM 호스트 강제 종료, 공유 디렉터리/네트워크 폐쇄도 별도 검증해야 함 | NOT_RUN, 안전하다고 선언하지 않음 |
+| fork 불가 고정 실행 파일만 허용 | 공격면을 줄일 수 있지만 일반 Shell·컴파일·테스트 요구를 충족하는 대체재가 아님 | 제품 요구 변경 없이 채택 불가 |
+
+권장 다음 검증 방향은 **VM 단위의 수명 경계**다. macOS 네이티브 작업이 필요하면 macOS 게스트, Linux 호환 작업이면 Linux 게스트를 비교한다. 원본 Vault 전체 공유는 `.nidus`·Secret 보호를 자동으로 제공하지 않으므로 승인된 작업 복사본과 변경 반영 또는 별도 파일 broker가 필요하다. 이는 기존 원본 Vault 직접 실행 요구와 설계 차이가 있으므로 이번 진단에서 임의 구현하지 않는다. XPC는 이후 제어 채널로 사용할 수 있으나 단독 해결책으로 약속하지 않는다.
+
+공식 근거(2026-10-30 확인): [Apple App Sandbox 상속·서명](https://developer.apple.com/library/archive/documentation/Miscellaneous/Reference/EntitlementKeyReference/Chapters/EnablingAppSandbox.html), [XPC 서비스](https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPSystemStartup/Chapters/CreatingXPCServices.html), [Endpoint Security](https://developer.apple.com/documentation/endpointsecurity), [Virtualization entitlement](https://developer.apple.com/documentation/virtualization/adding-the-virtualization-entitlement-to-your-project), [VM stop API](https://developer.apple.com/documentation/virtualization/vzvirtualmachine/stop(completionhandler:)). VM 선택은 위 API의 존재와 격리 경계에 근거한 **설계 제안**이며 이번 실측 결과가 아니다.
+
+### 실제 로컬 검증 방식
+
+- 환경: macOS 27.0.1 (26A434), Darwin 27.0.0, arm64, Node v24.21.0. 다른 macOS 버전은 NOT_RUN이다.
+- `lifecycle.mjs`는 독립 Node Supervisor와 별도 Node Worker **프로세스**를 만든다(Worker Thread 테스트가 아님). Supervisor가 샌드박스 내부의 고정 C fixture만 실행한다. Worker의 SIGKILL/exit, deadline, cancel을 PGID 종료로 처리한다. 제품 Runtime이나 범용 명령 실행 API가 아니다.
+- 외부 관측자가 Vault heartbeat 파일 증가와 loopback 서버의 실제 접속 횟수를 센다. 시작 시 heartbeat가 없거나 관측이 fixture 자체 만료에 가까워지면 NOT_RUN이다. 종료 후 150ms 정착 구간을 두고 600ms 동안 추가 활동을 확인한다. 이 유한 구간의 PASS는 무기한 종료 보장이 아니다.
+- fixture는 자식·손자 모두 같은 monotonic 4초 마감과 별도 5초 alarm을 가진다. 각 시나리오 후 5.6초까지 임시 경로를 유지한다. 이 자체 만료는 **검증 장비의 정리 장치**이며 제품 Supervisor의 성공으로 계산하지 않는다.
+- C fixture는 오직 임시 파일과 127.0.0.1에만 접근한다. 명시적 loopback 허용 대조군에서 통신이 실제 관측되어야 기본 차단 결과를 판정한다. 외부 인터넷·Provider API는 사용하지 않는다.
+- Shell 환경은 PATH/HOME/TMPDIR만 전달한다. 부모의 합성 Secret sentinel이 heartbeat에 나타나는지 확인한다. 실제 API Key는 읽거나 전달하지 않는다.
+- 승인 false에서는 workload를 만들지 않는다. 이는 신뢰된 진단 프로토콜의 거절 검증이며, 향후 제품 승인 UI/인증/변조 방지의 E2E 검증은 아니다.
+- 기존 `probe.mjs`도 재실행했다. 진단 후 저장된 자식 PID를 다시 kill하던 코드는 제거하고 fixture 자체 만료를 기다린다. 재사용된 PID를 실험 정리 대상으로 삼지 않는다. prototype의 PGID 신호 경로에는 여전히 원자적 식별 보장이 없으므로 제품 사용을 금지한다.
+
+### 결과와 남은 게이트
+
+| 검증 | 결과 |
+|---|---|
+| 일반 자식: 사용자 취소 / Worker SIGKILL / 시간 초과 | PASS (유한 관측 구간) |
+| setsid 자식: 취소 / Worker SIGKILL / 시간 초과 | FAIL: 종료 이후 쓰기 지속 |
+| 이중 fork + 부모 종료 / 분리된 자식의 추가 자식 생성 | FAIL: 자손 쓰기 지속 |
+| Supervisor SIGKILL | FAIL: 일반 자식도 쓰기 지속 |
+| 명시적 loopback 허용 중 setsid 취소 | FAIL: 리더 SIGKILL 후 600ms 동안 파일 쓰기 12회·접속 12회 추가 |
+| 기본 네트워크 차단 / 부모 Secret 비전달 / 승인 거절 | PASS (고정 fixture 범위; 제품 승인 E2E 아님) |
+| 기존 Vault 읽기·쓰기, 외부 파일 차단, `.nidus`/`.env` 읽기 차단, symlink 탈출 차단 | PASS (기존 제한된 fixture 범위) |
+| 실제 PID 재사용 시 원자적 종료 | NOT_RUN: 안전한 원자적 primitive 없음. PID 고갈/무관한 프로세스 종료 실험은 하지 않음 |
+| signed XPC / VM 수명 검증 | NOT_RUN |
+| 전체 hardlink/rename 경쟁·Secret 탐지·SDK 빌드·브라우저·제품 승인 E2E | NOT_RUN: 기존 제한된 파일 테스트로 대체하지 않음 |
+
+현재 unsigned 로컬 앱의 서명/공증 설정은 유지했다. App Sandbox/XPC 검증에는 앱·Helper의 올바른 code signature와 entitlement 구성이 필요하다. Virtualization 사용에도 entitlement가 필요하며 Endpoint Security에는 별도 권한 설계가 필요하다. 새 signing identity, provisioning, 서비스 설치를 수행하지 않았다. 배포 최소 macOS 버전이나 공증 적합성은 이 테스트로 확정하지 않는다.
+
+재현 명령(호스트에서 sandbox-exec와 loopback listener를 허용한 개발 환경):
+
+```sh
+node scripts/agent-sandbox/probe.mjs > /tmp/nidus-m0-recheck.json
+node scripts/agent-sandbox/lifecycle.mjs > /tmp/nidus-m0-lifecycle.json
+node --test tests/agent-sandbox-probe.test.mjs
+npm test
+```
+
+두 진단은 미자격 상태이므로 **exit 1이 예상 결과**다. 이를 Node 회귀 테스트 실패와 혼동하지 않는다. 최초 네트워크 허용 대조군은 profile selector 문제로 workload가 시작되지 않아 NOT_RUN이었고, 허용 host를 `localhost`로 수정했다. 이후 AF_INET socket 생성 권한 부재도 확인하여 명시적 loopback 대조군에만 추가하고 재검증했다. 기본 차단 profile은 변경하지 않았다. 비동기 connect 직후 close로 양성 대조군 접속이 관측되지 않던 fixture도 연결 완료를 최대 100ms 기다리도록 수정했다. 이 중간 상태에서 네트워크 격리는 NOT_RUN으로 유지했다. 시작 실패를 네트워크 차단 PASS로 기록하지 않았다.
+
+원본 [2026-10-28 evidence](evidence/Phase5_6_M0_Sandbox.json)는 보존한다. 이번 결과와 source hash는 [생명주기 재검증 evidence](evidence/Phase5_6_M0_Lifecycle.json)에 기록한다. **현재 종료 보장 범위는 검증된 일반 자식의 제한된 상황뿐이며, 임의 Shell 전체 트리 종료 보장은 없다.**

@@ -1,6 +1,6 @@
 # 검증 이력과 구현 상태
 
-이 문서는 기존 단계별 기록을 2026-10-30에 통합한 것입니다. **아래 수치는 당시 실행 결과이며 문서 정리 중 테스트를 새로 실행한 결과가 아닙니다.** 전체 상세 기록은 Git의 `fd3efae` 시점과 이전 커밋에 남아 있습니다.
+이 문서는 기존 단계별 기록을 2026-10-30에 통합한 것입니다. **단계별 결과 표는 당시 실행 기록입니다. 이후 재검증은 별도 날짜 섹션에 기록합니다.** 전체 상세 기록은 Git의 `fd3efae` 시점과 이전 커밋에 남아 있습니다.
 
 ## 현재 기준
 
@@ -8,6 +8,13 @@
 - Phase 5–6은 설계·M0 진단 단계입니다. **M0 종료 안전성 FAIL**로 Shell backend를 채택하지 않았으며 M1–M6 제품 기능은 미구현입니다.
 - 최근 기록(2026-10-28): Node 171개 PASS, Swift 42개 PASS, 기존 macOS 앱 빌드 PASS. 이 결과를 Agent E2E나 실제 Provider 성공으로 해석하지 않습니다.
 - 실제 무료·유료 Provider 인증·추론·청구 확인은 아래 개발 검증에서 NOT RUN입니다. 캐시 표시·분류 평가는 라이브 연결 검증이 아닙니다.
+
+## M0 생명주기 재검증 (2026-10-30)
+
+- 기존 setsid 종료 실패 재현. 독립 Supervisor prototype도 setsid·이중 fork·추가 자손·Supervisor SIGKILL에서 FAIL. 제품 backend는 미채택, M1–M6는 계속 보류합니다.
+- Node 전체 회귀 174개 PASS, 진단 판정 단위 테스트 3개 PASS. Swift·앱 빌드·실제 Provider API는 NOT_RUN(제품 코드 변경 없음).
+- 파일 쓰기와 외부 loopback listener로 실제 활동을 관측했습니다. fixture의 자체 수명 종료, PID 존재 확인, 신호 전송만으로 생명주기 PASS를 부여하지 않습니다.
+- [상세 대안·재현 절차](Phase5_6_Agent_Runtime_Vault_Sandbox.md#m0-생명주기-재검증--2026-10-30), [실측 JSON·소스 해시](evidence/Phase5_6_M0_Lifecycle.json). 원본 M0 evidence와 과거 FAIL 기록은 보존합니다.
 
 ## Ponytail 원칙 적용 점검 (2026-10-30)
 

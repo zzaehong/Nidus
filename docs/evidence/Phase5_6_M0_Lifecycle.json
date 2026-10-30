@@ -1,0 +1,453 @@
+{
+  "schemaVersion": 1,
+  "phase": "M0",
+  "eligible": false,
+  "decision": "No backend qualified; M1-M6 and product activation remain blocked.",
+  "sourceSha256": {
+    "scripts/agent-sandbox/probe.mjs": "eec0416cb2c0290c37d801ccb934bac674b652028cc10b70bea50be38c3f23ad",
+    "scripts/agent-sandbox/descendant.c": "6c90b6933e533eeff65b81f576036f723f907dcb79f43ab0a77a9a25b29fb2fc",
+    "scripts/agent-sandbox/network.c": "0c1f2949194ce5a049801901fd6e272f5a5d5abc6b342045fc371293c8c7982b",
+    "scripts/agent-sandbox/lifecycle.mjs": "42de8f415f8ba18aa55348243a9ceff759a844512d86bf4e7f3ccef12e1fd49c",
+    "scripts/agent-sandbox/lifecycle.c": "79172e75d0865d2eb972c8a990972d2accc70901b9d787c36fa0f486e8461c61"
+  },
+  "reproduction": [
+    "node scripts/agent-sandbox/probe.mjs",
+    "node scripts/agent-sandbox/lifecycle.mjs",
+    "node --test tests/agent-sandbox-probe.test.mjs",
+    "npm test"
+  ],
+  "expectedDiagnosticExitCode": 1,
+  "baselineRecheck": {
+    "schemaVersion": 1,
+    "phase": "M0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "generatedAt": "2026-10-30T05:05:47.211Z",
+    "backend": "sandbox-exec-candidate",
+    "eligible": false,
+    "checks": [
+      {
+        "name": "minimal-process-start",
+        "status": "PASS",
+        "evidence": {
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "launchError": false
+        }
+      },
+      {
+        "name": "vault-read",
+        "status": "PASS",
+        "evidence": {
+          "code": 0,
+          "signal": null
+        }
+      },
+      {
+        "name": "outside-read-denied",
+        "status": "PASS",
+        "evidence": {
+          "code": 1,
+          "signal": null
+        }
+      },
+      {
+        "name": "metadata-protected",
+        "status": "PASS",
+        "evidence": {
+          "code": 1,
+          "signal": null
+        }
+      },
+      {
+        "name": "secret-protected",
+        "status": "PASS",
+        "evidence": {
+          "code": 1,
+          "signal": null
+        }
+      },
+      {
+        "name": "symlink-escape-denied",
+        "status": "PASS",
+        "evidence": {
+          "code": 1,
+          "signal": null
+        }
+      },
+      {
+        "name": "vault-write",
+        "status": "PASS",
+        "evidence": {
+          "code": 0
+        }
+      },
+      {
+        "name": "outside-write-denied",
+        "status": "PASS",
+        "evidence": {
+          "code": 1
+        }
+      },
+      {
+        "name": "network-denied",
+        "status": "PASS",
+        "evidence": {
+          "code": 77,
+          "connectionsReceived": 0,
+          "scope": "loopback fixture only; EPERM/EACCES required; no external network tested"
+        }
+      },
+      {
+        "name": "descendant-cleanup",
+        "status": "FAIL",
+        "evidence": {
+          "strategy": "terminate-process-group",
+          "detachedChildSurvived": true
+        }
+      },
+      {
+        "name": "native-build",
+        "status": "NOT_RUN",
+        "evidence": "Separate security qualification required; not inferred from file tests"
+      },
+      {
+        "name": "browser-isolation",
+        "status": "NOT_RUN",
+        "evidence": "Separate security qualification required; not inferred from file tests"
+      }
+    ],
+    "limitations": [
+      "Diagnostic only; no backend activation",
+      "Browser isolation and descendant containment require independent verification"
+    ]
+  },
+  "independentSupervisor": {
+    "schemaVersion": 1,
+    "phase": "M0",
+    "generatedAt": "2026-10-30T05:11:52.751Z",
+    "platform": "darwin",
+    "kernel": "27.0.0",
+    "arch": "arm64",
+    "node": "v24.21.0",
+    "backend": "sandbox-exec-independent-pgid-supervisor-prototype",
+    "eligible": false,
+    "checks": [
+      {
+        "name": "sandbox-start",
+        "status": "PASS",
+        "evidence": {
+          "code": 0
+        }
+      },
+      {
+        "name": "ordinary/cancel/network-denied/approved",
+        "status": "PASS",
+        "evidence": {
+          "activeBeforeStop": true,
+          "stopReason": "user-cancel",
+          "signalSent": true,
+          "shellExit": {
+            "type": "shell-exit",
+            "code": null,
+            "signal": "SIGKILL"
+          },
+          "observationMs": 600,
+          "writesAfterStop": 0,
+          "connectionsAfterStop": 0,
+          "totalConnections": 0,
+          "secretLeaked": false,
+          "networkAllowed": false
+        }
+      },
+      {
+        "name": "setsid/cancel/network-denied/approved",
+        "status": "FAIL",
+        "evidence": {
+          "activeBeforeStop": true,
+          "stopReason": "user-cancel",
+          "signalSent": true,
+          "shellExit": {
+            "type": "shell-exit",
+            "code": null,
+            "signal": "SIGKILL"
+          },
+          "observationMs": 600,
+          "writesAfterStop": 12,
+          "connectionsAfterStop": 0,
+          "totalConnections": 0,
+          "secretLeaked": false,
+          "networkAllowed": false
+        }
+      },
+      {
+        "name": "double-fork/parent-exit/network-denied/approved",
+        "status": "FAIL",
+        "evidence": {
+          "activeBeforeStop": true,
+          "stopReason": "leader-exit",
+          "signalSent": false,
+          "shellExit": {
+            "type": "shell-exit",
+            "code": 0,
+            "signal": null
+          },
+          "observationMs": 600,
+          "writesAfterStop": 11,
+          "connectionsAfterStop": 0,
+          "totalConnections": 0,
+          "secretLeaked": false,
+          "networkAllowed": false
+        }
+      },
+      {
+        "name": "nested/cancel/network-denied/approved",
+        "status": "FAIL",
+        "evidence": {
+          "activeBeforeStop": true,
+          "stopReason": "user-cancel",
+          "signalSent": true,
+          "shellExit": {
+            "type": "shell-exit",
+            "code": null,
+            "signal": "SIGKILL"
+          },
+          "observationMs": 600,
+          "writesAfterStop": 24,
+          "connectionsAfterStop": 0,
+          "totalConnections": 0,
+          "secretLeaked": false,
+          "networkAllowed": false
+        }
+      },
+      {
+        "name": "ordinary/worker-crash/network-denied/approved",
+        "status": "PASS",
+        "evidence": {
+          "activeBeforeStop": true,
+          "stopReason": "worker-exit",
+          "signalSent": true,
+          "shellExit": {
+            "type": "shell-exit",
+            "code": null,
+            "signal": "SIGKILL"
+          },
+          "observationMs": 600,
+          "writesAfterStop": 0,
+          "connectionsAfterStop": 0,
+          "totalConnections": 0,
+          "secretLeaked": false,
+          "networkAllowed": false
+        }
+      },
+      {
+        "name": "setsid/worker-crash/network-denied/approved",
+        "status": "FAIL",
+        "evidence": {
+          "activeBeforeStop": true,
+          "stopReason": "worker-exit",
+          "signalSent": true,
+          "shellExit": {
+            "type": "shell-exit",
+            "code": null,
+            "signal": "SIGKILL"
+          },
+          "observationMs": 600,
+          "writesAfterStop": 12,
+          "connectionsAfterStop": 0,
+          "totalConnections": 0,
+          "secretLeaked": false,
+          "networkAllowed": false
+        }
+      },
+      {
+        "name": "ordinary/supervisor-crash/network-denied/approved",
+        "status": "FAIL",
+        "evidence": {
+          "activeBeforeStop": true,
+          "stopReason": "supervisor-sigkill",
+          "signalSent": false,
+          "shellExit": null,
+          "observationMs": 600,
+          "writesAfterStop": 12,
+          "connectionsAfterStop": 0,
+          "totalConnections": 0,
+          "secretLeaked": false,
+          "networkAllowed": false
+        }
+      },
+      {
+        "name": "ordinary/timeout/network-denied/approved",
+        "status": "PASS",
+        "evidence": {
+          "activeBeforeStop": true,
+          "stopReason": "timeout",
+          "signalSent": true,
+          "shellExit": {
+            "type": "shell-exit",
+            "code": null,
+            "signal": "SIGKILL"
+          },
+          "observationMs": 600,
+          "writesAfterStop": 0,
+          "connectionsAfterStop": 0,
+          "totalConnections": 0,
+          "secretLeaked": false,
+          "networkAllowed": false
+        }
+      },
+      {
+        "name": "setsid/timeout/network-denied/approved",
+        "status": "FAIL",
+        "evidence": {
+          "activeBeforeStop": true,
+          "stopReason": "timeout",
+          "signalSent": true,
+          "shellExit": {
+            "type": "shell-exit",
+            "code": null,
+            "signal": "SIGKILL"
+          },
+          "observationMs": 600,
+          "writesAfterStop": 12,
+          "connectionsAfterStop": 0,
+          "totalConnections": 0,
+          "secretLeaked": false,
+          "networkAllowed": false
+        }
+      },
+      {
+        "name": "setsid/cancel/loopback-approved/approved",
+        "status": "FAIL",
+        "evidence": {
+          "activeBeforeStop": true,
+          "stopReason": "user-cancel",
+          "signalSent": true,
+          "shellExit": {
+            "type": "shell-exit",
+            "code": null,
+            "signal": "SIGKILL"
+          },
+          "observationMs": 600,
+          "writesAfterStop": 12,
+          "connectionsAfterStop": 12,
+          "totalConnections": 16,
+          "secretLeaked": false,
+          "networkAllowed": true
+        }
+      },
+      {
+        "name": "ordinary/cancel/network-denied/denied",
+        "status": "PASS",
+        "evidence": {
+          "activeBeforeStop": false,
+          "stopReason": "approval-denied",
+          "signalSent": false,
+          "shellExit": null,
+          "observationMs": 600,
+          "writesAfterStop": 0,
+          "connectionsAfterStop": 0,
+          "totalConnections": 0,
+          "secretLeaked": false,
+          "networkAllowed": false
+        }
+      },
+      {
+        "name": "network-default-deny",
+        "status": "PASS",
+        "evidence": "Independent loopback listener; successful explicitly allowed control required. Not an external-network qualification."
+      },
+      {
+        "name": "shell-environment-secret-not-inherited",
+        "status": "PASS",
+        "evidence": "Synthetic parent-only sentinel absent from workload heartbeat; Shell receives only PATH/HOME/TMPDIR."
+      },
+      {
+        "name": "pid-reuse-atomic-termination",
+        "status": "NOT_RUN",
+        "evidence": "No safe atomic identity-bound tree termination primitive; no destructive PID exhaustion test."
+      },
+      {
+        "name": "signed-xpc-lifecycle",
+        "status": "NOT_RUN",
+        "evidence": "Not implemented or qualified; not inferred from prototype results."
+      },
+      {
+        "name": "vm-lifecycle",
+        "status": "NOT_RUN",
+        "evidence": "Not implemented or qualified; not inferred from prototype results."
+      },
+      {
+        "name": "native-build-in-sandbox",
+        "status": "NOT_RUN",
+        "evidence": "Not implemented or qualified; not inferred from prototype results."
+      },
+      {
+        "name": "browser-isolation",
+        "status": "NOT_RUN",
+        "evidence": "Not implemented or qualified; not inferred from prototype results."
+      },
+      {
+        "name": "production-approval-protocol",
+        "status": "NOT_RUN",
+        "evidence": "Not implemented or qualified; not inferred from prototype results."
+      }
+    ],
+    "limitations": [
+      "Finite synthetic observation is not a universal process-tree termination guarantee.",
+      "No signed XPC, VM or product runtime activated.",
+      "PID reuse has no atomic identity-bound kill in this prototype."
+    ],
+    "osVersion": "ProductName:\t\tmacOS\nProductVersion:\t\t27.0.1\nBuildVersion:\t\t26A434"
+  },
+  "regression": {
+    "node": {
+      "status": "PASS",
+      "tests": 174
+    },
+    "swift": "NOT_RUN: no Swift changes",
+    "appBuild": "NOT_RUN: no app changes",
+    "providerAPI": "NOT_RUN"
+  },
+  "diagnosticCorrections": [
+    "Initial loopback profiles using a numeric host failed to start (NOT_RUN); sandbox-exec requires localhost or wildcard.",
+    "After correcting host, workload ran but socket creation was denied; added AF_INET system-socket only to the explicitly allowed loopback control. Default deny profile unchanged.",
+    "Nonblocking connection was closed before handshake completion, invalidating the positive control; fixture now polls completion for up to 100ms. Intermediate network isolation remained NOT_RUN."
+  ],
+  "remainingQualification": [
+    {
+      "name": "atomic PID reuse protection",
+      "status": "NOT_RUN"
+    },
+    {
+      "name": "hardlink and rename races",
+      "status": "NOT_RUN"
+    },
+    {
+      "name": "complete secret protection",
+      "status": "NOT_RUN"
+    },
+    {
+      "name": "signed XPC lifecycle",
+      "status": "NOT_RUN"
+    },
+    {
+      "name": "VM lifecycle",
+      "status": "NOT_RUN"
+    },
+    {
+      "name": "native toolchain in sandbox",
+      "status": "NOT_RUN"
+    },
+    {
+      "name": "browser isolation",
+      "status": "NOT_RUN"
+    },
+    {
+      "name": "production approval E2E",
+      "status": "NOT_RUN"
+    }
+  ],
+  "qualificationStatus": "FAIL"
+}
