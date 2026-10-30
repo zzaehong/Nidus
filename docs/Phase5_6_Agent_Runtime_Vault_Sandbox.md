@@ -7,7 +7,7 @@
 
 이 문서는 승인된 통합 계획의 구현 기준이다. **아래 계약은 구현 목표이며, 완료된 기능 목록이 아니다.** 단계별 실제 결과는 마지막 검증 기록으로 구분한다. 현재 제품의 Provider·Router·권한·사용량·SwiftUI 동작은 M0 진단으로 변경하지 않는다. 실제 API 호출, 원격 push, develop 병합은 별도 승인 없이 수행하지 않는다.
 
-사용자 선택:
+이전 네이티브 설계의 사용자 선택(역사 기록; Shell 경계는 아래 VM M0로 대체):
 
 - macOS 네이티브 Shell, 원본 Vault 직접 실행.
 - 파일 Tool 쓰기·수정은 Diff 승인, 파일 삭제는 개별 승인.
@@ -16,6 +16,8 @@
 - 전용 브라우저 검색·공개 페이지 읽기 포함. 로그인·임의 폼 제출·다운로드·게시·구매 제외.
 - 기존 8개 Provider의 Tool Calling 변환 지원. 개별 모델의 실제 지원 여부가 불명확하면 Agent 후보에서 제외.
 - M0에서 네이티브 격리를 먼저 검증한다. 검증 전 Shell·브라우저 실행을 활성화하지 않는다.
+
+현재 방향: **Host 앱·엔진은 유지하고 Shell은 VM 내부의 승인된 작업 복사본에서만 실행**한다. 아래 기존 계약은 구현 목표로 보존하며, 이번 범위는 문서 끝의 VM M0 prototype뿐이다. 전체 M0 자격 판정은 아직 미통과이며 M1~M6는 보류한다.
 
 ## 기존 구조 재사용
 
@@ -236,3 +238,65 @@ npm test
 두 진단은 미자격 상태이므로 **exit 1이 예상 결과**다. 이를 Node 회귀 테스트 실패와 혼동하지 않는다. 최초 네트워크 허용 대조군은 profile selector 문제로 workload가 시작되지 않아 NOT_RUN이었고, 허용 host를 `localhost`로 수정했다. 이후 AF_INET socket 생성 권한 부재도 확인하여 명시적 loopback 대조군에만 추가하고 재검증했다. 기본 차단 profile은 변경하지 않았다. 비동기 connect 직후 close로 양성 대조군 접속이 관측되지 않던 fixture도 연결 완료를 최대 100ms 기다리도록 수정했다. 이 중간 상태에서 네트워크 격리는 NOT_RUN으로 유지했다. 시작 실패를 네트워크 차단 PASS로 기록하지 않았다.
 
 원본 [2026-10-28 evidence](evidence/Phase5_6_M0_Sandbox.json)는 보존한다. 이번 결과와 source hash는 [생명주기 재검증 evidence](evidence/Phase5_6_M0_Lifecycle.json)에 기록한다. **현재 종료 보장 범위는 검증된 일반 자식의 제한된 상황뿐이며, 임의 Shell 전체 트리 종료 보장은 없다.**
+
+
+## VM 기반 M0 재검증 — 2026-10-30
+
+기존 native/PGID 실패 기록과 JSON은 그대로 보존한다. 새 [VM Evidence](evidence/Phase5_6_M0_VM.json)는 별도 검증이다. **Apple Virtualization Linux ARM64 Backend의 실제 부팅·강제 종료는 동작하지만 전체 Sandbox 자격은 미통과(`eligible: false`)다.** M1~M6와 제품 Shell을 활성화하지 않는다.
+
+### 실행 및 파일 경계
+
+`scripts/agent-vm/VMProbe.swift`는 별도 검증용 실행 파일이다. `SandboxBackend`의 start/requestStop/forceStop/cleanup과 실제 VM 상태를 분리하며 생성 시 create 이벤트를 기록한다. running/failed/stopped는 framework 상태를 함께 기록한다. 정지 요청, 제어 프로세스 종료, 관측 채널 닫힘만으로 stopped를 만들지 않는다. VM 소유 Worker 상실 시 `interrupted-stop-unconfirmed`이며 결과 반영과 자동 삭제를 보류한다. macOS 게스트 구현은 없다.
+
+Host의 SwiftUI, Node 엔진, Provider, Router, Ledger, Keychain은 변경하지 않았다. 게스트에는 작업별 복사한 kernel/initrd와 승인된 합성 파일만 제공한다. 원본 Vault, API Key, Host 환경, 내부 DB를 마운트하지 않는다. writable virtiofs 공유는 격리된 작업 복사본 하나뿐이다. Git이 필요한 작업도 원본 `.git` 공유 대신 향후 검토된 소스 snapshot/별도 메타데이터 export가 필요하며 이번에는 지원하지 않는다.
+
+`workspace.py`는 **최상위 일반 파일, 최대 1MiB, 신규 파일 반영만** 검증한다. root 경로의 각 구성요소와 파일에 no-follow를 적용하고 다중 hardlink, 경로 탈출, 보호 파일명을 거부한다. 승인 hash와 읽기 전후 inode/metadata를 비교한다. 게스트 결과는 호스트 Diff 검토 후 별도 승인 및 VM 정지 확인이 있어야 O_EXCL로 신규 생성한다. 기존 파일 덮어쓰기·삭제·재귀 merge는 지원하지 않는다. 파일명 차단은 Secret 내용 탐지의 보장이 아니며 승인 전 내용 검토가 필요하다. 일반적인 디렉터리 rename 경쟁과 실패 중 부분 파일 복구는 아직 제품 수준으로 검증하지 않았다. 승인은 fixture의 명시적 결정이며 실제 UI 권한 프로토콜은 NOT_RUN이다.
+
+기본 VM에는 NIC 자체가 없다. 네트워크 대조군은 연결된 UNIX datagram socket으로 고정 UDP 목적지/내용만 수용하고 나머지는 폐기하는 **호스트 로컬 관측 sink**다. NAT·bridge·인터넷 전달은 없다. 따라서 이 결과는 외부 인터넷 allowlist, DNS, redirect, 프록시 정책의 검증이 아니다.
+
+### 실제 결과
+
+환경: macOS **27.0.1 (26A434), ARM64**, SDK **27.2**. Linux **6.18.58-0-virt**, Alpine **v3.24 aarch64 netboot**에 진단용 initramfs를 구성했다. 완전한 배포판 설치나 개발 toolchain 이미지는 아니다. 별도 바이너리에만 ad-hoc signing과 `com.apple.security.virtualization`을 적용했다. 이번 바이너리의 deployment minimum은 27.0이며 이전 macOS·Intel·정식 서명/공증은 검증하지 않았다. 기존 앱의 최소 버전·서명·빌드 설정은 변경하지 않았다.
+
+| 검증 | 결과 |
+|---|---|
+| 생성·부팅, 일반 Shell, 사용자 취소 | PASS |
+| setsid, double-fork, 중첩 자식 후 VM 종료 | PASS |
+| VM 소유 Worker SIGKILL | NOT_RUN: 활동 중단 관측 PASS, 권위 있는 VM 종료 상태 확인 불가 |
+| Supervisor SIGKILL | PASS: 남은 VM Worker가 제어 채널 EOF 후 forceStop 완료 |
+| 시간 초과, requestStop 후 forceStop | PASS: graceful 요청만으로 완료 처리하지 않음 |
+| 합성 앱 제어 프로세스 종료 | PASS; 실제 SwiftUI 앱 crash는 NOT_RUN |
+| 이미 정지한 VM 재정지 오류 | PASS: 오류와 실제 stopped 상태를 구분 기록 |
+| NIC 없는 기본 차단 / 로컬 sink 허용·거절 | PASS (fixture 범위) |
+| Host 경로·Secret 보호, 원본 보존, symlink/hardlink 거부 | PASS (제한된 파일 fixture 범위) |
+| 별도 Diff 승인·신규 파일 반영 / running 중 cleanup 거부 | PASS |
+| 확인된 정지 후 작업 이미지·임시 데이터 삭제 | PASS; 정지 미확인 작업과 공통 다운로드 cache는 보존 |
+
+시나리오 **9 PASS / 1 NOT_RUN**, 별도 보안 검사 **7 PASS**. 모든 10개 시나리오에서 활동 중단은 관측했다. 종료 전 heartbeat/패킷 양성 대조군을 확인하고, 정착 300ms 후 **1초** 동안 파일 크기와 프레임 증가를 독립 관측했다. 신호 전송 또는 PID 존재 여부만으로 판정하지 않았다. 유한 구간의 무활동을 영구 종료 보장으로 확대하지 않는다.
+
+부팅부터 workload까지 **0.3485~0.4978초**, 정상 forceStop 요청부터 framework 완료 callback까지 **1.37~2.19ms**였다. timeout/graceful 대기 시간은 별도다. 설정 자원은 **2 vCPU / 512MiB**. Evidence의 Worker RSS/CPU는 별도 Virtualization 서비스 사용량을 포함하지 않는다. VM 전체 peak 메모리/CPU는 NOT_RUN이며 설정 메모리를 실측치로 표시하지 않는다.
+
+초기 실패도 보존한다: (1) Busybox applet 링크 누락으로 mount/sleep 실패와 guest panic, (2) `/tmp` 누락으로 workload가 시작되지 않은 9개 NOT_RUN, (3) Worker SIGKILL 시 관측기의 ConnectionResetError로 중단. 각각 초기화와 채널 종료 처리를 수정했다. 게스트가 동작하지 않는 초기 실행을 격리 PASS로 계산하지 않았다.
+
+회귀 검증: Node **174 PASS**, Swift **42 PASS**, workspace **6 PASS**, standalone VM 컴파일·서명·실행 PASS. 제품 앱 packaging은 NOT_RUN(제품 코드·빌드 미변경). 실제 Provider API는 호출하지 않았다.
+
+### 재현 및 잔여 게이트
+
+```sh
+mkdir -p /private/tmp/nidus-vm-m0-assets
+curl --fail --location --proto '=https' https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/aarch64/netboot/vmlinuz-virt -o /private/tmp/nidus-vm-m0-assets/vmlinuz-virt
+curl --fail --location --proto '=https' https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/aarch64/netboot/initramfs-virt -o /private/tmp/nidus-vm-m0-assets/initramfs-virt
+python3 scripts/agent-vm/prepare.py /private/tmp/nidus-vm-m0-assets > /private/tmp/nidus-vm-m0-assets/hashes.json
+swiftc scripts/agent-vm/VMProbe.swift -framework Virtualization -o /private/tmp/nidus-vm-m0-assets/vm-probe
+codesign --force --sign - --entitlements scripts/agent-vm/probe.entitlements /private/tmp/nidus-vm-m0-assets/vm-probe
+python3 scripts/agent-vm/probe.py /private/tmp/nidus-vm-m0-assets > /tmp/nidus-vm-evidence.json
+python3 scripts/agent-vm/test_workspace.py
+npm test
+swift test
+```
+
+미자격 진단의 **exit 1은 예상 결과**다. 다운로드 SHA256은 `assets.json`의 관측 pin으로 검증하며 공식 서명 provenance를 의미하지 않는다. upstream 파일이 바뀌면 검증 실패를 무시하거나 pin을 자동 갱신하지 않는다. 정지 미확인 작업 디렉터리는 Evidence에 기록하고 보존한다. 재실행 시 추가로 남을 수 있다.
+
+제품 채택 전에는 Worker 소유권 상실 후 authoritative 정지 확인/복구, 실제 앱 crash, 일반 파일 반영 경쟁·실패 복구, 제품 승인 채널, 필요한 외부 네트워크 정책을 검증해야 한다. macOS 게스트, SDK 빌드·브라우저 등은 지원되지 않는다. 현재 채택 후보는 Apple Virtualization이지만 **M1~M6 착수 판단은 보류**한다.
+
+공식 근거: [Linux VM](https://developer.apple.com/documentation/virtualization/running-linux-in-a-virtual-machine), [Virtualization entitlement](https://developer.apple.com/documentation/virtualization/adding-the-virtualization-entitlement-to-your-project), [stop API](https://developer.apple.com/documentation/virtualization/vzvirtualmachine/stop(completionhandler:)), [Alpine netboot](https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/aarch64/netboot/). 위 측정치는 API 문서의 보장이 아니라 이 로컬 fixture의 관측 결과다.

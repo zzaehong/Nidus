@@ -1,0 +1,10 @@
+{
+  "vmlinuz-virt": {
+    "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/aarch64/netboot/vmlinuz-virt",
+    "sha256": "849394914e6a93cc9bb17e901f445ce21fcd7e4528541d9496a74d6a6ccee319"
+  },
+  "initramfs-virt": {
+    "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/aarch64/netboot/initramfs-virt",
+    "sha256": "7b75e0475ce73eca283ab60eac28f2fe1a8b62e8ffd870c056baaafc9d6e9b1b"
+  }
+}

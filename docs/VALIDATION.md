@@ -97,3 +97,10 @@ npm run test:live
 삭제한 중복 문서: `CONNECTIVITY_VALIDATION.md`, `DASHBOARD_VALIDATION.md`, `MODEL_HEALTH.md`, `Phase3_Usage_Budget.md`, `Phase4_Model_Router.md`, `Phase4_1_Tier_Router.md`, `Phase4_1_Free_Use.md`, `Gemini_Free_Tier_Fix.md`, `Phase4_2_Provider_Expansion.md`, `NVIDIA_Model_Classification.md`, `NVIDIA_Free_Setup_Fix.md`, `Budget_Guard_Removal.md`, `Phase4_3_Account_Permissions.md`, `Settings_UI_Refinement.md`.
 
 특히 과거 예산 예약·80/90/100% 차단·무조건 호출 허용·Provider Plan만의 실행 승인 정책은 현행 안내에서 제거했습니다. 현재는 계정 권한 검사와 참고용 Soft Budget을 사용합니다. 상세 원문은 `git show fd3efae:docs/<이전 파일명>`으로 조회할 수 있습니다. `AGENTS.md`, `CONCEPT.md`, `Git_Flow.md`는 이 정리에서 수정하지 않았습니다.
+
+
+## VM M0 추가 검증 (2026-10-30)
+
+Apple Virtualization + Linux ARM64 별도 prototype 실제 실행: 시나리오 **9 PASS / 1 NOT_RUN**, 제한된 보안 검사 **7 PASS**. Worker SIGKILL 이후 활동은 멈췄지만 실제 VM 정지는 확인하지 못하여 전체 자격은 미통과다. M1~M6/제품 Shell은 비활성 상태로 유지한다. 기존 native 실패 Evidence는 보존한다.
+
+Node 174개, Swift 42개, workspace 6개 PASS. 제품 앱 packaging·실제 API·실제 SwiftUI crash는 NOT_RUN. 환경, 초기 실패, 재현 명령, 파일·네트워크 범위 및 정리 보류 항목은 [설계 기록](Phase5_6_Agent_Runtime_Vault_Sandbox.md#vm-기반-m0-재검증--2026-10-30)과 [VM Evidence](evidence/Phase5_6_M0_VM.json)를 참조한다.

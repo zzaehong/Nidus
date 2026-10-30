@@ -1,0 +1,1170 @@
+{
+  "schemaVersion": 1,
+  "phase": "M0-VM",
+  "generatedAt": "2026-10-30T05:57:32Z",
+  "backend": "Apple-Virtualization-Linux-ARM64-prototype",
+  "eligible": false,
+  "checks": [
+    {
+      "name": "ordinary/cancel/no-network",
+      "status": "PASS",
+      "activityStatus": "PASS",
+      "bootToWorkloadSeconds": 0.4978,
+      "stopObservationSeconds": 0.0231,
+      "writesBeforeStop": 8,
+      "framesBeforeStop": 0,
+      "writesAfterStop": 0,
+      "framesAfterStop": 0,
+      "observationSeconds": 1.0,
+      "stopConfirmed": true,
+      "terminal": "stopped",
+      "acceptedFrames": 0,
+      "rejectedFrames": 0,
+      "networkChannelClosed": false,
+      "guestBootMarker": true,
+      "hostPathsAbsent": true,
+      "secretsAbsent": true,
+      "originalUnchanged": true,
+      "defaultNetworkBlocked": true,
+      "parentEscapeBlocked": true,
+      "networkDevices": 0,
+      "guestOutputLinksRejected": true,
+      "reviewApply": {
+        "deniedWithoutApproval": true,
+        "approvedNewFileMatches": true
+      },
+      "events": [
+        {
+          "action": "create",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "cpuCount": 2,
+          "elapsedSeconds": 0.0012910417281091213,
+          "memoryBytes": 536870912,
+          "networkDevices": 0
+        },
+        {
+          "action": "start-request",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.0025707499589771032
+        },
+        {
+          "action": "state-observed",
+          "actualState": 4,
+          "actualStateName": "starting",
+          "elapsedSeconds": 0.002657541655935347
+        },
+        {
+          "action": "state-observed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.10561970830895007
+        },
+        {
+          "action": "start-completed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.10575679165776819
+        },
+        {
+          "action": "cleanup-refused",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.3871408333070576
+        },
+        {
+          "action": "forceStop-request",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 1.0020458333892748
+        },
+        {
+          "action": "state-observed",
+          "actualState": 7,
+          "actualStateName": "stopping",
+          "elapsedSeconds": 1.0021531250094995
+        },
+        {
+          "action": "state-observed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 1.00387383333873
+        },
+        {
+          "action": "forceStop-completed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 1.0039200000464916
+        }
+      ],
+      "runningCleanupRejected": true,
+      "resources": {
+        "configuredVCPUs": 2,
+        "configuredMemoryBytes": 536870912,
+        "peakResidentBytes": null,
+        "cpuUsage": null,
+        "note": "VM service memory/CPU not inferred from controller RSS; resource accounting NOT_RUN",
+        "workerMaxResidentBytes": 11485184,
+        "workerUserCPUSeconds": 0.004156,
+        "workerSystemCPUSeconds": 0.003392,
+        "scope": "VM worker and reaped children only; excludes separate Virtualization services"
+      },
+      "cleanup": "PASS"
+    },
+    {
+      "name": "setsid/cancel/no-network",
+      "status": "PASS",
+      "activityStatus": "PASS",
+      "bootToWorkloadSeconds": 0.4539,
+      "stopObservationSeconds": 0.0243,
+      "writesBeforeStop": 7,
+      "framesBeforeStop": 0,
+      "writesAfterStop": 0,
+      "framesAfterStop": 0,
+      "observationSeconds": 1.0,
+      "stopConfirmed": true,
+      "terminal": "stopped",
+      "acceptedFrames": 0,
+      "rejectedFrames": 0,
+      "networkChannelClosed": false,
+      "guestBootMarker": true,
+      "hostPathsAbsent": true,
+      "secretsAbsent": true,
+      "originalUnchanged": true,
+      "defaultNetworkBlocked": true,
+      "parentEscapeBlocked": true,
+      "networkDevices": 0,
+      "guestOutputLinksRejected": true,
+      "reviewApply": {
+        "deniedWithoutApproval": true,
+        "approvedNewFileMatches": true
+      },
+      "events": [
+        {
+          "action": "create",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "cpuCount": 2,
+          "elapsedSeconds": 0.000969958258792758,
+          "memoryBytes": 536870912,
+          "networkDevices": 0
+        },
+        {
+          "action": "start-request",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.0022134166210889816
+        },
+        {
+          "action": "state-observed",
+          "actualState": 4,
+          "actualStateName": "starting",
+          "elapsedSeconds": 0.0022964582312852144
+        },
+        {
+          "action": "state-observed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.09053074999246746
+        },
+        {
+          "action": "start-completed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.09064574993681163
+        },
+        {
+          "action": "forceStop-request",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.8718575416132808
+        },
+        {
+          "action": "state-observed",
+          "actualState": 7,
+          "actualStateName": "stopping",
+          "elapsedSeconds": 0.8719717916101217
+        },
+        {
+          "action": "state-observed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.8734209582908079
+        },
+        {
+          "action": "forceStop-completed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.8734722499502823
+        }
+      ],
+      "runningCleanupRejected": false,
+      "resources": {
+        "configuredVCPUs": 2,
+        "configuredMemoryBytes": 536870912,
+        "peakResidentBytes": null,
+        "cpuUsage": null,
+        "note": "VM service memory/CPU not inferred from controller RSS; resource accounting NOT_RUN",
+        "workerMaxResidentBytes": 11501568,
+        "workerUserCPUSeconds": 0.004091,
+        "workerSystemCPUSeconds": 0.002957,
+        "scope": "VM worker and reaped children only; excludes separate Virtualization services"
+      },
+      "cleanup": "PASS"
+    },
+    {
+      "name": "double-fork/cancel/no-network",
+      "status": "PASS",
+      "activityStatus": "PASS",
+      "bootToWorkloadSeconds": 0.447,
+      "stopObservationSeconds": 0.0212,
+      "writesBeforeStop": 7,
+      "framesBeforeStop": 0,
+      "writesAfterStop": 0,
+      "framesAfterStop": 0,
+      "observationSeconds": 1.0,
+      "stopConfirmed": true,
+      "terminal": "stopped",
+      "acceptedFrames": 0,
+      "rejectedFrames": 0,
+      "networkChannelClosed": false,
+      "guestBootMarker": true,
+      "hostPathsAbsent": true,
+      "secretsAbsent": true,
+      "originalUnchanged": true,
+      "defaultNetworkBlocked": true,
+      "parentEscapeBlocked": true,
+      "networkDevices": 0,
+      "guestOutputLinksRejected": true,
+      "reviewApply": {
+        "deniedWithoutApproval": true,
+        "approvedNewFileMatches": true
+      },
+      "events": [
+        {
+          "action": "create",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "cpuCount": 2,
+          "elapsedSeconds": 0.0010472083231434226,
+          "memoryBytes": 536870912,
+          "networkDevices": 0
+        },
+        {
+          "action": "start-request",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.0025964583037421107
+        },
+        {
+          "action": "state-observed",
+          "actualState": 4,
+          "actualStateName": "starting",
+          "elapsedSeconds": 0.0027043332811444998
+        },
+        {
+          "action": "state-observed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.08574699994642287
+        },
+        {
+          "action": "start-completed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.08584920829162002
+        },
+        {
+          "action": "forceStop-request",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.8656750000081956
+        },
+        {
+          "action": "state-observed",
+          "actualState": 7,
+          "actualStateName": "stopping",
+          "elapsedSeconds": 0.8657838333165273
+        },
+        {
+          "action": "state-observed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.8672367916442454
+        },
+        {
+          "action": "forceStop-completed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.8672795833554119
+        }
+      ],
+      "runningCleanupRejected": false,
+      "resources": {
+        "configuredVCPUs": 2,
+        "configuredMemoryBytes": 536870912,
+        "peakResidentBytes": null,
+        "cpuUsage": null,
+        "note": "VM service memory/CPU not inferred from controller RSS; resource accounting NOT_RUN",
+        "workerMaxResidentBytes": 11517952,
+        "workerUserCPUSeconds": 0.004226,
+        "workerSystemCPUSeconds": 0.003088,
+        "scope": "VM worker and reaped children only; excludes separate Virtualization services"
+      },
+      "cleanup": "PASS"
+    },
+    {
+      "name": "nested/cancel/sink-network",
+      "status": "PASS",
+      "activityStatus": "PASS",
+      "bootToWorkloadSeconds": 0.3485,
+      "stopObservationSeconds": 0.0223,
+      "writesBeforeStop": 12,
+      "framesBeforeStop": 27,
+      "writesAfterStop": 0,
+      "framesAfterStop": 0,
+      "observationSeconds": 1.0,
+      "stopConfirmed": true,
+      "terminal": "stopped",
+      "acceptedFrames": 12,
+      "rejectedFrames": 15,
+      "networkChannelClosed": false,
+      "guestBootMarker": true,
+      "hostPathsAbsent": true,
+      "secretsAbsent": true,
+      "originalUnchanged": true,
+      "defaultNetworkBlocked": false,
+      "parentEscapeBlocked": true,
+      "networkDevices": 1,
+      "guestOutputLinksRejected": true,
+      "reviewApply": {
+        "deniedWithoutApproval": true,
+        "approvedNewFileMatches": true
+      },
+      "events": [
+        {
+          "action": "create",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "cpuCount": 2,
+          "elapsedSeconds": 0.0011956249363720417,
+          "memoryBytes": 536870912,
+          "networkDevices": 1
+        },
+        {
+          "action": "start-request",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.0026099999668076634
+        },
+        {
+          "action": "state-observed",
+          "actualState": 4,
+          "actualStateName": "starting",
+          "elapsedSeconds": 0.0027026666793972254
+        },
+        {
+          "action": "state-observed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.08632304158527404
+        },
+        {
+          "action": "start-completed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.08641724998597056
+        },
+        {
+          "action": "forceStop-request",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.7580702916020527
+        },
+        {
+          "action": "state-observed",
+          "actualState": 7,
+          "actualStateName": "stopping",
+          "elapsedSeconds": 0.7581754999700934
+        },
+        {
+          "action": "state-observed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.759690958308056
+        },
+        {
+          "action": "forceStop-completed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.7597443333361298
+        }
+      ],
+      "runningCleanupRejected": false,
+      "resources": {
+        "configuredVCPUs": 2,
+        "configuredMemoryBytes": 536870912,
+        "peakResidentBytes": null,
+        "cpuUsage": null,
+        "note": "VM service memory/CPU not inferred from controller RSS; resource accounting NOT_RUN",
+        "workerMaxResidentBytes": 11468800,
+        "workerUserCPUSeconds": 0.004256,
+        "workerSystemCPUSeconds": 0.003051,
+        "scope": "VM worker and reaped children only; excludes separate Virtualization services"
+      },
+      "cleanup": "PASS"
+    },
+    {
+      "name": "setsid/worker-kill/sink-network",
+      "status": "NOT_RUN",
+      "activityStatus": "PASS",
+      "bootToWorkloadSeconds": 0.4454,
+      "stopObservationSeconds": 0.0212,
+      "writesBeforeStop": 6,
+      "framesBeforeStop": 14,
+      "writesAfterStop": 0,
+      "framesAfterStop": 0,
+      "observationSeconds": 1.0,
+      "stopConfirmed": false,
+      "terminal": "interrupted-stop-unconfirmed",
+      "acceptedFrames": 6,
+      "rejectedFrames": 8,
+      "networkChannelClosed": true,
+      "guestBootMarker": true,
+      "hostPathsAbsent": true,
+      "secretsAbsent": true,
+      "originalUnchanged": true,
+      "defaultNetworkBlocked": false,
+      "parentEscapeBlocked": true,
+      "networkDevices": 1,
+      "events": [
+        {
+          "action": "create",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "cpuCount": 2,
+          "elapsedSeconds": 0.001027958351187408,
+          "memoryBytes": 536870912,
+          "networkDevices": 1
+        },
+        {
+          "action": "start-request",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.002412041649222374
+        },
+        {
+          "action": "state-observed",
+          "actualState": 4,
+          "actualStateName": "starting",
+          "elapsedSeconds": 0.0025016666622832417
+        },
+        {
+          "action": "state-observed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.08587720838841051
+        },
+        {
+          "action": "start-completed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.0859806666849181
+        }
+      ],
+      "runningCleanupRejected": false,
+      "resources": {
+        "configuredVCPUs": 2,
+        "configuredMemoryBytes": 536870912,
+        "peakResidentBytes": null,
+        "cpuUsage": null,
+        "note": "VM service memory/CPU not inferred from controller RSS; resource accounting NOT_RUN",
+        "workerMaxResidentBytes": 11337728,
+        "workerUserCPUSeconds": 0.003841,
+        "workerSystemCPUSeconds": 0.0027879999999999997,
+        "scope": "VM worker and reaped children only; excludes separate Virtualization services"
+      },
+      "cleanup": "NOT_RUN",
+      "retainedDiagnosticDirectory": "/private/tmp/nidus-vm-case-n0t4bbat"
+    },
+    {
+      "name": "setsid/supervisor-kill/sink-network",
+      "status": "PASS",
+      "activityStatus": "PASS",
+      "bootToWorkloadSeconds": 0.4485,
+      "stopObservationSeconds": 0.0215,
+      "writesBeforeStop": 7,
+      "framesBeforeStop": 16,
+      "writesAfterStop": 0,
+      "framesAfterStop": 0,
+      "observationSeconds": 1.0,
+      "stopConfirmed": true,
+      "terminal": "stopped",
+      "acceptedFrames": 7,
+      "rejectedFrames": 9,
+      "networkChannelClosed": true,
+      "guestBootMarker": true,
+      "hostPathsAbsent": true,
+      "secretsAbsent": true,
+      "originalUnchanged": true,
+      "defaultNetworkBlocked": false,
+      "parentEscapeBlocked": true,
+      "networkDevices": 1,
+      "guestOutputLinksRejected": true,
+      "reviewApply": {
+        "deniedWithoutApproval": true,
+        "approvedNewFileMatches": true
+      },
+      "events": [
+        {
+          "action": "create",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "cpuCount": 2,
+          "elapsedSeconds": 0.0009268333669751883,
+          "memoryBytes": 536870912,
+          "networkDevices": 1
+        },
+        {
+          "action": "start-request",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.0022291666828095913
+        },
+        {
+          "action": "state-observed",
+          "actualState": 4,
+          "actualStateName": "starting",
+          "elapsedSeconds": 0.002310666721314192
+        },
+        {
+          "action": "state-observed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.0884355417219922
+        },
+        {
+          "action": "start-completed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.08855254168156534
+        },
+        {
+          "action": "controller-disconnected",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.8754074583994225
+        },
+        {
+          "action": "forceStop-request",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.875543124973774
+        },
+        {
+          "action": "state-observed",
+          "actualState": 7,
+          "actualStateName": "stopping",
+          "elapsedSeconds": 0.8755951250204816
+        },
+        {
+          "action": "state-observed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.8773924167035148
+        },
+        {
+          "action": "forceStop-completed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.8774348750011995
+        },
+        {
+          "action": "cleanup",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.8774583333870396
+        }
+      ],
+      "runningCleanupRejected": false,
+      "resources": {
+        "configuredVCPUs": 2,
+        "configuredMemoryBytes": 536870912,
+        "peakResidentBytes": null,
+        "cpuUsage": null,
+        "note": "VM service memory/CPU not inferred from controller RSS; resource accounting NOT_RUN"
+      },
+      "cleanup": "PASS"
+    },
+    {
+      "name": "nested/timeout/no-network",
+      "status": "PASS",
+      "activityStatus": "PASS",
+      "bootToWorkloadSeconds": 0.3828,
+      "stopObservationSeconds": 0.5227,
+      "writesBeforeStop": 12,
+      "framesBeforeStop": 0,
+      "writesAfterStop": 0,
+      "framesAfterStop": 0,
+      "observationSeconds": 1.0,
+      "stopConfirmed": true,
+      "terminal": "stopped",
+      "acceptedFrames": 0,
+      "rejectedFrames": 0,
+      "networkChannelClosed": false,
+      "guestBootMarker": true,
+      "hostPathsAbsent": true,
+      "secretsAbsent": true,
+      "originalUnchanged": true,
+      "defaultNetworkBlocked": true,
+      "parentEscapeBlocked": true,
+      "networkDevices": 0,
+      "guestOutputLinksRejected": true,
+      "reviewApply": {
+        "deniedWithoutApproval": true,
+        "approvedNewFileMatches": true
+      },
+      "events": [
+        {
+          "action": "create",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "cpuCount": 2,
+          "elapsedSeconds": 0.0010355416452512145,
+          "memoryBytes": 536870912,
+          "networkDevices": 0
+        },
+        {
+          "action": "start-request",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.0024942499585449696
+        },
+        {
+          "action": "state-observed",
+          "actualState": 4,
+          "actualStateName": "starting",
+          "elapsedSeconds": 0.002590916585177183
+        },
+        {
+          "action": "state-observed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.09366875002160668
+        },
+        {
+          "action": "start-completed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.09377154160756618
+        },
+        {
+          "action": "forceStop-request",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 1.288849208271131
+        },
+        {
+          "action": "state-observed",
+          "actualState": 7,
+          "actualStateName": "stopping",
+          "elapsedSeconds": 1.2889497083378956
+        },
+        {
+          "action": "state-observed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 1.2905893332790583
+        },
+        {
+          "action": "forceStop-completed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 1.2906447083223611
+        }
+      ],
+      "runningCleanupRejected": false,
+      "resources": {
+        "configuredVCPUs": 2,
+        "configuredMemoryBytes": 536870912,
+        "peakResidentBytes": null,
+        "cpuUsage": null,
+        "note": "VM service memory/CPU not inferred from controller RSS; resource accounting NOT_RUN",
+        "workerMaxResidentBytes": 11468800,
+        "workerUserCPUSeconds": 0.004235,
+        "workerSystemCPUSeconds": 0.002963,
+        "scope": "VM worker and reaped children only; excludes separate Virtualization services"
+      },
+      "cleanup": "PASS"
+    },
+    {
+      "name": "ordinary/request-stop/no-network",
+      "status": "PASS",
+      "activityStatus": "PASS",
+      "bootToWorkloadSeconds": 0.4527,
+      "stopObservationSeconds": 0.5209,
+      "writesBeforeStop": 7,
+      "framesBeforeStop": 0,
+      "writesAfterStop": 0,
+      "framesAfterStop": 0,
+      "observationSeconds": 1.0,
+      "stopConfirmed": true,
+      "terminal": "stopped",
+      "acceptedFrames": 0,
+      "rejectedFrames": 0,
+      "networkChannelClosed": false,
+      "guestBootMarker": true,
+      "hostPathsAbsent": true,
+      "secretsAbsent": true,
+      "originalUnchanged": true,
+      "defaultNetworkBlocked": true,
+      "parentEscapeBlocked": true,
+      "networkDevices": 0,
+      "guestOutputLinksRejected": true,
+      "reviewApply": {
+        "deniedWithoutApproval": true,
+        "approvedNewFileMatches": true
+      },
+      "events": [
+        {
+          "action": "create",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "cpuCount": 2,
+          "elapsedSeconds": 0.0009777083760127425,
+          "memoryBytes": 536870912,
+          "networkDevices": 0
+        },
+        {
+          "action": "start-request",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.002320291707292199
+        },
+        {
+          "action": "state-observed",
+          "actualState": 4,
+          "actualStateName": "starting",
+          "elapsedSeconds": 0.0024029583437368274
+        },
+        {
+          "action": "state-observed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.0886996666667983
+        },
+        {
+          "action": "start-completed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.08884487499017268
+        },
+        {
+          "action": "requestStop",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.862172833411023
+        },
+        {
+          "action": "forceStop-request",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 1.3621623333310708
+        },
+        {
+          "action": "state-observed",
+          "actualState": 7,
+          "actualStateName": "stopping",
+          "elapsedSeconds": 1.3623037500074133
+        },
+        {
+          "action": "state-observed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 1.364276916719973
+        },
+        {
+          "action": "forceStop-completed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 1.3643512499984354
+        }
+      ],
+      "runningCleanupRejected": false,
+      "resources": {
+        "configuredVCPUs": 2,
+        "configuredMemoryBytes": 536870912,
+        "peakResidentBytes": null,
+        "cpuUsage": null,
+        "note": "VM service memory/CPU not inferred from controller RSS; resource accounting NOT_RUN",
+        "workerMaxResidentBytes": 11501568,
+        "workerUserCPUSeconds": 0.00441,
+        "workerSystemCPUSeconds": 0.0032329999999999998,
+        "scope": "VM worker and reaped children only; excludes separate Virtualization services"
+      },
+      "cleanup": "PASS"
+    },
+    {
+      "name": "setsid/app-crash/no-network",
+      "status": "PASS",
+      "activityStatus": "PASS",
+      "bootToWorkloadSeconds": 0.4639,
+      "stopObservationSeconds": 0.0258,
+      "writesBeforeStop": 7,
+      "framesBeforeStop": 0,
+      "writesAfterStop": 0,
+      "framesAfterStop": 0,
+      "observationSeconds": 1.0,
+      "stopConfirmed": true,
+      "terminal": "stopped",
+      "acceptedFrames": 0,
+      "rejectedFrames": 0,
+      "networkChannelClosed": false,
+      "guestBootMarker": true,
+      "hostPathsAbsent": true,
+      "secretsAbsent": true,
+      "originalUnchanged": true,
+      "defaultNetworkBlocked": true,
+      "parentEscapeBlocked": true,
+      "networkDevices": 0,
+      "guestOutputLinksRejected": true,
+      "reviewApply": {
+        "deniedWithoutApproval": true,
+        "approvedNewFileMatches": true
+      },
+      "events": [
+        {
+          "action": "create",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "cpuCount": 2,
+          "elapsedSeconds": 0.0010046666720882058,
+          "memoryBytes": 536870912,
+          "networkDevices": 0
+        },
+        {
+          "action": "start-request",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.0023481666576117277
+        },
+        {
+          "action": "state-observed",
+          "actualState": 4,
+          "actualStateName": "starting",
+          "elapsedSeconds": 0.0024472082732245326
+        },
+        {
+          "action": "state-observed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.09161441668402404
+        },
+        {
+          "action": "start-completed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.09173258335795254
+        },
+        {
+          "action": "controller-disconnected",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.8689156665932387
+        },
+        {
+          "action": "forceStop-request",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.8689958333270624
+        },
+        {
+          "action": "state-observed",
+          "actualState": 7,
+          "actualStateName": "stopping",
+          "elapsedSeconds": 0.8690438750199974
+        },
+        {
+          "action": "state-observed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.8703210416715592
+        },
+        {
+          "action": "forceStop-completed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.8703653332777321
+        },
+        {
+          "action": "cleanup",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.8703848333097994
+        }
+      ],
+      "runningCleanupRejected": false,
+      "appCrashScope": "Synthetic controller loss; actual SwiftUI app crash NOT_RUN",
+      "resources": {
+        "configuredVCPUs": 2,
+        "configuredMemoryBytes": 536870912,
+        "peakResidentBytes": null,
+        "cpuUsage": null,
+        "note": "VM service memory/CPU not inferred from controller RSS; resource accounting NOT_RUN"
+      },
+      "cleanup": "PASS"
+    },
+    {
+      "name": "ordinary/invalid-stop/no-network",
+      "status": "PASS",
+      "activityStatus": "PASS",
+      "bootToWorkloadSeconds": 0.4547,
+      "stopObservationSeconds": 0.0202,
+      "writesBeforeStop": 7,
+      "framesBeforeStop": 0,
+      "writesAfterStop": 0,
+      "framesAfterStop": 0,
+      "observationSeconds": 1.0,
+      "stopConfirmed": true,
+      "terminal": "stopped",
+      "acceptedFrames": 0,
+      "rejectedFrames": 0,
+      "networkChannelClosed": false,
+      "guestBootMarker": true,
+      "hostPathsAbsent": true,
+      "secretsAbsent": true,
+      "originalUnchanged": true,
+      "defaultNetworkBlocked": true,
+      "parentEscapeBlocked": true,
+      "networkDevices": 0,
+      "guestOutputLinksRejected": true,
+      "reviewApply": {
+        "deniedWithoutApproval": true,
+        "approvedNewFileMatches": true
+      },
+      "events": [
+        {
+          "action": "create",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "cpuCount": 2,
+          "elapsedSeconds": 0.0010771667584776878,
+          "memoryBytes": 536870912,
+          "networkDevices": 0
+        },
+        {
+          "action": "start-request",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.002504875068552792
+        },
+        {
+          "action": "state-observed",
+          "actualState": 4,
+          "actualStateName": "starting",
+          "elapsedSeconds": 0.002589375013485551
+        },
+        {
+          "action": "state-observed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.08736258337739855
+        },
+        {
+          "action": "start-completed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.08748370839748532
+        },
+        {
+          "action": "forceStop-request",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.8805711667519063
+        },
+        {
+          "action": "state-observed",
+          "actualState": 7,
+          "actualStateName": "stopping",
+          "elapsedSeconds": 0.8807005833368748
+        },
+        {
+          "action": "state-observed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.8821410000091419
+        },
+        {
+          "action": "forceStop-completed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.8821733334334567
+        },
+        {
+          "action": "forceStop-request",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.9007155416766182
+        },
+        {
+          "action": "forceStop-failed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.9025844583520666,
+          "error": "Invalid virtual machine state transition. Transition from state “stopped” to state “stopping” is invalid."
+        }
+      ],
+      "runningCleanupRejected": false,
+      "invalidStopRejected": true,
+      "resources": {
+        "configuredVCPUs": 2,
+        "configuredMemoryBytes": 536870912,
+        "peakResidentBytes": null,
+        "cpuUsage": null,
+        "note": "VM service memory/CPU not inferred from controller RSS; resource accounting NOT_RUN",
+        "workerMaxResidentBytes": 12075008,
+        "workerUserCPUSeconds": 0.0049299999999999995,
+        "workerSystemCPUSeconds": 0.003694,
+        "scope": "VM worker and reaped children only; excludes separate Virtualization services"
+      },
+      "cleanup": "PASS"
+    }
+  ],
+  "host": "ProductName:\t\tmacOS\nProductVersion:\t\t27.0.1\nBuildVersion:\t\t26A434",
+  "guest": "Alpine v3.24 netboot / Linux 6.18.58-0-virt, custom diagnostic initramfs",
+  "artifactHashes": {
+    "vmlinuz-virt": "849394914e6a93cc9bb17e901f445ce21fcd7e4528541d9496a74d6a6ccee319",
+    "initramfs-virt": "7b75e0475ce73eca283ab60eac28f2fe1a8b62e8ffd870c056baaafc9d6e9b1b",
+    "Image": "256d5fff4bb892edcb9218c1e6353e388bc3646e65f76c2bc9d958b635d1b00e",
+    "probe-initrd.gz": "65343b45dc53b0f4ce955aa52039ef48f9d6a6651d0ec2ac0ca64a85e877c647"
+  },
+  "scope": "Synthetic flat-file workspace; no original Vault mounts, NAT, bridge, Provider calls or product activation.",
+  "securityChecks": [
+    {
+      "name": "default-network-no-device-and-unreachable",
+      "status": "PASS"
+    },
+    {
+      "name": "isolated-network-sink-allow-and-reject",
+      "status": "PASS"
+    },
+    {
+      "name": "host-path-secret-original-protection",
+      "status": "PASS"
+    },
+    {
+      "name": "separate-new-file-review-approval",
+      "status": "PASS"
+    },
+    {
+      "name": "running-cleanup-rejected",
+      "status": "PASS"
+    },
+    {
+      "name": "invalid-stop-error-recorded",
+      "status": "PASS"
+    },
+    {
+      "name": "confirmed-stop-job-images-cleanup",
+      "status": "PASS"
+    }
+  ],
+  "remaining": [
+    {
+      "name": "VM state confirmation after owner SIGKILL",
+      "status": "NOT_RUN"
+    },
+    {
+      "name": "actual SwiftUI app crash",
+      "status": "NOT_RUN"
+    },
+    {
+      "name": "general recursive workspace merge and adversarial directory races",
+      "status": "NOT_RUN"
+    },
+    {
+      "name": "external network allowlist and DNS/redirect policy",
+      "status": "NOT_RUN"
+    },
+    {
+      "name": "macOS guest",
+      "status": "NOT_RUN"
+    },
+    {
+      "name": "full toolchain and browser",
+      "status": "NOT_RUN"
+    },
+    {
+      "name": "VM service CPU and peak memory accounting",
+      "status": "NOT_RUN"
+    }
+  ],
+  "sourceHashes": {
+    "scripts/agent-vm/VMProbe.swift": "cf82b1513acd36c33fccd19498046a4149c351b9b343524b6c553bcbd5f0ec1a",
+    "scripts/agent-vm/assets.json": "6fbf6f5194b819557c11404e67d99d54244d5589ecc4e2c59441eac5459c0d70",
+    "scripts/agent-vm/guest-init.sh": "b7052902c007161da9935b7d0588d61d4d586b1a7239d2fb175b042a92b42912",
+    "scripts/agent-vm/prepare.py": "7cef587a2a5ee32f4caa19c7a41227f58b21ab6ef876b144a983d3e4bb29cc1b",
+    "scripts/agent-vm/probe.entitlements": "915e2b39357ecf8d211dc7fac43195c9cdcf55a0a1ecdbf931c116a4eac421f3",
+    "scripts/agent-vm/probe.py": "55c6791b1586c82c03033c685b90f293ded0a25a1fcaaa566f611c46ff257957",
+    "scripts/agent-vm/test_workspace.py": "84030c05b2d4212f9e233ef887c7d9a42a864d7f899c892f1811af6ce19e1be4",
+    "scripts/agent-vm/workspace.py": "154df3613e4d375a53d1305fac23bd2ec979e2bac3d45d830e390bb40e1fda74"
+  },
+  "tests": {
+    "workspace": {
+      "status": "PASS",
+      "count": 6
+    },
+    "node": {
+      "status": "PASS",
+      "count": 174
+    },
+    "swift": {
+      "status": "PASS",
+      "count": 42
+    },
+    "standaloneVMBuildAndAdHocSigning": {
+      "status": "PASS",
+      "minimumOS": "27.0",
+      "SDK": "27.2",
+      "entitlement": "com.apple.security.virtualization"
+    },
+    "productAppPackaging": {
+      "status": "NOT_RUN",
+      "reason": "Product build/signing unchanged"
+    }
+  },
+  "priorAttempts": [
+    {
+      "attempt": 1,
+      "status": "NOT_RUN",
+      "reason": "VM booted but init lacked Busybox applet links: mount/mkdir/sleep missing, guest panic. Host running state was insufficient evidence of a live workload."
+    },
+    {
+      "attempt": 2,
+      "status": "NOT_RUN",
+      "reason": "After installing applet links, /tmp/beat could not be created because /tmp was absent. Nine scenarios had no active workload."
+    },
+    {
+      "attempt": 3,
+      "status": "FAIL",
+      "scope": "observer harness",
+      "reason": "ConnectionResetError errno 54 after VM worker SIGKILL interrupted observation. Harness now explicitly records closed network channel; closure alone does not prove stopped VM."
+    }
+  ],
+  "retainedSyntheticArtifacts": [
+    "/private/tmp/nidus-vm-case-2j77meeb",
+    "/private/tmp/nidus-vm-case-epz4ssh5",
+    "/private/tmp/nidus-vm-case-n0t4bbat",
+    "/private/tmp/nidus-vm-case-ysf434g8"
+  ],
+  "artifactRetentionNote": "Unconfirmed-owner-stop cases retained intentionally; common download/build cache also retained. Only confirmed job cleanup is PASS. No user Vault or credentials in these fixtures.",
+  "sources": [
+    "https://developer.apple.com/documentation/virtualization/running-linux-in-a-virtual-machine",
+    "https://developer.apple.com/documentation/virtualization/adding-the-virtualization-entitlement-to-your-project",
+    "https://developer.apple.com/documentation/virtualization/vzvirtualmachine/stop(completionhandler:)",
+    "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/aarch64/netboot/"
+  ],
+  "artifactTrust": "SHA256 pins are observed HTTPS download hashes, not publisher-signed provenance. Mutable upstream URLs must still match pins; do not silently update.",
+  "decision": "M1-M6 and product shell remain disabled. Worker owner death lacks authoritative stop confirmation; general workspace merge and production network/approval paths are unqualified."
+}
