@@ -300,3 +300,29 @@ swift test
 제품 채택 전에는 Worker 소유권 상실 후 authoritative 정지 확인/복구, 실제 앱 crash, 일반 파일 반영 경쟁·실패 복구, 제품 승인 채널, 필요한 외부 네트워크 정책을 검증해야 한다. macOS 게스트, SDK 빌드·브라우저 등은 지원되지 않는다. 현재 채택 후보는 Apple Virtualization이지만 **M1~M6 착수 판단은 보류**한다.
 
 공식 근거: [Linux VM](https://developer.apple.com/documentation/virtualization/running-linux-in-a-virtual-machine), [Virtualization entitlement](https://developer.apple.com/documentation/virtualization/adding-the-virtualization-entitlement-to-your-project), [stop API](https://developer.apple.com/documentation/virtualization/vzvirtualmachine/stop(completionhandler:)), [Alpine netboot](https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/aarch64/netboot/). 위 측정치는 API 문서의 보장이 아니라 이 로컬 fixture의 관측 결과다.
+
+## 독립 VM Manager M0 — 2026-10-31
+
+작업 Worker가 VM 객체를 소유하던 경계를 분리했다. 기존 별도 Swift target의 `manager` 모드만 VM을 소유하며, Python 관측기가 Manager와 Worker를 각각 독립 자식으로 만든다. 제품 앱이나 상주 서비스에는 연결하지 않았다. 기존 stdin 진단 모드는 회귀 검증을 위해 보존한다.
+
+제어는 파일 경로/listener를 만들지 않는 UNIX socketpair를 사용한다. 신뢰된 검증기가 각 endpoint를 하나씩 전달하고 불필요한 descriptor를 닫는다. 실행 ID가 일치하는 start/heartbeat/cancel/status만 허용한다. status 결과는 Host journal에 기록한다. Worker 외 제3자 연결이나 무제한 재접속 기능은 없다. 동일 사용자 악성 Host 프로세스 방어·제품 IPC 인증을 검증한 것은 아니다.
+
+Manager는 heartbeat 1초/만료 5초, 실행 deadline, 연결 EOF, 취소를 공통 종료 경로로 처리한다. requestStop 후 2초 내 확인되지 않으면 forceStop, 추가 5초 내 확인되지 않으면 stop-unconfirmed를 남긴다. 중복 취소는 새 종료를 시작하지 않는다. 성공 callback 또는 guest-stop callback에서 실제 stopped 상태까지 확인한 경우에만 stop-confirmed를 기록한다. 기록은 Host 파일에 flush하고 종료 확정 후 Manager를 정상 종료한다. Manager 자체의 45초 진단 watchdog 종료는 VM 종료 증거가 아니다.
+
+검증 suite의 registry는 실행 전에 journal 경로/run ID를 기록·fsync하고 flock으로 동시 admission을 직렬화한다. 이전 실행의 마지막 유효 기록이 stop-confirmed/stopped가 아니면 신규 VM 생성을 거절한다. 재시작 검사는 별도 프로세스에서 journal을 다시 읽는다. 누락·손상·다른 run ID·정지 요청만 있는 기록은 apply/cleanup/new-execution 모두 거절한다. registry는 새 합성 suite에서만 초기화하며, 미확인 suite를 다시 시작할 때 초기화하면 안 된다. 이는 제품 전역 Registry가 아닌 검증용 진입 정책이다. Host journal은 게스트에 공유하지 않는다.
+
+실제 VM 결과: 일반 취소(중복 포함), setsid/double-fork/중첩 자식 실행 중 Worker SIGKILL, Worker 연결 단절, heartbeat 중단, 시간 초과, 잘못된 run ID 거절은 종료 확인까지 PASS. Manager SIGKILL은 무활동 관측만 PASS이며 종료 확인은 NOT_RUN이다. 원래 문제였던 **작업 Worker 상실 시 종료 확인**은 해결했지만 **VM 소유자 자체 상실**은 해결하지 않았다. M0 전체 eligible=false와 M1~M6 보류는 유지한다.
+
+모든 신규 시나리오는 NIC 없이 합성 Workspace만 사용한다. 종료 전 heartbeat 증가를 확인하고 정착 300ms 뒤 1초 동안 파일 증가를 독립 관측한다. 신규 Manager 네트워크 활동 검증은 NIC 없음 범위이며, 이전 제어 모드의 로컬 sink 대조군을 별도로 회귀 실행했다. 실제 앱 crash, Manager 모드의 네트워크 허용 경로, 실제 framework stop 실패/종료 확인 timeout 강제 주입은 NOT_RUN이다. 파일 반영·정리 권한 검사는 수행하지만 이번 harness는 진단 자료를 모두 보존하며 결과를 원본에 자동 반영하지 않는다.
+
+재현(기존 VM 자산 준비 후):
+
+```sh
+swiftc scripts/agent-vm/VMProbe.swift -framework Virtualization -o /private/tmp/nidus-vm-m0-assets/vm-manager
+codesign --force --sign - --entitlements scripts/agent-vm/probe.entitlements /private/tmp/nidus-vm-m0-assets/vm-manager
+python3 scripts/agent-vm/manager_probe.py /private/tmp/nidus-vm-m0-assets > /tmp/nidus-manager-final.json
+python3 scripts/agent-vm/test_manager.py
+python3 scripts/agent-vm/test_workspace.py
+```
+
+전체 M0 미자격이므로 진단 exit 1은 예상 결과다. 환경은 macOS 27.0.1 (26A434), Linux 6.18.58-0-virt, 2 vCPU/512MiB로 유지한다. 신규 [Manager Evidence](evidence/Phase5_6_M0_VM_Manager.json)에 source hash와 회귀 결과를 저장한다. Node 174개, Swift 42개, 파일 테스트 6개, Manager 정책 테스트 4개 PASS. 첫 Node 실행은 sandbox의 localhost listen EPERM으로 실패했고 로컬 mock listener 허용 후 통과했다. 실제 API 호출, 제품 앱 packaging, 제품 서명 변경은 수행하지 않았다.

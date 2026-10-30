@@ -104,3 +104,9 @@ npm run test:live
 Apple Virtualization + Linux ARM64 별도 prototype 실제 실행: 시나리오 **9 PASS / 1 NOT_RUN**, 제한된 보안 검사 **7 PASS**. Worker SIGKILL 이후 활동은 멈췄지만 실제 VM 정지는 확인하지 못하여 전체 자격은 미통과다. M1~M6/제품 Shell은 비활성 상태로 유지한다. 기존 native 실패 Evidence는 보존한다.
 
 Node 174개, Swift 42개, workspace 6개 PASS. 제품 앱 packaging·실제 API·실제 SwiftUI crash는 NOT_RUN. 환경, 초기 실패, 재현 명령, 파일·네트워크 범위 및 정리 보류 항목은 [설계 기록](Phase5_6_Agent_Runtime_Vault_Sandbox.md#vm-기반-m0-재검증--2026-10-30)과 [VM Evidence](evidence/Phase5_6_M0_VM.json)를 참조한다.
+
+## 독립 VM Manager M0 (2026-10-31)
+
+작업 Worker와 VM 소유 Manager를 분리한 실제 VM 검증은 8 PASS / 1 NOT_RUN이다. Worker SIGKILL·연결 단절·heartbeat 만료·timeout 후 Manager가 VM 종료를 확인했다. Manager 자체 SIGKILL은 종료 미확인으로 남고 신규 실행을 차단한다. M0 전체 자격 및 M1~M6 보류는 유지한다.
+
+Node 174, Swift 42, workspace 6, Manager 정책 4개 PASS. 기존 VM 모드 회귀는 9 PASS / 1 NOT_RUN, 보안 검사 7 PASS. 최초 Node 실행의 localhost EPERM은 환경 제한으로 기록하고 권한 허용 후 재검증했다. 상세 제한과 원시 이벤트는 [Manager Evidence](evidence/Phase5_6_M0_VM_Manager.json)를 참조한다. 기존 실패 Evidence는 수정하지 않았다.
