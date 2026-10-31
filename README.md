@@ -4,7 +4,19 @@ TypeScript API 엔진과 SwiftUI macOS 앱입니다. Provider 모델 탐색, 텍
 
 **지원 Provider:** OpenAI, Anthropic, Gemini, DeepSeek, NVIDIA NIM, Groq, Mistral AI, Cloudflare Workers AI.
 
-**현재 상태:** API 연결·채팅·라우팅은 구현되어 있습니다. Agent Runtime·Vault·Shell·브라우저는 Phase 5–6 설계 및 M0 검증 단계이며 사용할 수 없습니다. M0에서 분리된 자식 프로세스 종료 실패가 확인되어 실행 backend를 채택하지 않았습니다.
+**현재 상태:** API 연결·채팅·라우팅은 구현되어 있습니다. Phase 5–6 M0에서는 Apple Virtualization 기반 Linux VM, 독립 VM Manager, 장애 알림·사용자 복구 경로를 구현했습니다. **M0 전체 보안 검증은 아직 미통과**이며, 제품 Agent Runtime·Vault·Shell·브라우저는 사용할 수 없습니다. 현재 결과를 통합하고 M1~M6 개발을 준비하되, 검증되지 않은 Shell 실행을 활성화하지 않습니다.
+
+## Phase 5–6: 남은 문제와 다음 단계
+
+- **Manager 사망 후 VM 종료 확정:** SIGKILL 이후 파일·네트워크 활동 중단은 반복 관측했지만, 종료를 확정할 공개 API 근거는 확보하지 못했습니다. `STOP_UNCONFIRMED`를 유지하며 재실행·원본 반영·자료 삭제를 차단합니다. 시간 경과·PID 소멸·프로세스 재시작만으로 해제하지 않습니다.
+- **실제 재부팅·앱 장애·UI 검증:** 호스트 부팅 ID 변경과 파일 무결성 정책은 Mock으로 검증했습니다. 실제 Mac 재부팅, SwiftUI 앱 crash, 복구 화면의 수동 조작·시각 검증은 미완료입니다. Framework 종료 오류도 실제 내부 장애가 아닌 fault injection으로 검증했습니다.
+- **Workspace 및 네트워크 범위:** 승인된 최상위 파일 복사와 신규 파일 반영만 제한적으로 검증했습니다. 일반 재귀 merge·기존 파일 덮어쓰기·디렉터리 경쟁 조건, 외부 네트워크 허용 정책, 다른 Vault 동시 실행 격리는 추가 검증이 필요합니다. 현재 제품 실행 제한은 유지합니다.
+- **복구 UI의 제한:** 앱의 **VM 복구**에서 M0 Registry를 직접 선택합니다. 살아 있는 Manager의 신뢰 가능한 채널이 있을 때만 종료를 요청할 수 있습니다. 이전 Registry에 Vault ID나 사전 파일 inventory가 없으면 추측하지 않으며, 재부팅만으로 잠금을 풀지 않습니다. 복구 bridge는 시스템 Python을 필요로 하고, 사용할 수 없으면 안전하게 차단합니다.
+- **배포·지원 범위:** VM prototype은 macOS 27.0.1 / Linux ARM64 진단 이미지에서 검증했습니다. 일반 개발 toolchain, macOS 게스트, 다른 OS·기기, 제품 배포 서명·공증은 검증하지 않았습니다. 앱 자체의 최소 macOS 버전과 VM prototype의 검증 환경은 다릅니다.
+
+다음 개발 브랜치는 `feature/agent-runtime-vault-m1-m6`입니다. Vault → Tool/권한 → 단일 Agent → 격리 Shell → 실행 감사 → SwiftUI 통합 순서로 준비합니다. **이번 develop 통합은 M0 통과나 제품 Shell 활성화 승인이 아닙니다.** 위 항목을 후속 검증 과제로 유지하고, Phase 7 Memory·Task 자동 재개는 포함하지 않습니다.
+
+상세 설계와 실패 기록은 [Phase 5–6 문서](docs/Phase5_6_Agent_Runtime_Vault_Sandbox.md), 최신 실제 VM·Mock 결과는 [사용자 복구 Evidence](docs/evidence/Phase5_6_M0_VM_User_Recovery.json)를 참고하세요. 기존 FAIL·UNCONFIRMED·NOT_RUN 기록은 보존합니다.
 
 ## 시작하기
 
@@ -75,4 +87,4 @@ npm run test:keychain    # 별도 테스트 항목에 가짜 키 저장·삭제
 npm run test:live        # opt-in 없으면 실제 API 테스트 skip
 ```
 
-최근 기록된 검증은 Node 171개·Swift 42개 PASS, 앱 빌드 PASS입니다. **M0 보안 검증은 별도로 FAIL**이며 실제 Provider 호출 성공을 의미하지 않습니다. 상세 조건과 재현 방법은 검증 이력을 참고하세요.
+최근 기록된 검증은 Node 174개·Swift 46개·Python M0 정책 테스트 21개 PASS, 앱 빌드 PASS입니다. 최신 실제 VM 복구 검증은 2 PASS / 1 UNCONFIRMED이며, 장애 차단 정책의 PASS를 VM 종료 확정으로 해석하지 않습니다. **M0 전체 자격은 미통과**이고 실제 Provider 호출 성공을 의미하지 않습니다. 상세 조건과 재현 방법은 검증 이력을 참고하세요.
