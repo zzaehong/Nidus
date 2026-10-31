@@ -18,3 +18,8 @@ for (const entry of await readdir(join(root, 'dist'), { withFileTypes: true })) 
   else if (entry.name.endsWith('.js') || entry.name === 'nidus-keychain') await copyFile(join(root, 'dist', entry.name), join(resources, 'dist', entry.name));
 }
 console.log('Built dist/Nidus.app (local unsigned development bundle; Node included).');
+
+await mkdir(join(resources, 'm0'), { recursive: true });
+for (const name of ['recovery.py', 'lifecycle.py', 'workspace.py']) {
+  await copyFile(join(root, 'scripts', 'agent-vm', name), join(resources, 'm0', name));
+}

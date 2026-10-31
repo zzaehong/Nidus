@@ -118,6 +118,49 @@ final class LinuxVMBackend: NSObject, SandboxBackend, VZVirtualMachineDelegate {
     func guestDidStop(_ virtualMachine: VZVirtualMachine) { event("guest-stopped"); if managerMode { confirmStop() } }
     func virtualMachine(_ virtualMachine: VZVirtualMachine, didStopWithError error: Error) { event("failed",["error":error.localizedDescription]) }
 }
+// M0-only authenticated local control. No PID-based discovery or termination.
+func recoveryListener(directory: String, backend: LinuxVMBackend) throws {
+    let token = UUID().uuidString
+    let path = directory + "/control.sock"
+    guard path.utf8.count < 104 else { throw NSError(domain:"ControlPath",code:1) }
+    let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+    guard fd >= 0 else { throw NSError(domain:"ControlSocket",code:1) }
+    var address = sockaddr_un(); address.sun_family = sa_family_t(AF_UNIX)
+    address.sun_len = UInt8(MemoryLayout<sockaddr_un>.size)
+    withUnsafeMutableBytes(of:&address.sun_path) { buffer in
+        for (index,byte) in (Array(path.utf8)+[0]).enumerated() { buffer[index]=byte }
+    }
+    let bound = withUnsafePointer(to:&address) { pointer in
+        pointer.withMemoryRebound(to:sockaddr.self,capacity:1) { Darwin.bind(fd,$0,socklen_t(MemoryLayout<sockaddr_un>.size)) }
+    }
+    guard bound==0 && listen(fd,1)==0 else { close(fd); throw NSError(domain:"ControlBind",code:1) }
+    chmod(path,0o600)
+    let metadata = try JSONSerialization.data(withJSONObject:["runID":backend.runID,"token":token])
+    let url=URL(fileURLWithPath:directory+"/control.json")
+    try metadata.write(to:url,options:.atomic);chmod(url.path,0o600)
+    DispatchQueue.global().async {
+        while true {
+            let peer=accept(fd,nil,nil)
+            if peer<0 { break }
+            var timeout=timeval(tv_sec:2,tv_usec:0)
+            setsockopt(peer,SOL_SOCKET,SO_RCVTIMEO,&timeout,socklen_t(MemoryLayout<timeval>.size))
+            var noSignal:Int32=1
+            setsockopt(peer,SOL_SOCKET,SO_NOSIGPIPE,&noSignal,socklen_t(MemoryLayout<Int32>.size))
+            var bytes=[UInt8](repeating:0,count:1024)
+            let count=recv(peer,&bytes,bytes.count,0)
+            guard count>0, let object=try? JSONSerialization.jsonObject(with:Data(bytes.prefix(count))) as? [String:String],
+                  object["runID"]==backend.runID, object["token"]==token,
+                  let action=object["action"], ["status","cancel"].contains(action) else { close(peer);continue }
+            DispatchQueue.main.async {
+                let allowed = !backend.stopping && !backend.stopConfirmed
+                if action=="cancel" { backend.terminate("user-recovery-stop") }
+                let value:[String:Any] = ["runID":backend.runID,"actualState":backend.actualState.rawValue,"canStop":allowed,"accepted":action=="cancel"]
+                if let data=try? JSONSerialization.data(withJSONObject:value) { data.withUnsafeBytes { buffer in _ = send(peer,buffer.baseAddress,data.count,0) } }
+                close(peer)
+            }
+        }
+    }
+}
 let args = CommandLine.arguments
 let managerMode = (9...11).contains(args.count) && args[6] == "manager"
 if !managerMode && args.count != 6 && args.count != 7 { fputs("kernel initrd workspace serial mode [networkFD]\n",stderr); exit(2) }
@@ -131,6 +174,8 @@ if managerMode {
     backend.managerMode = true
     backend.stopFault = args.count==11 ? args[10] : "none"
     backend.runID = args[7]
+    do { try recoveryListener(directory:URL(fileURLWithPath:args[4]).deletingLastPathComponent().path,backend:backend) }
+    catch { backend.event("control-unavailable") }
     backend.event("manager-ready")
     let timeout = Double(args[8]) ?? 15
     DispatchQueue.main.asyncAfter(deadline:.now()+timeout) { backend.terminate("execution-timeout") }

@@ -116,3 +116,9 @@ Node 174, Swift 42, workspace 6, Manager 정책 4개 PASS. 기존 VM 모드 회�
 실제 Manager SIGKILL 5회: 5초간 파일·로컬 패킷 추가 활동 없음, 관측된 Virtualization 서비스 소멸. 활동 관측은 모두 PASS지만 권위 있는 종료 근거는 **5 UNCONFIRMED**다. 정상 취소/중복 종료, 중복 시작 차단, Worker 종료, Supervisor 종료, 합성 앱 연결 상실은 **5 PASS**. 종료 오류·완료 미도착 주입 2건은 종료 증명 NOT_RUN, 미확인 처리·재실행 차단 정책은 PASS다. 실제 framework 내부 오류와 실제 SwiftUI crash로 확대 해석하지 않는다.
 
 Node 174, Swift 42, workspace 6, Manager 4, lifecycle 4개 PASS. 상태 불일치는 단위 테스트에서 현재 상태를 주입해 검증한다. launchd는 공식 기능을 검토했으며 설치하지 않았다. M0 전체 미통과 및 M1~M6 보류를 유지한다. [Recovery Evidence](evidence/Phase5_6_M0_VM_Recovery.json)에 원시 관측과 판정 근거를 보존한다.
+
+## M0 사용자 복구 UI (2026-10-31)
+
+실제 VM 복구 bridge: 안전 종료와 Worker 종료 2 PASS, Manager 사망의 종료 증명 1 UNCONFIRMED. 장애 차단/채널 비활성 정책은 PASS. Swift 46개(복구 Mock 4개), Python 21개, Node 174개 PASS. macOS release 앱 packaging PASS.
+
+부팅 UUID 조회는 확인했으나 실제 호스트 재부팅·실제 앱 crash·수동 UI E2E는 NOT_RUN이다. headless 캡처는 텍스트 표시가 확인되지 않아 시각 QA PASS로 계산하지 않는다. 새 [사용자 복구 Evidence](evidence/Phase5_6_M0_VM_User_Recovery.json)와 [설계 문서](Phase5_6_Agent_Runtime_Vault_Sandbox.md)에 제한을 기록했다. M0 전체 통과가 아니며 M1~M6는 보류한다.

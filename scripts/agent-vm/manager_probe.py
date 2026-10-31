@@ -1,5 +1,6 @@
 """Independent VM owner/worker M0 diagnostic; socketpair has no public listener."""
 from lifecycle import reconcile
+from recovery import snapshot, boot_id
 import fcntl, json, os, pathlib, socket, subprocess, sys, tempfile, time, uuid
 
 
@@ -12,15 +13,17 @@ def require_stopped(path, run_id, operation):
         raise ValueError('Unconfirmed execution blocks '+operation)
 
 
-def begin_run(registry, journal, run_id):
+def begin_run(registry, journal, run_id, inventory=None):
     """Persist before VM creation; serialize admission across diagnostic observers."""
     with open(registry,'r+') as handle:
         fcntl.flock(handle,fcntl.LOCK_EX)
         previous=json.load(handle)  # Missing/corrupt registry refuses admission.
         if previous is not None:
-            require_stopped(previous['journal'],previous['runID'],'new-execution')
+            if previous.get('bootID'):
+                if snapshot(registry)['locked']:raise ValueError('Recovery required')
+            else:require_stopped(previous['journal'],previous['runID'],'new-execution')
         handle.seek(0)
-        json.dump({'journal':str(journal),'runID':run_id},handle)
+        json.dump({'journal':str(journal),'runID':run_id,'bootID':boot_id(),'registryIdentity':[os.fstat(handle.fileno()).st_dev,os.fstat(handle.fileno()).st_ino],'integrity':inventory},handle)
         handle.truncate();handle.flush();os.fsync(handle.fileno())
 
 
@@ -89,6 +92,10 @@ def scenario(assets,mode,trigger,registry,network=False,observation=1,fault="non
         row['framesBeforeStop']=frames
         row['approvedFramesBeforeStop']=approved
         row['processSnapshotBefore']=vm_processes()
+        if trigger=='ui-cancel':
+            row['recoveryBefore']=snapshot(registry)
+            row['stopAttempt']=snapshot(registry,'cancel')
+            row['duplicateStopAttempt']=snapshot(registry,'cancel')
         if trigger=='worker-kill':child.kill();child.wait()
         if trigger=='manager-kill':manager.kill();manager.wait()
         deadline=time.monotonic()+10
@@ -111,6 +118,7 @@ def scenario(assets,mode,trigger,registry,network=False,observation=1,fault="non
             except (ValueError,OSError,KeyError):blocked=True
             row['newVMAdmissionBlocked']=blocked
         row['events']=[json.loads(line) for line in journal.read_text().splitlines()]
+        row['recoveryAfter']=snapshot(registry)
         row['defaultNetworkBlocked']='DEFAULT_NETWORK_BLOCKED' in (root/'serial.log').read_text()
         return row
     finally:

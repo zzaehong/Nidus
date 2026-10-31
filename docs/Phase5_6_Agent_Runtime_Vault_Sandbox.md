@@ -378,3 +378,47 @@ python3 scripts/agent-vm/test_workspace.py
 **결론: 소유자 상실 후 종료의 공개 API 근거가 확보되지 않아 M0 전체 통과 및 M1~M6 착수는 보류한다.** 확인 가능한 상태 조회·재연결 기능이 필요하면 Apple에 해당 수명 계약을 확인하거나, 안정적인 실행 ID 기반 재조회와 종료 확인을 제공하는 Backend를 별도 검증해야 한다. Supervisor를 하나 더 쌓거나 재시작 성공을 종료 증거로 삼는 것은 해결책으로 인정하지 않는다.
 
 최종 결과: Manager SIGKILL **5 UNCONFIRMED**(각각 5초간 파일/패킷 증가 0, OS 서비스 관측 1→0), 정상/중복 요청·Worker/Supervisor·합성 앱 연결 검증 **5 PASS**, 종료 장애 주입 **2 NOT_RUN**(종료 증명 기준; 차단 정책은 2 PASS). Node 174, Swift 42, 파일 6, Manager 4, lifecycle 4개 테스트 PASS. 기록/현재 상태 불일치는 단위 테스트 입력으로 검증했으며 실제 Framework 상태 위조를 수행하지 않았다.
+
+## M0 사용자 장애 대응 및 복구 UI — 2026-10-31
+
+### 연결 범위와 사용자 절차
+
+SwiftUI toolbar의 **VM 복구**에서 M0 Registry 파일을 선택한다. 선택한 경로는 앱 설정에 저장하고, 다음 실행에서도 3초 간격으로 복구 상태를 조회한다. STOP_UNCONFIRMED/FAILED 또는 조회 실패는 하단 장애 배너로 알린다. 화면에는 실행/Vault 식별자, 최초 관측된 장애 시각, 마지막 journal 시각, 관리 상태·종료 확인·차단 사유, 허용 목록으로 정제한 이벤트, 종료 시도 시각을 표시한다. 실제 사망 시각을 관측하지 못하면 마지막 기록 시각과 혼동하지 않는다. 기존 Registry에 Vault ID가 없으면 M0 진단으로 표시하며 경로나 이름을 추측하지 않는다.
+
+제품에는 Agent/VM 생성 기능을 추가하지 않았다. Registry 수동 등록은 M0 검증 UI의 연결 방법이며 일반 Vault 관리가 아니다. 새 Supervisor·서비스·VM 기술도 설치하지 않았다. 기존 Provider/Router/Ledger는 변경하지 않았다. 앱 bundle에는 읽기/복구용 Python 파일 3개만 포함하며 VM 실행 바이너리는 포함하지 않는다. `/usr/bin/python3` 또는 해당 스크립트를 사용할 수 없으면 오류와 차단 상태를 표시한다. Python 런타임 설치는 하지 않는다.
+
+### 신뢰 가능한 채널과 종료 시도
+
+살아 있는 Swift Manager만 실행별 private 디렉터리에 `control.sock`을 생성한다. 접근권한 0600, 디렉터리 0700, run ID와 임의 capability token을 확인한다. token은 Host의 control.json에만 두며 UI·journal·Evidence에 출력하지 않는다. 별도 Supervisor나 PID 검색·종료를 사용하지 않는다. UI bridge는 동일 사용자 소유 private 디렉터리와 일치하는 run ID를 확인한 경우에만 status/cancel을 전달한다. 이 채널은 동일 사용자 악성 Host로부터의 방어를 입증한 제품 IPC가 아니다.
+
+안전 종료 버튼은 유효한 채널이 있고 Manager가 요청을 수용할 수 있을 때만 활성화한다. 클릭 즉시 성공으로 표시하지 않으며 기존 requestStop → forceStop → callback/stopped 검증을 재사용한다. 종료 요청은 저장되지 않은 VM 변경을 잃을 수 있음을 안내한다. 동시 클릭은 UI busy 상태로 차단하고, Manager도 중복 종료를 새 실행으로 처리하지 않는다. 채널 상실·timeout·손상된 journal에서는 STOP_UNCONFIRMED와 차단을 유지한다. raw 오류·guest serial·파일 내용은 표시하지 않는다. 복구 관측/종료 시도는 별도 Host `recovery-events.jsonl`에 최소 정보만 기록한다.
+
+### 호스트 재시작과 파일 검증
+
+Nidus는 Mac 재시작을 실행하지 않는다. 사용자는 다른 작업을 저장하고 데이터 손실 가능성을 검토한 뒤 직접 결정한다. 단순 앱 재시작·시간 경과·PID 소멸은 잠금 해제 근거가 아니다.
+
+실행 전 Registry에는 조회 가능한 경우 OS `kern.bootsessionuuid`와 Registry의 device/inode 식별을 기록한다. 현재 boot UUID가 유효하고 달라졌으며 동일 Registry임을 확인하면 이전 부팅의 VM 종료 근거와 파일 검증을 **별도**로 판단한다. 새 실행 허용에는 원본과 Workspace 각각의 명시적 사전 inventory에 대해 파일 목록/내용 SHA256 일치가 추가로 필요하다. 예상 밖 파일, symlink/hardlink, 내용 변경, 누락된 inventory, 손상된 audit은 계속 차단한다. `begin_run(..., inventory=...)`는 승인된 flat-file inventory를 실행 전에 기록할 수 있다. 현재 fixture와 이전 Registry는 inventory가 없을 수 있으므로 재부팅만으로 해제되지 않는다. 승인된 변경 반영/일반 재귀 merge UI는 이번 범위가 아니다.
+
+실제 boot UUID 조회는 이 Mac에서 확인했으나 **실제 Mac 재부팅 E2E는 NOT_RUN**이다. UUID 변경/미변경/조회 실패, Registry 복사, 파일 변경·누락을 Mock으로 검증했다. 부팅 근거를 조회할 수 없으면 추측하지 않는다. 절전/앱 재실행은 boot 변경으로 취급하지 않는다. 해당 정책은 현재 OS의 관측 가능 정보에 의존하며 다른 OS 버전·재부팅 방식은 별도 검증이 필요하다.
+
+안전 제한은 해당 작업의 재실행·원본 반영·자료 삭제와 자동 재개 금지다. 기존 단일 Registry 실행 admission을 유지하고, 다른 Vault 허용을 추가하지 않았다. 제품 Shell은 여전히 비활성 상태이므로 이 UI가 전역 실행 제한을 해제하는 경로는 없다. 직접 저수준 진단 바이너리를 임의 실행하는 것을 제품 권한 경로로 간주하지 않는다.
+
+### 검증 결과와 재현
+
+- 실제 VM: UI와 동일 bridge를 통한 안전 종료 PASS, Worker 종료 PASS, Manager SIGKILL의 종료 증명 UNCONFIRMED. Manager 사망 후 버튼 비활성·재시작/반영/정리 차단 정책은 PASS.
+- Swift 46개 PASS(복구 상태·버튼 정책·실패 안내·재로드·layout 구성 Mock 4개 포함), Python 21개 PASS, Node 174개 PASS, macOS release 앱 packaging PASS.
+- headless 이미지 캡처는 텍스트 표시를 확인하지 못하여 시각 QA 성공으로 인정하지 않았다. 실제 창의 수동 클릭 E2E, 실제 SwiftUI crash, 실제 호스트 재부팅은 NOT_RUN이다.
+- 일반 파일 merge, 외부 네트워크 허용 정책, 다른 Vault와의 동시 실행 격리, Manager 사망 후 공식 VM 재연결은 미검증/미지원 상태를 유지한다.
+
+```sh
+# 기존 VM assets 준비 후 별도 target 빌드·서명
+swiftc scripts/agent-vm/VMProbe.swift -framework Virtualization -o /private/tmp/nidus-vm-m0-assets/vm-manager
+codesign --force --sign - --entitlements scripts/agent-vm/probe.entitlements /private/tmp/nidus-vm-m0-assets/vm-manager
+python3 scripts/agent-vm/recovery_probe.py /private/tmp/nidus-vm-m0-assets > /tmp/nidus-user-recovery-final.json
+python3 scripts/agent-vm/test_recovery.py
+swift test
+npm test
+npm run build:app
+```
+
+진단은 M0 미자격이므로 exit 1이다. [사용자 복구 Evidence](evidence/Phase5_6_M0_VM_User_Recovery.json)를 새로 저장하고 이전 결과는 보존했다. **장애 대응 경로는 추가했지만 Manager 소멸 후 즉시 종료 확정 문제를 해결한 것으로 간주하지 않는다. M0 전체 미통과와 M1~M6 보류를 유지한다.**
