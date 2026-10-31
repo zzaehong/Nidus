@@ -20,6 +20,17 @@
  Nidus의 작업 계층은 기본적으로 **Agent Vault > Project > Task**이며, Task는 Project와 무관한 독립적인 업무로도 존재할 수 있다.
  각 Agent Vault에는 Nidus가 Vault를 식별하고 호환성과 무결성을 확인하기 위한 로컬 메타데이터와 버전 정보가 존재한다. 
  Agent의 정체성·지침·지속 상태는 Agent Vault 자체의 책임이 아니라 AI Office의 **Home**이 담당한다.
+
+## 실행 환경과 단계별 범위
+
+Vault는 VM Environment의 소유 단위다. 하나의 Vault에 활성 VM Instance는 최대 1개이며 필요할 때 시작하고 유휴 시 종료할 수 있다. VM은 Worker나 Task에 귀속되지 않으며, 향후 여러 AI Employee가 공유할 수 있다. 초기에는 단일 Agent와 VM Execution Session 1개만 실행한다.
+
+실행 자원은 Host File Gateway(허용된 파일 읽기·승인된 변경), Vault VM Gateway(Shell·코드·테스트·실제 브라우저 검색/탐색), Provider Tool Gateway(이미지 생성 등 API)로 분리한다. 모델은 공통 Tool을 호출하며 실행 환경·권한은 Nidus가 결정한다. 웹 검색 API는 사용하지 않는다. VM은 원본 Vault를 직접 수정하지 않고 승인된 Workspace와 Host의 검토·반영 절차를 사용한다.
+
+Task는 Step으로 나누고 VM이 필요한 Step만 VM slot을 점유한다. Host 읽기·LLM 추론·이미지 API는 slot을 사용하지 않는다. 모델 선택과 도구 실행 환경은 독립적이다. VM 재사용은 이전 Session의 프로세스·쿠키·네트워크 권한을 승계한다는 뜻이 아니다.
+
+아래 AI Office와 세션 복구는 장기 개념이다. **Phase 5–6은 단일 Agent의 순차 Step 및 실행 감사**, **Phase 7은 Home/Desk/Library·Memory·Persistent Task Context**, **Phase 8은 Multi-Agent·Task Board·Worker 조정**으로 구분한다. Phase 5–6에서 앱 재실행 후 Task를 자동 재개하지 않는다. 구체 계약과 미검증 조건은 [Phase 5–6 설계](Phase5_6_Agent_Runtime_Vault_Sandbox.md)를 따른다.
+
 # AI Office
 ---
 **Home → Library → Desk → Task Board → Workshop → Inbox → Meeting Room → Security Office → Idea Bank → Rest Room → Manager's Office**

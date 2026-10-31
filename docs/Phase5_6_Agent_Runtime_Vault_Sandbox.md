@@ -1,154 +1,256 @@
-# Phase 5–6: Single Agent Runtime · Vault · Sandbox
+# Phase 5–6: Agent Runtime · Vault VM · Unified Tools
 
-## 승인된 설계와 구현 상태
+## 현재 설계 기준 — 2026-11-01
 
-기준 develop: `81ecb887cd2f2b8803ead55c0c50d945aacbf15a`.
-작업 브랜치: `feature/agent-runtime-vault-sandbox`.
+이 절부터 「M0 실제 검증 기록」 직전까지가 **현재 설계**다. 아래 날짜별 검증 기록은 당시 설계와 결과를 그대로 보존한 역사 기록이며, 현재 정책보다 우선하지 않는다. 이번 변경은 문서만 갱신하며 구현·DB migration·Prototype 변경·develop 병합을 하지 않는다.
 
-이 문서는 승인된 통합 계획의 구현 기준이다. **아래 계약은 구현 목표이며, 완료된 기능 목록이 아니다.** 단계별 실제 결과는 마지막 검증 기록으로 구분한다. 현재 제품의 Provider·Router·권한·사용량·SwiftUI 동작은 M0 진단으로 변경하지 않는다. 실제 API 호출, 원격 push, develop 병합은 별도 승인 없이 수행하지 않는다.
+작업 브랜치: `feature/agent-runtime-vault-sandbox`. 설계 변경 기준 코드: `a9a9c71`(M0 구현 `374b920` 포함). 해당 작업의 develop 통합은 `d5972ba`이며 별도의 후속 개발 준비 브랜치는 `feature/agent-runtime-vault-m1-m6`이다. 이번 문서는 사용자 지정에 따라 기존 feature에서 작성한다.
 
-이전 네이티브 설계의 사용자 선택(역사 기록; Shell 경계는 아래 VM M0로 대체):
+**방향:** Vault가 VM Environment를 소유한다. 도구는 Host / Vault VM / Provider로 분리하고, 단일 Agent가 Step 단위로 실행한다. VM 브라우저 기반 웹 검색·탐색은 필수 범위이며 검색 API로 대체하지 않는다. M0 잔여 검증과 Manager 사망 후 추가 복구 개발은 별도 후속 작업으로 미룬다. 이는 M0 통과를 의미하지 않는다. 개발 계획과 Mock/비활성 구현은 진행할 수 있지만, M0의 미검증 조건을 우회해 제품 Shell·브라우저를 활성화하지 않는다. **현재 요청은 설계 검토까지만이며 구현은 후속 승인 대상이다.**
 
-- macOS 네이티브 Shell, 원본 Vault 직접 실행.
-- 파일 Tool 쓰기·수정은 Diff 승인, 파일 삭제는 개별 승인.
-- Shell은 정확한 명령과 지정 경로의 **수정·삭제 가능성 전체를 명령 단위로 승인**한다. Shell 내부의 개별 파일 삭제 사전 승인을 보장하지 않는다.
-- 외부 네트워크는 기본 차단, 요청별 별도 승인. 네트워크 허용 Shell은 Vault 정보를 외부로 전송할 수 있음을 명시한다.
-- 전용 브라우저 검색·공개 페이지 읽기 포함. 로그인·임의 폼 제출·다운로드·게시·구매 제외.
-- 기존 8개 Provider의 Tool Calling 변환 지원. 개별 모델의 실제 지원 여부가 불명확하면 Agent 후보에서 제외.
-- M0에서 네이티브 격리를 먼저 검증한다. 검증 전 Shell·브라우저 실행을 활성화하지 않는다.
+## 기존 코드와 재사용 경계
 
-현재 방향: **Host 앱·엔진은 유지하고 Shell은 VM 내부의 승인된 작업 복사본에서만 실행**한다. 아래 기존 계약은 구현 목표로 보존하며, 이번 범위는 문서 끝의 VM M0 prototype뿐이다. 전체 M0 자격 판정은 아직 미통과이며 M1~M6는 보류한다.
+| 현재 구성 | 확인된 상태 / 후속 재사용 |
+|---|---|
+| `ConnectivityEngine`, Provider Adapter 8개 | 공통 계정 실행 권한·Tier 재검사·HTTP·토큰 기록 재사용. 현재 ChatRequest는 user/assistant 문자열이고 ChatResponse는 text 중심이며 Tool 실행 API는 없다 |
+| Model Registry / Router / Routing Context | 동적 모델 목록·Tier·가용성·사용량 정보 유지. `capabilities.tools`는 supported/unsupported/unknown이며 실제 Adapter 왕복 지원과 함께 검증해야 Agent 후보가 됨 |
+| Usage Ledger / Soft Budget | 기존 SQLite 데이터 보존. 이미지 요청의 사용량 단위·비용 미확인은 확장 계약이 필요. 비용 기반 호출 차단이나 예약을 복원하지 않음 |
+| SwiftUI Runtime | 기존 단발 JSON 요청은 유지. Agent 실행에만 장기 양방향 채널을 추가할 계획 |
+| M0 Swift Manager / Python lifecycle·Registry·복구 UI | 실행별 합성 fixture에서 검증한 Prototype. Vault 소유권·세션 정리·VM 재사용을 구현/검증한 것으로 취급하지 않음 |
+| Host 파일 Prototype | 최상위 제한 파일·신규 파일 반영 범위. 일반 디렉터리·overwrite·경쟁 조건 검증을 대신하지 않음 |
 
-## 기존 구조 재사용
+기존 Provider Adapter는 모델 API 형식 변환을 담당하고 실제 파일·Shell·브라우저 Tool을 실행하지 않는다. Provider 종류에 따라 같은 Tool의 권한 의미가 달라지지 않는다. Provider가 제공하는 원격 Shell·검색 기능을 Nidus의 검증된 Tool로 자동 대체하지 않는다.
 
-`ConnectivityEngine.execute`의 API 권한 재검사·사용량 기록을 Agent 호출에도 적용한다. Router의 Tier 우선순위·안전한 초기 Fallback을 재사용한다. Soft Budget은 참고 정보이며 비용 기반 차단은 도입하지 않는다. 기존 ChatRequest는 user/assistant 문자열 메시지만 받고, Adapter 응답은 텍스트가 비면 오류 처리하므로 Tool 전용 타입·응답 처리가 필요하다.
+## 전체 아키텍처와 책임
 
-SwiftUI의 Runtime은 요청마다 Node 자식을 만들고 단일 최종 JSON을 받는다. 기존 채팅·설정 흐름을 유지하며 Agent 전용 양방향 채널을 추가한다. 현재 Runtime.shutdown은 직접 자식 PID만 종료하므로 Shell의 손자·분리된 자식 종료를 보장한다고 취급하지 않는다.
+```text
+SwiftUI / CLI
+  └─ Single-Agent Runtime (Task → 순차 Step → Tool Invocation)
+       ├─ 기존 Provider 엔진: 텍스트 추론 / Tool Calling 정규화
+       └─ Unified Tool Registry → Schema 검증 → Permission Gateway
+            ├─ Host File Gateway → Vault 내부 허용 파일
+            ├─ Vault VM Execution Gateway → Vault VM Manager → Linux VM Session
+            │    └─ Shell / 코드 / 빌드·테스트 / 실제 브라우저
+            └─ Provider Tool Gateway → 이미지 API → 임시 artifact
+                                                 └─ 승인된 Host File Gateway 저장
+```
 
-Keychain과 로컬 모델 캐시, Usage Ledger(schema 8), Routing Context v2를 유지한다. API Key·Provider 자격 증명은 Shell·브라우저·Vault 메타데이터에 전달하지 않는다.
+Keychain·API Key·Usage DB·원본 Vault는 Host에 둔다. 실행 대상은 신뢰된 Registry의 정적 정의로 결정하며 모델 인자에 따라 변경하지 않는다. VM Backend는 Apple Virtualization Linux ARM64를 우선 대상으로 유지한다. macOS 게스트는 확장점만 두며 이번 구현을 확정하지 않는다.
 
-## 데이터 계약
+### Host Tool Gateway
 
-### Vault
+- `list_files`, `search_files`, `read_file` 및 내부 메타데이터/Diff 기능은 허용된 Vault 파일에 한정한다. 검색은 Native/라이브러리 함수로 수행하며 임의 Shell로 위임하지 않는다.
+- `write_file`, `apply_patch`, `delete_file`은 사용자 승인 대상이다. 삭제는 개별 파일만 허용하고 재귀 디렉터리 삭제는 제공하지 않는다.
+- 루트 디렉터리 핸들 기반 경로 순회, no-follow, 파일 종류·링크 수·동일성 확인, 크기 제한, 정규화와 직전 재검사를 함께 적용한다. `.nidus`, `.git`, Secret·기기별 인증 경로는 Agent 접근에서 제외한다. Nidus 자체의 메타데이터 접근과 Agent 권한을 구분한다.
+- 승인 시 대상·Diff·기준 해시를 고정한다. 승인 후 파일/정책/입력 변경은 충돌 또는 승인 무효로 처리하고 자동 overwrite하지 않는다. 임시 파일과 원자적 교체는 부분 쓰기를 줄이는 수단이지 compare-and-swap/TOCTOU 방어의 증명이 아니다. Native Helper의 파일 교체·부모 디렉터리 경쟁 조건을 검증한 뒤 지원 범위를 늘린다.
+- 원본 변경은 이 Gateway만 수행한다. VM·이미지 결과도 예외가 아니다. Host 파일 접근 가능성이 macOS 전체 접근 권한을 뜻하지 않는다.
 
-- `VaultDescriptor`: schemaVersion, vaultId(UUID), displayName, createdAt.
-- `.nidus/vault.json`: 이동 가능한 식별 정보. 절대 경로와 기기별 연결 정보는 앱 로컬 Registry에 저장.
-- `.nidus/executions.sqlite`: Vault별 실행 감사 DB. 전역 Usage Ledger와 분리하고 requestId로 연결.
-- 등록·선택·전환·해제와 새 디렉터리 생성 지원. 해제는 프로젝트 삭제가 아님.
-- 동일 ID 복사본은 이동/독립 복사본을 명시적으로 선택. 중첩 Vault 및 홈·파일시스템 루트 전체 등록 거부.
-- 앱·CLI 합계 하나의 Agent 실행만 허용. OS 잠금으로 중복 실행 방지. 실행 중 Vault 전환·해제 거부.
+### Vault VM Execution Gateway
 
-파일 Tool은 상대 경로만 받는다. 절대 경로, `..`, NUL, 심볼릭 링크 경유, 다중 하드링크, 특수 파일을 거부한다. Native Helper가 루트 핸들 기준 경로 순회와 링크 추적 방지, 파일 동일성 재검사를 수행해야 한다. 문자열 정규화만으로 경로 안전을 주장하지 않는다. `.nidus`, `.git`, 알려진 자격 증명 파일은 Agent 접근에서 제외한다.
+- Shell, Python/Node 등 코드 실행, 빌드·테스트, 실제 브라우저와 JavaScript 페이지 처리, 비신뢰 실행을 담당한다. VM이 필요하지 않은 Tool은 VM을 부팅하지 않는다.
+- 원본 Vault를 writable mount하지 않는다. 승인된 manifest(경로·해시·크기·버전)로 파일을 작업 Workspace에 복사한다. 결과를 불신 입력으로 검사하고 Host Diff 승인 후 반영한다. Git 메타데이터가 필요하면 별도 검토된 snapshot을 전달하며 원본 `.git` 공유는 금지한다.
+- 이미지/도구 구성은 검증된 VM Environment의 일부다. Session 임시 쓰기 영역·HOME·TMP·브라우저 프로필과 분리한다. 게스트에 Provider 키·Host DB·인증 데이터를 전달하지 않는다.
+- 초기 기본 네트워크는 차단이다. 네트워크 허용은 Invocation/Session 범위의 별도 승인으로, VM 재사용 시 자동 승계하지 않는다. Host NAT 직접 연결이나 브라우저 request interception만으로 정책 집행을 주장하지 않는다.
 
-### Tool / Permission
+### Provider Tool Gateway
 
-- `ToolDefinition`: name, version, inputSchema, permissions, outputLimit.
-- `ToolInvocation`: runId, toolCallId, toolName, input, inputHash.
-- `ToolResult`: status(succeeded/failed/denied/cancelled), boundedOutput, truncated, structuredError.
-- `PermissionRequest`: approvalId, runId, toolCallId, action, targetPaths, diff/command, networkScope, expiresAt, policyRevision, payloadHash.
-- `PermissionDecision`: approvalId, payloadHash, decision(approve/deny/cancel), decidedAt.
+- `generate_image`와 지원이 검증된 이미지 편집/변형을 Provider API로 수행한다. VM 슬롯을 사용하지 않는다. 텍스트 추론·Tool Calling도 기존 Provider 엔진에서 처리하며 VM 슬롯과 무관하다.
+- 텍스트 모델과 이미지 생성 모델 선택은 별도다. 기존 텍스트 Tier Router에 이미지 모델을 억지로 포함하지 않는다. 초기 이미지 모델은 사용자 지정/검증된 capability만 사용하며 지원 모델이 없으면 unsupported를 반환한다.
+- 생성 요청·외부로 보내는 이미지/프롬프트·과금 가능성에 대한 승인과 계정 실행 권한을 모두 확인한다. 결과 저장은 별도의 Host 변경 승인이다. 이미지 API 승인이 원본 파일 저장 승인으로 확대되지 않는다.
+- 응답은 제한된 임시 artifact로 수신해 MIME·실제 파일 형식·크기·개수를 검증한다. Provider URL은 모델이 지정한 임의 URL이 아니며, 다운로드 origin/redirect/인증정보 전달 정책을 별도로 검증한다. 원본 bytes/URL/token은 감사 DB에 저장하지 않는다.
+- Usage Ledger에 provider/model/requestId 및 제공된 usage/단위를 연결한다. 토큰이 없으면 null, 가격·비용이 불명확하면 null을 유지한다. 이미지 단가를 토큰 비용으로 위장하지 않는다. 실제 API 지원표·정산 확장 방식은 구현 전 결정 항목이다.
 
-Tools: list_files, read_file, write_file, apply_patch, delete_file, run_shell, web_search, read_web_page.
+## Vault 소유권 및 데이터 계약
 
-모든 실행은 공통 Permission Gateway를 통과한다. 모델이 보내는 approved/permission 필드를 권한으로 취급하지 않는다. 읽기는 보호 경로 외 기본 허용. 쓰기는 현재 파일 해시와 Diff를 승인받고 실행 직전에 재검증한다. 파일 변경·인자 변경·revision 변경 시 승인을 무효화한다. 삭제는 파일별 승인만 지원하며 재귀 디렉터리 삭제 Tool은 제공하지 않는다.
+아래는 **Markdown 내 TypeScript 의사코드**이며 기존 public API나 구현 완료 타입이 아니다. runId는 기존 감사 실행 ID로 유지하며 Task·Step·Session과 혼용하지 않는다.
 
-승인은 호출별 일회성이다. 중복 응답·만료·취소 후 응답으로 실행하지 않는다. 승인 대기에 DB 트랜잭션을 열어두지 않는다. 권한 확인·실행 전 감사 기록 저장에 실패하면 새 부작용을 실행하지 않는다. 쓰기는 임시 파일과 원자적 교체를 사용하며, 성공 여부를 알 수 없는 중단은 outcome_unknown으로 남긴다. 자동 재실행·자동 rollback을 약속하지 않는다.
+```ts
+type ExecutionTarget = 'host' | 'vaultVM' | 'provider';
+type CapabilitySupport = 'supported' | 'unsupported' | 'unknown';
 
-### 실행 / 감사 이벤트
+type VaultDescriptor = {
+  schemaVersion: 1; vaultId: string; displayName: string; createdAt: string;
+  environmentId: string; // 설정 참조: 살아 있는 VM 핸들이 아님
+};
+type VMEnvironment = {
+  environmentId: string; vaultId: string; revision: number;
+  backendKind: 'apple-virtualization-linux-arm64'; imageDigest: string;
+  toolsetRevision: string; resourcePolicyId: string;
+};
+type VMInstance = {
+  instanceId: string; environmentId: string; vaultId: string;
+  managerGeneration: string; hostBootId: string | null;
+  managementState: 'CREATED' | 'STARTING' | 'RUNNING' | 'STOP_REQUESTED'
+                 | 'STOP_CONFIRMED' | 'STOP_UNCONFIRMED' | 'FAILED';
+  frameworkState: string | null; activeSessionId: string | null;
+};
+type Task = { taskId: string; vaultId: string; runId: string; workerId: string };
+type Step = {
+  stepId: string; taskId: string; runId: string; sequence: number;
+  state: 'pending' | 'running' | 'awaiting_approval' | 'succeeded'
+       | 'failed' | 'cancelled' | 'outcome_unknown';
+};
+type ToolInvocation = {
+  invocationId: string; toolCallId: string; toolId: string; toolVersion: string;
+  runId: string; stepId: string; input: unknown; inputHash: string;
+};
+type VMExecutionSession = {
+  sessionId: string; instanceId: string; stepId: string; invocationId: string;
+  workspaceId: string; workspaceRevision: number; policyRevision: number;
+  state: 'preparing' | 'running' | 'stopping' | 'cleaning'
+       | 'released' | 'quarantined';
+};
+```
 
-`AgentRun`: runId, vaultId, state, startedAt, endedAt, limits, stopReason, usageRequestIds.
-상태: created → running ↔ awaiting_approval → succeeded / failed / cancelled / limit_reached / interrupted.
+- **VM Environment**는 Vault에 귀속된 구성이고, **VM Instance**는 이번 부팅의 실제 실행이다. **Session**은 VM 자원을 사용하는 한 Step의 격리 작업 단위다. Worker는 실행 주체, Task는 업무, Step은 작은 실행 단위이며 서로 수명과 ID가 다르다.
+- `.nidus/vault.json`은 이동 가능한 Vault 식별/설정 참조만 보관한다. 절대 경로·Manager 제어 채널·boot ID·활성 Instance 잠금은 Host Registry에 둔다. Secret은 어느 곳에도 평문 저장하지 않는다.
+- Vault 등록·전환·해제는 원본 파일 삭제가 아니다. 중첩 Vault 및 홈/파일시스템 루트 전체 등록을 거부한다. 복사된 vaultId는 사용자가 이동/독립 복사를 구분하도록 하고, 이전 VM/잠금을 복사해 살아 있는 실행으로 인식하지 않는다.
+- Vault당 Environment 1개와 활성 VM 최대 1개를 초기 정책으로 삼는다. 중지된 이미지가 여러 버전 존재해도 활성 Instance는 하나다. Environment revision 변경은 활성 세션이 없고 안전한 종료가 확인된 뒤 적용한다.
+- 초기에는 앱·CLI 합계 Agent Run 1개, **호스트 전체 활성 VM도 최대 1개**로 제한한다. Vault별 최대 1개와 별개의 보수적 전역 정책이다. 다른 Vault 병렬 실행은 격리/자원 검증 전 허용하지 않는다.
 
-`ExecutionEvent`: schemaVersion, eventId, runId, vaultId, sequence, timestamp, type, toolCallId?, approvalId?, requestId?, status, errorCode?, durationMs?, metadata.
+## Unified Tool Registry와 권한 계약
 
-이벤트: 실행 시작/종료, 모델 선택, LLM 요청, Tool 제안/시작/완료, 승인 요청/결정, 파일 변경 결과, 제한 도달, 중단. sequence는 실행별 단조 증가한다. 저장 정보는 경로·변경 종류·전후 해시·결과 코드·소요 시간·토큰·Usage Ledger 요청 연결 등 최소 기록으로 한정한다.
+```ts
+type ToolDefinition = {
+  toolId: string; name: string; version: string; description: string;
+  inputSchema: object; outputSchema: object; executionTarget: ExecutionTarget;
+  requiredPermissions: string[]; sideEffect: 'none' | 'local-write' | 'external';
+  approvalPolicy: 'policy-read' | 'per-invocation' | 'per-file-delete';
+  timeoutMs: number; maxResultBytes: number;
+  cancellation: 'cooperative' | 'session-stop' | 'not-guaranteed';
+  errorCodes: string[]; capabilityRequirements: string[];
+};
+type ToolResult = {
+  invocationId: string; status: 'succeeded' | 'failed' | 'denied'
+    | 'cancelled' | 'outcome_unknown';
+  data?: unknown; artifactRefs?: string[]; truncated: boolean;
+  errorCode?: string; eventId: string;
+};
+type PermissionRequest = {
+  approvalId: string; runId: string; stepId: string; invocationId: string;
+  payloadHash: string; policyRevision: number; expiresAt: string;
+  targetSummary: unknown; // 대상·Diff·명령·외부 전송 범위: 실행 중 메모리에만 유지
+};
+```
 
-프롬프트, 파일 본문, 출력 원문, 웹 본문, API Key, 모델 내부 추론, continuation 원문은 저장하지 않는다. 정확한 명령·Diff는 현재 실행 UI 메모리에만 표시하고 감사 DB에는 해시·실행 파일·권한 범위를 기록한다. 재시작 후 실행 사실과 결과는 볼 수 있지만 과거 Diff·대화·작업 맥락을 복구하지 않는다. 감사 기록은 위변조 방지 저장소나 백업이 아니다.
-
-## Runtime와 UI 프로토콜
-
-Agent 전용 Node worker ↔ Swift AgentRuntimeSession의 NDJSON 양방향 통신을 추가한다. 기존 dashboard 단발 JSON은 유지한다.
-
-- Swift → Node: start, approval_decision, cancel, shutdown.
-- Node → Swift: ready, execution_event, approval_required, terminal, error.
-- protocolVersion, messageId, runId를 사용하고 이벤트에 sequence 포함.
-- stdout은 프로토콜 전용. Shell 출력은 별도 파이프에서 수집.
-- 잘못된 프레임·연결 종료·출력 초과·앱 종료는 취소로 처리. 승인 창 종료·무응답을 승인으로 해석하지 않는다.
-- CLI도 동일 Runtime·Gateway 사용. 비대화형 호출은 승인 필요 작업을 거절하고 자동 승인 옵션을 제공하지 않는다.
-
-실행 순서:
-
-1. Vault·실행 잠금·모델·backend 준비 상태 확인, 감사 실행 생성.
-2. 요청은 메모리 보관. 수동 모델 또는 기존 Router로 Tool 지원 모델 선택.
-3. 공통 LLM 호출 경로에서 계정 권한·Tier 재검사, 실제 전송 횟수 기록.
-4. Tool Call 스키마 검증 → 권한 검사 → 사용자 승인 → 직전 재검사 → 순차 실행.
-5. 제한된 결과를 메모리 대화에 추가하고 반복. 최종 텍스트 또는 제한·취소·실패에서 종료.
-
-Tool-only 응답을 정상 처리한다. OpenAI Responses, Anthropic content blocks, Gemini functionCall/functionResponse 및 thought signature, OpenAI-compatible tool_calls/tool messages를 Provider별로 손실 없이 변환한다. 모델 목록을 임의 생성하지 않으며 지원 근거를 공식 자료와 함께 유지한다. 첫 유효 응답 이후 모델은 고정한다. continuation을 다른 Provider로 자동 전달하지 않는다. 타임아웃·전송 불명확·부작용 불명확 시 자동 재시도하지 않는다.
-
-| 제한 | 기본값 |
-|---|---:|
-| 실제 LLM 시도(Fallback 포함) | 20회 |
-| 실행 시간(승인 대기 포함) | 15분 |
-| Tool 호출 | 100회 |
-| 한 응답 Tool Calls | 8개, 순차 |
-| 동일 Tool·인자 연속 반복 | 3회 |
-| 파일 읽기·패치 입력 | 1 MiB |
-| 모델에 전달하는 Tool 출력 | 64 KiB |
-| Shell 시간 | 120초 |
-| Shell 수집 출력 합계 | 1 MiB |
-| 웹 요청 | 30초 |
-| NDJSON 프레임 | 2 MiB |
-
-LLM 횟수는 실제 Adapter 전송 직전 검사한다. 컨텍스트 한도 초과 시 명시적으로 종료한다. 요약·압축·자동 복구는 구현하지 않는다.
-
-## Sandbox와 M0 채택 기준
-
-1. sandbox-exec: 로컬 개발 환경에서 먼저 검증하는 후보. macOS 매뉴얼이 deprecated로 표시하므로 장기 지원 보장이 없다.
-2. App Sandbox·XPC: 공식 분리 방식이나 서명·패키징·권한 상속·SDK 호환성 검증이 필요하다.
-3. Linux VM/컨테이너: 사용자의 macOS 네이티브 요구와 달라 기본 backend에서 제외.
-
-**M0 후보가 필수 검증을 통과하지 못하면 backend를 채택하지 않는다. App Sandbox·XPC 전환안은 별도 설계 승인 대상으로 보고한다. 일반 spawn이나 비격리 브라우저로 대체하지 않는다.**
-
-Shell은 승인된 Vault 범위만 변경 가능. 시스템 실행 파일·라이브러리·SDK는 검증된 읽기 전용 예외다. 홈·다른 Vault·앱 DB·Keychain·Docker socket은 허용하지 않는다. 새 환경변수 허용 목록, 실행별 HOME/TMPDIR/캐시, 셸 초기화 파일 미사용. 명령 승인에는 정확한 명령·cwd·수정/삭제 범위·네트워크 상태를 표시한다. 명령 종료가 프로세스 트리 전체 종료와 같다고 가정하지 않는다.
-
-Supervisor는 UI/worker 연결 종료·시간 제한을 처리하고 detached 자식까지 종료 확인 전 잠금을 해제하지 않아야 한다. 단순 process.kill(pid) 또는 process.kill(-pgid)는 setsid 자식에 충분하지 않을 수 있다. 프로세스 PID 재사용도 고려해야 한다. 권한 불확실·격리 실패 시 실행하지 않는다.
-
-브라우저: Playwright 전용 Chromium, 임시 프로필, chromiumSandbox 활성화. 사용자 Chrome·쿠키·키·확장 기능 재사용 금지. web_search는 Bing 공개 검색 페이지와 검색어를 승인 UI에 표시한다. read_web_page는 URL 승인. 로컬 파일·내부망·loopback·link-local·비HTTP(S)·업로드·다운로드·권한 요청 차단. Service Worker 차단, 통신 broker에서 DNS·목적지·redirect 검증. 승인하지 않은 최상위 origin 이동은 새 승인. CAPTCHA·로그인·검색 차단 우회 금지. 요청 가로채기만으로 격리를 주장하지 않는다.
-
-M0는 filesystem, symlink/hardlink/rename, 환경·credentials, network, native code build/run, detached child, crash/timeout, browser filesystem/network, 프로토콜 승인 순서 검증을 포함한다. 모든 항목이 PASS이기 전 제품 활성화 금지. 실패한 실행을 접근 차단 성공으로 기록하지 않는다.
-
-## 마일스톤·완료 조건
-
-순서: 설계 승인 → M0 → M1 → M2 → M3 → M4 → M6. M5는 M1부터 함께 구현하고 M6 이전 완성한다.
-
-| 단계 | 구현 | 완료 조건 |
+| Tool | 실행 대상 | 초기 승인·제한 |
 |---|---|---|
-| M0 | 격리 후보·프로세스 감독·브라우저·프로토콜 검증 | 필수 격리 테스트 PASS와 backend 채택 보고 |
-| M1 | Vault·Registry·잠금·Native 경로 Helper | 이동/복사 ID 충돌·중첩·탈출·동시 실행 차단, 데이터 보존 |
-| M2 | 파일 Tool·Gateway·Diff·승인 | 승인 전 변경 0건, TOCTOU·변조·중복·취소 테스트 |
-| M3 | 8 Provider Tool 왕복·Agent loop | Mock 왕복·Tool-only·continuation·권한 철회·호출/시간 제한 |
-| M4 | 검증된 Shell·검색/읽기 | 코드 실행·테스트, 권한/네트워크/출력/종료 우회 차단 |
-| M5 | 감사·Usage 연결·중단 식별 | 강제 종료 후 interrupted/outcome_unknown, 자동 재개/재실행 없음 |
-| M6 | SwiftUI Vault·Agent·승인·Diff·중단·이력 | Mock E2E, 기존 회귀, 앱 빌드 |
+| list_files / read_file / search_files | Host | 보호 대상 외 Vault 읽기, 검색 건수·출력 제한 |
+| write_file / apply_patch | Host | Diff·기준 해시 승인 및 직전 재검증 |
+| delete_file | Host | 파일별 명시적 승인, 재귀 삭제 미지원 |
+| run_shell / run_tests | Vault VM | 정확한 명령·cwd·쓰기 대상·network 범위 승인. 테스트도 임의 코드 실행과 동일하게 취급 |
+| browser_search / browser_navigate / browser_read_page | Vault VM | 검색어/URL/공개 읽기 범위·network 승인, 검색 API 미사용 |
+| generate_image | Provider | 외부 전송·API 권한 승인, 저장은 별도의 Host 변경 승인 |
 
-E2E: 임시 프로젝트 등록 → 오류 조사 → Diff 승인 → 수정 → Shell 승인/테스트 → 추가 수정 → 최종 변경/테스트/사용량 보고 → 종료·재시작 이력 확인. 별도 공격 fixture로 외부 경로·네트워크·승인 우회와 중복 실행을 검증한다. CLI와 SwiftUI의 정책이 같아야 한다.
+호출 순서는 **Adapter 정규화 → Registry 조회 → Schema/기능 검증 → Permission Gateway → 필요한 승인 → 실행 직전 재검증 → 대상 Gateway → 결과 정규화 → 모델**이다. 모델이 보낸 `executionTarget`, `approved`, `permissions`는 권한 근거로 쓰지 않으며 입력 Schema의 알 수 없는 필드는 거절한다. Tool별 승인·결과 크기·취소 의미를 Registry에서 정의한다.
 
-## Phase 7 경계
+승인은 일회성이며 payloadHash, run/step/invocation, 파일 버전, policyRevision에 결합한다. 중복 응답·만료·취소 후 응답·변경된 인자로 실행하지 않는다. 승인 대기 중 DB transaction이나 VM slot을 유지하지 않는다. 권한/감사 기록 저장 실패 시 부작용을 시작하지 않고, 결과 불명확 작업을 자동 재시도·rollback하지 않는다.
 
-Home/Desk/Library, 정체성, 지속 Task 상태/Next Action, 장기 Memory, RAG, Context 압축, 재실행 복원·자동 재개는 제외한다. 현재 실행의 대화·Tool 결과는 메모리만 사용한다. runId/vaultId/버전 이벤트를 확장 가능하게 유지하되 감사 이벤트를 재생해 Task를 복원하지 않는다. JEV, Multi-Agent, AI Office 전체 구조, 자동 충전, 비용 차단은 도입하지 않는다.
+## 브라우저와 네트워크
 
-## 공식 참고 자료
+웹 검색·페이지 탐색은 **VM 내부 실제 브라우저**로 수행한다. 초기 후보는 Playwright + Chromium이며 guest image·browser sandbox·network 정책의 호환성 검증 전에는 제품 채택으로 간주하지 않는다. 검색엔진 공개 페이지에서 결과를 탐색하고 페이지 텍스트·출처 URL을 제한된 결과로 정규화한다. 검색엔진은 M4 전 결정하며 새 검색 API를 도입하지 않는다. CAPTCHA·로그인 벽·검색 제한을 우회하지 않는다.
 
-- [Apple: sandboxed helper](https://developer.apple.com/documentation/xcode/embedding-a-helper-tool-in-a-sandboxed-app)
-- [Apple: App Sandbox](https://developer.apple.com/documentation/security/app_sandbox)
-- [Apple: network entitlement](https://developer.apple.com/documentation/bundleresources/entitlements/com.apple.security.network.server)
-- [Apple: XPC](https://developer.apple.com/documentation/xpc)
-- [Playwright: browser launch options](https://playwright.dev/docs/api/class-browsertype)
-- [Playwright: network and Service Workers](https://playwright.dev/docs/network)
-- [Gemini: thought signatures](https://ai.google.dev/gemini-api/docs/generate-content/thought-signatures)
+- 페이지·검색 결과·이미지 metadata는 비신뢰 입력이다. 페이지에 포함된 명령을 system instruction, Tool 승인, 정책 변경으로 승격하지 않는다.
+- Host 브라우저·쿠키·확장·인증 session을 사용하지 않는다. Execution Session별 독립 profile을 만들고 page handle을 sessionId/generation에 묶는다. 다음 Step에는 URL 등 명시적 입력만 전달하며 숨은 쿠키/프로세스를 승계하지 않는다.
+- 검색어·URL 자체도 외부 전송이다. 대상과 필요한 부속 resource 범위를 승인 UI에 표시한다. 새로운 최상위 origin 또는 승인 범위 밖 이동은 중지하고 재승인을 요구한다. 승인 대기는 안전한 경계에서 browser Session을 종료한 후 수행한다. 정리를 확인하지 못하면 slot을 반환하거나 다음 Step을 실행하지 않는다.
+- VM의 직접 외부 통신을 차단하는 경계와 통제 proxy/broker를 설계한다. URL뿐 아니라 실제 DNS 목적지, IPv4/IPv6, redirect, WebSocket, Service Worker, QUIC 등 우회 경로도 다룬다. 내부망/loopback/link-local/metadata endpoint/Host 서비스, 비HTTP(S), DNS rebinding, 검증되지 않은 경로는 거절한다. browser request interception만으로 격리를 보장하지 않는다.
+- 다운로드·업로드·로그인·폼 제출·게시·구매는 읽기 승인에 포함되지 않는다. 초기 Tool은 공개 검색/읽기만 제공하고 해당 행동은 미지원으로 거절한다. 추후 지원 시에도 별도 Schema와 대상/전송 내용에 결합된 개별 승인이 필요하다. navigate/read에 부작용 기능을 숨기지 않는다.
+- 외부 페이지의 JavaScript가 무부작용이라고 보장하지 않는다. 인증정보 없는 환경, 전송/통신 범위 제한, 감사와 사용자 승인을 함께 적용하고 검증 전에는 활성화하지 않는다.
 
-현재 macOS의 `man sandbox-exec`도 확인했다. Provider별 공식 Tool Calling 계약은 M3 진입 전 별도 검증표로 기록한다. 실 Provider 요청·실 웹 검색 없이 Mock 및 로컬 fixture로 검증하며, 실제 호출은 별도 승인 대상이다.
+## Step·VM Slot·Session 운영
+
+Phase 5–6은 단일 Agent의 Step 순차 실행이며 Tool도 순차 실행한다. 모델이 복수 Tool Call을 반환해도 병렬로 실행하지 않는다. LLM 추론, Host read/write, Provider 이미지 생성은 VM slot을 점유하지 않는다. 승인된 VM Step 시작 직전에만 slot을 얻고 Task 전체에는 할당하지 않는다.
+
+1. Invocation과 승인을 검증하고 Vault/Environment/Instance revision 및 장애 상태를 재확인한다.
+2. Host Registry의 배타적 admission에서 Vault별 VM 최대 1개·Session 최대 1개·전역 VM 상한을 함께 검사한다. 동시 시작으로 2대를 생성하지 않는다. slot은 instanceId/managerGeneration/sessionId에 결합한다.
+3. Instance가 없으면 지연 부팅한다. 재사용 VM에서도 새 Session의 Workspace·프로세스 경계·network lease·profile을 준비한다.
+4. 제한 시간 내 실행하고, 완료/취소 후 Session의 자식·분리된 프로세스, FD, 쓰기 활동, network 권한, browser profile의 종료·회수를 확인한다.
+5. 종료와 정리를 확인한 경우에만 slot을 반환한다. 신호 전송·leader 종료·lease 만료는 반환 근거가 아니다. 불명확하면 Session과 Instance를 격리하고 필요하면 VM 전체를 종료한다.
+
+Session 경계의 후보는 guest의 신뢰된 제어 서비스, 비특권 실행 사용자, cgroup/namespace 등이다. 구체 방식은 M4 전 기술 결정 대상이다. workload가 제어 서비스나 관리 cgroup을 바꿀 권한을 갖지 않도록 한다. **PGID만으로 setsid/double-fork를 통제하지 못한다**는 기존 M0 결과를 유지한다. 전체 자손 종료·청소를 검증하지 못하면 warm VM 재사용을 금지하고 VM 전체 종료 확인 후 다음 Instance를 시작한다. 재사용 성능보다 안전을 우선한다.
+
+동일 Task에서도 쓰기 가능한 Workspace를 Step 간 암묵적으로 공유하지 않는다. 필요한 결과는 명시적인 artifact/manifest revision으로 인계하고 입력 해시·승인 범위를 확인한다. Host와 VM 결과가 같은 원본을 수정했다면 적용 시 충돌로 중지한다. 승인 없이 overwrite/자동 merge하지 않는다.
+
+짧은 Step 우선·Aging, Task 의존성, Worker별 공정성, Task Board는 Phase 8 확장점이다. 예상 시간은 휴리스틱이지 실제 측정이나 성능 보장이 아니다. 초기에는 순차 실행만 구현하며 실행 중 command를 강제로 선점해 다른 Step에 slot을 넘기지 않는다.
+
+## Vault VM 생명주기와 장애
+
+Environment는 Vault가 보유하고 독립 Manager가 Instance를 소유한다. Worker/Task 종료를 VM 소유권 소멸로 해석하지 않는다. 활성 Session이 있으면 유휴 종료를 금지한다. 초기 idle timeout은 **5분을 제안**하며, Session 없음·cleanup 확인·중지 처리 중 아님 조건에서만 적용한다. Vault 닫기는 활성 Step 취소/종료 확인을 먼저 수행한다.
+
+| 대상 | 수명 및 정리 조건 |
+|---|---|
+| Vault 원본·Environment 설정 | VM 종료와 독립. Vault 해제로 원본을 삭제하지 않음 |
+| 검증된 base image/toolset | immutable version/digest로 식별. 이용 중 참조가 있으면 삭제하지 않음 |
+| Instance disk·임시 쓰기 영역 | VM 종료 확인과 참조/무결성 검사 후 회수. 미검토 변경을 다음 부팅으로 승계하지 않음 |
+| Session Workspace·profile·network lease | Session마다 격리하고 정리 확인 후 회수. 반영 대기 artifact는 별도 보관 |
+| 반환 artifact·Diff | Host 승인/버전 확인 후 원본 반영. 미승인·결과 불명확이면 격리 |
+| Host Journal·Registry | 최소 실행 안전 기록. Task 재개용 context로 사용하지 않음 |
+
+관리 상태는 CREATED/STARTING/RUNNING/STOP_REQUESTED/STOP_CONFIRMED/STOP_UNCONFIRMED/FAILED를 유지한다. Framework 상태와 관리 상태, VM 종료와 Session 정리를 별도 기록한다. FAILED도 종료 확인을 뜻하지 않는다.
+
+작업 취소 시 Session 종료를 먼저 시도한다. 확인 불가면 quarantined로 전환해 slot을 유지하고 VM 전체 종료를 시도한다. 초기 활성 Session은 하나이므로 다른 실행 중 Step은 없지만 같은 Vault의 대기 Step에는 `blocked_by_vm_failure`를 기록한다. 종료 확인 후에도 이전 Task를 자동 재실행하지 않는다. 새 작업은 새로운 사용자 요청/실행 ID/승인을 요구하며 이전 작업 맥락을 복원하지 않는다.
+
+Manager 사망/제어 단절은 기존 M0 Fail-closed와 사용자 알림을 유지한다. instanceId→vaultId→session/step 관계로 영향 범위를 찾고 해당 Vault의 모든 VM 의존 Step을 동결한다. **종료 미확인 상태에서 같은 Vault에 새 VM을 만들지 않는다.** 시간 경과로 slot을 해제하지 않는다. 다른 Vault VM도 격리·전역 자원 검증 전에는 전역 차단을 유지한다.
+
+장애 중 Host read는 원본 Vault가 VM에 공유되지 않았고 Registry/루트 동일성·보호 경로·무결성이 확인되는 경우, 사용자의 명시적 읽기 조작에 한해 허용한다. 미확인 Workspace/artifact는 읽지 않으며 Registry 손상 또는 원본 접근 가능성이 불명확하면 read도 거절한다. 격리 Vault의 Host 쓰기·이미지 저장·새 Agent Run은 금지한다. 이미 Provider가 수락한 요청은 취소를 보장하지 않고 결과를 격리하며 기존 Task를 자동 계속하지 않는다.
+
+M0의 boot 증거·파일 inventory·복구 UI는 기존 범위에서 유지한다. Vault 소유 metadata 확장은 필요하지만 Manager 사망 후 자동 복구나 새로운 종료 증명 기능은 이번 추가 개발 대상이 아니다. 실제 host 재시작·VM 재연결이 검증됐다고 표시하지 않는다.
+
+## Agent Runtime·전달·감사
+
+Agent용 typed messages/Tool Call/Tool Result/opaque continuation을 기존 문자열 chat 계약과 구분해 확장한다. 기존 chat API의 호환성을 보존하고 Tool-only 응답을 정상 처리한다. Provider별 ID·결과 대응·서명/continuation은 구현 전 공식 자료와 Mock으로 확인한다. 모든 Provider/모델에 공통 지원을 가정하지 않는다.
+
+첫 유효 응답 이후 모델은 고정한다. Tool 실행 후 대화를 다른 Provider로 임의 전달하지 않는다. 명시적 거절 시 안전한 초기 Fallback은 기존 Router를 재사용하지만, 전송/부작용 불명확 상태에서는 자동 재시도하지 않는다. Provider 실행 권한과 Tool 권한을 각각 확인하며 이미지 usage/비용 미확인은 0으로 만들지 않는다.
+
+CLI/SwiftUI는 같은 Runtime/Gateway를 사용한다. Agent 전용 NDJSON은 protocolVersion/messageId/runId/stepId를 포함하고 start/approval_decision/cancel/shutdown 및 ready/execution_event/approval_required/terminal/error를 교환한다. 기존 단발 Dashboard JSON은 유지한다. stdout은 protocol 전용이며 끊어진 연결·잘못된 frame·출력 초과를 승인으로 해석하지 않는다. 비대화형 CLI는 승인 필요 작업을 거절한다.
+
+초기 제한안은 기존 실행 제한을 기반으로 새 Tool 제한을 추가한다: 실제 LLM 시도 20회(Fallback 포함), Task 15분(승인 대기 포함), Tool 100회, 응답당 Tool 8개 순차 실행, 동일 Tool/인자 연속 3회, 파일 입력 1MiB, 모델에 전달할 결과 64KiB, Shell 120초·수집 출력 1MiB, browser 조작 30초, NDJSON 2MiB. 이미지 개수/해상도/수신 크기/timeout은 Provider capability 표에서 별도 결정하고 미설정 기능은 미지원으로 거절한다. 실행 안전 제한이며 금액 Budget Guard가 아니다.
+
+`ExecutionEvent`에는 schemaVersion/eventId/sequence/timestamp와 vaultId/environmentId/instanceId/sessionId, runId/taskId/stepId/invocationId, 해당하는 approvalId/requestId, type/status/errorCode/duration을 연결한다. 해당하지 않는 ID는 null이며 임의로 채우지 않는다. 시작·승인·실행·slot 취득/반환·cleanup·장애·취소·결과 미확인·종료를 기록한다.
+
+원본 내용·prompt·응답 본문·명령 전체·Diff·Cookie·API Key·인증 token·이미지 bytes·continuation은 감사 DB에 저장하지 않는다. 필요한 UI 표시는 현재 실행 메모리/격리 artifact로 제한한다. URL query/fragment와 검색어도 민감할 수 있어 영속 로그에는 허용된 origin·hash 등만 기록한다. 경로 식별·전후 hash·승인 결정·시간·Usage 연결 등 최소 정보만 남긴다.
+
+Vault 감사 DB와 Host VM Journal의 책임을 분리한다. 기존 Usage Ledger는 비용/사용량의 source이며 VM 정리나 Task Memory의 저장소가 아니다. 앱 종료 후 미완료 Run/Step은 interrupted/outcome_unknown으로 표시하고 이벤트 재생으로 작업을 자동 복구하지 않는다.
+
+## 새 M1~M6 순서·의존성·완료 조건
+
+기본 순서는 **M1 → M2 → M3 → M4 → M6**이며 M5는 M1부터 병행한다. M6의 최소 UI도 각 단계에 함께 연결한다. M0 잔여 검증은 별도 후속 track이며, M4의 실제 활성화는 검증 조건 충족 전까지 보류한다. Mock 성공은 실제 VM/browser 안전 인증이 아니다.
+
+| 단계 | 산출물·의존성 | 완료 조건 |
+|---|---|---|
+| M1 Vault Foundation | Registry, Vault 이동/복사, Environment, Instance 소유 관계, Host 실행 잠금 | ID 충돌·중첩 Vault·동시 부팅·기록 손상 처리. 기존 M0는 legacy로 보존하고 임의 Vault에 매핑하지 않음 |
+| M2 Unified Registry / Permission | M1, Host read/변경 Gateway, 공통 Schema·결과·승인, Provider 이미지 Tool 계약 | 모델 권한 위조·만료/버전/충돌/취소 테스트, 승인 전 변경 0, VM 불필요 Tool이 VM을 시작하지 않음 |
+| M3 Single Agent | M2, Adapter Tool 정규화, 순차 Step loop, Router/Usage 통합, 검증된 Provider 이미지 Gateway | Tool-only/ID 대응/unknown/continuation/제한/취소/불명확 결과 및 이미지 생성·저장 별도 승인 Mock. 8개 Provider의 지원/미지원을 표로 명시 |
+| M4 Vault VM Backend | M1~M3, Session·slot·지연 부팅·유휴 종료, Shell/빌드/테스트, 필수 VM browser 검색 | slot 경합·반환 근거, setsid/double-fork·세션 오염, network 우회·페이지 지시 공격·산출물 충돌을 실제 VM에서 검증. 미자격이면 비활성 |
+| M5 Logging / Safety | M1부터 공통 Gateway와 함께, M0 장애 UI의 ID 연결 | 중복 이벤트·감사 실패·중단·정합성·Secret 비저장, 미확인 VM 대기 Step 동결과 무단 재개 거절 |
+| M6 SwiftUI | 각 단계 API와 M5, Vault·Step·Tool·Diff·승인·VM 상태·취소·이력 | CLI와 동일 권한, 지연 승인·중복 클릭·앱 종료, 기존 Provider 회귀, Mock E2E/실VM/수동 UI/빌드를 구분 검증 |
+
+최종 시나리오: Vault 등록 → Host 조사 → Diff 승인/수정 → VM 테스트 → VM browser 공개 검색/페이지 읽기 → 필요한 경우 Provider 이미지 생성 및 저장 승인 → 변경·테스트·사용량 보고. 각 단계는 필요한 자원만 취득한다. 실제 API 호출은 별도 명시적 승인이 필요하며 우선 Mock/로컬 fixture로 검증한다. M0 종료 미확인 시 후속 VM Step·파일 반영·정리를 막고 이력만 보존해야 한다.
+
+## 대체 정책·Phase 경계·미결정 사항
+
+| 이전 방침 | 현재 방침 |
+|---|---|
+| Run/Worker의 VM 소유 | Vault가 Environment 소유, 독립 Manager가 Instance 제어, Step이 Session/slot 사용 |
+| 원본 Vault에서 native Shell, Linux VM 제외 | Linux ARM64 VM과 승인된 작업 복사본. Host는 제한된 파일 Gateway |
+| Task 전체 VM 점유 | VM Step만 slot 사용. LLM/Host/이미지 API는 제외 |
+| M0 완료까지 M1~M6 일괄 보류 | 설계·단계 개발을 분리. M0 추가 검증은 후속으로 두되 제품 Shell/browser 안전 게이트 유지 |
+| web_search/read_web_page와 별도 browser 가정 | browser_search/navigate/read_page를 Vault VM 내부에서 실행, 검색 API 미사용 |
+| VM 임시 상태를 다음 작업으로 승계 | VM 재사용과 Session 정리를 분리. 명시적 artifact 외 암묵 전달 금지 |
+
+Phase 5–6은 단일 Agent의 현재 Task·순차 Step·실행 안전 감사까지다. Phase 7의 Home/Desk/Library/Persistent Task Context, Memory/RAG/압축/세션 복구는 구현하지 않는다. Phase 8의 Multi-Agent, Task Board, Worker 분배·공정성·짧은 Step 우선·Aging은 ID와 경계의 확장점만 둔다. JEV·AI Office 전체·예산 예약·금액 기반 강제 Fallback·검색 API는 추가하지 않는다.
+
+실제 착수 전 또는 단계 진입 전에 필요한 판단:
+
+1. **M1 전:** Vault 소유·단일 Agent·전역 VM 1개·장애 중 Host read 조건을 검토하고 Host Registry/감사 DB schema와 기존 M0 취급을 확정한다. `.nidus` 이동/손상 처리도 정한다.
+2. **M2 전:** Native File Gateway의 overwrite/rename 경쟁 방어 방식과 초기 지원 파일 범위를 검증한다. 원자 rename만으로 충돌 방어를 주장하지 않는다.
+3. **M3 전:** Provider별 Tool Calling 지원표와 이미지 Provider/model/format/크기/timeout/과금 usage 단위를 확인한다. 공통 인터페이스가 모든 모델 지원을 의미하지 않는다. 이번 문서 작업에서 공식 API 지원을 새로 인증하지 않는다.
+4. **M4 전:** guest image/toolchain 배포·업데이트, Session 격리/정리 증명, browser/검색엔진, network broker 위치, OS·서명 범위를 결정한다. 유휴 5분은 자원 상한과 함께 확인할 초기 제안이다.
+5. **활성화 전:** 남은 M0와 실제 VM/browser/재부팅/UI E2E의 PASS 기준을 확인한다. Manager 사망 후 UNCONFIRMED를 시간 경과로 PASS 처리하는 정책은 포함하지 않는다.
+
+## 과거 M0 실측 기록 — 이하 보존
+
+이하의 「현재」「보류」「backend 미채택」 등은 각 날짜 당시의 판단이다. 새 Vault 소유 모델이나 Session/browser 설계가 검증됐다는 뜻이 아니다. 현재 개발 방향은 문서 앞부분을 따른다.
 
 ## M0 실제 검증 기록 — 2026-10-28
 

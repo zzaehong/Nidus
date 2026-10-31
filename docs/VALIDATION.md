@@ -2,6 +2,12 @@
 
 이 문서는 기존 단계별 기록을 2026-10-30에 통합한 것입니다. **단계별 결과 표는 당시 실행 기록입니다. 이후 재검증은 별도 날짜 섹션에 기록합니다.** 전체 상세 기록은 Git의 `fd3efae` 시점과 이전 커밋에 남아 있습니다.
 
+## 2026-11-01 설계 갱신 안내
+
+현재 설계는 Vault 소유 VM Environment/Instance, Host·VM·Provider Gateway, 단일 Agent의 순차 Step으로 갱신했다. VM 브라우저 검색/탐색은 필수이며 검색 API는 도입하지 않는다. 이 변경은 문서 작업으로 신규 실행/검증 결과가 아니다. M0 잔여 검증·Manager 사망 후 추가 복구 개발은 후속 과제로 두며, 미검증 조건을 우회해 Shell/browser를 활성화하지 않는다.
+
+이하 「현재 기준」 및 날짜별 기록은 당시 상태를 보존한다. 새 Session 정리·VM 재사용·이미지 API·공유 VM 격리는 아직 검증되지 않았다. 최신 설계는 [Phase 5–6 문서](Phase5_6_Agent_Runtime_Vault_Sandbox.md) 앞부분을 따른다.
+
 ## 현재 기준
 
 - Phase 4.4까지의 API 연결·Tier Router·계정 권한·Usage Ledger·Soft Budget 구현은 develop `81ecb88`에 통합됐습니다.

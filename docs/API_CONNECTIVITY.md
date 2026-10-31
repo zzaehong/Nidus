@@ -52,3 +52,11 @@ SQLite는 schema 8, WAL, synchronous=FULL, busy_timeout 5초를 사용합니다.
 OpenAI/Anthropic 조직 사용량·비용 조회는 별도 Admin 환경변수만 사용합니다. DeepSeek는 공식 USD balance를 조회하며 임의 환산하지 않습니다. Gemini 및 조회를 연결하지 않은 Provider는 잔량을 생성하지 않습니다. 조직 집계는 요청별 비용으로 배분하지 않습니다. `UsageLedger.reconcile`은 신뢰 가능한 요청별 청구 증거의 확장 지점이며 현재 조직 조회가 이를 자동 호출하지 않습니다.
 
 세부 비용 집계·Soft Budget 계약은 [Routing Context](Phase4_4_Routing_Context.md), 정책·명령은 [사용 가이드](USER_GUIDE.md), 과거 변경·테스트는 [검증 이력](VALIDATION.md)에 모았습니다. 가격·모델별 공식 출처는 `src/pricing.ts`, `src/providers.ts`, `src/nvidia-classification.ts`와 UI의 출처 필드가 기준입니다. 문서 정리 과정에서 공식 자료를 새로 검증한 것은 아닙니다.
+
+## Phase 5–6 확장 설계 — 미구현 계약
+
+[갱신된 설계](Phase5_6_Agent_Runtime_Vault_Sandbox.md)는 Provider와 실행 도구를 분리한다. 기존 텍스트 API/Router/Usage Ledger를 유지하면서 Adapter는 Tool Calling 형식을 공통 호출로 정규화하고, Agent Runtime과 Unified Tool Registry/Permission Gateway가 실제 실행을 결정할 예정이다. 현재 `ChatRequest`/`ChatResponse`는 텍스트 중심이며 Tool 실행 계약이나 이미지 API가 이미 구현됐다는 의미가 아니다.
+
+실행 대상은 **Host 파일 Gateway / Vault 소유 VM Gateway / Provider Tool Gateway**다. Shell·브라우저 검색/탐색은 VM 내부에서, 이미지 생성은 Provider API에서 처리한다. 검색 API는 도입하지 않는다. 텍스트 추론·Host 작업·이미지 API는 VM slot을 사용하지 않는다. 이미지 저장도 별도의 Host 변경 승인과 사용량·비용 기록을 거치며 가격 미확인은 null이다.
+
+Vault는 VM Environment를 보유하고 실제 Instance는 독립 Manager가 제어한다. 초기 활성 VM/Session 상한과 장애 격리는 Host Registry에서 관리할 계획이다. 기존 M0의 Run 중심 metadata·복구 UI는 검증용 구현이며 Vault별 공유 VM·Session 재사용을 검증한 것으로 취급하지 않는다. 이번 변경에는 코드·DB migration·Provider endpoint 변경이 없다.
