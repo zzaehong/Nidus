@@ -1,0 +1,2200 @@
+{
+  "schemaVersion": 1,
+  "phase": "M0-independent-manager",
+  "eligible": false,
+  "host": "ProductName:\t\tmacOS\nProductVersion:\t\t27.0.1\nBuildVersion:\t\t26A434",
+  "generatedAt": "2026-10-30T15:09:58Z",
+  "checks": [
+    {
+      "name": "ordinary/cancel",
+      "runID": "c51faa5f-5159-4db9-ad9d-79df5bb9a729",
+      "directory": "/private/tmp/nidus-manager-g4nw65_a",
+      "status": "PASS",
+      "activeBytes": 2,
+      "stopConfirmed": true,
+      "writesAfterStop": 0,
+      "observationSeconds": 1,
+      "activityStatus": "PASS",
+      "restartAllowsOperations": true,
+      "recoveryPolicyStatus": "PASS",
+      "events": [
+        {
+          "action": "create",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "cpuCount": 2,
+          "elapsedSeconds": 0.0014809999847784638,
+          "memoryBytes": 536870912,
+          "networkDevices": 0,
+          "runID": ""
+        },
+        {
+          "action": "manager-ready",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.0032110000029206276,
+          "runID": "c51faa5f-5159-4db9-ad9d-79df5bb9a729"
+        },
+        {
+          "action": "start-request",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.003503125044517219,
+          "runID": "c51faa5f-5159-4db9-ad9d-79df5bb9a729"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 4,
+          "actualStateName": "starting",
+          "elapsedSeconds": 0.003654374973848462,
+          "runID": "c51faa5f-5159-4db9-ad9d-79df5bb9a729"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.22922129172366112,
+          "runID": "c51faa5f-5159-4db9-ad9d-79df5bb9a729"
+        },
+        {
+          "action": "start-completed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.2294469999615103,
+          "runID": "c51faa5f-5159-4db9-ad9d-79df5bb9a729"
+        },
+        {
+          "action": "termination-request",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.8504703333601356,
+          "reason": "user-cancel",
+          "runID": "c51faa5f-5159-4db9-ad9d-79df5bb9a729"
+        },
+        {
+          "action": "requestStop",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.8506805417127907,
+          "runID": "c51faa5f-5159-4db9-ad9d-79df5bb9a729"
+        },
+        {
+          "action": "duplicate-stop",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.8508026666240767,
+          "reason": "user-cancel",
+          "runID": "c51faa5f-5159-4db9-ad9d-79df5bb9a729"
+        },
+        {
+          "action": "forceStop-request",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 2.9437730833888054,
+          "runID": "c51faa5f-5159-4db9-ad9d-79df5bb9a729"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 7,
+          "actualStateName": "stopping",
+          "elapsedSeconds": 2.9441230833763257,
+          "runID": "c51faa5f-5159-4db9-ad9d-79df5bb9a729"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 2.9465267916675657,
+          "runID": "c51faa5f-5159-4db9-ad9d-79df5bb9a729"
+        },
+        {
+          "action": "forceStop-completed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 2.946646916680038,
+          "runID": "c51faa5f-5159-4db9-ad9d-79df5bb9a729"
+        },
+        {
+          "action": "stop-confirmed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 2.946709333336912,
+          "runID": "c51faa5f-5159-4db9-ad9d-79df5bb9a729"
+        }
+      ],
+      "defaultNetworkBlocked": true
+    },
+    {
+      "name": "setsid/worker-kill",
+      "runID": "be0af705-e64f-4a75-ad98-0e050c960ce0",
+      "directory": "/private/tmp/nidus-manager-iomrd0ef",
+      "status": "PASS",
+      "activeBytes": 2,
+      "stopConfirmed": true,
+      "writesAfterStop": 0,
+      "observationSeconds": 1,
+      "activityStatus": "PASS",
+      "restartAllowsOperations": true,
+      "recoveryPolicyStatus": "PASS",
+      "events": [
+        {
+          "action": "create",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "cpuCount": 2,
+          "elapsedSeconds": 0.0017886250279843807,
+          "memoryBytes": 536870912,
+          "networkDevices": 0,
+          "runID": ""
+        },
+        {
+          "action": "manager-ready",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.0037109584081918,
+          "runID": "be0af705-e64f-4a75-ad98-0e050c960ce0"
+        },
+        {
+          "action": "start-request",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.12241616670507938,
+          "runID": "be0af705-e64f-4a75-ad98-0e050c960ce0"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 4,
+          "actualStateName": "starting",
+          "elapsedSeconds": 0.12268862500786781,
+          "runID": "be0af705-e64f-4a75-ad98-0e050c960ce0"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.35096695832908154,
+          "runID": "be0af705-e64f-4a75-ad98-0e050c960ce0"
+        },
+        {
+          "action": "start-completed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.3511635416653007,
+          "runID": "be0af705-e64f-4a75-ad98-0e050c960ce0"
+        },
+        {
+          "action": "termination-request",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.8671790834050626,
+          "reason": "worker-disconnected",
+          "runID": "be0af705-e64f-4a75-ad98-0e050c960ce0"
+        },
+        {
+          "action": "requestStop",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.8673880000133067,
+          "runID": "be0af705-e64f-4a75-ad98-0e050c960ce0"
+        },
+        {
+          "action": "forceStop-request",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 2.96743745834101,
+          "runID": "be0af705-e64f-4a75-ad98-0e050c960ce0"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 7,
+          "actualStateName": "stopping",
+          "elapsedSeconds": 2.967834833310917,
+          "runID": "be0af705-e64f-4a75-ad98-0e050c960ce0"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 2.9695579999824986,
+          "runID": "be0af705-e64f-4a75-ad98-0e050c960ce0"
+        },
+        {
+          "action": "forceStop-completed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 2.969848291715607,
+          "runID": "be0af705-e64f-4a75-ad98-0e050c960ce0"
+        },
+        {
+          "action": "stop-confirmed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 2.9699545833282173,
+          "runID": "be0af705-e64f-4a75-ad98-0e050c960ce0"
+        }
+      ],
+      "defaultNetworkBlocked": true
+    },
+    {
+      "name": "double-fork/worker-kill",
+      "runID": "829afd5d-1890-4400-a4fc-09af4b4c3e1f",
+      "directory": "/private/tmp/nidus-manager-twb28qbs",
+      "status": "PASS",
+      "activeBytes": 2,
+      "stopConfirmed": true,
+      "writesAfterStop": 0,
+      "observationSeconds": 1,
+      "activityStatus": "PASS",
+      "restartAllowsOperations": true,
+      "recoveryPolicyStatus": "PASS",
+      "events": [
+        {
+          "action": "create",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "cpuCount": 2,
+          "elapsedSeconds": 0.0014276249567046762,
+          "memoryBytes": 536870912,
+          "networkDevices": 0,
+          "runID": ""
+        },
+        {
+          "action": "manager-ready",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.0032536666840314865,
+          "runID": "829afd5d-1890-4400-a4fc-09af4b4c3e1f"
+        },
+        {
+          "action": "start-request",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.11809808330144733,
+          "runID": "829afd5d-1890-4400-a4fc-09af4b4c3e1f"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 4,
+          "actualStateName": "starting",
+          "elapsedSeconds": 0.1183545415988192,
+          "runID": "829afd5d-1890-4400-a4fc-09af4b4c3e1f"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.32725179160479456,
+          "runID": "829afd5d-1890-4400-a4fc-09af4b4c3e1f"
+        },
+        {
+          "action": "start-completed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.3274502083659172,
+          "runID": "829afd5d-1890-4400-a4fc-09af4b4c3e1f"
+        },
+        {
+          "action": "termination-request",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.8241408333415166,
+          "reason": "worker-disconnected",
+          "runID": "829afd5d-1890-4400-a4fc-09af4b4c3e1f"
+        },
+        {
+          "action": "requestStop",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.8243761250050738,
+          "runID": "829afd5d-1890-4400-a4fc-09af4b4c3e1f"
+        },
+        {
+          "action": "forceStop-request",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 2.922413249965757,
+          "runID": "829afd5d-1890-4400-a4fc-09af4b4c3e1f"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 7,
+          "actualStateName": "stopping",
+          "elapsedSeconds": 2.9226189999608323,
+          "runID": "829afd5d-1890-4400-a4fc-09af4b4c3e1f"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 2.924487083335407,
+          "runID": "829afd5d-1890-4400-a4fc-09af4b4c3e1f"
+        },
+        {
+          "action": "forceStop-completed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 2.924598208279349,
+          "runID": "829afd5d-1890-4400-a4fc-09af4b4c3e1f"
+        },
+        {
+          "action": "stop-confirmed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 2.924648708314635,
+          "runID": "829afd5d-1890-4400-a4fc-09af4b4c3e1f"
+        }
+      ],
+      "defaultNetworkBlocked": true
+    },
+    {
+      "name": "nested/worker-kill",
+      "runID": "97d44817-dad1-4052-82df-91dbd4f22c22",
+      "directory": "/private/tmp/nidus-manager-nhvatu3p",
+      "status": "PASS",
+      "activeBytes": 2,
+      "stopConfirmed": true,
+      "writesAfterStop": 0,
+      "observationSeconds": 1,
+      "activityStatus": "PASS",
+      "restartAllowsOperations": true,
+      "recoveryPolicyStatus": "PASS",
+      "events": [
+        {
+          "action": "create",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "cpuCount": 2,
+          "elapsedSeconds": 0.0020395833998918533,
+          "memoryBytes": 536870912,
+          "networkDevices": 0,
+          "runID": ""
+        },
+        {
+          "action": "manager-ready",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.003954791696742177,
+          "runID": "97d44817-dad1-4052-82df-91dbd4f22c22"
+        },
+        {
+          "action": "start-request",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.12891404167748988,
+          "runID": "97d44817-dad1-4052-82df-91dbd4f22c22"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 4,
+          "actualStateName": "starting",
+          "elapsedSeconds": 0.12915375002194196,
+          "runID": "97d44817-dad1-4052-82df-91dbd4f22c22"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.3283209999790415,
+          "runID": "97d44817-dad1-4052-82df-91dbd4f22c22"
+        },
+        {
+          "action": "start-completed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.3286028750007972,
+          "runID": "97d44817-dad1-4052-82df-91dbd4f22c22"
+        },
+        {
+          "action": "termination-request",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.6744252917123958,
+          "reason": "worker-disconnected",
+          "runID": "97d44817-dad1-4052-82df-91dbd4f22c22"
+        },
+        {
+          "action": "requestStop",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.674635500065051,
+          "runID": "97d44817-dad1-4052-82df-91dbd4f22c22"
+        },
+        {
+          "action": "forceStop-request",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 2.773953083320521,
+          "runID": "97d44817-dad1-4052-82df-91dbd4f22c22"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 7,
+          "actualStateName": "stopping",
+          "elapsedSeconds": 2.774196833372116,
+          "runID": "97d44817-dad1-4052-82df-91dbd4f22c22"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 2.776484249974601,
+          "runID": "97d44817-dad1-4052-82df-91dbd4f22c22"
+        },
+        {
+          "action": "forceStop-completed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 2.7766152917174622,
+          "runID": "97d44817-dad1-4052-82df-91dbd4f22c22"
+        },
+        {
+          "action": "stop-confirmed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 2.7766860000556335,
+          "runID": "97d44817-dad1-4052-82df-91dbd4f22c22"
+        }
+      ],
+      "defaultNetworkBlocked": true
+    },
+    {
+      "name": "setsid/disconnect",
+      "runID": "b8cf448c-228c-4b70-9a8c-8196ae49466f",
+      "directory": "/private/tmp/nidus-manager-bb74iz1d",
+      "status": "PASS",
+      "activeBytes": 2,
+      "stopConfirmed": true,
+      "writesAfterStop": 0,
+      "observationSeconds": 1,
+      "activityStatus": "PASS",
+      "restartAllowsOperations": true,
+      "recoveryPolicyStatus": "PASS",
+      "events": [
+        {
+          "action": "create",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "cpuCount": 2,
+          "elapsedSeconds": 0.001345041673630476,
+          "memoryBytes": 536870912,
+          "networkDevices": 0,
+          "runID": ""
+        },
+        {
+          "action": "manager-ready",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.0036655833246186376,
+          "runID": "b8cf448c-228c-4b70-9a8c-8196ae49466f"
+        },
+        {
+          "action": "start-request",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.12271550006698817,
+          "runID": "b8cf448c-228c-4b70-9a8c-8196ae49466f"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 4,
+          "actualStateName": "starting",
+          "elapsedSeconds": 0.1229762916918844,
+          "runID": "b8cf448c-228c-4b70-9a8c-8196ae49466f"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.36098120838869363,
+          "runID": "b8cf448c-228c-4b70-9a8c-8196ae49466f"
+        },
+        {
+          "action": "start-completed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.3611569167114794,
+          "runID": "b8cf448c-228c-4b70-9a8c-8196ae49466f"
+        },
+        {
+          "action": "termination-request",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 1.1270177917322144,
+          "reason": "worker-disconnected",
+          "runID": "b8cf448c-228c-4b70-9a8c-8196ae49466f"
+        },
+        {
+          "action": "requestStop",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 1.1274614583235234,
+          "runID": "b8cf448c-228c-4b70-9a8c-8196ae49466f"
+        },
+        {
+          "action": "forceStop-request",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 3.225714166648686,
+          "runID": "b8cf448c-228c-4b70-9a8c-8196ae49466f"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 7,
+          "actualStateName": "stopping",
+          "elapsedSeconds": 3.2259998333174735,
+          "runID": "b8cf448c-228c-4b70-9a8c-8196ae49466f"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 3.2281257916474715,
+          "runID": "b8cf448c-228c-4b70-9a8c-8196ae49466f"
+        },
+        {
+          "action": "forceStop-completed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 3.2282335000345483,
+          "runID": "b8cf448c-228c-4b70-9a8c-8196ae49466f"
+        },
+        {
+          "action": "stop-confirmed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 3.228303875075653,
+          "runID": "b8cf448c-228c-4b70-9a8c-8196ae49466f"
+        }
+      ],
+      "defaultNetworkBlocked": true
+    },
+    {
+      "name": "ordinary/silent",
+      "runID": "51e3fa71-f9fe-4b81-bd42-a1204c203d79",
+      "directory": "/private/tmp/nidus-manager-743diz7_",
+      "status": "PASS",
+      "activeBytes": 2,
+      "stopConfirmed": true,
+      "writesAfterStop": 0,
+      "observationSeconds": 1,
+      "activityStatus": "PASS",
+      "restartAllowsOperations": true,
+      "recoveryPolicyStatus": "PASS",
+      "events": [
+        {
+          "action": "create",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "cpuCount": 2,
+          "elapsedSeconds": 0.0027375000063329935,
+          "memoryBytes": 536870912,
+          "networkDevices": 0,
+          "runID": ""
+        },
+        {
+          "action": "manager-ready",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.006171416724100709,
+          "runID": "51e3fa71-f9fe-4b81-bd42-a1204c203d79"
+        },
+        {
+          "action": "start-request",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.14127216674387455,
+          "runID": "51e3fa71-f9fe-4b81-bd42-a1204c203d79"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 4,
+          "actualStateName": "starting",
+          "elapsedSeconds": 0.1416302917059511,
+          "runID": "51e3fa71-f9fe-4b81-bd42-a1204c203d79"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.35696270840708166,
+          "runID": "51e3fa71-f9fe-4b81-bd42-a1204c203d79"
+        },
+        {
+          "action": "start-completed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.3571594583336264,
+          "runID": "51e3fa71-f9fe-4b81-bd42-a1204c203d79"
+        },
+        {
+          "action": "termination-request",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 6.010078125051223,
+          "reason": "heartbeat-expired",
+          "runID": "51e3fa71-f9fe-4b81-bd42-a1204c203d79"
+        },
+        {
+          "action": "requestStop",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 6.0102786250645295,
+          "runID": "51e3fa71-f9fe-4b81-bd42-a1204c203d79"
+        },
+        {
+          "action": "forceStop-request",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 8.107340333401226,
+          "runID": "51e3fa71-f9fe-4b81-bd42-a1204c203d79"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 7,
+          "actualStateName": "stopping",
+          "elapsedSeconds": 8.10755691677332,
+          "runID": "51e3fa71-f9fe-4b81-bd42-a1204c203d79"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 8.109030249994248,
+          "runID": "51e3fa71-f9fe-4b81-bd42-a1204c203d79"
+        },
+        {
+          "action": "forceStop-completed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 8.10920608334709,
+          "runID": "51e3fa71-f9fe-4b81-bd42-a1204c203d79"
+        },
+        {
+          "action": "stop-confirmed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 8.10927658341825,
+          "runID": "51e3fa71-f9fe-4b81-bd42-a1204c203d79"
+        }
+      ],
+      "defaultNetworkBlocked": true
+    },
+    {
+      "name": "nested/timeout",
+      "runID": "c4c19e3d-c774-4399-bd2a-5f01e21bec72",
+      "directory": "/private/tmp/nidus-manager-m_xwsugs",
+      "status": "PASS",
+      "activeBytes": 2,
+      "stopConfirmed": true,
+      "writesAfterStop": 0,
+      "observationSeconds": 1,
+      "activityStatus": "PASS",
+      "restartAllowsOperations": true,
+      "recoveryPolicyStatus": "PASS",
+      "events": [
+        {
+          "action": "create",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "cpuCount": 2,
+          "elapsedSeconds": 0.0013308333000168204,
+          "memoryBytes": 536870912,
+          "networkDevices": 0,
+          "runID": ""
+        },
+        {
+          "action": "manager-ready",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.00308383337687701,
+          "runID": "c4c19e3d-c774-4399-bd2a-5f01e21bec72"
+        },
+        {
+          "action": "start-request",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.11849912500474602,
+          "runID": "c4c19e3d-c774-4399-bd2a-5f01e21bec72"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 4,
+          "actualStateName": "starting",
+          "elapsedSeconds": 0.11874308332335204,
+          "runID": "c4c19e3d-c774-4399-bd2a-5f01e21bec72"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.34454795834608376,
+          "runID": "c4c19e3d-c774-4399-bd2a-5f01e21bec72"
+        },
+        {
+          "action": "start-completed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.3447995416354388,
+          "runID": "c4c19e3d-c774-4399-bd2a-5f01e21bec72"
+        },
+        {
+          "action": "termination-request",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 3.0081659166608006,
+          "reason": "execution-timeout",
+          "runID": "c4c19e3d-c774-4399-bd2a-5f01e21bec72"
+        },
+        {
+          "action": "requestStop",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 3.0085345417028293,
+          "runID": "c4c19e3d-c774-4399-bd2a-5f01e21bec72"
+        },
+        {
+          "action": "forceStop-request",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 5.107866249978542,
+          "runID": "c4c19e3d-c774-4399-bd2a-5f01e21bec72"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 7,
+          "actualStateName": "stopping",
+          "elapsedSeconds": 5.1082794583635405,
+          "runID": "c4c19e3d-c774-4399-bd2a-5f01e21bec72"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 5.11023800005205,
+          "runID": "c4c19e3d-c774-4399-bd2a-5f01e21bec72"
+        },
+        {
+          "action": "forceStop-completed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 5.1104805417126045,
+          "runID": "c4c19e3d-c774-4399-bd2a-5f01e21bec72"
+        },
+        {
+          "action": "stop-confirmed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 5.110558166634291,
+          "runID": "c4c19e3d-c774-4399-bd2a-5f01e21bec72"
+        }
+      ],
+      "defaultNetworkBlocked": true
+    },
+    {
+      "name": "ordinary/invalid",
+      "runID": "9329983c-b7b0-4044-a223-7ccaedc62ee9",
+      "directory": "/private/tmp/nidus-manager-iemyfg__",
+      "status": "PASS",
+      "activeBytes": 2,
+      "stopConfirmed": true,
+      "writesAfterStop": 0,
+      "observationSeconds": 1,
+      "activityStatus": "PASS",
+      "restartAllowsOperations": true,
+      "recoveryPolicyStatus": "PASS",
+      "events": [
+        {
+          "action": "create",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "cpuCount": 2,
+          "elapsedSeconds": 0.0015722500393167138,
+          "memoryBytes": 536870912,
+          "networkDevices": 0,
+          "runID": ""
+        },
+        {
+          "action": "manager-ready",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.0035883333766832948,
+          "runID": "9329983c-b7b0-4044-a223-7ccaedc62ee9"
+        },
+        {
+          "action": "start-request",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.12448995839804411,
+          "runID": "9329983c-b7b0-4044-a223-7ccaedc62ee9"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 4,
+          "actualStateName": "starting",
+          "elapsedSeconds": 0.12478029169142246,
+          "runID": "9329983c-b7b0-4044-a223-7ccaedc62ee9"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.3390070416498929,
+          "runID": "9329983c-b7b0-4044-a223-7ccaedc62ee9"
+        },
+        {
+          "action": "start-completed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.33921404171269387,
+          "runID": "9329983c-b7b0-4044-a223-7ccaedc62ee9"
+        },
+        {
+          "action": "command-refused",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 1.1272237499943003,
+          "runID": "9329983c-b7b0-4044-a223-7ccaedc62ee9"
+        },
+        {
+          "action": "termination-request",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 1.127615874982439,
+          "reason": "invalid-command",
+          "runID": "9329983c-b7b0-4044-a223-7ccaedc62ee9"
+        },
+        {
+          "action": "requestStop",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 1.1276928333099931,
+          "runID": "9329983c-b7b0-4044-a223-7ccaedc62ee9"
+        },
+        {
+          "action": "forceStop-request",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 3.2241949166636914,
+          "runID": "9329983c-b7b0-4044-a223-7ccaedc62ee9"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 7,
+          "actualStateName": "stopping",
+          "elapsedSeconds": 3.2246445000637323,
+          "runID": "9329983c-b7b0-4044-a223-7ccaedc62ee9"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 3.226779125048779,
+          "runID": "9329983c-b7b0-4044-a223-7ccaedc62ee9"
+        },
+        {
+          "action": "forceStop-completed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 3.226988625014201,
+          "runID": "9329983c-b7b0-4044-a223-7ccaedc62ee9"
+        },
+        {
+          "action": "stop-confirmed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 3.227061583311297,
+          "runID": "9329983c-b7b0-4044-a223-7ccaedc62ee9"
+        }
+      ],
+      "defaultNetworkBlocked": true
+    },
+    {
+      "name": "setsid/manager-kill",
+      "runID": "3a271aa2-94f5-4861-8ba5-3e7fe3d16e9a",
+      "directory": "/private/tmp/nidus-manager-hbh1ftao",
+      "status": "NOT_RUN",
+      "activeBytes": 2,
+      "stopConfirmed": false,
+      "writesAfterStop": 0,
+      "observationSeconds": 1,
+      "activityStatus": "PASS",
+      "restartAllowsOperations": false,
+      "recoveryPolicyStatus": "PASS",
+      "newVMAdmissionBlocked": true,
+      "events": [
+        {
+          "action": "create",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "cpuCount": 2,
+          "elapsedSeconds": 0.002024833345785737,
+          "memoryBytes": 536870912,
+          "networkDevices": 0,
+          "runID": ""
+        },
+        {
+          "action": "manager-ready",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.004086000029928982,
+          "runID": "3a271aa2-94f5-4861-8ba5-3e7fe3d16e9a"
+        },
+        {
+          "action": "start-request",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.1305582500062883,
+          "runID": "3a271aa2-94f5-4861-8ba5-3e7fe3d16e9a"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 4,
+          "actualStateName": "starting",
+          "elapsedSeconds": 0.13086087501142174,
+          "runID": "3a271aa2-94f5-4861-8ba5-3e7fe3d16e9a"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.3612256250344217,
+          "runID": "3a271aa2-94f5-4861-8ba5-3e7fe3d16e9a"
+        },
+        {
+          "action": "start-completed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.36141054169274867,
+          "runID": "3a271aa2-94f5-4861-8ba5-3e7fe3d16e9a"
+        }
+      ],
+      "defaultNetworkBlocked": true
+    }
+  ],
+  "remaining": [
+    "Manager death authoritative VM stop confirmation",
+    "Actual SwiftUI crash",
+    "External network policy",
+    "General workspace merge",
+    "Manager-mode allowed network activity observation",
+    "Injected framework stop failure and stop-confirmation timeout",
+    "Product-wide registry and authenticated IPC"
+  ],
+  "scope": "Socketpair control, synthetic files, no NIC, no product integration. Journals and workspaces retained.",
+  "legacyVMRegression": {
+    "checks": [
+      {
+        "name": "ordinary/cancel/no-network",
+        "status": "PASS",
+        "activityStatus": "PASS",
+        "bootToWorkloadSeconds": 0.7475,
+        "stopObservationSeconds": 0.0252,
+        "writesBeforeStop": 6,
+        "framesBeforeStop": 0,
+        "writesAfterStop": 0,
+        "framesAfterStop": 0,
+        "observationSeconds": 1.0,
+        "stopConfirmed": true,
+        "terminal": "stopped",
+        "acceptedFrames": 0,
+        "rejectedFrames": 0,
+        "networkChannelClosed": false,
+        "guestBootMarker": true,
+        "hostPathsAbsent": true,
+        "secretsAbsent": true,
+        "originalUnchanged": true,
+        "defaultNetworkBlocked": true,
+        "parentEscapeBlocked": true,
+        "networkDevices": 0,
+        "guestOutputLinksRejected": true,
+        "reviewApply": {
+          "deniedWithoutApproval": true,
+          "approvedNewFileMatches": true
+        },
+        "events": [
+          {
+            "action": "create",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "cpuCount": 2,
+            "elapsedSeconds": 0.001001124968752265,
+            "memoryBytes": 536870912,
+            "networkDevices": 0,
+            "runID": ""
+          },
+          {
+            "action": "start-request",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "elapsedSeconds": 0.002283083274960518,
+            "runID": ""
+          },
+          {
+            "action": "state-observed",
+            "actualState": 4,
+            "actualStateName": "starting",
+            "elapsedSeconds": 0.002376624965108931,
+            "runID": ""
+          },
+          {
+            "action": "state-observed",
+            "actualState": 1,
+            "actualStateName": "running",
+            "elapsedSeconds": 0.1890472082886845,
+            "runID": ""
+          },
+          {
+            "action": "start-completed",
+            "actualState": 1,
+            "actualStateName": "running",
+            "elapsedSeconds": 0.1891359166475013,
+            "runID": ""
+          },
+          {
+            "action": "cleanup-refused",
+            "actualState": 1,
+            "actualStateName": "running",
+            "elapsedSeconds": 0.6465790416114032,
+            "runID": ""
+          },
+          {
+            "action": "forceStop-request",
+            "actualState": 1,
+            "actualStateName": "running",
+            "elapsedSeconds": 1.273472375003621,
+            "runID": ""
+          },
+          {
+            "action": "state-observed",
+            "actualState": 7,
+            "actualStateName": "stopping",
+            "elapsedSeconds": 1.2735889999894425,
+            "runID": ""
+          },
+          {
+            "action": "state-observed",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "elapsedSeconds": 1.275640666601248,
+            "runID": ""
+          },
+          {
+            "action": "forceStop-completed",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "elapsedSeconds": 1.2757144999923185,
+            "runID": ""
+          }
+        ],
+        "runningCleanupRejected": true,
+        "resources": {
+          "configuredVCPUs": 2,
+          "configuredMemoryBytes": 536870912,
+          "peakResidentBytes": null,
+          "cpuUsage": null,
+          "note": "VM service memory/CPU not inferred from controller RSS; resource accounting NOT_RUN",
+          "workerMaxResidentBytes": 11534336,
+          "workerUserCPUSeconds": 0.00417,
+          "workerSystemCPUSeconds": 0.004482,
+          "scope": "VM worker and reaped children only; excludes separate Virtualization services"
+        },
+        "cleanup": "PASS"
+      },
+      {
+        "name": "setsid/cancel/no-network",
+        "status": "PASS",
+        "activityStatus": "PASS",
+        "bootToWorkloadSeconds": 0.8741,
+        "stopObservationSeconds": 0.0205,
+        "writesBeforeStop": 6,
+        "framesBeforeStop": 0,
+        "writesAfterStop": 0,
+        "framesAfterStop": 0,
+        "observationSeconds": 1.0,
+        "stopConfirmed": true,
+        "terminal": "stopped",
+        "acceptedFrames": 0,
+        "rejectedFrames": 0,
+        "networkChannelClosed": false,
+        "guestBootMarker": true,
+        "hostPathsAbsent": true,
+        "secretsAbsent": true,
+        "originalUnchanged": true,
+        "defaultNetworkBlocked": true,
+        "parentEscapeBlocked": true,
+        "networkDevices": 0,
+        "guestOutputLinksRejected": true,
+        "reviewApply": {
+          "deniedWithoutApproval": true,
+          "approvedNewFileMatches": true
+        },
+        "events": [
+          {
+            "action": "create",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "cpuCount": 2,
+            "elapsedSeconds": 0.0010183750418946147,
+            "memoryBytes": 536870912,
+            "networkDevices": 0,
+            "runID": ""
+          },
+          {
+            "action": "start-request",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "elapsedSeconds": 0.002470750012435019,
+            "runID": ""
+          },
+          {
+            "action": "state-observed",
+            "actualState": 4,
+            "actualStateName": "starting",
+            "elapsedSeconds": 0.002561208326369524,
+            "runID": ""
+          },
+          {
+            "action": "state-observed",
+            "actualState": 1,
+            "actualStateName": "running",
+            "elapsedSeconds": 0.2009393332991749,
+            "runID": ""
+          },
+          {
+            "action": "start-completed",
+            "actualState": 1,
+            "actualStateName": "running",
+            "elapsedSeconds": 0.2010523333447054,
+            "runID": ""
+          },
+          {
+            "action": "forceStop-request",
+            "actualState": 1,
+            "actualStateName": "running",
+            "elapsedSeconds": 1.275606874958612,
+            "runID": ""
+          },
+          {
+            "action": "state-observed",
+            "actualState": 7,
+            "actualStateName": "stopping",
+            "elapsedSeconds": 1.275790625018999,
+            "runID": ""
+          },
+          {
+            "action": "state-observed",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "elapsedSeconds": 1.2778254166478291,
+            "runID": ""
+          },
+          {
+            "action": "forceStop-completed",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "elapsedSeconds": 1.2778748333221301,
+            "runID": ""
+          }
+        ],
+        "runningCleanupRejected": false,
+        "resources": {
+          "configuredVCPUs": 2,
+          "configuredMemoryBytes": 536870912,
+          "peakResidentBytes": null,
+          "cpuUsage": null,
+          "note": "VM service memory/CPU not inferred from controller RSS; resource accounting NOT_RUN",
+          "workerMaxResidentBytes": 11534336,
+          "workerUserCPUSeconds": 0.004399,
+          "workerSystemCPUSeconds": 0.0035299999999999997,
+          "scope": "VM worker and reaped children only; excludes separate Virtualization services"
+        },
+        "cleanup": "PASS"
+      },
+      {
+        "name": "double-fork/cancel/no-network",
+        "status": "PASS",
+        "activityStatus": "PASS",
+        "bootToWorkloadSeconds": 0.8042,
+        "stopObservationSeconds": 0.0247,
+        "writesBeforeStop": 6,
+        "framesBeforeStop": 0,
+        "writesAfterStop": 0,
+        "framesAfterStop": 0,
+        "observationSeconds": 1.0,
+        "stopConfirmed": true,
+        "terminal": "stopped",
+        "acceptedFrames": 0,
+        "rejectedFrames": 0,
+        "networkChannelClosed": false,
+        "guestBootMarker": true,
+        "hostPathsAbsent": true,
+        "secretsAbsent": true,
+        "originalUnchanged": true,
+        "defaultNetworkBlocked": true,
+        "parentEscapeBlocked": true,
+        "networkDevices": 0,
+        "guestOutputLinksRejected": true,
+        "reviewApply": {
+          "deniedWithoutApproval": true,
+          "approvedNewFileMatches": true
+        },
+        "events": [
+          {
+            "action": "create",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "cpuCount": 2,
+            "elapsedSeconds": 0.0010625416180118918,
+            "memoryBytes": 536870912,
+            "networkDevices": 0,
+            "runID": ""
+          },
+          {
+            "action": "start-request",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "elapsedSeconds": 0.0027917916886508465,
+            "runID": ""
+          },
+          {
+            "action": "state-observed",
+            "actualState": 4,
+            "actualStateName": "starting",
+            "elapsedSeconds": 0.002913166652433574,
+            "runID": ""
+          },
+          {
+            "action": "state-observed",
+            "actualState": 1,
+            "actualStateName": "running",
+            "elapsedSeconds": 0.20392779167741537,
+            "runID": ""
+          },
+          {
+            "action": "start-completed",
+            "actualState": 1,
+            "actualStateName": "running",
+            "elapsedSeconds": 0.2040467499755323,
+            "runID": ""
+          },
+          {
+            "action": "forceStop-request",
+            "actualState": 1,
+            "actualStateName": "running",
+            "elapsedSeconds": 1.212036666693166,
+            "runID": ""
+          },
+          {
+            "action": "state-observed",
+            "actualState": 7,
+            "actualStateName": "stopping",
+            "elapsedSeconds": 1.2121652499772608,
+            "runID": ""
+          },
+          {
+            "action": "state-observed",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "elapsedSeconds": 1.214401708333753,
+            "runID": ""
+          },
+          {
+            "action": "forceStop-completed",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "elapsedSeconds": 1.214463375043124,
+            "runID": ""
+          }
+        ],
+        "runningCleanupRejected": false,
+        "resources": {
+          "configuredVCPUs": 2,
+          "configuredMemoryBytes": 536870912,
+          "peakResidentBytes": null,
+          "cpuUsage": null,
+          "note": "VM service memory/CPU not inferred from controller RSS; resource accounting NOT_RUN",
+          "workerMaxResidentBytes": 11534336,
+          "workerUserCPUSeconds": 0.004626,
+          "workerSystemCPUSeconds": 0.0038209999999999997,
+          "scope": "VM worker and reaped children only; excludes separate Virtualization services"
+        },
+        "cleanup": "PASS"
+      },
+      {
+        "name": "nested/cancel/sink-network",
+        "status": "PASS",
+        "activityStatus": "PASS",
+        "bootToWorkloadSeconds": 0.7222,
+        "stopObservationSeconds": 0.0225,
+        "writesBeforeStop": 8,
+        "framesBeforeStop": 18,
+        "writesAfterStop": 0,
+        "framesAfterStop": 0,
+        "observationSeconds": 1.0,
+        "stopConfirmed": true,
+        "terminal": "stopped",
+        "acceptedFrames": 8,
+        "rejectedFrames": 10,
+        "networkChannelClosed": false,
+        "guestBootMarker": true,
+        "hostPathsAbsent": true,
+        "secretsAbsent": true,
+        "originalUnchanged": true,
+        "defaultNetworkBlocked": false,
+        "parentEscapeBlocked": true,
+        "networkDevices": 1,
+        "guestOutputLinksRejected": true,
+        "reviewApply": {
+          "deniedWithoutApproval": true,
+          "approvedNewFileMatches": true
+        },
+        "events": [
+          {
+            "action": "create",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "cpuCount": 2,
+            "elapsedSeconds": 0.0020252916729077697,
+            "memoryBytes": 536870912,
+            "networkDevices": 1,
+            "runID": ""
+          },
+          {
+            "action": "start-request",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "elapsedSeconds": 0.003624708391726017,
+            "runID": ""
+          },
+          {
+            "action": "state-observed",
+            "actualState": 4,
+            "actualStateName": "starting",
+            "elapsedSeconds": 0.0037450416712090373,
+            "runID": ""
+          },
+          {
+            "action": "state-observed",
+            "actualState": 1,
+            "actualStateName": "running",
+            "elapsedSeconds": 0.2136688750470057,
+            "runID": ""
+          },
+          {
+            "action": "start-completed",
+            "actualState": 1,
+            "actualStateName": "running",
+            "elapsedSeconds": 0.21379495842847973,
+            "runID": ""
+          },
+          {
+            "action": "forceStop-request",
+            "actualState": 1,
+            "actualStateName": "running",
+            "elapsedSeconds": 1.1223998750792816,
+            "runID": ""
+          },
+          {
+            "action": "state-observed",
+            "actualState": 7,
+            "actualStateName": "stopping",
+            "elapsedSeconds": 1.1225532917305827,
+            "runID": ""
+          },
+          {
+            "action": "state-observed",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "elapsedSeconds": 1.124501125072129,
+            "runID": ""
+          },
+          {
+            "action": "forceStop-completed",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "elapsedSeconds": 1.1245960417436436,
+            "runID": ""
+          }
+        ],
+        "runningCleanupRejected": false,
+        "resources": {
+          "configuredVCPUs": 2,
+          "configuredMemoryBytes": 536870912,
+          "peakResidentBytes": null,
+          "cpuUsage": null,
+          "note": "VM service memory/CPU not inferred from controller RSS; resource accounting NOT_RUN",
+          "workerMaxResidentBytes": 11550720,
+          "workerUserCPUSeconds": 0.004833,
+          "workerSystemCPUSeconds": 0.003747,
+          "scope": "VM worker and reaped children only; excludes separate Virtualization services"
+        },
+        "cleanup": "PASS"
+      },
+      {
+        "name": "setsid/worker-kill/sink-network",
+        "status": "NOT_RUN",
+        "activityStatus": "PASS",
+        "bootToWorkloadSeconds": 0.8214,
+        "stopObservationSeconds": 0.0222,
+        "writesBeforeStop": 5,
+        "framesBeforeStop": 13,
+        "writesAfterStop": 0,
+        "framesAfterStop": 0,
+        "observationSeconds": 1.0,
+        "stopConfirmed": false,
+        "terminal": "interrupted-stop-unconfirmed",
+        "acceptedFrames": 5,
+        "rejectedFrames": 8,
+        "networkChannelClosed": true,
+        "guestBootMarker": true,
+        "hostPathsAbsent": true,
+        "secretsAbsent": true,
+        "originalUnchanged": true,
+        "defaultNetworkBlocked": false,
+        "parentEscapeBlocked": true,
+        "networkDevices": 1,
+        "events": [
+          {
+            "action": "create",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "cpuCount": 2,
+            "elapsedSeconds": 0.0012787916930392385,
+            "memoryBytes": 536870912,
+            "networkDevices": 1,
+            "runID": ""
+          },
+          {
+            "action": "start-request",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "elapsedSeconds": 0.002890833420678973,
+            "runID": ""
+          },
+          {
+            "action": "state-observed",
+            "actualState": 4,
+            "actualStateName": "starting",
+            "elapsedSeconds": 0.003052666666917503,
+            "runID": ""
+          },
+          {
+            "action": "state-observed",
+            "actualState": 1,
+            "actualStateName": "running",
+            "elapsedSeconds": 0.20663879171479493,
+            "runID": ""
+          },
+          {
+            "action": "start-completed",
+            "actualState": 1,
+            "actualStateName": "running",
+            "elapsedSeconds": 0.20675416674930602,
+            "runID": ""
+          }
+        ],
+        "runningCleanupRejected": false,
+        "resources": {
+          "configuredVCPUs": 2,
+          "configuredMemoryBytes": 536870912,
+          "peakResidentBytes": null,
+          "cpuUsage": null,
+          "note": "VM service memory/CPU not inferred from controller RSS; resource accounting NOT_RUN",
+          "workerMaxResidentBytes": 11419648,
+          "workerUserCPUSeconds": 0.004431,
+          "workerSystemCPUSeconds": 0.004595999999999999,
+          "scope": "VM worker and reaped children only; excludes separate Virtualization services"
+        },
+        "cleanup": "NOT_RUN",
+        "retainedDiagnosticDirectory": "/private/tmp/nidus-vm-case-mqu1rt9_"
+      },
+      {
+        "name": "setsid/supervisor-kill/sink-network",
+        "status": "PASS",
+        "activityStatus": "PASS",
+        "bootToWorkloadSeconds": 0.7935,
+        "stopObservationSeconds": 0.0222,
+        "writesBeforeStop": 5,
+        "framesBeforeStop": 12,
+        "writesAfterStop": 0,
+        "framesAfterStop": 0,
+        "observationSeconds": 1.0,
+        "stopConfirmed": true,
+        "terminal": "stopped",
+        "acceptedFrames": 5,
+        "rejectedFrames": 7,
+        "networkChannelClosed": true,
+        "guestBootMarker": true,
+        "hostPathsAbsent": true,
+        "secretsAbsent": true,
+        "originalUnchanged": true,
+        "defaultNetworkBlocked": false,
+        "parentEscapeBlocked": true,
+        "networkDevices": 1,
+        "guestOutputLinksRejected": true,
+        "reviewApply": {
+          "deniedWithoutApproval": true,
+          "approvedNewFileMatches": true
+        },
+        "events": [
+          {
+            "action": "create",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "cpuCount": 2,
+            "elapsedSeconds": 0.001080124988220632,
+            "memoryBytes": 536870912,
+            "networkDevices": 1,
+            "runID": ""
+          },
+          {
+            "action": "start-request",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "elapsedSeconds": 0.0028025000356137753,
+            "runID": ""
+          },
+          {
+            "action": "state-observed",
+            "actualState": 4,
+            "actualStateName": "starting",
+            "elapsedSeconds": 0.002929666661657393,
+            "runID": ""
+          },
+          {
+            "action": "state-observed",
+            "actualState": 1,
+            "actualStateName": "running",
+            "elapsedSeconds": 0.21453591668978333,
+            "runID": ""
+          },
+          {
+            "action": "start-completed",
+            "actualState": 1,
+            "actualStateName": "running",
+            "elapsedSeconds": 0.2146635833196342,
+            "runID": ""
+          },
+          {
+            "action": "controller-disconnected",
+            "actualState": 1,
+            "actualStateName": "running",
+            "elapsedSeconds": 1.196375083294697,
+            "runID": ""
+          },
+          {
+            "action": "forceStop-request",
+            "actualState": 1,
+            "actualStateName": "running",
+            "elapsedSeconds": 1.1964910000097007,
+            "runID": ""
+          },
+          {
+            "action": "state-observed",
+            "actualState": 7,
+            "actualStateName": "stopping",
+            "elapsedSeconds": 1.196536458330229,
+            "runID": ""
+          },
+          {
+            "action": "state-observed",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "elapsedSeconds": 1.1983172500040382,
+            "runID": ""
+          },
+          {
+            "action": "forceStop-completed",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "elapsedSeconds": 1.1984013332985342,
+            "runID": ""
+          },
+          {
+            "action": "cleanup",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "elapsedSeconds": 1.1984476665966213,
+            "runID": ""
+          }
+        ],
+        "runningCleanupRejected": false,
+        "resources": {
+          "configuredVCPUs": 2,
+          "configuredMemoryBytes": 536870912,
+          "peakResidentBytes": null,
+          "cpuUsage": null,
+          "note": "VM service memory/CPU not inferred from controller RSS; resource accounting NOT_RUN"
+        },
+        "cleanup": "PASS"
+      },
+      {
+        "name": "nested/timeout/no-network",
+        "status": "PASS",
+        "activityStatus": "PASS",
+        "bootToWorkloadSeconds": 0.6953,
+        "stopObservationSeconds": 0.5132,
+        "writesBeforeStop": 10,
+        "framesBeforeStop": 0,
+        "writesAfterStop": 0,
+        "framesAfterStop": 0,
+        "observationSeconds": 1.0,
+        "stopConfirmed": true,
+        "terminal": "stopped",
+        "acceptedFrames": 0,
+        "rejectedFrames": 0,
+        "networkChannelClosed": false,
+        "guestBootMarker": true,
+        "hostPathsAbsent": true,
+        "secretsAbsent": true,
+        "originalUnchanged": true,
+        "defaultNetworkBlocked": true,
+        "parentEscapeBlocked": true,
+        "networkDevices": 0,
+        "guestOutputLinksRejected": true,
+        "reviewApply": {
+          "deniedWithoutApproval": true,
+          "approvedNewFileMatches": true
+        },
+        "events": [
+          {
+            "action": "create",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "cpuCount": 2,
+            "elapsedSeconds": 0.0011951250489801168,
+            "memoryBytes": 536870912,
+            "networkDevices": 0,
+            "runID": ""
+          },
+          {
+            "action": "start-request",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "elapsedSeconds": 0.00265541672706604,
+            "runID": ""
+          },
+          {
+            "action": "state-observed",
+            "actualState": 4,
+            "actualStateName": "starting",
+            "elapsedSeconds": 0.002745208330452442,
+            "runID": ""
+          },
+          {
+            "action": "state-observed",
+            "actualState": 1,
+            "actualStateName": "running",
+            "elapsedSeconds": 0.20859266666229814,
+            "runID": ""
+          },
+          {
+            "action": "start-completed",
+            "actualState": 1,
+            "actualStateName": "running",
+            "elapsedSeconds": 0.2087093333248049,
+            "runID": ""
+          },
+          {
+            "action": "forceStop-request",
+            "actualState": 1,
+            "actualStateName": "running",
+            "elapsedSeconds": 1.6038562500616536,
+            "runID": ""
+          },
+          {
+            "action": "state-observed",
+            "actualState": 7,
+            "actualStateName": "stopping",
+            "elapsedSeconds": 1.6040190833155066,
+            "runID": ""
+          },
+          {
+            "action": "state-observed",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "elapsedSeconds": 1.6065365417161956,
+            "runID": ""
+          },
+          {
+            "action": "forceStop-completed",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "elapsedSeconds": 1.6066327500157058,
+            "runID": ""
+          }
+        ],
+        "runningCleanupRejected": false,
+        "resources": {
+          "configuredVCPUs": 2,
+          "configuredMemoryBytes": 536870912,
+          "peakResidentBytes": null,
+          "cpuUsage": null,
+          "note": "VM service memory/CPU not inferred from controller RSS; resource accounting NOT_RUN",
+          "workerMaxResidentBytes": 11550720,
+          "workerUserCPUSeconds": 0.004683,
+          "workerSystemCPUSeconds": 0.0036969999999999998,
+          "scope": "VM worker and reaped children only; excludes separate Virtualization services"
+        },
+        "cleanup": "PASS"
+      },
+      {
+        "name": "ordinary/request-stop/no-network",
+        "status": "PASS",
+        "activityStatus": "PASS",
+        "bootToWorkloadSeconds": 0.8238,
+        "stopObservationSeconds": 0.5319,
+        "writesBeforeStop": 5,
+        "framesBeforeStop": 0,
+        "writesAfterStop": 0,
+        "framesAfterStop": 0,
+        "observationSeconds": 1.0,
+        "stopConfirmed": true,
+        "terminal": "stopped",
+        "acceptedFrames": 0,
+        "rejectedFrames": 0,
+        "networkChannelClosed": false,
+        "guestBootMarker": true,
+        "hostPathsAbsent": true,
+        "secretsAbsent": true,
+        "originalUnchanged": true,
+        "defaultNetworkBlocked": true,
+        "parentEscapeBlocked": true,
+        "networkDevices": 0,
+        "guestOutputLinksRejected": true,
+        "reviewApply": {
+          "deniedWithoutApproval": true,
+          "approvedNewFileMatches": true
+        },
+        "events": [
+          {
+            "action": "create",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "cpuCount": 2,
+            "elapsedSeconds": 0.001466625020839274,
+            "memoryBytes": 536870912,
+            "networkDevices": 0,
+            "runID": ""
+          },
+          {
+            "action": "start-request",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "elapsedSeconds": 0.0031147917034104466,
+            "runID": ""
+          },
+          {
+            "action": "state-observed",
+            "actualState": 4,
+            "actualStateName": "starting",
+            "elapsedSeconds": 0.003227916662581265,
+            "runID": ""
+          },
+          {
+            "action": "state-observed",
+            "actualState": 1,
+            "actualStateName": "running",
+            "elapsedSeconds": 0.23357608343940228,
+            "runID": ""
+          },
+          {
+            "action": "start-completed",
+            "actualState": 1,
+            "actualStateName": "running",
+            "elapsedSeconds": 0.23368254175875336,
+            "runID": ""
+          },
+          {
+            "action": "requestStop",
+            "actualState": 1,
+            "actualStateName": "running",
+            "elapsedSeconds": 1.2295626667328179,
+            "runID": ""
+          },
+          {
+            "action": "forceStop-request",
+            "actualState": 1,
+            "actualStateName": "running",
+            "elapsedSeconds": 1.7411539583699778,
+            "runID": ""
+          },
+          {
+            "action": "state-observed",
+            "actualState": 7,
+            "actualStateName": "stopping",
+            "elapsedSeconds": 1.7412956251064315,
+            "runID": ""
+          },
+          {
+            "action": "state-observed",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "elapsedSeconds": 1.7432860833359882,
+            "runID": ""
+          },
+          {
+            "action": "forceStop-completed",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "elapsedSeconds": 1.7434093334013596,
+            "runID": ""
+          }
+        ],
+        "runningCleanupRejected": false,
+        "resources": {
+          "configuredVCPUs": 2,
+          "configuredMemoryBytes": 536870912,
+          "peakResidentBytes": null,
+          "cpuUsage": null,
+          "note": "VM service memory/CPU not inferred from controller RSS; resource accounting NOT_RUN",
+          "workerMaxResidentBytes": 11583488,
+          "workerUserCPUSeconds": 0.005103,
+          "workerSystemCPUSeconds": 0.004575,
+          "scope": "VM worker and reaped children only; excludes separate Virtualization services"
+        },
+        "cleanup": "PASS"
+      },
+      {
+        "name": "setsid/app-crash/no-network",
+        "status": "PASS",
+        "activityStatus": "PASS",
+        "bootToWorkloadSeconds": 0.9163,
+        "stopObservationSeconds": 0.0257,
+        "writesBeforeStop": 6,
+        "framesBeforeStop": 0,
+        "writesAfterStop": 0,
+        "framesAfterStop": 0,
+        "observationSeconds": 1.0,
+        "stopConfirmed": true,
+        "terminal": "stopped",
+        "acceptedFrames": 0,
+        "rejectedFrames": 0,
+        "networkChannelClosed": false,
+        "guestBootMarker": true,
+        "hostPathsAbsent": true,
+        "secretsAbsent": true,
+        "originalUnchanged": true,
+        "defaultNetworkBlocked": true,
+        "parentEscapeBlocked": true,
+        "networkDevices": 0,
+        "guestOutputLinksRejected": true,
+        "reviewApply": {
+          "deniedWithoutApproval": true,
+          "approvedNewFileMatches": true
+        },
+        "events": [
+          {
+            "action": "create",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "cpuCount": 2,
+            "elapsedSeconds": 0.0011919999960809946,
+            "memoryBytes": 536870912,
+            "networkDevices": 0,
+            "runID": ""
+          },
+          {
+            "action": "start-request",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "elapsedSeconds": 0.0029808332910761237,
+            "runID": ""
+          },
+          {
+            "action": "state-observed",
+            "actualState": 4,
+            "actualStateName": "starting",
+            "elapsedSeconds": 0.0031111249700188637,
+            "runID": ""
+          },
+          {
+            "action": "state-observed",
+            "actualState": 1,
+            "actualStateName": "running",
+            "elapsedSeconds": 0.2166334999492392,
+            "runID": ""
+          },
+          {
+            "action": "start-completed",
+            "actualState": 1,
+            "actualStateName": "running",
+            "elapsedSeconds": 0.21674808324314654,
+            "runID": ""
+          },
+          {
+            "action": "controller-disconnected",
+            "actualState": 1,
+            "actualStateName": "running",
+            "elapsedSeconds": 1.308974291663617,
+            "runID": ""
+          },
+          {
+            "action": "forceStop-request",
+            "actualState": 1,
+            "actualStateName": "running",
+            "elapsedSeconds": 1.309139791643247,
+            "runID": ""
+          },
+          {
+            "action": "state-observed",
+            "actualState": 7,
+            "actualStateName": "stopping",
+            "elapsedSeconds": 1.3091960416641086,
+            "runID": ""
+          },
+          {
+            "action": "state-observed",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "elapsedSeconds": 1.3128894165856764,
+            "runID": ""
+          },
+          {
+            "action": "forceStop-completed",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "elapsedSeconds": 1.3129511666484177,
+            "runID": ""
+          },
+          {
+            "action": "cleanup",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "elapsedSeconds": 1.3129674582742155,
+            "runID": ""
+          }
+        ],
+        "runningCleanupRejected": false,
+        "appCrashScope": "Synthetic controller loss; actual SwiftUI app crash NOT_RUN",
+        "resources": {
+          "configuredVCPUs": 2,
+          "configuredMemoryBytes": 536870912,
+          "peakResidentBytes": null,
+          "cpuUsage": null,
+          "note": "VM service memory/CPU not inferred from controller RSS; resource accounting NOT_RUN"
+        },
+        "cleanup": "PASS"
+      },
+      {
+        "name": "ordinary/invalid-stop/no-network",
+        "status": "PASS",
+        "activityStatus": "PASS",
+        "bootToWorkloadSeconds": 0.9349,
+        "stopObservationSeconds": 0.0212,
+        "writesBeforeStop": 5,
+        "framesBeforeStop": 0,
+        "writesAfterStop": 0,
+        "framesAfterStop": 0,
+        "observationSeconds": 1.0,
+        "stopConfirmed": true,
+        "terminal": "stopped",
+        "acceptedFrames": 0,
+        "rejectedFrames": 0,
+        "networkChannelClosed": false,
+        "guestBootMarker": true,
+        "hostPathsAbsent": true,
+        "secretsAbsent": true,
+        "originalUnchanged": true,
+        "defaultNetworkBlocked": true,
+        "parentEscapeBlocked": true,
+        "networkDevices": 0,
+        "guestOutputLinksRejected": true,
+        "reviewApply": {
+          "deniedWithoutApproval": true,
+          "approvedNewFileMatches": true
+        },
+        "events": [
+          {
+            "action": "create",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "cpuCount": 2,
+            "elapsedSeconds": 0.0013253750512376428,
+            "memoryBytes": 536870912,
+            "networkDevices": 0,
+            "runID": ""
+          },
+          {
+            "action": "start-request",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "elapsedSeconds": 0.003211416653357446,
+            "runID": ""
+          },
+          {
+            "action": "state-observed",
+            "actualState": 4,
+            "actualStateName": "starting",
+            "elapsedSeconds": 0.003324333345517516,
+            "runID": ""
+          },
+          {
+            "action": "state-observed",
+            "actualState": 1,
+            "actualStateName": "running",
+            "elapsedSeconds": 0.21546362503431737,
+            "runID": ""
+          },
+          {
+            "action": "start-completed",
+            "actualState": 1,
+            "actualStateName": "running",
+            "elapsedSeconds": 0.21558141661807895,
+            "runID": ""
+          },
+          {
+            "action": "forceStop-request",
+            "actualState": 1,
+            "actualStateName": "running",
+            "elapsedSeconds": 1.3091427916660905,
+            "runID": ""
+          },
+          {
+            "action": "state-observed",
+            "actualState": 7,
+            "actualStateName": "stopping",
+            "elapsedSeconds": 1.3092745416797698,
+            "runID": ""
+          },
+          {
+            "action": "state-observed",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "elapsedSeconds": 1.3115062500583008,
+            "runID": ""
+          },
+          {
+            "action": "forceStop-completed",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "elapsedSeconds": 1.3115806250134483,
+            "runID": ""
+          },
+          {
+            "action": "forceStop-request",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "elapsedSeconds": 1.3303237500367686,
+            "runID": ""
+          },
+          {
+            "action": "forceStop-failed",
+            "actualState": 0,
+            "actualStateName": "stopped",
+            "elapsedSeconds": 1.333826333284378,
+            "error": "Invalid virtual machine state transition. Transition from state “stopped” to state “stopping” is invalid.",
+            "runID": ""
+          }
+        ],
+        "runningCleanupRejected": false,
+        "invalidStopRejected": true,
+        "resources": {
+          "configuredVCPUs": 2,
+          "configuredMemoryBytes": 536870912,
+          "peakResidentBytes": null,
+          "cpuUsage": null,
+          "note": "VM service memory/CPU not inferred from controller RSS; resource accounting NOT_RUN",
+          "workerMaxResidentBytes": 12189696,
+          "workerUserCPUSeconds": 0.006578,
+          "workerSystemCPUSeconds": 0.005967,
+          "scope": "VM worker and reaped children only; excludes separate Virtualization services"
+        },
+        "cleanup": "PASS"
+      }
+    ],
+    "securityChecks": [
+      {
+        "name": "default-network-no-device-and-unreachable",
+        "status": "PASS"
+      },
+      {
+        "name": "isolated-network-sink-allow-and-reject",
+        "status": "PASS"
+      },
+      {
+        "name": "host-path-secret-original-protection",
+        "status": "PASS"
+      },
+      {
+        "name": "separate-new-file-review-approval",
+        "status": "PASS"
+      },
+      {
+        "name": "running-cleanup-rejected",
+        "status": "PASS"
+      },
+      {
+        "name": "invalid-stop-error-recorded",
+        "status": "PASS"
+      },
+      {
+        "name": "confirmed-stop-job-images-cleanup",
+        "status": "PASS"
+      }
+    ],
+    "eligible": false,
+    "note": "Run before final manager-only exit-after-confirmation refinement; legacy control path unchanged by that refinement."
+  },
+  "tests": {
+    "node": {
+      "status": "PASS",
+      "count": 174
+    },
+    "swift": {
+      "status": "PASS",
+      "count": 42
+    },
+    "workspace": {
+      "status": "PASS",
+      "count": 6
+    },
+    "managerPolicy": {
+      "status": "PASS",
+      "count": 4
+    },
+    "productAppPackaging": {
+      "status": "NOT_RUN"
+    },
+    "actualProviderAPIs": {
+      "status": "NOT_RUN"
+    }
+  },
+  "priorAttempts": [
+    {
+      "status": "FAIL",
+      "scope": "environment",
+      "reason": "Swift compile sandbox denied module cache; retried with approved cache access."
+    },
+    {
+      "status": "FAIL",
+      "scope": "environment",
+      "reason": "Initial npm test denied localhost mock listener with EPERM; approved local-only rerun passed 174 tests."
+    }
+  ],
+  "sourceHashes": {
+    "scripts/agent-vm/VMProbe.swift": "5bc4b78f56474e7046034504ad3b7523a8c4662317963f95b8474f7d9157ca0d",
+    "scripts/agent-vm/assets.json": "6fbf6f5194b819557c11404e67d99d54244d5589ecc4e2c59441eac5459c0d70",
+    "scripts/agent-vm/guest-init.sh": "b7052902c007161da9935b7d0588d61d4d586b1a7239d2fb175b042a92b42912",
+    "scripts/agent-vm/manager_probe.py": "cff4757990150553437f531c1ade146b0a02ca1ad0b9d3cbb46452e03c1ca569",
+    "scripts/agent-vm/prepare.py": "7cef587a2a5ee32f4caa19c7a41227f58b21ab6ef876b144a983d3e4bb29cc1b",
+    "scripts/agent-vm/probe.entitlements": "915e2b39357ecf8d211dc7fac43195c9cdcf55a0a1ecdbf931c116a4eac421f3",
+    "scripts/agent-vm/probe.py": "55c6791b1586c82c03033c685b90f293ded0a25a1fcaaa566f611c46ff257957",
+    "scripts/agent-vm/test_manager.py": "acdbecc3b8970779c44490f9f2989f461768f415f60685c567add1a0fd158f83",
+    "scripts/agent-vm/test_workspace.py": "84030c05b2d4212f9e233ef887c7d9a42a864d7f899c892f1811af6ce19e1be4",
+    "scripts/agent-vm/workspace.py": "154df3613e4d375a53d1305fac23bd2ec979e2bac3d45d830e390bb40e1fda74"
+  },
+  "artifactHashes": {
+    "vmlinuz-virt": "849394914e6a93cc9bb17e901f445ce21fcd7e4528541d9496a74d6a6ccee319",
+    "initramfs-virt": "7b75e0475ce73eca283ab60eac28f2fe1a8b62e8ffd870c056baaafc9d6e9b1b",
+    "Image": "256d5fff4bb892edcb9218c1e6353e388bc3646e65f76c2bc9d958b635d1b00e",
+    "probe-initrd.gz": "65343b45dc53b0f4ce955aa52039ef48f9d6a6651d0ec2ac0ca64a85e877c647"
+  },
+  "guest": "Alpine v3.24 netboot / Linux 6.18.58-0-virt, custom diagnostic initramfs",
+  "configuredResources": {
+    "vCPUs": 2,
+    "memoryBytes": 536870912,
+    "actualTotalUsage": null
+  },
+  "decision": "Worker death is handled by independent VM owner; owner death remains unconfirmed. M0 ineligible; M1-M6 disabled."
+}

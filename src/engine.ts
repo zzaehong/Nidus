@@ -188,8 +188,10 @@ export class ConnectivityEngine {
           pressure: false });
       }
     }
-    return { difficulty: level, settings, candidates: rankCandidates(candidates, level, settings.policies[level]), budget: { ...budget.total, level: "disabled", remainingUSD: null },
-      excluded: candidates.filter(c => !rankCandidates([c], level, settings.policies[level]).length).map(c => ({ provider: c.model.provider, model: c.model.id, reason: c.quote.reason ?? (!c.health.available ? 'temporarily_unavailable' : 'task_or_grade_incompatible') })) };
+    const ranked = rankCandidates(candidates, level, settings.policies[level]);
+    const eligibleModels = new Set(ranked.map(candidate => candidate.model));
+    return { difficulty: level, settings, candidates: ranked, budget: { ...budget.total, level: "disabled", remainingUSD: null },
+      excluded: candidates.filter(c => !eligibleModels.has(c.model)).map(c => ({ provider: c.model.provider, model: c.model.id, reason: c.quote.reason ?? (!c.health.available ? 'temporarily_unavailable' : 'task_or_grade_incompatible') })) };
   }
   async autoChat(request: ChatRequest, task: unknown = 'normal', options: RequestOptions = {}) {
     if(options.consentToken)throw new NidusError('invalid_request','One-shot consent is only for manual requests.');

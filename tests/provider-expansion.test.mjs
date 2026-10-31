@@ -126,3 +126,29 @@ test('plan revocation at credential boundary blocks execution; concurrent free t
  f.credentials.get=async p=>{f.ledger.setProviderPlan('groq','unknown',false,false,'');return f.keys.get(p);};const count=f.calls.length;
  await assert.rejects(f.engine.autoChat(request(id)),e=>e.code==='invalid_request');assert.equal(f.calls.length,count);
 });
+
+test('catalog lookup rejects invalid model IDs before any network request', async () => {
+ const f=fixture();
+ for (const provider of expandedProviders) {
+  const credential=provider==='cloudflare'?cloudflareCredential(key,account):key;
+  for (const id of ['', ' ', 'a\nb', 'a\0b', 'a'.repeat(513), null]) {
+   await assert.rejects(f.registry[provider].getModel(credential,id),e=>e.code==='invalid_request');
+  }
+  assert.equal(f.calls.length,0);
+ }
+ for (const provider of expandedProviders) {
+  const credential=provider==='cloudflare'?cloudflareCredential(key,account):key;
+  const id=reviewedFreeModels[provider][0];
+  assert.equal((await f.registry[provider].getModel(credential,id)).id,id);
+  await assert.rejects(f.registry[provider].getModel(credential,'missing-model'),e=>e.code==='not_found');
+ }
+});
+
+test('Cloudflare malformed stored credentials fail safely before network access', async () => {
+ const f=fixture();
+ for (const credential of ['not-json', 'null', '{}', JSON.stringify({token:key,accountId:'../escape'}), JSON.stringify({token:'secret\nheader',accountId:account})]) {
+  await assert.rejects(f.registry.cloudflare.listModels(credential),e=>e.code==='invalid_request'&&!e.message.includes('secret'));
+ }
+ assert.equal(f.calls.length,0);
+ assert.deepEqual(JSON.parse(cloudflareCredential(` ${key} `,account)),{token:key,accountId:account});
+});

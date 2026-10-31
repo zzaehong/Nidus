@@ -1,4 +1,4 @@
-import { BaseAdapter, baseModel, array, object, count, string, response, usage, support } from './base.js';
+import { BaseAdapter, validateModelID, baseModel, array, object, count, string, response, usage, support } from './base.js';
 import { HttpClient, optionalObject } from '../http.js';
 import { NidusError } from '../errors.js';
 import { providerMetadata, reviewedFreeModels } from '../providers.js';
@@ -28,7 +28,7 @@ export class CompatibleAdapter extends BaseAdapter {
     return model;
   }
   async getModel(key:string, model:string, options:RequestOptions={}) {
-    this.validateModelID(model);
+    validateModelID(model);
     const match=(await this.listModels(key,options)).find(m=>m.id===model);
     if(!match) throw new NidusError('not_found','Model was not returned by the provider.');
     return match;

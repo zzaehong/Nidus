@@ -1,4 +1,5 @@
-import { BaseAdapter, baseModel, array, object, count, string, response, usage } from "./base.js";
+import { BaseAdapter, validateModelID, baseModel, array, object, count, string, response, usage } from "./base.js";
+import { completionBody } from "./compatible.js";
 import { optionalObject, HttpClient } from "../http.js";
 import { NidusError } from "../errors.js";
 import type { ChatRequest, RequestOptions } from "../types.js";
@@ -19,14 +20,14 @@ export class DeepSeekAdapter extends BaseAdapter {
     return model;
   }
   async getModel(key: string, model: string, options: RequestOptions = {}) {
-    this.validateModelID(model);
+    validateModelID(model);
     // DeepSeek documents no separate model-detail endpoint.
     const match = (await this.listModels(key, options)).find(m => m.id === model);
     if (!match) throw new NidusError("not_found", "Model was not returned by the provider.");
     return match;
   }
   protected chatBody(r: ChatRequest) {
-    return { path: "/chat/completions", body: { model: r.model, messages: [...(r.system ? [{ role: "system", content: r.system }] : []), ...r.messages], max_tokens: r.maxOutputTokens ?? 1024, stream: false } };
+    return { path: "/chat/completions", body: completionBody(r) };
   }
   protected normalizeChat(raw: Record<string, unknown>, model: string) {
     const choice = object(array(raw.choices)[0]); const message = object(choice.message);

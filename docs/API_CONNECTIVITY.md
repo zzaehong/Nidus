@@ -1,47 +1,54 @@
-# API Connectivity MVP 아키텍처
+# 아키텍처와 데이터 보관
 
-현재 구현은 CLI → ConnectivityEngine → ProviderAdapter → HttpClient의 순서로 요청합니다. 엔진은 자격증명 저장소, 모델 캐시, 가격 레지스트리를 조합합니다. Provider별 인증 헤더·경로·페이지네이션·모델 메타데이터·요청 형식·사용량 정규화는 각 Adapter의 책임입니다.
+현재 구현 경로는 **CLI / SwiftUI → ConnectivityEngine → ProviderAdapter → HttpClient**입니다. 추론은 공통 경로에서 실행 권한을 확인하고 SQLite에 요청을 기록한 뒤 전송·정산합니다. 모델 조회는 추론을 보내지 않습니다. Agent·Tool 실행은 아직 구현되지 않았으며 [별도 계획](Phase5_6_Agent_Runtime_Vault_Sandbox.md)에 따릅니다.
 
-macOS 대시보드는 SwiftUI → 요청별 Node 자식 프로세스(`dist/dashboard.js`) → 동일한 ConnectivityEngine 경로를 사용합니다. Swift에 Provider HTTP 구현이나 모델 목록을 복제하지 않습니다.
+## 모듈 경계
 
-| 경로 | 책임 |
-| --- | --- |
-| `src/types.ts` | 모델, 기능 상태, 채팅, 사용량, Adapter 공통 계약 |
-| `src/adapters/` | OpenAI Responses, Anthropic Messages, Gemini generateContent, DeepSeek Chat Completions |
-| `src/http.ts`, `src/errors.ts` | bounded HTTP 요청, 리다이렉트 거부, 응답 검증과 안전한 오류 |
-| `src/engine.ts` | 연결 검증, 키 등록, 모델 갱신, 캐시와 가격 결합 |
-| `src/storage.ts` | 비밀정보 없는 모델 목록의 원자적 파일 교체 |
-| `src/credentials.ts`, `native/keychain.swift` | macOS Keychain과 명시적 환경변수 모드 |
-| `src/pricing.ts` | 공식 출처를 가진 수동 가격 스냅샷과 정확한 ID 매칭 |
-| `src/cli.ts`, `src/prompt.ts`, `bin/nidus.mjs` | 명령 검증, 숨김 키 입력, JSON 출력 |
-| `src/dashboard.ts` | 단일 요청/응답 JSON envelope, 캐시 전용 읽기, 기존 엔진 호출 |
-| `Sources/NidusNativeApp/Runtime.swift` | Node/Runtime 탐색, 비동기 프로세스와 Pipe 수명, 오류/타임아웃 |
-| `Sources/NidusNativeApp/Models.swift` | Codable 응답, Provider별 독립 상태, 연결 결과의 모델 자동 반영 |
-| `Sources/NidusNativeApp/App.swift` | SwiftUI 서비스·모델·가격·응답 화면, AppKit 보안 키 입력 |
-| `scripts/build-app.mjs`, `native/Info.plist` | 현재 머신용 Node 포함 로컬 앱 번들 |
-| `src/classification.ts`, `src/health.ts` | 모델 대표 용도/분류 근거와 텍스트 동작 검사 |
-| `Sources/NidusNativeApp/HealthChecks*.swift` | 순차 일괄 검사, 과금 동의, 진행/중지/오류 격리 UI |
-| `Sources/NidusNativeApp/HealthResultStore.swift` | 버전이 있는 로컬 검사 기록, 원자적 저장, 재실행 복원과 미검사 선택 |
-| `Sources/NidusNativeApp/ChatRooms.swift` | 영구 채팅방, Provider별 모델 선택, Provider를 넘나드는 대화 문맥 |
+| 모듈 | 책임 |
+|---|---|
+| `src/engine.ts` | 연결, 모델·가격 결합, 공통 실행, 계정 권한, 라우팅 |
+| `src/adapters/`, `src/http.ts`, `src/errors.ts` | 인증·페이지네이션·요청 변환·토큰 정규화, 타임아웃·안전한 오류 |
+| `src/credentials.ts`, `native/keychain.swift`, `src/storage.ts` | Keychain/환경 자격 증명, 모델 캐시 |
+| `src/ledger.ts`, `src/pricing.ts`, `src/money.ts`, `src/provider-usage.ts` | SQLite 기록·정산·권한, 가격 스냅샷·정수 금액, 계정 조회 |
+| `src/router.ts`, `src/routing-context.ts` | Tier 규칙 기반 선택, 별도의 읽기 전용 Context Builder |
+| `src/classification.ts`, `src/nvidia-classification.ts`, `src/health.ts` | 용도 분류와 텍스트 probe |
+| `src/cli.ts`, `src/dashboard.ts` | CLI 및 SwiftUI용 요청 인터페이스 |
+| `Sources/NidusNativeApp/` | UI, 단발 Node 전달 계층, 채팅방·모델 검사 기록 |
 
-모델 분류·일괄 검사 세부 계약은 [MODEL_HEALTH.md](MODEL_HEALTH.md)를 참고합니다. 이 기능은 이미지/영상/라이브 전용 Adapter를 구현하지 않으며, 미지원 유형을 실패로 오인하지 않도록 구분합니다.
+Provider별 요청은 OpenAI `/responses`, Anthropic `/messages`, Gemini `:generateContent`, 나머지 OpenAI-compatible `/chat/completions`를 사용합니다. Cloudflare는 Account ID 기반 Models Search 및 `/ai/v1/chat/completions`를 사용하며 비텍스트 native run을 범용 변환하지 않습니다. 모델 ID는 공식 조회 값을 보존하며 가격·분류 표가 모델 목록을 생성하지 않습니다. `supported/unsupported/unknown` 기능 상태는 실제 계정 권한과 별개입니다.
 
-`connect`는 새 키로 전체 모델 조회가 끝나기 전까지 저장소를 변경하지 않습니다. 목록은 메모리에 수집한 뒤 한 번에 교체하므로 중간 페이지 실패 시 일부 모델만 등록되지 않습니다. 키 교체 뒤 캐시 저장이 실패하면 기존 키를 복원합니다. 프로세스 강제 종료를 아우르는 두 저장소의 분산 트랜잭션은 아니므로 이 경우에는 다시 connect/refresh해야 합니다. 여러 CLI의 동시 키 교체를 직렬화하는 잠금은 MVP에 없습니다.
+모델 전체 페이지를 검증한 뒤 캐시를 원자적으로 교체합니다. 연결 시 키 저장 후 캐시 쓰기가 실패하면 키를 복구하지만, Keychain과 파일 시스템 전체의 분산 트랜잭션이나 동시 키 교체 잠금은 없습니다. 강제 중단 후 재연결이 필요할 수 있습니다.
 
-가격 레코드는 조회된 모델에만 매칭됩니다. 모델 ID가 가격 레지스트리에 없더라도 등록·채팅은 가능하며 가격만 미확인입니다. 기능 확인과 비용 확인은 독립적입니다. `unknown` 기능은 거부하지 않지만, API가 명시한 `unsupported` 기능은 거부합니다. Gemini처럼 메서드 지원만 확인되는 경우 일반 채팅 지원으로 단정하지 않습니다.
+## 실행 권한과 전달 계층
 
-라이브러리는 `dist/index.js`와 생성된 타입 선언을 통해 사용할 수 있습니다. `ProviderAdapter`의 `listModels`, `getModel`, `chat`을 구현한 새 Adapter를 Engine에 주입할 수 있습니다. 테스트는 HttpClient 또는 Adapter·CredentialStore·ModelStore를 주입하여 외부 계정 없이 전체 흐름을 검증합니다. CLI에서는 임의 endpoint 설정을 노출하지 않습니다.
+`ConnectivityEngine.execute()` 직전 `BEGIN IMMEDIATE`에서 계정·키 fingerprint·승인·모델 무료 지원·Tier·revision을 재검사하고 요청 기록 및 일회용 승인 소비를 처리합니다. 철회가 먼저 확정되면 전송하지 않지만 이미 승인·전송된 요청을 소급 취소하지 않습니다. 지출 한도나 비용 예약은 없습니다.
 
-보안 경계: 키는 Keychain 또는 사용자가 주입한 환경에서 읽어 인증 헤더로만 전달합니다. macOS helper의 프로세스 인자는 비어 있으며 stdin/stdout Pipe로만 통신합니다. 오류 원문은 외부로 내보내지 않습니다. 모델 캐시는 key를 저장하지 않고, 일반적인 프롬프트/응답 로그도 만들지 않습니다. 모델 출력은 CLI stdout에 표시하므로 사용자가 리다이렉트한 경우의 파일 관리는 사용자 책임입니다.
+Dashboard는 stdin EOF 이후 JSON 요청을 받고 stdout에 `{result}` 또는 `{error}` 하나를 출력합니다. 요청마다 Node 자식 프로세스를 생성하며 키를 명령줄에 넣지 않습니다. stderr와 Provider 원문 오류는 앱 로그로 전달하지 않습니다. 입력 1 MiB, Swift 응답 32 MiB, Node 240초, Swift watchdog 245초 제한입니다. HTTP 기본 제한은 모델 조회 30초·채팅 120초이며 본문 읽기·전체 페이지 조회에도 적용합니다. 종료 시 TERM→1초 후 KILL을 사용합니다. **이 처리는 임의 Shell의 분리된 자식까지 종료한다는 보장이 아닙니다.**
 
-현재 CLI는 단일 비스트리밍 텍스트 요청을 실행합니다. 멀티턴 메시지와 시스템 프롬프트는 라이브러리 계약에 제공됩니다. Tool Calling 기능 표시는 모델 메타데이터일 뿐 도구 실행을 의미하지 않습니다. 향후 기능을 위한 Agent/Router/Workflow 골격은 추가하지 않았습니다.
+수동 API 요청은 자동 재시도하지 않습니다. 자동 라우팅은 명시적 거절에만 Fallback합니다. HTTP 리다이렉트는 인증정보 전달을 막기 위해 거부합니다. CLI 성공은 JSON stdout, 오류는 안전한 JSON stderr이며 취소 종료 코드는 130입니다.
 
-## macOS 전달 계층과 상태
+## 저장 위치와 개인정보
 
-각 작업은 하나의 자식 프로세스를 사용하며 stdin EOF 이후 `{method, provider, ...}`를 처리하고 stdout에 `{result}` 또는 `{error}`를 한 번 출력한 뒤 종료합니다. 이전 폐기 구현의 상주 JSON-RPC 세션을 재도입하지 않았습니다. 키는 stdin으로만 전달하고 명령줄에 포함하지 않습니다. stderr는 JSON 파서에 합치지 않으며 앱 로그로도 전달하지 않습니다. 이 선택은 디버깅 출력을 제한하는 대신 비밀정보의 의도치 않은 로그 기록을 줄입니다.
+| 저장소 | 내용 |
+|---|---|
+| Keychain service `com.nidus.connectivity` | Provider별 키. Cloudflare 토큰과 Account ID. 동기화하지 않는 기기 전용 항목 |
+| `~/.local/share/nidus/<provider>.json` | 모델 목록·확인 시각. 키·대화 없음 |
+| `~/.local/share/nidus/usage.sqlite` | 요청·토큰·가격·비용·계정 권한·Tier·전환·Soft Budget |
+| `~/Library/Application Support/Nidus/model-health.json` | 모델별 최신 검사 결과. 키·프롬프트·생성 본문 없음 |
+| `~/Library/Application Support/Nidus/chat-rooms.json` | 채팅방과 메시지 본문. Usage Ledger와 별개 |
 
-입력 1 MiB, 앱 측 응답 32 MiB 제한이 있습니다. 기존 HTTP 타임아웃(모델 조회 30초, 채팅 120초) 외에 Node 작업 240초, Swift watchdog 245초를 적용합니다. 종료·비정상 응답·비정상 exit는 오류로 반환합니다. 시간 초과 시 TERM 후 1초 내 종료하지 않으면 KILL하고 Pipe를 정리합니다. 앱 종료 시 실행 중인 작업을 종료합니다. 수동 요청 취소 버튼은 제공하지 않습니다.
+모델 캐시/DB 생성 권한은 파일 0600·디렉터리 0700입니다. 키는 요청 중 메모리에 존재하며 JavaScript 문자열의 완전한 소거를 보장하지 않습니다. helper가 없으면 평문 저장으로 대체하지 않습니다. CLI 출력 리다이렉트나 사용자 백업의 보관 책임은 별도입니다.
 
-시작 시 `ping` 성공 후에만 엔진 준비 상태를 표시합니다. 이후 `cached`로 네 Provider의 로컬 모델 목록을 읽되 API/Keychain을 건드리지 않습니다. `connect`의 Models API 결과를 UI에 직접 반영하므로 별도 수동 새로고침이 필요하지 않습니다. 공급자별 busy 상태로 같은 앱 내 중복 작업을 막고, 응답은 요청 당시 Provider에만 기록합니다. 다른 CLI/앱 프로세스와의 동시 키 교체 잠금은 없으므로 계정 교체는 한 곳에서 수행해야 합니다.
+SQLite는 schema 8, WAL, synchronous=FULL, busy_timeout 5초를 사용합니다. schema 7의 계정 권한·일회용 승인·권한 이벤트와 schema 8의 `soft_budgets`를 추가하면서 이전 요청·예산·예약·Tier·전환 기록을 보존했습니다. 과거 예약과 호환용 예산 필드는 실행 정책이 아닙니다. 신규 요청은 `reserved=0`, `bound=NULL`, `settlement=tracking`으로 기록합니다.
 
-가격 상세와 원본 데이터에는 기존 출처·확인시각·조건을 유지합니다. 응답 테스트는 단일 요청이며 전송마다 대화 이력을 누적하지 않습니다. 사용량 원본은 엔진 응답에 보존되고 화면에는 입력/출력/합계만 표시합니다. 키·프롬프트·응답을 앱 설정에 저장하지 않습니다. `.app`은 로컬 개발 번들이며 코드 서명, 공증, 업데이트와 배포 보안은 별도 후속 작업입니다.
+## 가격·사용량·정산
+
+금액은 정수 nano-USD(1 USD = 10⁹), JSON은 소수 문자열입니다. 가격은 정확한 Provider+Model ID의 공식 자료 수동 스냅샷이며 `checkedAt`과 출처·조건을 보존합니다. 모델 새로고침은 가격 갱신이 아닙니다. 미검토 가격은 unknown이며 실제 무료 할당량을 추정하지 않습니다.
+
+입력·출력·캐시 가격을 구분하고 출력에 포함된 추론 토큰을 중복 합산하지 않습니다. Anthropic 입력은 uncached+cache read+cache write, Gemini 출력은 후보+thinking 토큰입니다. 복잡한 조건을 확정 단일 가격으로 표시하지 않습니다. 캐시 쓰기 TTL을 모르면 비용을 미확인으로 유지하고 DeepSeek 시간 조건은 보수적 추정과 원래 조건을 함께 보존합니다.
+
+요청별 가격 스냅샷이 있어 현재 가격 변경으로 과거 비용을 재계산하지 않습니다. 실패·취소·타임아웃·강제 종료 후 사용량을 모르면 비용은 null이며 자동으로 0원 처리하거나 재시도하지 않습니다. 응답 누락·pending 기록을 자동 정산하지 않습니다. DB에는 키·프롬프트·응답 본문·임의 Provider 오류를 저장하지 않습니다.
+
+OpenAI/Anthropic 조직 사용량·비용 조회는 별도 Admin 환경변수만 사용합니다. DeepSeek는 공식 USD balance를 조회하며 임의 환산하지 않습니다. Gemini 및 조회를 연결하지 않은 Provider는 잔량을 생성하지 않습니다. 조직 집계는 요청별 비용으로 배분하지 않습니다. `UsageLedger.reconcile`은 신뢰 가능한 요청별 청구 증거의 확장 지점이며 현재 조직 조회가 이를 자동 호출하지 않습니다.
+
+세부 비용 집계·Soft Budget 계약은 [Routing Context](Phase4_4_Routing_Context.md), 정책·명령은 [사용 가이드](USER_GUIDE.md), 과거 변경·테스트는 [검증 이력](VALIDATION.md)에 모았습니다. 가격·모델별 공식 출처는 `src/pricing.ts`, `src/providers.ts`, `src/nvidia-classification.ts`와 UI의 출처 필드가 기준입니다. 문서 정리 과정에서 공식 자료를 새로 검증한 것은 아닙니다.
