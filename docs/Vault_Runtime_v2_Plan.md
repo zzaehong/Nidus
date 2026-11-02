@@ -120,3 +120,7 @@ M4 전 결정: guest image/toolchain 배포, session 격리와 cleanup 근거, �
 ## M1b 구현 후속 — 2026-11-03
 
 [Environment 및 Admission 구현·검증](Vault_M1b_Environment_Admission.md)을 추가했다. M1a Descriptor/Registry를 유지하고 별도 Host 실행 저장소, Mock Backend, Instance/generation, Session/lease, 단일 소유자 FIFO와 프로세스 간 배타 진입을 구현했다. 전역 VM/Execution 제한은 각각 1이며 다른 프로세스의 요청은 busy로 거절한다. 다중 프로세스 FIFO·자동 복구는 미지원이다. M1b Mock 기반 완료는 실제 VM 운영 또는 M4 안전성 검증 완료를 뜻하지 않는다. 기존 M0 실패·미검증 기록은 유지한다.
+
+## M2/M3 제한 통합 구현 — 2026-11-03
+
+[Tool/Agent 구현·검증 보고](Vault_M2_M3_Tool_Agent_Runtime.md)를 추가했다. 이번 요청에 따라 optional OpenAI Tool Calling과 기존 Ledger 재사용을 허용했으며, 이전 “별도 승인 전 Provider 확장 보류”는 해당 범위에서 해소되었다. 제품 기본은 Host 읽기·검색과 단일 Agent 라이브러리 API다. 격리 테스트의 Mock 승인 신규 생성만 검증했고 기존 파일 수정·삭제, 실제 사용자 승인 UI 및 다른 Provider Tool Calling은 비활성/미구현으로 남긴다. M2/M3 전체 파일 변경 목표 또는 M4 운영 완료를 선언하지 않는다. M0 evidence와 M1a/M1b 구현은 유지한다.
