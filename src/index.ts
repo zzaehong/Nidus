@@ -19,3 +19,6 @@ export type { Difficulty, Grade, Tier, Candidate } from './router.js';
 export * from './routing-context.js';
 export * from './vault/types.js';
 export * from './vault/registry.js';
+export * from './vault/execution-types.js';
+export * from './vault/mock-backend.js';
+export * from './vault/admission.js';
