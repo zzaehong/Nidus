@@ -14,7 +14,7 @@ await copyFile(join(root, 'native', 'Info.plist'), join(contents, 'Info.plist'))
 await copyFile(join(bin, 'NidusNativeApp'), join(contents, 'MacOS', 'NidusNativeApp'));
 await copyFile(process.execPath, join(resources, 'bin', 'node'));
 for (const entry of await readdir(join(root, 'dist'), { withFileTypes: true })) {
-  if (entry.name === 'adapters') await cp(join(root, 'dist', entry.name), join(resources, 'dist', entry.name), { recursive: true });
-  else if (entry.name.endsWith('.js') || entry.name === 'nidus-keychain') await copyFile(join(root, 'dist', entry.name), join(resources, 'dist', entry.name));
+  if (['adapters', 'vault', 'tools', 'agent'].includes(entry.name) && entry.isDirectory()) await cp(join(root, 'dist', entry.name), join(resources, 'dist', entry.name), { recursive: true });
+  else if (entry.name.endsWith('.js') || ['nidus-keychain', 'nidus-vault-files'].includes(entry.name)) await copyFile(join(root, 'dist', entry.name), join(resources, 'dist', entry.name));
 }
 console.log('Built dist/Nidus.app (local unsigned development bundle; Node included).');

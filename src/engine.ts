@@ -1,3 +1,4 @@
+import { toolCallingSupport, validateToolRequest, type ToolModelRequest } from './agent/model.js';
 import { buildContext, taskContext, softBudgets, type TaskContext } from './routing-context.js';
 import { providerMetadata } from './providers.js';
 import { cloudflareCredential } from './adapters/cloudflare.js';
@@ -262,6 +263,32 @@ export class ConnectivityEngine {
     ledger.recordHealth(provider, request.model, "passed");
     const cost = reservation.billingMode === 'free' ? (result.usage && Number.isSafeInteger(result.usage.inputTokens) && Number.isSafeInteger(result.usage.outputTokens) ? 0n : null) : calculatedCost(reservation.price, result.usage);
     return { ...result, billingMode: reservation.billingMode, estimatedUSD: cost === null ? null : dollars(cost), requestId: reservation.id, budget: { ...ledger.snapshot().total, level: "disabled", remainingUSD: null } };
+  }
+
+  /** Uses the existing ranking/account policy; tool support is an additional filter. No cross-provider continuation fallback. */
+  async toolRoutePlan(request: ChatRequest, task: unknown = 'normal') {
+    const plan = await this.routePlan(request, task);
+    return { ...plan, candidates: plan.candidates.filter(c => c.model.capabilities.tools !== 'unsupported' && toolCallingSupport(c.model.provider, c.model.id) && this.registry[c.model.provider].toolChat) };
+  }
+  async toolChat(provider: ProviderId, request: ToolModelRequest, options: RequestOptions = {}) {
+    request = structuredClone(request);
+    validateToolRequest(request);
+    const known = (await this.store.load(provider))?.models.find(m => m.id === request.model);
+    const adapter = this.registry[provider];
+    if (!known || known.capabilities.tools === 'unsupported' || !toolCallingSupport(provider, request.model) || !adapter.toolChat)
+      throw new NidusError('unsupported', 'This discovered model has no reviewed tool-calling implementation.');
+    if (options.signal?.aborted) throw new NidusError('cancelled', 'Cancelled before dispatch.');
+    const key = await this.key(provider), ledger = this.usageLedger();
+    const accountingRequest: ChatRequest = { model: request.model, messages: [{role:'user',content:JSON.stringify(request)}], maxOutputTokens:request.maxOutputTokens };
+    const reservation = ledger.recordRequest(provider, accountingRequest, 'chat', undefined, createHash('sha256').update(key).digest('hex'), options.consentToken);
+    let headers: Record<string,string> = {}, turn;
+    try { turn = await adapter.toolChat(key, request, {...options,onHeaders:value=>{headers=value;}}); }
+    catch (error) {
+      ledger.settle(reservation, error instanceof NidusError && error.code === 'cancelled' ? 'cancelled' : 'failed', error instanceof NidusError ? error.usage : null, headers);
+      throw error;
+    }
+    ledger.settle(reservation, 'succeeded', turn.usage, headers);
+    return { ...turn, requestId:reservation.id };
   }
 
   async disconnect(provider: ProviderId) { await this.credentials.delete(provider); await this.store.remove(provider); this.usageLedger().invalidateFreeUse(provider); this.usageLedger().invalidateAccount(provider); return { provider, disconnected: true }; }
