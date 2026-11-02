@@ -11,7 +11,7 @@
   },
   "scripts": {
     "build:app": "npm run build && npm run build:keychain && node scripts/build-app.mjs",
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node scripts/build-vault-helper.mjs",
     "build:keychain": "swiftc native/keychain.swift -o dist/nidus-keychain",
     "test": "npm run build && node --test tests/*.test.mjs",
     "test:live": "npm run build && node --test tests/live/*.test.mjs",
