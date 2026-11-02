@@ -112,3 +112,7 @@ M4 전 결정: guest image/toolchain 배포, session 격리와 cleanup 근거, �
 | VM/M0 진단·실제 Provider API·Keychain 통합·앱 packaging·수동 UI | NOT RUN: 문서 전용 작업이며 기존 evidence 재생성/외부 호출을 하지 않음 |
 
 위 테스트 수는 VM 이전 기반의 회귀 결과다. 기존 M0 feature의 174 Node/46 Swift와 범위가 다르며 기존 검증 기록을 대체하지 않는다. 실행 로그는 `/private/tmp/nidus-v2-{node,swift}-{test,retest}.log`에 두고 커밋하지 않는다. develop 병합은 요청대로 수행하지 않으며 승인 대기 절차를 시작하지 않는다. main과 원격 변경, push/PR 없음.
+
+## M1a 구현 후속 — 2026-11-02
+
+이번 M1a 요청에 따라 [등록·식별 기반 구현 및 검증](Vault_M1a_Registration.md)을 추가했다. 이 문서 앞부분의 “이번에는 구현하지 않는다”는 브랜치 준비 작업 당시 기록이다. 현재 구현은 `src/vault/`와 전용 테스트이며, Host Registry는 기존 저장 정책에 맞춰 `~/.local/share/nidus/vaults/registry.json`을 사용한다. Provider/Router/Usage Ledger, M0 evidence와 VM 구현은 변경하지 않았다. M1 전체는 미완료이며 M1b의 Environment/Mock Instance/Session/실행 admission은 별도다.
