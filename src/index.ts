@@ -17,3 +17,5 @@ export { modelProfile, rankCandidates, difficulty } from './router.js';
 export type { Difficulty, Grade, Tier, Candidate } from './router.js';
 
 export * from './routing-context.js';
+export * from './vault/types.js';
+export * from './vault/registry.js';
