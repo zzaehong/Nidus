@@ -116,3 +116,7 @@ M4 전 결정: guest image/toolchain 배포, session 격리와 cleanup 근거, �
 ## M1a 구현 후속 — 2026-11-02
 
 이번 M1a 요청에 따라 [등록·식별 기반 구현 및 검증](Vault_M1a_Registration.md)을 추가했다. 이 문서 앞부분의 “이번에는 구현하지 않는다”는 브랜치 준비 작업 당시 기록이다. 현재 구현은 `src/vault/`와 전용 테스트이며, Host Registry는 기존 저장 정책에 맞춰 `~/.local/share/nidus/vaults/registry.json`을 사용한다. Provider/Router/Usage Ledger, M0 evidence와 VM 구현은 변경하지 않았다. M1 전체는 미완료이며 M1b의 Environment/Mock Instance/Session/실행 admission은 별도다.
+
+## M1b 구현 후속 — 2026-11-03
+
+[Environment 및 Admission 구현·검증](Vault_M1b_Environment_Admission.md)을 추가했다. M1a Descriptor/Registry를 유지하고 별도 Host 실행 저장소, Mock Backend, Instance/generation, Session/lease, 단일 소유자 FIFO와 프로세스 간 배타 진입을 구현했다. 전역 VM/Execution 제한은 각각 1이며 다른 프로세스의 요청은 busy로 거절한다. 다중 프로세스 FIFO·자동 복구는 미지원이다. M1b Mock 기반 완료는 실제 VM 운영 또는 M4 안전성 검증 완료를 뜻하지 않는다. 기존 M0 실패·미검증 기록은 유지한다.
