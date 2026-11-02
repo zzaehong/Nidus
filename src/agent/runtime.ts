@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { NidusError } from '../errors.js';
 import { ConnectivityEngine } from '../engine.js';
 import type { ProviderId } from '../types.js';
 import { ToolDispatcher } from '../tools/dispatcher.js';
@@ -57,10 +58,10 @@ export class SingleAgentRuntime {
       }
       return fail('model_limit');
     }catch(e){
-      const code=e instanceof ToolError?e.code:signal.aborted?'cancelled':'provider_error';
+      const code=signal.aborted?'cancelled':e instanceof ToolError?e.code:e instanceof NidusError?`provider_${e.code}`:'provider_error';
       task.code=deadline.signal.aborted?'execution_limit':code;
       task.status=deadline.signal.aborted||['model_limit','tool_limit','result_limit'].includes(code)?'LIMIT_REACHED':code==='cancelled'?'CANCELLED':'FAILED';
       const last=task.steps.at(-1);if(last && last.state!=='COMPLETED')last.state='FAILED';return task;
-    }finally{clearTimeout(timer);deadline.abort();this.running=false;}
+    }finally{clearTimeout(timer);deadline.abort();this.tools.finishExecution(task.executionId);this.running=false;}
   }
 }

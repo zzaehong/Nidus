@@ -4,7 +4,10 @@ import { HostFileGateway } from './files.js';
 import { PermissionGateway } from './permission.js';
 import { ToolRegistry, matches } from './registry.js';
 export class ToolDispatcher {
-  private used=new Set<string>();
+  private used=new Map<string,Set<string>>();
+  /** Host-owned task scopes. Completed scopes must never be resumed. */
+  finishExecution(executionId:string){this.used.delete(executionId);this.readReserved.delete(executionId);}
+  get retainedExecutions(){return this.used.size;}
   private readReserved=new Map<string,number>();
   readonly mode:'product'|'test';
   constructor(readonly registry:ToolRegistry,private readonly files:HostFileGateway,private readonly permissions=new PermissionGateway(),options:{mode?:'product'|'test'}={}){this.mode=options.mode??'product';}
@@ -13,8 +16,9 @@ export class ToolDispatcher {
   async invoke(ctx:InvocationContext,call:ToolCall):Promise<ToolResult>{
     let timer:ReturnType<typeof setTimeout>|undefined;
     try{
-      const d=this.registry.validate(call.name,call.arguments);const key=`${ctx.executionId}:${call.id}`;
-      if(this.used.has(key))fail('duplicate_invocation');this.used.add(key);
+      const d=this.registry.validate(call.name,call.arguments);let calls=this.used.get(ctx.executionId);
+      if(!calls){if(this.used.size>=128)fail('execution_scope_limit');calls=new Set();this.used.set(ctx.executionId,calls);}
+      if(calls.has(call.id))fail('duplicate_invocation');if(calls.size>=100)fail('tool_limit');calls.add(call.id);
       if(ctx.signal.aborted)fail('cancelled');if(!this.available().some(t=>t.name===d.name))fail('tool_disabled');
       const policy=this.permissions.policy(d);if(policy==='DENY')fail('permission_denied');if(!d.sideEffect && policy==='REQUIRE_APPROVAL')fail('read_approval_unsupported');
       const abort=new AbortController();timer=setTimeout(()=>abort.abort(),d.timeoutMs);const work={...ctx,signal:AbortSignal.any([ctx.signal,abort.signal])};

@@ -26,7 +26,7 @@ func components(_ path: String, directory: Bool = false) throws -> [String] {
     let parts = path.components(separatedBy:"/")
     for p in parts {
         let lower=p.lowercased()
-        if p.isEmpty || p == "." || p == ".." || p.hasPrefix(".") || lower.contains("secret") || lower.contains("credential") || lower.contains("config") || lower.hasPrefix("id_rsa") || lower.hasPrefix("id_ed25519") || ["node_modules","keychain","package.json","package-lock.json"].contains(lower) { try deny("protected_path") }
+        if p.isEmpty || p == "." || p == ".." || p.hasPrefix(".") || lower.contains("secret") || lower.contains("credential") || lower.contains("config") || lower.contains("token") || lower.contains("password") || lower.contains("auth") || lower.hasPrefix("env.") || lower.hasPrefix("id_rsa") || lower.hasPrefix("id_ed25519") || ["node_modules","keychain","package.json","package-lock.json","settings.json","settings.yaml","settings.yml","settings.toml","netrc","npmrc","pip.conf"].contains(lower) { try deny("protected_path") }
     }
     return parts
 }
@@ -37,7 +37,7 @@ func directoryFD(_ root: Int32, _ parts: [String]) throws -> Int32 {
 }
 func allowedText(_ path: String) throws {
     let ext=(path as NSString).pathExtension.lowercased()
-    if !["txt","md","markdown","csv","tsv","log"].contains(ext) { try deny("unsupported_file_type") }
+    if !["txt","md","markdown","csv","tsv","log","py","ts","tsx","js","jsx","mjs","cjs","swift","json","html","css","yaml","yml","toml","c","h","cpp","hpp","rs","go","java","xml","sql"].contains(ext) { try deny("unsupported_file_type") }
 }
 func readText(_ root: Int32, _ path: String) throws -> [String:Any] {
     let parts=try components(path);try allowedText(path)
