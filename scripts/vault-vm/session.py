@@ -46,7 +46,10 @@ while p.poll() is None:
  if pathlib.Path('/run/'+ID+'.cancel').exists():reason='cancelled';(CG/'cgroup.kill').write_text('1')
  if time.monotonic()-started>=SECONDS:reason='timeout';(CG/'cgroup.kill').write_text('1')
  time.sleep(.02)
-code=p.wait();(CG/'cgroup.kill').write_text('1')
+code=p.wait()
+# Control-channel cancellation may kill the child before the polling loop observes it.
+if pathlib.Path('/run/'+ID+'.cancel').exists():reason='cancelled'
+(CG/'cgroup.kill').write_text('1')
 clean=False
 for _ in range(150):
  if 'populated 0' in (CG/'cgroup.events').read_text():clean=True;break

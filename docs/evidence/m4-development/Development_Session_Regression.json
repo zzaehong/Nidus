@@ -1,0 +1,290 @@
+{
+  "scope": "Real Linux ARM64 development VM, no network devices or Host mounts",
+  "cases": [
+    {
+      "name": "versions",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 28651520,
+      "stdout": "Python 3.14.10\npip 26.1.2 from /usr/lib/python3.14/site-packages/pip (python 3.14)\nv24.22.1\n11.12.1\ngit version 2.54.0\nGNU bash, version 5.3.9(1)-release (aarch64-alpine-linux-musl)\ncurl 8.23.0 (aarch64-alpine-linux-musl) libcurl/8.23.0 OpenSSL/3.5.9 zlib/1.3.2 brotli/1.2.1 zstd/1.5.7 c-ares/1.34.9 libidn2/2.3.8 libpsl/0.21.5 nghttp2/1.70.0\ngcc (Alpine 15.2.0) 15.2.0\n",
+      "stderr": ""
+    },
+    {
+      "name": "python-json",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 7565312,
+      "stdout": "python-ok\n",
+      "stderr": ""
+    },
+    {
+      "name": "node-json",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 11169792,
+      "stdout": "node-ok\n",
+      "stderr": ""
+    },
+    {
+      "name": "python-test",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 15253504,
+      "stdout": "",
+      "stderr": "test_sum (test_example.Test.test_sum) ... ok\n\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nOK\n"
+    },
+    {
+      "name": "node-test",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 27234304,
+      "stdout": "\u2714 math (4.50825ms)\n\u2139 tests 1\n\u2139 suites 0\n\u2139 pass 1\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 211.352\n",
+      "stderr": ""
+    },
+    {
+      "name": "git-build",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 8019968,
+      "stdout": "build-ok\n",
+      "stderr": ""
+    },
+    {
+      "name": "cleanup",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 7647232,
+      "stdout": "background\n",
+      "stderr": ""
+    },
+    {
+      "name": "isolation",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 7565312,
+      "stdout": "uid=1000(nidus) gid=1000(nidus)\nclean\n",
+      "stderr": ""
+    },
+    {
+      "name": "double-fork",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 7643136,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "boundaries",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 7520256,
+      "stdout": "isolated\n",
+      "stderr": "unshare: unshare(0x10000000): No space left on device\ncurl: (7) Failed to connect to 169.254.169.254:80 after 0 ms: Could not connect to server\ncurl: (7) Failed to connect to 127.0.0.1:80 after 0 ms: Could not connect to server\n"
+    },
+    {
+      "name": "cancel",
+      "exitCode": 137,
+      "cleanupConfirmed": true,
+      "reason": "cancelled",
+      "memoryPeakBytes": 7528448,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "timeout",
+      "exitCode": 137,
+      "cleanupConfirmed": true,
+      "reason": "timeout",
+      "memoryPeakBytes": 7630848,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "workspace",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 7647232,
+      "stdout": "snapshot-ok\n",
+      "stderr": ""
+    },
+    {
+      "name": "chromium-offline-dom",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 186691584,
+      "stdout": "<html><head><title>Nidus synthetic</title></head><body><h1>DOM verified</h1></body></html>\n",
+      "stderr": "[13:29:1103/131055.086776:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory\n[13:29:1103/131055.086820:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are \"tcp\" and on UNIX \"unix\")\nFontconfig error: Cannot load default config file: No such file: (null)\n[13:29:1103/131055.127172:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory\n[13:29:1103/131055.127215:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory\n[13:29:1103/131055.127237:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory\n[13:29:1103/131055.127253:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are \"tcp\" and on UNIX \"unix\")\n[13:29:1103/131055.127267:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are \"tcp\" and on UNIX \"unix\")\n[13:29:1103/131055.197606:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are \"tcp\" and on UNIX \"unix\")\n[13:29:1103/131055.297029:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are \"tcp\" and on UNIX \"unix\")\n\n(process:13): GLib-GIO-CRITICAL **: 13:10:55.334: g_settings_schema_source_lookup: assertion 'source != NULL' failed\n[13:13:1103/131055.628174:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: \n[13:29:1103/131055.628347:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are \"tcp\" and on UNIX \"unix\")\n[13:13:1103/131055.629143:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: \n[13:29:1103/131055.629234:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are \"tcp\" and on UNIX \"unix\")\n[13:13:1103/131055.629549:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: \n[13:13:1103/131055.636210:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: \n[13:29:1103/131055.637477:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are \"tcp\" and on UNIX \"unix\")\n[13:13:1103/131055.797769:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: \n[13:13:1103/131055.802240:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: \n[13:13:1103/131055.803297:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: \n[13:29:1103/131055.803382:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory\n[13:29:1103/131055.803406:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory\n[13:29:1103/131055.803419:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are \"tcp\" and on UNIX \"unix\")\n[13:13:1103/131055.928021:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.Properties.GetAll: object_path= /org/freedesktop/UPower/devices/DisplayDevice: unknown error type: \n[13:13:1103/131055.928058:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: \n[13:29:1103/131055.928116:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are \"tcp\" and on UNIX \"unix\")\n[13:13:1103/131055.986656:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: \n[13:29:1103/131055.986743:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are \"tcp\" and on UNIX \"unix\")\n[13:13:1103/131056.018236:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: \n"
+    }
+  ],
+  "events": [
+    {
+      "event": "starting",
+      "frameworkState": 0,
+      "time": "2026-11-03T13:10:33Z"
+    },
+    {
+      "event": "running",
+      "frameworkState": 1,
+      "time": "2026-11-03T13:10:33Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_DEVELOPMENT ready",
+      "time": "2026-11-03T13:10:41Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_READY cgroup2",
+      "time": "2026-11-03T13:10:41Z"
+    },
+    {
+      "event": "ready",
+      "frameworkState": 1,
+      "time": "2026-11-03T13:10:41Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 7f7cac0f-408e-406b-ab57-1449b5b92099 0 1 completed 28651520 UHl0aG9uIDMuMTQuMTAKcGlwIDI2LjEuMiBmcm9tIC91c3IvbGliL3B5dGhvbjMuMTQvc2l0ZS1wYWNrYWdlcy9waXAgKHB5dGhvbiAzLjE0KQp2MjQuMjIuMQoxMS4xMi4xCmdpdCB2ZXJzaW9uIDIuNTQuMApHTlUgYmFzaCwgdmVyc2lvbiA1LjMuOSgxKS1yZWxlYXNlIChhYXJjaDY0LWFscGluZS1saW51eC1tdXNsKQpjdXJsIDguMjMuMCAoYWFyY2g2NC1hbHBpbmUtbGludXgtbXVzbCkgbGliY3VybC84LjIzLjAgT3BlblNTTC8zLjUuOSB6bGliLzEuMy4yIGJyb3RsaS8xLjIuMSB6c3RkLzEuNS43IGMtYXJlcy8xLjM0LjkgbGliaWRuMi8yLjMuOCBsaWJwc2wvMC4yMS41IG5naHR0cDIvMS43MC4wCmdjYyAoQWxwaW5lIDE1LjIuMCkgMTUuMi4wCg== -",
+      "time": "2026-11-03T13:10:51Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 0dca01ed-a81f-4cf2-a725-ef1cb34ca26b 0 1 completed 7565312 cHl0aG9uLW9rCg== -",
+      "time": "2026-11-03T13:10:51Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 253fa422-5f7a-4ddd-920a-c01c7cd2c9b2 0 1 completed 11169792 bm9kZS1vawo= -",
+      "time": "2026-11-03T13:10:51Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 67e1cc24-f218-4e1a-9d68-93030f084fd8 0 1 completed 15253504 - dGVzdF9zdW0gKHRlc3RfZXhhbXBsZS5UZXN0LnRlc3Rfc3VtKSAuLi4gb2sKCi0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0KUmFuIDEgdGVzdCBpbiAwLjAwMHMKCk9LCg==",
+      "time": "2026-11-03T13:10:52Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 52946b6a-805d-421f-a26e-80c5c6ddc880 0 1 completed 27234304 4pyUIG1hdGggKDQuNTA4MjVtcykK4oS5IHRlc3RzIDEK4oS5IHN1aXRlcyAwCuKEuSBwYXNzIDEK4oS5IGZhaWwgMArihLkgY2FuY2VsbGVkIDAK4oS5IHNraXBwZWQgMArihLkgdG9kbyAwCuKEuSBkdXJhdGlvbl9tcyAyMTEuMzUyCg== -",
+      "time": "2026-11-03T13:10:52Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 3ad752d0-c555-459d-8985-d35fdfab4bd3 0 1 completed 8019968 YnVpbGQtb2sK -",
+      "time": "2026-11-03T13:10:52Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT fd1d71fb-7687-4f20-9717-4a52e0e6aa9c 0 1 completed 7647232 YmFja2dyb3VuZAo= -",
+      "time": "2026-11-03T13:10:53Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT baa672e2-ad46-4f1a-8b8c-e533d7c9458f 0 1 completed 7565312 dWlkPTEwMDAobmlkdXMpIGdpZD0xMDAwKG5pZHVzKQpjbGVhbgo= -",
+      "time": "2026-11-03T13:10:53Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 10f7ac62-c8b0-4ab9-9cc6-23f13e873eed 0 1 completed 7643136 - -",
+      "time": "2026-11-03T13:10:53Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 0f6d9334-20b9-4012-aba5-5262e8e8de8c 0 1 completed 7520256 aXNvbGF0ZWQK dW5zaGFyZTogdW5zaGFyZSgweDEwMDAwMDAwKTogTm8gc3BhY2UgbGVmdCBvbiBkZXZpY2UKY3VybDogKDcpIEZhaWxlZCB0byBjb25uZWN0IHRvIDE2OS4yNTQuMTY5LjI1NDo4MCBhZnRlciAwIG1zOiBDb3VsZCBub3QgY29ubmVjdCB0byBzZXJ2ZXIKY3VybDogKDcpIEZhaWxlZCB0byBjb25uZWN0IHRvIDEyNy4wLjAuMTo4MCBhZnRlciAwIG1zOiBDb3VsZCBub3QgY29ubmVjdCB0byBzZXJ2ZXIK",
+      "time": "2026-11-03T13:10:53Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 752bc6ef-54fe-4748-97c8-570e3e37b261 137 1 cancelled 7528448 - -",
+      "time": "2026-11-03T13:10:53Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT c20de7ab-6c11-4e5f-a372-65c3d987a9d2 137 1 timeout 7630848 - -",
+      "time": "2026-11-03T13:10:54Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_WORKSPACE_ACK 7aaa950e-1cfc-44df-a543-43d5f8352538 begin",
+      "time": "2026-11-03T13:10:54Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_WORKSPACE_ACK 7aaa950e-1cfc-44df-a543-43d5f8352538 chunk",
+      "time": "2026-11-03T13:10:54Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_WORKSPACE_ACK 7aaa950e-1cfc-44df-a543-43d5f8352538 seal",
+      "time": "2026-11-03T13:10:55Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_WORKSPACE_RESULT e8fd8b85-bf75-4024-943f-2e6fcde0e943 0 W3sicGF0aCI6ICJtYWluLnB5IiwgImNvbnRlbnQiOiAicHJpbnQoMikifV0=",
+      "time": "2026-11-03T13:10:55Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_WORKSPACE_END e8fd8b85-bf75-4024-943f-2e6fcde0e943 4aed66e4cfe1f9f04b760dcd642be6d647d5a3189e29b0dc493dfb7600cb9bcc",
+      "time": "2026-11-03T13:10:55Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT e8fd8b85-bf75-4024-943f-2e6fcde0e943 0 1 completed 7647232 c25hcHNob3Qtb2sK -",
+      "time": "2026-11-03T13:10:55Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT cb89b6b6-b6e6-4b2f-b22d-6eaefa57757e 0 1 completed 186691584 PGh0bWw+PGhlYWQ+PHRpdGxlPk5pZHVzIHN5bnRoZXRpYzwvdGl0bGU+PC9oZWFkPjxib2R5PjxoMT5ET00gdmVyaWZpZWQ8L2gxPjwvYm9keT48L2h0bWw+Cg== WzEzOjI5OjExMDMvMTMxMDU1LjA4Njc3NjpFUlJPUjpkYnVzL2J1cy5jYzo0MDVdIEZhaWxlZCB0byBjb25uZWN0IHRvIHRoZSBidXM6IEZhaWxlZCB0byBjb25uZWN0IHRvIHNvY2tldCAvcnVuL2RidXMvc3lzdGVtX2J1c19zb2NrZXQ6IE5vIHN1Y2ggZmlsZSBvciBkaXJlY3RvcnkKWzEzOjI5OjExMDMvMTMxMDU1LjA4NjgyMDpFUlJPUjpkYnVzL2J1cy5jYzo0MDVdIEZhaWxlZCB0byBjb25uZWN0IHRvIHRoZSBidXM6IENvdWxkIG5vdCBwYXJzZSBzZXJ2ZXIgYWRkcmVzczogVW5rbm93biBhZGRyZXNzIHR5cGUgKGV4YW1wbGVzIG9mIHZhbGlkIHR5cGVzIGFyZSAidGNwIiBhbmQgb24gVU5JWCAidW5peCIpCkZvbnRjb25maWcgZXJyb3I6IENhbm5vdCBsb2FkIGRlZmF1bHQgY29uZmlnIGZpbGU6IE5vIHN1Y2ggZmlsZTogKG51bGwpClsxMzoyOToxMTAzLzEzMTA1NS4xMjcxNzI6RVJST1I6ZGJ1cy9idXMuY2M6NDA1XSBGYWlsZWQgdG8gY29ubmVjdCB0byB0aGUgYnVzOiBGYWlsZWQgdG8gY29ubmVjdCB0byBzb2NrZXQgL3J1bi9kYnVzL3N5c3RlbV9idXNfc29ja2V0OiBObyBzdWNoIGZpbGUgb3IgZGlyZWN0b3J5ClsxMzoyOToxMTAzLzEzMTA1NS4xMjcyMTU6RVJST1I6ZGJ1cy9idXMuY2M6NDA1XSBGYWlsZWQgdG8gY29ubmVjdCB0byB0aGUgYnVzOiBGYWlsZWQgdG8gY29ubmVjdCB0byBzb2NrZXQgL3J1bi9kYnVzL3N5c3RlbV9idXNfc29ja2V0OiBObyBzdWNoIGZpbGUgb3IgZGlyZWN0b3J5ClsxMzoyOToxMTAzLzEzMTA1NS4xMjcyMzc6RVJST1I6ZGJ1cy9idXMuY2M6NDA1XSBGYWlsZWQgdG8gY29ubmVjdCB0byB0aGUgYnVzOiBGYWlsZWQgdG8gY29ubmVjdCB0byBzb2NrZXQgL3J1bi9kYnVzL3N5c3RlbV9idXNfc29ja2V0OiBObyBzdWNoIGZpbGUgb3IgZGlyZWN0b3J5ClsxMzoyOToxMTAzLzEzMTA1NS4xMjcyNTM6RVJST1I6ZGJ1cy9idXMuY2M6NDA1XSBGYWlsZWQgdG8gY29ubmVjdCB0byB0aGUgYnVzOiBDb3VsZCBub3QgcGFyc2Ugc2VydmVyIGFkZHJlc3M6IFVua25vd24gYWRkcmVzcyB0eXBlIChleGFtcGxlcyBvZiB2YWxpZCB0eXBlcyBhcmUgInRjcCIgYW5kIG9uIFVOSVggInVuaXgiKQpbMTM6Mjk6MTEwMy8xMzEwNTUuMTI3MjY3OkVSUk9SOmRidXMvYnVzLmNjOjQwNV0gRmFpbGVkIHRvIGNvbm5lY3QgdG8gdGhlIGJ1czogQ291bGQgbm90IHBhcnNlIHNlcnZlciBhZGRyZXNzOiBVbmtub3duIGFkZHJlc3MgdHlwZSAoZXhhbXBsZXMgb2YgdmFsaWQgdHlwZXMgYXJlICJ0Y3AiIGFuZCBvbiBVTklYICJ1bml4IikKWzEzOjI5OjExMDMvMTMxMDU1LjE5NzYwNjpFUlJPUjpkYnVzL2J1cy5jYzo0MDVdIEZhaWxlZCB0byBjb25uZWN0IHRvIHRoZSBidXM6IENvdWxkIG5vdCBwYXJzZSBzZXJ2ZXIgYWRkcmVzczogVW5rbm93biBhZGRyZXNzIHR5cGUgKGV4YW1wbGVzIG9mIHZhbGlkIHR5cGVzIGFyZSAidGNwIiBhbmQgb24gVU5JWCAidW5peCIpClsxMzoyOToxMTAzLzEzMTA1NS4yOTcwMjk6RVJST1I6ZGJ1cy9idXMuY2M6NDA1XSBGYWlsZWQgdG8gY29ubmVjdCB0byB0aGUgYnVzOiBDb3VsZCBub3QgcGFyc2Ugc2VydmVyIGFkZHJlc3M6IFVua25vd24gYWRkcmVzcyB0eXBlIChleGFtcGxlcyBvZiB2YWxpZCB0eXBlcyBhcmUgInRjcCIgYW5kIG9uIFVOSVggInVuaXgiKQoKKHByb2Nlc3M6MTMpOiBHTGliLUdJTy1DUklUSUNBTCAqKjogMTM6MTA6NTUuMzM0OiBnX3NldHRpbmdzX3NjaGVtYV9zb3VyY2VfbG9va3VwOiBhc3NlcnRpb24gJ3NvdXJjZSAhPSBOVUxMJyBmYWlsZWQKWzEzOjEzOjExMDMvMTMxMDU1LjYyODE3NDpFUlJPUjpkYnVzL29iamVjdF9wcm94eS5jYzo1NzJdIEZhaWxlZCB0byBjYWxsIG1ldGhvZDogb3JnLmZyZWVkZXNrdG9wLkRCdXMuTmFtZUhhc093bmVyOiBvYmplY3RfcGF0aD0gL29yZy9mcmVlZGVza3RvcC9EQnVzOiB1bmtub3duIGVycm9yIHR5cGU6IApbMTM6Mjk6MTEwMy8xMzEwNTUuNjI4MzQ3OkVSUk9SOmRidXMvYnVzLmNjOjQwNV0gRmFpbGVkIHRvIGNvbm5lY3QgdG8gdGhlIGJ1czogQ291bGQgbm90IHBhcnNlIHNlcnZlciBhZGRyZXNzOiBVbmtub3duIGFkZHJlc3MgdHlwZSAoZXhhbXBsZXMgb2YgdmFsaWQgdHlwZXMgYXJlICJ0Y3AiIGFuZCBvbiBVTklYICJ1bml4IikKWzEzOjEzOjExMDMvMTMxMDU1LjYyOTE0MzpFUlJPUjpkYnVzL29iamVjdF9wcm94eS5jYzo1NzJdIEZhaWxlZCB0byBjYWxsIG1ldGhvZDogb3JnLmZyZWVkZXNrdG9wLkRCdXMuTmFtZUhhc093bmVyOiBvYmplY3RfcGF0aD0gL29yZy9mcmVlZGVza3RvcC9EQnVzOiB1bmtub3duIGVycm9yIHR5cGU6IApbMTM6Mjk6MTEwMy8xMzEwNTUuNjI5MjM0OkVSUk9SOmRidXMvYnVzLmNjOjQwNV0gRmFpbGVkIHRvIGNvbm5lY3QgdG8gdGhlIGJ1czogQ291bGQgbm90IHBhcnNlIHNlcnZlciBhZGRyZXNzOiBVbmtub3duIGFkZHJlc3MgdHlwZSAoZXhhbXBsZXMgb2YgdmFsaWQgdHlwZXMgYXJlICJ0Y3AiIGFuZCBvbiBVTklYICJ1bml4IikKWzEzOjEzOjExMDMvMTMxMDU1LjYyOTU0OTpFUlJPUjpkYnVzL29iamVjdF9wcm94eS5jYzo1NzJdIEZhaWxlZCB0byBjYWxsIG1ldGhvZDogb3JnLmZyZWVkZXNrdG9wLkRCdXMuTmFtZUhhc093bmVyOiBvYmplY3RfcGF0aD0gL29yZy9mcmVlZGVza3RvcC9EQnVzOiB1bmtub3duIGVycm9yIHR5cGU6IApbMTM6MTM6MTEwMy8xMzEwNTUuNjM2MjEwOkVSUk9SOmRidXMvb2JqZWN0X3Byb3h5LmNjOjU3Ml0gRmFpbGVkIHRvIGNhbGwgbWV0aG9kOiBvcmcuZnJlZWRlc2t0b3AuREJ1cy5OYW1lSGFzT3duZXI6IG9iamVjdF9wYXRoPSAvb3JnL2ZyZWVkZXNrdG9wL0RCdXM6IHVua25vd24gZXJyb3IgdHlwZTogClsxMzoyOToxMTAzLzEzMTA1NS42Mzc0Nzc6RVJST1I6ZGJ1cy9idXMuY2M6NDA1XSBGYWlsZWQgdG8gY29ubmVjdCB0byB0aGUgYnVzOiBDb3VsZCBub3QgcGFyc2Ugc2VydmVyIGFkZHJlc3M6IFVua25vd24gYWRkcmVzcyB0eXBlIChleGFtcGxlcyBvZiB2YWxpZCB0eXBlcyBhcmUgInRjcCIgYW5kIG9uIFVOSVggInVuaXgiKQpbMTM6MTM6MTEwMy8xMzEwNTUuNzk3NzY5OkVSUk9SOmRidXMvb2JqZWN0X3Byb3h5LmNjOjU3Ml0gRmFpbGVkIHRvIGNhbGwgbWV0aG9kOiBvcmcuZnJlZWRlc2t0b3AuREJ1cy5OYW1lSGFzT3duZXI6IG9iamVjdF9wYXRoPSAvb3JnL2ZyZWVkZXNrdG9wL0RCdXM6IHVua25vd24gZXJyb3IgdHlwZTogClsxMzoxMzoxMTAzLzEzMTA1NS44MDIyNDA6RVJST1I6ZGJ1cy9vYmplY3RfcHJveHkuY2M6NTcyXSBGYWlsZWQgdG8gY2FsbCBtZXRob2Q6IG9yZy5mcmVlZGVza3RvcC5EQnVzLk5hbWVIYXNPd25lcjogb2JqZWN0X3BhdGg9IC9vcmcvZnJlZWRlc2t0b3AvREJ1czogdW5rbm93biBlcnJvciB0eXBlOiAKWzEzOjEzOjExMDMvMTMxMDU1LjgwMzI5NzpFUlJPUjpkYnVzL29iamVjdF9wcm94eS5jYzo1NzJdIEZhaWxlZCB0byBjYWxsIG1ldGhvZDogb3JnLmZyZWVkZXNrdG9wLkRCdXMuTmFtZUhhc093bmVyOiBvYmplY3RfcGF0aD0gL29yZy9mcmVlZGVza3RvcC9EQnVzOiB1bmtub3duIGVycm9yIHR5cGU6IApbMTM6Mjk6MTEwMy8xMzEwNTUuODAzMzgyOkVSUk9SOmRidXMvYnVzLmNjOjQwNV0gRmFpbGVkIHRvIGNvbm5lY3QgdG8gdGhlIGJ1czogRmFpbGVkIHRvIGNvbm5lY3QgdG8gc29ja2V0IC9ydW4vZGJ1cy9zeXN0ZW1fYnVzX3NvY2tldDogTm8gc3VjaCBmaWxlIG9yIGRpcmVjdG9yeQpbMTM6Mjk6MTEwMy8xMzEwNTUuODAzNDA2OkVSUk9SOmRidXMvYnVzLmNjOjQwNV0gRmFpbGVkIHRvIGNvbm5lY3QgdG8gdGhlIGJ1czogRmFpbGVkIHRvIGNvbm5lY3QgdG8gc29ja2V0IC9ydW4vZGJ1cy9zeXN0ZW1fYnVzX3NvY2tldDogTm8gc3VjaCBmaWxlIG9yIGRpcmVjdG9yeQpbMTM6Mjk6MTEwMy8xMzEwNTUuODAzNDE5OkVSUk9SOmRidXMvYnVzLmNjOjQwNV0gRmFpbGVkIHRvIGNvbm5lY3QgdG8gdGhlIGJ1czogQ291bGQgbm90IHBhcnNlIHNlcnZlciBhZGRyZXNzOiBVbmtub3duIGFkZHJlc3MgdHlwZSAoZXhhbXBsZXMgb2YgdmFsaWQgdHlwZXMgYXJlICJ0Y3AiIGFuZCBvbiBVTklYICJ1bml4IikKWzEzOjEzOjExMDMvMTMxMDU1LjkyODAyMTpFUlJPUjpkYnVzL29iamVjdF9wcm94eS5jYzo1NzJdIEZhaWxlZCB0byBjYWxsIG1ldGhvZDogb3JnLmZyZWVkZXNrdG9wLkRCdXMuUHJvcGVydGllcy5HZXRBbGw6IG9iamVjdF9wYXRoPSAvb3JnL2ZyZWVkZXNrdG9wL1VQb3dlci9kZXZpY2VzL0Rpc3BsYXlEZXZpY2U6IHVua25vd24gZXJyb3IgdHlwZTogClsxMzoxMzoxMTAzLzEzMTA1NS45MjgwNTg6RVJST1I6ZGJ1cy9vYmplY3RfcHJveHkuY2M6NTcyXSBGYWlsZWQgdG8gY2FsbCBtZXRob2Q6IG9yZy5mcmVlZGVza3RvcC5EQnVzLk5hbWVIYXNPd25lcjogb2JqZWN0X3BhdGg9IC9vcmcvZnJlZWRlc2t0b3AvREJ1czogdW5rbm93biBlcnJvciB0eXBlOiAKWzEzOjI5OjExMDMvMTMxMDU1LjkyODExNjpFUlJPUjpkYnVzL2J1cy5jYzo0MDVdIEZhaWxlZCB0byBjb25uZWN0IHRvIHRoZSBidXM6IENvdWxkIG5vdCBwYXJzZSBzZXJ2ZXIgYWRkcmVzczogVW5rbm93biBhZGRyZXNzIHR5cGUgKGV4YW1wbGVzIG9mIHZhbGlkIHR5cGVzIGFyZSAidGNwIiBhbmQgb24gVU5JWCAidW5peCIpClsxMzoxMzoxMTAzLzEzMTA1NS45ODY2NTY6RVJST1I6ZGJ1cy9vYmplY3RfcHJveHkuY2M6NTcyXSBGYWlsZWQgdG8gY2FsbCBtZXRob2Q6IG9yZy5mcmVlZGVza3RvcC5EQnVzLk5hbWVIYXNPd25lcjogb2JqZWN0X3BhdGg9IC9vcmcvZnJlZWRlc2t0b3AvREJ1czogdW5rbm93biBlcnJvciB0eXBlOiAKWzEzOjI5OjExMDMvMTMxMDU1Ljk4Njc0MzpFUlJPUjpkYnVzL2J1cy5jYzo0MDVdIEZhaWxlZCB0byBjb25uZWN0IHRvIHRoZSBidXM6IENvdWxkIG5vdCBwYXJzZSBzZXJ2ZXIgYWRkcmVzczogVW5rbm93biBhZGRyZXNzIHR5cGUgKGV4YW1wbGVzIG9mIHZhbGlkIHR5cGVzIGFyZSAidGNwIiBhbmQgb24gVU5JWCAidW5peCIpClsxMzoxMzoxMTAzLzEzMTA1Ni4wMTgyMzY6RVJST1I6ZGJ1cy9vYmplY3RfcHJveHkuY2M6NTcyXSBGYWlsZWQgdG8gY2FsbCBtZXRob2Q6IG9yZy5mcmVlZGVza3RvcC5EQnVzLk5hbWVIYXNPd25lcjogb2JqZWN0X3BhdGg9IC9vcmcvZnJlZWRlc2t0b3AvREJ1czogdW5rbm93biBlcnJvciB0eXBlOiAK",
+      "time": "2026-11-03T13:10:57Z"
+    },
+    {
+      "event": "stop_requested",
+      "frameworkState": 1,
+      "reason": "user",
+      "time": "2026-11-03T13:10:57Z"
+    },
+    {
+      "event": "STOP_CONFIRMED",
+      "frameworkState": 0,
+      "time": "2026-11-03T13:10:57Z"
+    }
+  ],
+  "managerExit": 0,
+  "assets": {
+    "Image": "256d5fff4bb892edcb9218c1e6353e388bc3646e65f76c2bc9d958b635d1b00e",
+    "initrd": "7850bf20946c94f2b43ed8f53c2dee2e3cd2ff0be1d474a6d80f753474e5c0ec"
+  }
+}

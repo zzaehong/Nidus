@@ -133,7 +133,7 @@ struct VaultRuntimeView: View {
                 Button("오프라인 VM 시작"){Task {await vm.action("vault-vm-start")}}.disabled(vm.selected.isEmpty||vm.busy||vm.running)
                 Button("VM 종료 요청"){Task {await vm.action("vault-vm-stop")}}.disabled(vm.busy||vm.running)
             }
-            Text("Shell: 승인된 BusyBox 명령만 오프라인 VM에서 실행합니다. Host Vault는 마운트하지 않으며 세션 작업 디렉터리는 매번 비워집니다. Browser: 네트워크 격리 미검증으로 비활성. Host 파일 생성·수정·삭제: 비활성.").font(.caption).foregroundStyle(.secondary)
+            Text("Shell: 승인된 명령만 번들에 포함된 오프라인 VM에서 실행합니다. 개발 이미지 빌드에서는 Python·Node.js를 사용할 수 있습니다. Host Vault는 마운트하지 않으며 세션 작업 디렉터리는 매번 비워집니다. Browser: 네트워크 격리 미검증으로 비활성. Host 파일 생성·수정·삭제: 비활성.").font(.caption).foregroundStyle(.secondary)
             HStack {TextField("오프라인 Shell 명령",text:$vm.shellCommand).disabled(vm.running)
                 Button("Shell 제안 · API 호출 없음"){vm.startShell()}.disabled(vm.running || vm.selected.isEmpty || vm.shellCommand.isEmpty)
             }

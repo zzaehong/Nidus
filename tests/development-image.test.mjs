@@ -23,3 +23,37 @@ with tempfile.TemporaryDirectory() as tmp:
 `;
  const result=spawnSync('python3',['-c',script],{encoding:'utf8'});assert.equal(result.status,0,result.stderr);
 });
+test('guest workspace rejects traversal, corrupt hashes, links and oversized results',()=>{
+ const script=`import sys,pathlib,tempfile,uuid,hashlib,os
+sys.path.insert(0,'scripts/vault-vm')
+import workspace
+value={'schemaVersion':1,'snapshotId':str(uuid.uuid4()),'vaultId':str(uuid.uuid4()),'environmentId':str(uuid.uuid4()),'files':[{'path':'main.py','content':'print(1)','hash':hashlib.sha256(b'print(1)').hexdigest()}]}
+assert workspace.validate(value)==value
+for path in ['../out.py','/tmp/out.py','.nidus/test.py','a/../x.py','a//b.py','a\\\\b.py']:
+ bad={**value,'files':[{**value['files'][0],'path':path}]}
+ try:workspace.validate(bad)
+ except ValueError:pass
+ else:raise AssertionError(path)
+bad={**value,'files':[{**value['files'][0],'hash':'0'*64}]}
+try:workspace.validate(bad)
+except ValueError:pass
+else:raise AssertionError('corrupt hash')
+with tempfile.TemporaryDirectory() as tmp:
+ root=pathlib.Path(tmp);(root/'work').mkdir();p=root/'work/main.py';p.write_text('updated')
+ assert workspace.export(root,value)==[{'path':'main.py','content':'updated'}]
+ p.write_text('x'*65537)
+ try:workspace.export(root,value)
+ except ValueError:pass
+ else:raise AssertionError('oversized export')
+ p.write_text('updated')
+ os.link(p,root/'work/alias.py')
+ try:workspace.export(root,value)
+ except ValueError:pass
+ else:raise AssertionError('hardlink export')
+ (root/'work/alias.py').unlink();p.unlink();p.symlink_to('/etc/passwd')
+ try:workspace.export(root,value)
+ except ValueError:pass
+ else:raise AssertionError('symlink export')
+`;
+ const result=spawnSync('python3',['-c',script],{encoding:'utf8'});assert.equal(result.status,0,result.stderr);
+});
