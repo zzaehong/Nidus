@@ -314,10 +314,20 @@ export class ConnectivityEngine {
   }
 
   async disconnect(provider: ProviderId) { await this.credentials.delete(provider); await this.store.remove(provider); this.usageLedger().invalidateFreeUse(provider); this.usageLedger().invalidateAccount(provider); return { provider, disconnected: true }; }
-  async probe(provider: ProviderId, model: string, allowInferred = false, consentToken?: string) {
+  async probe(provider: ProviderId, model: string, allowInferred = false, consentToken?: string, probeRiskAccepted = false) {
     const saved = await this.store.load(provider);
     const known = saved?.models.find(m => m.id === model);
     if (!known) throw new NidusError("invalid_request", "Refresh models before testing a discovered model.");
-    return probeModel(known, allowInferred, async (request, options) => this.execute(provider, request, "probe", {...options,consentToken}));
+    return probeModel(known, allowInferred, async (request, options) => {
+      let token=consentToken;
+      // Explicit Host probe consent is scoped to this one bounded request; never upgrades the account.
+      if(!token && probeRiskAccepted===true){
+        const fingerprint=createHash('sha256').update(await this.key(provider)).digest('hex');
+        const permission=this.usageLedger().executionPermission(provider,model,fingerprint);
+        if(['account_unknown','free_model_unverified'].includes(permission.reason??''))
+          token=this.usageLedger().issueConsent(provider,model,'probe',fingerprint,true).token;
+      }
+      return this.execute(provider, request, "probe", {...options,consentToken:token});
+    });
   }
 }

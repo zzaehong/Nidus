@@ -2,7 +2,17 @@
 
 2026-10-26, `feature/usage-ledger-budget-guard`.
 
-## 확정한 정책
+## 2026-11-04 검사 전용 예외 보완
+
+아래 본문은 Phase 4.3 당시 정책 기록이다. 현재 동작 검사는 다음 제한된 예외가 우선한다.
+
+- `free_model_unverified` 때문에 최초 검사를 못 하던 문제를 해결한다. 일괄 검사 UI가 과금 위험 승인을 `probeRiskAccepted: true`로 전달하며, 검사 callback 안에서만 한 모델의 한 요청에 한정된 동의 토큰을 발급·소비한다. Unknown 계정에도 같은 명시적 검사 승인을 적용한다.
+- 토큰은 기존 Provider/모델/task/키/revision/5분 만료/일회용 조건을 유지한다. 일반 채팅과 자동 실행에는 Free Only 예외가 없다. 계정 상태·Provider 유료 승인·무료 모델 인증값은 변경하지 않는다.
+- 무료 여부 미확인 또는 유료 전용 모델의 예외 검사는 `billingMode=paid`로 기록하여 무료 0원으로 오인하지 않는다. 가격이 없으면 비용 미확인이다. 알려진 무료 모델은 기존 free 경로를 유지한다.
+- `provider_paid_not_approved`, `free_unavailable`, 승인 없음·잘못된 토큰·기한 만료는 계속 차단한다. 확인 UI를 수락하지 않으면 검사 API를 보내지 않는다.
+- 단일 검사 manualCall도 `free_model_unverified`일 때 1회 동의를 요청할 수 있다. 일반 채팅은 이 사유로 검사 동의를 재사용할 수 없다.
+
+## 당시 확정한 정책
 
 기존 계정은 최초 한 번 재확인한다. 기존 Gemini 프로젝트·NVIDIA Free 설정·Provider Plan은 참고 정보로 보존하지만 실행 권한으로 자동 승계하지 않는다. 유료 승인은 **Provider 전체의 현재·향후 모델**에 적용하며 모델별 유료 승인 기능은 제공하지 않는다. 신규 관리자 자격 증명/OAuth/IAM 연결은 범위 밖이다.
 

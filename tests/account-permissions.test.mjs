@@ -150,3 +150,57 @@ test('old key free-unavailable metadata does not apply to a newly confirmed acco
  await assert.rejects(f.engine.chat('gemini',request()),e=>e.reason==='free_unavailable');
  f.keys.set('gemini','new-account-key');await f.set('gemini','free_only');assert.equal((await f.engine.chat('gemini',request())).billingMode,'free');
 });
+test('explicit one-shot probe bypasses unverified free metadata without changing Free Only or free cost claims',async()=>{
+ for(const model of ['gpt-4.1-mini','text-future']){
+  const f=fixture();try{
+   await f.set('openai','free_only');
+   assert.equal((await f.engine.probe('openai',model)).status,'skipped');assert.equal(f.calls.length,0);
+   const result=await dispatch({method:'probe',provider:'openai',model,confirmed:true,probeRiskAccepted:true},f.engine);
+   assert.equal(result.status,'passed');assert.equal(f.calls.length,1);
+   const account=await f.engine.accountPermission('openai');assert.equal(account.state,'free_only');assert.equal(account.paidAllowed,false);
+   const record=f.ledger.snapshot().requests.find(r=>r.status==='succeeded');assert.equal(record.billingMode,'paid');
+   if(model==='gpt-4.1-mini')assert.ok(Number(record.estimatedUSD)>0);else assert.equal(record.costStatus,'unknown');
+   await assert.rejects(f.engine.chat('openai',request(model)),e=>e.reason==='free_model_unverified');assert.equal(f.calls.length,1);
+  }finally{f.ledger.close();}
+ }
+});
+test('unverified free-model consent binds task/model/key/revision/expiry and consumes once',async()=>{
+ let now=new Date('2026-11-04T00:00:00Z');const f=fixture(new UsageLedger(':memory:',()=>now));try{
+  await f.set('openai','free_only');const model='text-future';
+  await assert.rejects(f.engine.issueConsent('openai',model,'probe',false));
+  await assert.rejects(f.engine.issueConsent('openai',model,'chat',true));
+  const token=(await f.engine.issueConsent('openai',model,'probe',true)).token;
+  await assert.rejects(f.engine.chat('openai',request(model),{consentToken:token}),denied);
+  assert.equal((await f.engine.probe('openai','gpt-4.1-mini',false,token)).status,'skipped');
+  assert.equal((await f.engine.probe('openai',model,false,token)).status,'passed');
+  assert.equal((await f.engine.probe('openai',model,false,token)).status,'skipped');assert.equal(f.calls.length,1);
+  const expired=(await f.engine.issueConsent('openai',model,'probe',true)).token;now=new Date(now.getTime()+300001);
+  assert.equal((await f.engine.probe('openai',model,false,expired)).status,'skipped');
+  const revised=(await f.engine.issueConsent('openai',model,'probe',true)).token;await f.set('openai','free_only');
+  assert.equal((await f.engine.probe('openai',model,false,revised)).status,'skipped');
+  const changed=(await f.engine.issueConsent('openai',model,'probe',true)).token;f.keys.set('openai','changed');
+  assert.equal((await f.engine.probe('openai',model,false,changed)).status,'skipped');assert.equal(f.calls.length,1);
+ }finally{f.ledger.close();}
+});
+test('probe exception requires explicit risk acceptance, does not override paid denial, and never retries Provider failure',async()=>{
+ const f=fixture(undefined,()=>{throw new NidusError('rate_limit','fixture',429);});try{
+  await f.set('openai','free_only');const input={method:'probe',provider:'openai',model:'text-future',confirmed:true};
+  for(const flag of [undefined,false,'true'])assert.equal((await dispatch({...input,probeRiskAccepted:flag},f.engine)).status,'skipped');
+  assert.equal(f.calls.length,0);
+  assert.equal((await dispatch({...input,probeRiskAccepted:true},f.engine)).status,'failed');assert.equal(f.calls.length,1);
+  await f.set('openai','paid_only',false);assert.equal((await dispatch({...input,probeRiskAccepted:true},f.engine)).status,'skipped');assert.equal(f.calls.length,1);
+  await assert.rejects(dispatch({...input,confirmed:false,probeRiskAccepted:true},f.engine));
+ }finally{f.ledger.close();}
+});
+test('confirmed batch probes retain known free billing and never override exhausted free allowance',async()=>{
+ const f=fixture();try{
+  const model=request().model;
+  const unknown=await dispatch({method:'probe',provider:'gemini',model,confirmed:true,probeRiskAccepted:true},f.engine);
+  assert.equal(unknown.status,'passed');assert.equal((await f.engine.accountPermission('gemini')).state,'unknown');
+  await f.set('gemini','free_only');
+  const known=await dispatch({method:'probe',provider:'gemini',model,confirmed:true,probeRiskAccepted:true},f.engine);assert.equal(known.status,'passed');
+  assert.ok(f.ledger.snapshot().requests.some(r=>r.status==='succeeded'&&r.billingMode==='free'));assert.equal(f.calls.length,2);
+  await f.engine.setFreeUse('gemini',model,'unavailable',false,true,true);
+  const exhausted=await dispatch({method:'probe',provider:'gemini',model,confirmed:true,probeRiskAccepted:true},f.engine);assert.equal(exhausted.status,'skipped');assert.match(exhausted.error.message,/free_unavailable/);assert.equal(f.calls.length,2);
+ }finally{f.ledger.close();}
+});

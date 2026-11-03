@@ -60,4 +60,20 @@ final class AccountPermissionTests: XCTestCase {
         XCTAssertEqual(calls[1]["task"] as? String, "probe")
         XCTAssertEqual(calls[2]["consentToken"] as? String, "probe-token")
     }
+    @MainActor func testUnverifiedFreeModelOffersConsentOnlyForProbe() async throws {
+        for method in ["probe", "chat"] {
+            var calls:[[String:Any]]=[];var confirmations=0
+            let dashboard=Dashboard { request in
+                calls.append(request)
+                if request["method"] as? String == "request-consent" { return Data(#"{"token":"scoped"}"#.utf8) }
+                if request["consentToken"] != nil { return Data(#"{"status":"passed"}"#.utf8) }
+                throw DashboardError(message:"Execution permission denied (free_model_unverified)")
+            }
+            do {
+                _ = try await dashboard.manualCall(["method":method,"provider":"openai","model":"m"],confirm:{ _,_ in confirmations += 1;return true })
+                XCTAssertEqual(method,"probe");XCTAssertEqual(calls.last?["consentToken"] as? String,"scoped")
+            } catch { XCTAssertEqual(method,"chat") }
+            XCTAssertEqual(confirmations,method == "probe" ? 1 : 0)
+        }
+    }
 }

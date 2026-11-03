@@ -62,7 +62,7 @@ export async function dispatch(input: unknown, engine: ConnectivityEngine): Prom
     case "probe":
       if (typeof r.model !== "string" || r.confirmed !== true || (r.allowInferred !== undefined && typeof r.allowInferred !== "boolean"))
         throw new NidusError("invalid_request", "Confirm probe cost and select a discovered model.");
-      return engine.probe(provider, r.model, r.allowInferred === true, typeof r.consentToken==='string'?r.consentToken:undefined);
+      return engine.probe(provider, r.model, r.allowInferred === true, typeof r.consentToken==='string'?r.consentToken:undefined, r.probeRiskAccepted===true);
     case "chat":
       if (!r.request || typeof r.request !== "object") throw new NidusError("invalid_request", "Invalid chat request.");
       return engine.chat(provider, r.request as ChatRequest, { timeoutMs: 120_000, consentToken: typeof r.consentToken==='string'?r.consentToken:undefined });
