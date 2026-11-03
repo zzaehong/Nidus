@@ -1,3 +1,4 @@
+import {textToolRequest,parseTextTools} from './agent/text-tools.js';
 import { toolCallingSupport, validateToolRequest, type ToolModelRequest } from './agent/model.js';
 import { buildContext, taskContext, softBudgets, type TaskContext } from './routing-context.js';
 import { providerMetadata } from './providers.js';
@@ -269,6 +270,27 @@ export class ConnectivityEngine {
   async toolRoutePlan(request: ChatRequest, task: unknown = 'normal') {
     const plan = await this.routePlan(request, task);
     return { ...plan, candidates: plan.candidates.filter(c => c.model.capabilities.tools !== 'unsupported' && toolCallingSupport(c.model.provider, c.model.id) && this.registry[c.model.provider].toolChat) };
+  }
+  async agentModels(only?:ProviderId) {
+    const rows=await Promise.all(providerIds.filter(p=>!only||p===only).map(async provider=>{
+      if(!await this.credentials.get(provider))return [];
+      const saved=await this.store.load(provider);
+      return (saved?.models??[]).map(model=>{
+        const classification=classifyModel(model);
+        const available=model.capabilities.chat!=='unsupported'&&classification.kind==='text'&&classification.textProbe!=='unsupported'&&!model.id.toLowerCase().includes('computer-use');
+        const native=available&&model.capabilities.tools!=='unsupported'&&toolCallingSupport(provider,model.id)&&!!this.registry[provider]?.toolChat;
+        return {id:provider+':'+model.id,provider,model:model.id,name:model.name,available,mode:native?'native-tools':'nidus-text',reason:available?'':'텍스트 Agent 실행을 지원하지 않는 모델'};
+      });
+    }));return rows.flat();
+  }
+  async agentChat(provider:ProviderId,request:ToolModelRequest,options:RequestOptions={}) {
+    request=structuredClone(request);validateToolRequest(request);
+    if(options.signal?.aborted)throw new NidusError('cancelled','Cancelled before dispatch.');
+    const choice=(await this.agentModels(provider)).find(m=>m.provider===provider&&m.model===request.model);
+    if(!choice?.available)throw new NidusError('unsupported','Select a connected text model from the current catalog.');
+    if(choice.mode==='native-tools')return this.toolChat(provider,request,options);
+    const response=await this.chat(provider,textToolRequest(request),options);
+    options.signal?.throwIfAborted();return parseTextTools(response,request);
   }
   async toolChat(provider: ProviderId, request: ToolModelRequest, options: RequestOptions = {}) {
     request = structuredClone(request);

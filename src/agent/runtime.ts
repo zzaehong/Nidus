@@ -8,7 +8,7 @@ import type { AgentModel, ModelTurn, ToolModelRequest } from './model.js';
 export class EngineAgentModel implements AgentModel {
   readonly source='provider' as const;
   constructor(private readonly engine:ConnectivityEngine,private readonly provider:ProviderId){}
-  respond(request:ToolModelRequest,signal:AbortSignal){return this.engine.toolChat(this.provider,request,{signal});}
+  respond(request:ToolModelRequest,signal:AbortSignal){return this.engine.agentChat(this.provider,request,{signal});}
 }
 export interface AgentLimits {modelCalls:number;toolInvocations:number;executionMs:number;resultBytes:number}
 export interface AgentStep {stepId:string;index:number;state:'MODEL'|'TOOLS'|'COMPLETED'|'FAILED';invocations:{invocationId:string;callId:string;tool:string;result:ToolResult}[]}

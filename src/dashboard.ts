@@ -13,12 +13,13 @@ import {VMClient} from './vault/vm-client.js';
 export async function dispatch(input: unknown, engine: ConnectivityEngine): Promise<unknown> {
   if (!input || typeof input !== "object") throw new NidusError("invalid_request", "Invalid dashboard request.");
   const r = input as Record<string, unknown>;
+  if(r.method==='agent-models')return engine.agentModels();
   if(typeof r.method==='string'&&r.method.startsWith('vault-')){
     const registry=new VaultRegistry(process.env.NIDUS_VAULT_REGISTRY),client=new VMClient(registry);
     switch(r.method){
       case 'vault-list':return registry.listVaults();
       case 'vault-register':if(typeof r.path!=='string')throw new NidusError('invalid_request','Select a directory.');return registry.registerVault(r.path);
-      case 'vault-vm-status':return client.status();
+      case 'vault-vm-status':return client.status(true);
       case 'vault-vm-start':if(typeof r.vaultId!=='string')throw new NidusError('invalid_request','Select a Vault.');await registry.resolveVault(r.vaultId);return client.request('start',{vaultId:r.vaultId},true);
       case 'vault-vm-stop':return client.request('stop');
       default:throw new NidusError('invalid_request','Unknown Vault action.');

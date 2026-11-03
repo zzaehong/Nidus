@@ -3,7 +3,7 @@ import {VaultRegistry} from './registry.js';
 import {VaultError} from './types.js';
 import {VMJournal} from './vm-journal.js';
 import {AppleOfflineBackend,type SharedBackend} from './apple-backend.js';
-import {initialVMStatus,type SharedVMStatus,type ShellResult,type SessionRecord} from './vm-protocol.js';
+import {summarizeVMStatus,initialVMStatus,type SharedVMStatus,type ShellResult,type SessionRecord} from './vm-protocol.js';
 const hash=(value:string)=>createHash('sha256').update(value).digest('hex');
 const fail=(code:string):never=>{throw new VaultError(code);};
 interface Pending {record:SessionRecord;command:string;seconds:number;expiresAt:number;resolve:(r:ShellResult)=>void;reject:(e:unknown)=>void}
@@ -18,6 +18,7 @@ export class SharedVMController {
  async initialize(){if(!Number.isSafeInteger(this.idleMs)||this.idleMs<100||this.idleMs>3600000)fail('vm_invalid_idle');this.state=await this.journal.claim();this.state.policy.idleMs=this.idleMs;await this.persist();}
  private persist(){this.writes=this.writes.then(()=>this.journal.save(this.state)).catch(e=>{this.poisoned=true;throw e;});return this.writes;}
  private serial<T>(work:()=>Promise<T>):Promise<T>{const next=this.lifecycle.then(work);this.lifecycle=next.catch(()=>{});return next;}
+ summary(){return summarizeVMStatus(this.state);}
  status():SharedVMStatus{return structuredClone(this.state);}
  private guard(){if(this.poisoned||this.state.state==='STOP_UNCONFIRMED')fail('STOP_UNCONFIRMED');if(this.shutdownRequested)fail('vm_shutting_down');}
  async start(vaultId:string){return this.serial(()=>this.ensureStarted(vaultId));}

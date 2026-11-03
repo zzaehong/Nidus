@@ -1,3 +1,4 @@
+import {summarizeVMStatus} from './vm-protocol.js';
 import {connect} from 'node:net';
 import {spawn} from 'node:child_process';
 import {join} from 'node:path';
@@ -30,8 +31,13 @@ export class VMClient {
    });socket.on('error',()=>done(new VaultError('vm_manager_unavailable')));socket.on('end',()=>{if(!buffer.includes('\n'))done(new VaultError('STOP_UNCONFIRMED'));});
   });
  }
- async status(){try{return await this.request('status');}catch{
+ async status(summary=false){try{
+  let state;
+  try{state=await this.request(summary?'summary':'status');}
+  catch(e){if(summary&&e instanceof VaultError&&e.code==='vm_unknown_method')state=await this.request('status');else throw e;}
+  return summary?{...summarizeVMStatus(state),sessionCount:state.sessionCount??state.sessions.length,statusSource:'live-service'}:state;
+ }catch{
   const s=await new VMJournal(this.directory).read();let owned=false;try{await lstat(join(this.directory,'owner'));owned=true;}catch{}
-  if(owned||!['STOPPED','STOP_CONFIRMED'].includes(s.state)){s.state='STOP_UNCONFIRMED';s.ready=false;}return s;
+  if(owned||!['STOPPED','STOP_CONFIRMED'].includes(s.state)){s.state='STOP_UNCONFIRMED';s.ready=false;}return summary?{...summarizeVMStatus(s),statusSource:'journal-unverified'}:s;
  }}
 }

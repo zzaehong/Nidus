@@ -24,6 +24,7 @@ export async function serve(registryPath:string){
     const r=JSON.parse(buffer),provided=Buffer.from(typeof r.token==='string'?r.token:'');
     if(provided.length!==64||!timingSafeEqual(provided,Buffer.from(token)))throw new VaultError('vm_unauthorized');
     switch(r.method){
+     case 'summary':return controller.summary();
      case 'status':return controller.status();
      case 'shutdown':await controller.close();await unlink(path);server.close();return {shutdownConfirmed:true};
      case 'start':return controller.start(r.vaultId);

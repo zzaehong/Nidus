@@ -1,0 +1,37 @@
+{
+  "scope": "Real development VM; synthetic text Provider adapters and approval fixtures. In-memory fixture Ledger only. Zero paid API calls.",
+  "checks": [
+    {
+      "name": "nvidia-denied",
+      "status": "PASS",
+      "requests": 2,
+      "approval": "synthetic fixture",
+      "instance": null,
+      "generation": 0
+    },
+    {
+      "name": "nvidia-approved",
+      "status": "PASS",
+      "requests": 2,
+      "approval": "synthetic fixture",
+      "instance": "fe71c076-11b1-42e3-9f78-67dcc8baf72a",
+      "generation": 1
+    },
+    {
+      "name": "gemini-approved",
+      "status": "PASS",
+      "requests": 2,
+      "approval": "synthetic fixture",
+      "instance": "fe71c076-11b1-42e3-9f78-67dcc8baf72a",
+      "generation": 1
+    },
+    {
+      "name": "different-models-reuse-one-VM",
+      "status": "PASS"
+    },
+    {
+      "name": "confirmed-stop",
+      "status": "PASS"
+    }
+  ]
+}

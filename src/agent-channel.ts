@@ -1,3 +1,4 @@
+import {providerId} from './adapters/index.js';
 // Dedicated bounded NDJSON Host/UI channel; Provider responses never enter this input stream.
 import {randomUUID} from 'node:crypto';
 import {createInterface} from 'node:readline';
@@ -23,7 +24,7 @@ input.on('line',line=>{
  let r:any;try{r=JSON.parse(line);}catch{abort.abort();return;}
  if(r.method==='cancel'){abort.abort();return;}
  if(r.method==='approval'){const resolve=pending.get(r.approvalId);if(resolve){pending.delete(r.approvalId);resolve(r.approved===true);}return;}
- if(started||!['run','direct-shell'].includes(r.method)||typeof r.vaultId!=='string'||(r.method==='run'&&(r.confirmDataSharing!==true||typeof r.model!=='string'||typeof r.prompt!=='string'))||(r.method==='direct-shell'&&typeof r.command!=='string')){emit({event:'error',code:'invalid_agent_request'});return;}
+ if(started||!['run','direct-shell'].includes(r.method)||typeof r.vaultId!=='string'||(r.method==='run'&&(r.confirmDataSharing!==true||typeof r.provider!=='string'||typeof r.model!=='string'||typeof r.prompt!=='string'))||(r.method==='direct-shell'&&typeof r.command!=='string')){emit({event:'error',code:'invalid_agent_request'});return;}
  started=true;
  void (async()=>{
   const registry=new VaultRegistry(process.env.NIDUS_VAULT_REGISTRY),client=new VMClient(registry);
@@ -39,7 +40,7 @@ input.on('line',line=>{
    emit({event:'tool-result',name:call.name,result});emit({event:'completed',task:{status:result.status,code:result.code,text:'직접 Shell 검토 — Provider 호출 없음'}});return;
   }
   const engine=new ConnectivityEngine(new KeychainStore(),new FileModelStore());
-  const runtime=new SingleAgentRuntime(new EngineAgentModel(engine,'openai'),tools);
+  const runtime=new SingleAgentRuntime(new EngineAgentModel(engine,providerId(r.provider)),tools);
   const task=await runtime.run({vaultId:r.vaultId,model:r.model,prompt:r.prompt,signal:abort.signal,onEvent:emit});emit({event:'completed',task});
  })().catch(e=>emit({event:'error',code:e instanceof NidusError?e.code:'agent_failed'})).finally(()=>{abort.abort();pending.clear();input.close();process.stdin.destroy();});
 });
