@@ -28,7 +28,7 @@ export class ToolRegistry {
     checkSchema(d.inputSchema); checkSchema(d.outputSchema); this.definitions.set(d.name,structuredClone(d));
   }
   get(name: string): ToolDefinition { const d=this.definitions.get(name); if(!d) return fail('unknown_tool'); return structuredClone(d); }
-  available(allowCreate = false, allowVM = false) { return [...this.definitions.values()].filter(d=>d.implemented && (!d.sideEffect || allowCreate && d.name==='write_file' || allowVM && d.target==='vm' && d.name==='run_shell')).map(d=>structuredClone(d)); }
+  available(allowCreate = false, allowVM = false) { return [...this.definitions.values()].filter(d=>d.implemented && (!d.sideEffect || allowCreate && d.name==='write_file' || allowVM && d.target==='vm' && ['run_shell','run_project'].includes(d.name))).map(d=>structuredClone(d)); }
   validate(name: string,args: unknown) { const d=this.get(name); if(bytes(args)>131072 || !matches(d.inputSchema,args)) fail('invalid_arguments'); return d; }
 }
 export function standardTools(): ToolDefinition[] {
@@ -50,3 +50,6 @@ export function standardTools(): ToolDefinition[] {
 
 /** Enabled only with a trusted Host approval channel and the offline VM gateway. */
 export function offlineShellTools():ToolDefinition[]{return standardTools().map(d=>d.name==='run_shell'?{...d,description:'Run an approved command in the Vault offline Linux VM as an unprivileged user. No network, Host mount or persistent workspace; each session starts empty. Available development commands depend on the bundled image; no command can provide internet access.',inputSchema:object({command:text(16384)}),implemented:true,approval:'REQUIRE_APPROVAL',timeoutMs:120000,cancellation:'cooperative'}:d);}
+
+/** Approved selected-file snapshot, ephemeral VM workspace, review-only returned changes. */
+export function developmentTools():ToolDefinition[]{const shell=offlineShellTools();const base=shell.find(d=>d.name==='run_shell')!;return [...shell,{...base,id:'nidus.run_project',name:'run_project',description:'Run an approved command against an explicitly selected snapshot of allowed Vault files in the offline VM. paths is newline-separated Vault-relative file paths (maximum 32). Changes return as review-only diffs; never modify Host originals. No network.',inputSchema:object({command:text(16384),paths:text(16384)})}];}

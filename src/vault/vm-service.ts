@@ -1,4 +1,4 @@
-// Trusted, single-owner local service. Never receives Provider keys or original Vault contents.
+// Trusted, single-owner local service. No Provider keys; selected Vault contents enter only via the validated Workspace gateway.
 import {createServer} from 'node:net';
 import {chmod,unlink} from 'node:fs/promises';
 import {join} from 'node:path';
@@ -29,7 +29,7 @@ export async function serve(registryPath:string){
      case 'shutdown':await controller.close();await unlink(path);server.close();return {shutdownConfirmed:true};
      case 'start':return controller.start(r.vaultId);
      case 'stop':return controller.stop();
-     case 'propose':return controller.propose(r.vaultId,r.executionId,r.callId,r.command);
+     case 'propose':return controller.propose(r.vaultId,r.executionId,r.callId,r.command,r.paths);
      case 'executeApproved':if(typeof r.executionId!=='string')throw new VaultError('vm_invalid_request');cancelExecution=r.executionId;return controller.executeApproved(r.approvalId,r.executionId);
      case 'cancel':await controller.cancel(r.executionId);return {cancelRequested:true};
      default:throw new VaultError('vm_unknown_method');

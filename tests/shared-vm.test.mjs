@@ -36,3 +36,15 @@ test('M4 Host policy: queued approval expiry blocks command dispatch',async t=>{
 test('M4 Host policy: stop cannot interleave between VM start and admission',async t=>{
  const f=await fixture(t);f.backend.auto=false;let ready;f.backend.start=()=>new Promise(r=>{ready=r;});const p=await propose(f),run=f.runtime.executeApproved(p.approvalId);await wait(()=>!!ready);const stopped=assert.rejects(f.runtime.stop(),/vm_execution_active/);ready();await stopped;await wait(()=>f.backend.pending.length===1);f.backend.finish();await run;await f.runtime.close();
 });
+test('Workspace approval binds selected files and returns review without Host mutation',async t=>{
+ const f=await fixture(t);await writeFile(join(f.base,'vault','main.py'),'print(1)');
+ let payload;f.backend.execute=async(id,command,seconds,options)=>{payload=JSON.parse(options.workspace);return {exitCode:0,stdout:'2',stderr:'',cleanupConfirmed:true,reason:'completed',memoryPeakBytes:1,workspaceStatus:'complete',workspace:[{path:'main.py',content:'print(2)'}]};};
+ const p=await f.runtime.propose(f.v.vaultId,'project','call','python3 main.py',['main.py']);
+ assert.deepEqual(p.workspace.paths,['main.py']);assert.equal(payload,undefined);
+ const r=await f.runtime.executeApproved(p.approvalId);assert.equal(payload.files[0].content,'print(1)');assert.equal(r.workspace,undefined);assert.equal(r.workspaceReview[0].hostApplyEnabled,false);assert.equal(r.workspaceReview[0].conflict,false);
+ assert.equal(await readFile(join(f.base,'vault','main.py'),'utf8'),'print(1)');await f.runtime.close();
+});
+test('Workspace changed after approval proposal is never dispatched',async t=>{
+ const f=await fixture(t);await writeFile(join(f.base,'vault','main.py'),'print(1)');const p=await f.runtime.propose(f.v.vaultId,'project','call','python3 main.py',['main.py']);await writeFile(join(f.base,'vault','main.py'),'print(3)');
+ await assert.rejects(f.runtime.executeApproved(p.approvalId),/workspace_source_changed/);assert.equal(f.backend.commands.length,0);assert.equal(f.runtime.status().state,'RUNNING');await f.runtime.close();
+});

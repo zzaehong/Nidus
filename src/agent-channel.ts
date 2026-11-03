@@ -1,3 +1,4 @@
+import {readFile} from 'node:fs/promises';
 import {providerId} from './adapters/index.js';
 // Dedicated bounded NDJSON Host/UI channel; Provider responses never enter this input stream.
 import {randomUUID} from 'node:crypto';
@@ -7,7 +8,7 @@ import {KeychainStore} from './credentials.js';
 import {FileModelStore} from './storage.js';
 import {VaultRegistry} from './vault/registry.js';
 import {VMClient} from './vault/vm-client.js';
-import {ToolRegistry,offlineShellTools} from './tools/registry.js';
+import {ToolRegistry,developmentTools,offlineShellTools} from './tools/registry.js';
 import {ToolDispatcher} from './tools/dispatcher.js';
 import {HostFileGateway} from './tools/files.js';
 import {VMToolGateway} from './tools/vm.js';
@@ -33,9 +34,11 @@ input.on('line',line=>{
    const cancel=()=>answer(false);pending.set(p.approvalId,answer);signal.addEventListener('abort',cancel,{once:true});
    emit({event:'approval',proposal:p});if(signal.aborted)cancel();
   })});
-  const tools=new ToolDispatcher(new ToolRegistry(offlineShellTools()),new HostFileGateway(registry),undefined,{},vm);
+  let development=false;try{development=JSON.parse(await readFile(new URL('./vm-assets/manifest.json',import.meta.url),'utf8')).profile==='development';}catch{}
+  const definitions=development?developmentTools():offlineShellTools();
+  const tools=new ToolDispatcher(new ToolRegistry(definitions),new HostFileGateway(registry),undefined,{},vm);
   if(r.method==='direct-shell'){
-   const call={id:randomUUID(),name:'run_shell',arguments:{command:r.command}};new ToolRegistry(offlineShellTools()).validate(call.name,call.arguments);
+   const call={id:randomUUID(),name:r.paths?'run_project':'run_shell',arguments:r.paths?{command:r.command,paths:r.paths}:{command:r.command}};new ToolRegistry(definitions).validate(call.name,call.arguments);
    emit({event:'tool',name:call.name});const context={vaultId:r.vaultId,executionId:randomUUID(),signal:abort.signal};const result=await tools.invoke(context,call);tools.finishExecution(context.executionId);
    emit({event:'tool-result',name:call.name,result});emit({event:'completed',task:{status:result.status,code:result.code,text:'직접 Shell 검토 — Provider 호출 없음'}});return;
   }

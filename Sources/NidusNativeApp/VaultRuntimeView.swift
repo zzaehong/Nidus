@@ -6,7 +6,7 @@ struct VaultAgentModel: Decodable, Identifiable {
     let id: String; let provider: String; let model: String; let name: String; let available: Bool; let mode: String; let reason: String
     var label: String { "\(Provider(rawValue: provider)?.name ?? provider) · \(name) [\(model)]" }
 }
-struct ShellApproval: Identifiable { let id: String; let vault: String; let command: String; let hash: String; let expires: Double }
+struct ShellApproval: Identifiable { let id: String; let vault: String; let command: String; let hash: String; let expires: Double; let workspace: String }
 
 @MainActor final class VaultRuntimeModel: ObservableObject {
     @Published var vaults: [VaultChoice] = []
@@ -18,6 +18,7 @@ struct ShellApproval: Identifiable { let id: String; let vault: String; let comm
     @Published var events: [String] = []
     @Published var approval: ShellApproval?
     @Published var prompt = ""
+    @Published var workspacePaths = ""
     @Published var shellCommand = "echo hello; pwd; id"
     @Published var model = ""
     @Published var requiresWeb = false
@@ -133,7 +134,7 @@ struct ShellApproval: Identifiable { let id: String; let vault: String; let comm
     }
     func startShell() {
         guard !running,!selected.isEmpty,!shellCommand.isEmpty else {return}
-        startRequest(["method":"direct-shell","vaultId":selected,"command":shellCommand])
+        startRequest(["method":"direct-shell","vaultId":selected,"command":shellCommand,"paths":workspacePaths.trimmingCharacters(in:.whitespacesAndNewlines)])
     }
     private func startRequest(_ request:[String:Any]) {
         do {
@@ -162,7 +163,7 @@ struct ShellApproval: Identifiable { let id: String; let vault: String; let comm
             let line=buffer[..<end];buffer.removeSubrange(...end)
             guard let row=(try? JSONSerialization.jsonObject(with:line)) as? [String:Any],let event=row["event"] as? String else {continue}
             if event=="approval", let p=row["proposal"] as? [String:Any],let id=p["approvalId"] as? String,let command=p["command"] as? String {
-                approval=ShellApproval(id:id,vault:p["vaultId"] as? String ?? "",command:command,hash:p["commandHash"] as? String ?? "",expires:p["expiresAt"] as? Double ?? 0)
+                approval=ShellApproval(id:id,vault:p["vaultId"] as? String ?? "",command:command,hash:p["commandHash"] as? String ?? "",expires:p["expiresAt"] as? Double ?? 0,workspace:Self.workspaceSummary(p["workspace"] as? [String:Any]))
                 events.append("Shell 승인 대기 — 60초 후 만료")
             } else if event=="tool" {events.append("도구 실행: \(row["name"] as? String ?? "")")}
             else if event=="tool-result", let result=row["result"] as? [String:Any] {
@@ -175,6 +176,11 @@ struct ShellApproval: Identifiable { let id: String; let vault: String; let comm
             else if event=="step" {events.append("모델 Step \(row["index"] as? Int ?? 0)")}
             if events.count>150 {events.removeFirst(events.count-150)}
         }
+    }
+    static func workspaceSummary(_ value:[String:Any]?) -> String {
+        guard let value else { return "선택 파일 없음 — 빈 작업 디렉터리" }
+        let paths=(value["paths"] as? [String] ?? []).joined(separator:"\n")
+        return "VM에 전달할 파일:\n\(paths)\n총 \(value["bytes"] as? Int ?? 0) bytes\nSnapshot: \(value["hash"] as? String ?? "")\n변경 결과는 Diff 검토만 지원합니다. Host 원본은 수정하지 않습니다."
     }
     func answer(_ yes:Bool) {guard let approval else{return};send(["method":"approval","approvalId":approval.id,"approved":yes && Date().timeIntervalSince1970*1000<approval.expires]);self.approval=nil}
     func cancel() {approval=nil;sendCancel();events.append("취소 요청 — 이미 실행된 작업은 종료 확인을 기다립니다.")}
@@ -215,6 +221,8 @@ struct VaultRuntimeView: View {
             HStack {TextField("오프라인 Shell 명령",text:$vm.shellCommand).disabled(vm.running)
                 Button("Shell 제안 · API 호출 없음"){vm.startShell()}.disabled(vm.running || vm.selected.isEmpty || vm.shellCommand.isEmpty)
             }
+            Text("Workspace 파일 (Vault 상대경로, 한 줄에 하나, 최대 32개). 다음 Shell 승인에 포함됩니다.").font(.caption)
+            TextEditor(text:$vm.workspacePaths).frame(height:50).border(.quaternary).disabled(vm.running)
             Divider()
             HStack {Picker("검사 통과 모델",selection:$vm.model){Text("모델 선택").tag("");ForEach(vm.agentModels.filter { $0.available }) { choice in Text(choice.label).tag(choice.id) }}.disabled(vm.running)
                 Button("Agent 실행"){vm.startAgent()}.disabled(vm.running||vm.selected.isEmpty || vm.selectedModel == nil || vm.requiresWeb || !vm.sharing||vm.prompt.isEmpty)
@@ -234,6 +242,7 @@ struct VaultRuntimeView: View {
             if let approval=vm.approval {
                 VStack(alignment:.leading,spacing:8){Text("VM Shell 실행 승인").font(.headline);Text("Vault: \(approval.vault)").font(.caption)
                     ScrollView {Text(approval.command).font(.system(.body,design:.monospaced)).textSelection(.enabled).frame(maxWidth:.infinity,alignment:.leading)}.frame(maxHeight:120)
+                    Text(approval.workspace).font(.caption).textSelection(.enabled)
                     Text("SHA-256: \(approval.hash)").font(.caption2).textSelection(.enabled)
                     HStack {Button("거부"){vm.answer(false)};Button("이 명령 1회 승인"){vm.answer(true)}}
                 }.padding().background(.orange.opacity(0.12),in:RoundedRectangle(cornerRadius:8))

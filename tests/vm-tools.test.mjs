@@ -17,3 +17,11 @@ test('M4 dispatcher VM deadline cancels the port and preserves unknown outcomes'
   const r=await tools.invoke(ctx(),call);assert.equal(r.code,status==='unknown'?'outcome_unknown':'tool_timeout');
  }
 });
+test('M4 project snapshot selection reaches trusted approval; denial cannot transfer',async()=>{
+ const {developmentTools,ToolRegistry}=await import('../dist/tools/registry.js');
+ const registry=new ToolRegistry(developmentTools());registry.validate('run_project',{command:'python3 main.py',paths:'main.py\ntest.py'});
+ const requests=[];const client={request:async(method,args)=>{requests.push({method,args});return {approvalId:'test',expiresAt:Date.now()+10000,workspace:{paths:args.paths}};}};
+ const gateway=new VMToolGateway(client,{request:async proposal=>{assert.deepEqual(proposal.workspace.paths,['main.py','test.py']);return false;}});
+ const output=await gateway.invoke({vaultId:'v',executionId:'task',signal:new AbortController().signal},{id:'c',name:'run_project',arguments:{command:'python3 main.py',paths:'main.py\ntest.py'}});
+ assert.equal(output.code,'permission_denied');assert.deepEqual(requests.map(r=>r.method),['propose']);
+});

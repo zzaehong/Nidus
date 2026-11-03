@@ -13,6 +13,7 @@ export class WorkspaceGateway {
  private preparing=0;
  private transferred=new Set<string>();
  constructor(private registry:VaultRegistry,private files:HostFileGateway,private now=Date.now){}
+ discard(id:string){this.snapshots.delete(id);this.transferred.delete(id);}
  finishExecution(executionId:string){for(const [id,s] of this.snapshots)if(s.executionId===executionId){this.snapshots.delete(id);this.transferred.delete(id);}}
  async prepare(ctx:InvocationContext,paths:string[]):Promise<WorkspaceSnapshot>{
   ctx.signal.throwIfAborted();

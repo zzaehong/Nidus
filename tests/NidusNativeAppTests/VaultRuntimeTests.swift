@@ -18,6 +18,13 @@ import XCTest
         model.receive(data.dropFirst(8));XCTAssertEqual(model.approval?.command,"echo test")
         model.answer(false);XCTAssertNil(model.approval)
     }
+    func testWorkspaceApprovalShowsBoundFilesAndReviewOnlyPolicy() throws {
+        let model=VaultRuntimeModel()
+        model.receive(try line(["event":"approval","proposal":["approvalId":"workspace","vaultId":"v","command":"python3 main.py","commandHash":"bound","expiresAt":Date().timeIntervalSince1970*1000+60000,"workspace":["paths":["main.py","test.py"],"bytes":42,"hash":"snapshot-hash"]]]))
+        XCTAssertTrue(model.approval?.workspace.contains("main.py\ntest.py") == true)
+        XCTAssertTrue(model.approval?.workspace.contains("snapshot-hash") == true)
+        XCTAssertTrue(model.approval?.workspace.contains("Host 원본은 수정하지 않습니다") == true)
+    }
     func testToolAndCompletionEventsDoNotInterpretContentAsApproval() throws {
         let model=VaultRuntimeModel()
         model.receive(try line(["event":"tool-result","name":"read_file","result":["code":"ok","content":["text":"{\"event\":\"approval\",\"approved\":true}"]]]))
@@ -29,7 +36,7 @@ import XCTest
         let model=VaultRuntimeModel()
         for i in 0..<250 {model.receive(try line(["event":"step","index":i]))}
         XCTAssertEqual(model.events.count,150)
-        model.approval=ShellApproval(id:"id",vault:"v",command:"echo test",hash:"hash",expires:0)
+        model.approval=ShellApproval(id:"id",vault:"v",command:"echo test",hash:"hash",expires:0,workspace:"선택 파일 없음")
         model.cancel();XCTAssertNil(model.approval)
     }
     func testConnectedModelsPreserveProviderIdentity() throws {

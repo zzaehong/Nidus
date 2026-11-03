@@ -11,8 +11,8 @@ export class VMToolGateway implements VMToolPort {
   let dispatched=false;let timer:ReturnType<typeof setTimeout>|undefined;
   const abort=()=>{void this.client.request('cancel',{executionId:ctx.executionId}).catch(()=>{});};
   try{
-   if(ctx.signal.aborted)return result(call.id,'cancelled','cancelled');if(call.name!=='run_shell')return result(call.id,'denied','tool_disabled');
-   const p:ShellProposal=await this.client.request('propose',{vaultId:ctx.vaultId,executionId:ctx.executionId,callId:call.id,command:(call.arguments as {command:string}).command},true);
+   if(ctx.signal.aborted)return result(call.id,'cancelled','cancelled');if(!['run_shell','run_project'].includes(call.name))return result(call.id,'denied','tool_disabled');
+   const p:ShellProposal=await this.client.request('propose',{vaultId:ctx.vaultId,executionId:ctx.executionId,callId:call.id,command:(call.arguments as {command:string}).command,...(call.name==='run_project'?{paths:(call.arguments as {paths:string}).paths.split('\n')}: {})},true);
    const deadline=new AbortController(),signal=AbortSignal.any([ctx.signal,deadline.signal]);timer=setTimeout(()=>deadline.abort(),Math.max(0,p.expiresAt-Date.now()));
    let onAbort:(()=>void)|undefined;
    let approved=false;

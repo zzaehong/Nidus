@@ -6,12 +6,14 @@ import {createReadStream} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {join} from 'node:path';
 import {VaultError} from './types.js';
-export interface BackendResult {exitCode:number;stdout:string;stderr:string;cleanupConfirmed:boolean;reason:string;memoryPeakBytes:number}
-export interface SharedBackend {onFailure?(handler:()=>void):void;start():Promise<void>;execute(id:string,command:string,seconds:number):Promise<BackendResult>;cancel(id:string):void;stop():Promise<void>}
+export interface ExecutionOptions {workspace?:string;profile?:'shell'|'browser'}
+export interface BackendResult {workspace?:{path:string;content:string|null}[];workspaceStatus?:'complete'|'invalid';exitCode:number;stdout:string;stderr:string;cleanupConfirmed:boolean;reason:string;memoryPeakBytes:number}
+export interface SharedBackend {onFailure?(handler:()=>void):void;start():Promise<void>;execute(id:string,command:string,seconds:number,options?:ExecutionOptions):Promise<BackendResult>;cancel(id:string):void;stop():Promise<void>}
 /** Only this adapter can produce actual Framework stop evidence. Mock implementations are test-only. */
 export class AppleOfflineBackend implements SharedBackend {
  private child:ChildProcessWithoutNullStreams|null=null;
  private development=false;
+ private executing:string|null=null;
  private failureHandler:(()=>void)|undefined;
  onFailure(handler:()=>void){this.failureHandler=handler;}
  private listeners=new Set<(event:any)=>void>();private closed=false;private stopped=false;
@@ -37,14 +39,49 @@ export class AppleOfflineBackend implements SharedBackend {
   child.on('error',()=>this.event({event:'lost'}));child.on('close',()=>{this.closed=true;this.event({event:this.stopped?'closed':'lost'});});
   await ready;
  }
- async execute(id:string,command:string,seconds:number):Promise<BackendResult>{
+ async execute(id:string,command:string,seconds:number,options:ExecutionOptions={}):Promise<BackendResult>{
+  if(this.executing)throw new VaultError('vm_execution_active');
+  if(!/^[0-9a-f-]{36}$/.test(id))throw new VaultError('vm_invalid_session');
+  this.executing=id;
+  const chunks:Buffer[]=[];let workspaceDigest='',invalid=false,total=0;
+  const listener=(e:any)=>{
+   if(e.event!=='guest'||typeof e.line!=='string')return;const parts=e.line.split(' ');if(parts[1]!==id)return;
+   if(parts[0]==='NIDUS_WORKSPACE_RESULT'){
+    if(parts.length!==4||String(chunks.length)!==parts[2]||!/^[A-Za-z0-9+/]+={0,2}$/.test(parts[3])){invalid=true;return;}
+    const chunk=Buffer.from(parts[3],'base64');total+=chunk.length;if(total>1048576){invalid=true;return;}chunks.push(chunk);
+   }else if(parts[0]==='NIDUS_WORKSPACE_END')workspaceDigest=parts[2];
+   else if(parts[0]==='NIDUS_WORKSPACE_INVALID')invalid=true;
+  };
+  this.listeners.add(listener);
+  try{
   if(!this.child||this.closed||this.stopped)throw new VaultError('vm_not_running');
+  let snapshot='';
+  if(options.workspace){
+   if(!this.development||Buffer.byteLength(options.workspace)>1048576)throw new VaultError('workspace_backend_unsupported');
+   const value=JSON.parse(options.workspace);snapshot=value.snapshotId;
+   if(typeof snapshot!=='string'||!/^[0-9a-f-]{36}$/.test(snapshot))throw new VaultError('workspace_invalid');
+   const raw=Buffer.from(options.workspace);
+   const transfer=async(action:string,payload:string)=>{
+    const ack=this.wait(e=>e.event==='guest'&&e.line===`NIDUS_WORKSPACE_ACK ${snapshot} ${action}`,10000);
+    this.child!.stdin.write(`workspace-${action} ${snapshot} ${payload}\n`);await ack;
+   };
+   await transfer('begin','-');
+   for(let offset=0;offset<raw.length;offset+=12288)await transfer('chunk',raw.subarray(offset,offset+12288).toString('base64'));
+   await transfer('seal',createHash('sha256').update(raw).digest('hex'));
+  }
   const pending=this.wait(e=>e.event==='guest'&&typeof e.line==='string'&&e.line.startsWith(`NIDUS_RESULT ${id} `),(seconds+12)*1000);
-  this.child.stdin.write(`${this.development?'execute-dev':'execute'} ${id} ${Buffer.from(command).toString('base64')} ${seconds}\n`);
+  this.child.stdin.write(`${options.profile==='browser'?'execute-browser':this.development?'execute-dev':'execute'} ${id} ${Buffer.from(command).toString('base64')} ${seconds}${snapshot?' '+snapshot:''}\n`);
   const e=await pending,parts=e.line.split(' ');
   if(parts.length!==8||!/^\d+$/.test(parts[2])||!['0','1'].includes(parts[3])||!['completed','cancelled','timeout'].includes(parts[4])||!/^\d+$/.test(parts[5]))throw new VaultError('vm_protocol_invalid');
   const decode=(v:string)=>{if(v==='-')return '';if(!/^[A-Za-z0-9+/]*={0,2}$/.test(v)||v.length>87384)throw new VaultError('vm_output_invalid');return Buffer.from(v,'base64').toString('utf8');};
-  return {exitCode:Number(parts[2]),cleanupConfirmed:parts[3]==='1',reason:parts[4],memoryPeakBytes:Number(parts[5]),stdout:decode(parts[6]),stderr:decode(parts[7])};
+  let workspace:BackendResult['workspace'];
+  if(options.workspace){
+   const raw=Buffer.concat(chunks);
+   if(invalid||!workspaceDigest||createHash('sha256').update(raw).digest('hex')!==workspaceDigest)invalid=true;
+   else{try{workspace=JSON.parse(raw.toString('utf8'));if(!Array.isArray(workspace))invalid=true;}catch{invalid=true;}}
+  }
+  return {...(options.workspace?{workspaceStatus:invalid?'invalid' as const:'complete' as const,...(!invalid?{workspace}:{})}:{}),exitCode:Number(parts[2]),cleanupConfirmed:parts[3]==='1',reason:parts[4],memoryPeakBytes:Number(parts[5]),stdout:decode(parts[6]),stderr:decode(parts[7])};
+  }finally{this.listeners.delete(listener);this.executing=null;}
  }
  cancel(id:string){if(!/^[a-zA-Z0-9-]+$/.test(id))throw new VaultError('vm_invalid_session');this.child?.stdin.write(`cancel ${id}\n`);}
  async stop(){
