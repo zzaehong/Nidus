@@ -41,6 +41,6 @@ input.on('line',line=>{
   }
   const engine=new ConnectivityEngine(new KeychainStore(),new FileModelStore());
   const runtime=new SingleAgentRuntime(new EngineAgentModel(engine,providerId(r.provider)),tools);
-  const task=await runtime.run({vaultId:r.vaultId,model:r.model,prompt:r.prompt,signal:abort.signal,onEvent:emit});emit({event:'completed',task});
+  const task=await runtime.run({vaultId:r.vaultId,model:r.model,prompt:r.prompt,requiresWeb:r.requiresWeb===true,signal:abort.signal,onEvent:emit});emit({event:'completed',task});
  })().catch(e=>emit({event:'error',code:e instanceof NidusError?e.code:'agent_failed'})).finally(()=>{abort.abort();pending.clear();input.close();process.stdin.destroy();});
 });

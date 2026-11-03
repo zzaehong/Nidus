@@ -1,3 +1,4 @@
+import {webToolsAvailable} from './capabilities.js';
 import { randomUUID } from 'node:crypto';
 import { NidusError } from '../errors.js';
 import { ConnectivityEngine } from '../engine.js';
@@ -12,7 +13,7 @@ export class EngineAgentModel implements AgentModel {
 }
 export interface AgentLimits {modelCalls:number;toolInvocations:number;executionMs:number;resultBytes:number}
 export interface AgentStep {stepId:string;index:number;state:'MODEL'|'TOOLS'|'COMPLETED'|'FAILED';invocations:{invocationId:string;callId:string;tool:string;result:ToolResult}[]}
-export interface AgentTask {taskId:string;executionId:string;vaultId:string;status:'COMPLETED'|'LIMIT_REACHED'|'CANCELLED'|'FAILED'|'UNCONFIRMED';text:string;code:string;modelSource:'mock'|'provider';steps:AgentStep[]}
+export interface AgentTask {taskId:string;executionId:string;vaultId:string;status:'COMPLETED'|'LIMIT_REACHED'|'CANCELLED'|'FAILED'|'UNCONFIRMED';text:string;code:string;modelSource:'mock'|'provider';webStatus:'unavailable'|'not_used'|'used';steps:AgentStep[]}
 const defaults:AgentLimits={modelCalls:20,toolInvocations:100,executionMs:900000,resultBytes:1048576};
 async function interruptible<T>(work:Promise<T>,signal:AbortSignal):Promise<T>{
   let listener:(()=>void)|undefined;
@@ -23,15 +24,17 @@ async function interruptible<T>(work:Promise<T>,signal:AbortSignal):Promise<T>{
 export class SingleAgentRuntime {
   private running=false;
   constructor(private readonly model:AgentModel,private readonly tools:ToolDispatcher){}
-  async run(input:{vaultId:string;model:string;prompt:string;signal?:AbortSignal;limits?:Partial<AgentLimits>;onEvent?:(event:Record<string,unknown>)=>void}):Promise<AgentTask>{
+  async run(input:{vaultId:string;model:string;prompt:string;requiresWeb?:boolean;signal?:AbortSignal;limits?:Partial<AgentLimits>;onEvent?:(event:Record<string,unknown>)=>void}):Promise<AgentTask>{
     if(this.running)fail('agent_busy');
     const limits={...defaults,...input.limits};for(const k of Object.keys(defaults) as (keyof AgentLimits)[])if(!Number.isSafeInteger(limits[k])||limits[k]<1||limits[k]>defaults[k])fail('invalid_limits');
     if(typeof input.prompt!=='string'||!input.prompt.trim()||Buffer.byteLength(input.prompt)>65536)fail('invalid_prompt');
     this.running=true;const deadline=new AbortController(),signal=input.signal?AbortSignal.any([input.signal,deadline.signal]):deadline.signal;
     const timer=setTimeout(()=>deadline.abort(),limits.executionMs);
-    const task:AgentTask={taskId:randomUUID(),executionId:randomUUID(),vaultId:input.vaultId,status:'FAILED',text:'',code:'not_started',modelSource:this.model.source,steps:[]};
+    const task:AgentTask={taskId:randomUUID(),executionId:randomUUID(),vaultId:input.vaultId,status:'FAILED',text:'',code:'not_started',modelSource:this.model.source,webStatus:webToolsAvailable(this.tools.available())?'not_used':'unavailable',steps:[]};
     const history:ToolModelRequest['history']=[],seen=new Set<string>();let invocations=0,resultBytes=0;
     try{
+      if(signal.aborted)fail('cancelled');
+      if(input.requiresWeb===true && task.webStatus==='unavailable'){task.code='web_unavailable';task.text='현재 웹 검색과 인터넷 브라우저가 비활성화되어 최신 정보를 확인할 수 없습니다. 모델·VM 호출은 실행하지 않았습니다.';return task;}
       await this.tools.validateVault(input.vaultId);input.onEvent?.({event:'task',executionId:task.executionId});
       for(let i=0;i<limits.modelCalls;i++){
         if(signal.aborted)fail('cancelled');
@@ -52,6 +55,7 @@ export class SingleAgentRuntime {
           input.onEvent?.({event:'tool',name:c.name,callId:c.id});
           const r=await this.tools.invoke({vaultId:input.vaultId,executionId:task.executionId,signal},c);
           input.onEvent?.({event:'tool-result',name:c.name,result:r});
+          if(r.status==='succeeded' && ['browser_search','browser_navigate','browser_read_page'].includes(c.name))task.webStatus='used';
           step.invocations.push({invocationId:randomUUID(),callId:c.id,tool:c.name,result:r});results.push(r);resultBytes+=bytes(r);
           if(r.status==='unknown'){task.status='UNCONFIRMED';task.code=r.code;step.state='FAILED';return task;}
           if(signal.aborted)fail('cancelled');if(resultBytes>limits.resultBytes)fail('result_limit');

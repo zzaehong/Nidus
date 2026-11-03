@@ -2,6 +2,8 @@
 
 2026-11-04, `feature/vault-runtime-v2`.
 
+후속 변경: 현재 Vault Runtime 선택 목록은 연결된 텍스트 모델 중 저장된 동작 검사에 통과한 모델만 표시한다. [검사 통과 필터와 웹 검색 상태](Vault_Runtime_Health_Filter_Web_Status.md)를 참조한다.
+
 ## 문제 및 수정
 
 기존 화면은 OpenAI 두 모델을 하드코딩하고 Agent 채널도 OpenAI로 고정했다. 이제 `agent-models` Host API가 저장된 Provider 연결 및 모델 카탈로그에서 선택 목록을 제공한다. Provider와 모델 ID를 함께 전달하므로 서로 다른 Provider의 같은 모델 이름도 구분한다. 연결이 없거나 카탈로그가 비어 있으면 기본 OpenAI 모델을 임의로 선택하지 않는다.

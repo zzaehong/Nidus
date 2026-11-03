@@ -38,3 +38,15 @@ test('M4 Gate 1: 5000 completed tasks retain bounded heap and no invocation scop
  const script=`import {SingleAgentRuntime} from './dist/agent/runtime.js';import {MockAgentModel} from './dist/agent/model.js';import {ToolDispatcher} from './dist/tools/dispatcher.js';import {ToolRegistry} from './dist/tools/registry.js';const files={validateVault:async()=>{},list:async()=>({entries:[]}),finishExecution:()=>{}};const tools=new ToolDispatcher(new ToolRegistry(),files);const model=new MockAgentModel(async r=>({text:r.history.length?'done':'',calls:r.history.length?[]:[{id:'same',name:'list_files',arguments:{path:'.'}}],continuation:null,usage:null}));const runtime=new SingleAgentRuntime(model,tools);global.gc();const before=process.memoryUsage().heapUsed;for(let i=0;i<5000;i++){const r=await runtime.run({vaultId:'test',model:'mock',prompt:'test'});if(r.status!=='COMPLETED'||tools.retainedExecutions!==0)process.exit(2);}global.gc();console.log(JSON.stringify({retained:tools.retainedExecutions,heapGrowth:process.memoryUsage().heapUsed-before}));`;
  const child=spawn(process.execPath,['--expose-gc','--input-type=module','-e',script],{stdio:['ignore','pipe','pipe']});let output='';child.stdout.on('data',b=>output+=b);child.stderr.resume();assert.equal(await new Promise(r=>child.once('exit',r)),0);const r=JSON.parse(output);assert.equal(r.retained,0);assert.ok(r.heapGrowth<16*1024*1024,JSON.stringify(r));
 });
+test('web-required task fails before Provider or tool invocation when browser is unavailable',async t=>{
+ let calls=0;const f=await setup(t,async()=>{calls++;return turn([],'not reached');});
+ const out=await f.runtime.run({...f.input,prompt:'Find current web evidence',requiresWeb:true});
+ assert.equal(out.code,'web_unavailable');assert.equal(out.status,'FAILED');assert.equal(out.webStatus,'unavailable');assert.equal(calls,0);assert.equal(out.steps.length,0);assert.equal(f.dispatcher.retainedExecutions,0);
+});
+test('offline response carries Host web provenance and no Browser tool is advertised',async t=>{
+ const f=await setup(t,async r=>{assert(!r.tools.some(t=>t.name.startsWith('browser_')));return turn([],'local analysis');});
+ const out=await f.runtime.run(f.input);assert.equal(out.webStatus,'unavailable');assert.equal(out.text,'local analysis');
+ const {textToolRequest}=await import('../dist/agent/text-tools.js');const {responsesToolBody}=await import('../dist/adapters/openai-tools.js');
+ const request={model:'fixture',prompt:'latest web facts',tools:f.dispatcher.available(),history:[]};
+ assert.match(textToolRequest(request).system,/NO web search/);assert.match(responsesToolBody(request).instructions,/NO web search/);
+});

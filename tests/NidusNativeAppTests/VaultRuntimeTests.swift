@@ -2,6 +2,14 @@ import XCTest
 @testable import NidusNativeApp
 
 @MainActor final class VaultRuntimeTests: XCTestCase {
+    func store(_ rows: [HealthRow]) throws -> HealthResultStore {
+        let directory=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        addTeardownBlock { try? FileManager.default.removeItem(at:directory) }
+        let store=HealthResultStore(url:directory.appendingPathComponent("health.json"));try store.save(rows);return store
+    }
+    func row(_ provider:Provider,_ model:String,_ status:CheckStatus = .passed) -> HealthRow {
+        HealthRow(provider:provider,model:model,kind:"text",status:status,reason:"fixture",checkedAt:"2026-11-04T00:00:00Z")
+    }
     func line(_ value:[String:Any]) throws -> Data {try JSONSerialization.data(withJSONObject:value)+Data([10])}
     func testApprovalArrivesOnlyFromHostChannelAndCanBeDenied() throws {
         let model=VaultRuntimeModel()
@@ -25,7 +33,7 @@ import XCTest
         model.cancel();XCTAssertNil(model.approval)
     }
     func testConnectedModelsPreserveProviderIdentity() throws {
-        let vm=VaultRuntimeModel()
+        let vm=VaultRuntimeModel(healthStore:try store([row(.groq,"shared"),row(.nvidia,"shared")]))
         let rows:[[String:Any]] = [
             ["id":"groq:shared","provider":"groq","model":"shared","name":"Shared","available":true,"mode":"nidus-text","reason":""],
             ["id":"nvidia:shared","provider":"nvidia","model":"shared","name":"Shared","available":true,"mode":"nidus-text","reason":""]]
@@ -41,5 +49,29 @@ import XCTest
         vm.applyStatus(["state":"RUNNING","vaultId":"owner","generation":3,"queued":0]);XCTAssertTrue(vm.canStop);XCTAssertTrue(vm.status.contains("유휴"))
         vm.applyStatus(["state":"STOP_UNCONFIRMED","queued":0]);XCTAssertFalse(vm.canStop);XCTAssertTrue(vm.status.contains("재실행 차단"))
         vm.statusUnavailable=true;XCTAssertFalse(vm.canStop);XCTAssertTrue(vm.vmSummaryTitle.contains("확인 불가"))
+    }
+    func testOnlyPassedConnectedModelsAreSelectableAndRecheckDoesNotSwitchProvider() throws {
+        let health=try store([row(.groq,"same"),row(.nvidia,"same",.failed)])
+        let vm=VaultRuntimeModel(healthStore:health)
+        let rows:[[String:Any]] = [
+            ["id":"groq:same","provider":"groq","model":"same","name":"Same","available":true,"mode":"nidus-text","reason":""],
+            ["id":"nvidia:same","provider":"nvidia","model":"same","name":"Same","available":true,"mode":"nidus-text","reason":""],
+            ["id":"openai:untested","provider":"openai","model":"untested","name":"Untested","available":true,"mode":"nidus-text","reason":""]]
+        try vm.loadModels(JSONSerialization.data(withJSONObject:rows))
+        XCTAssertEqual(vm.agentModels.map(\.id),["groq:same"])
+        try health.save([row(.groq,"same",.failed),row(.nvidia,"same")])
+        vm.startAgent()
+        XCTAssertEqual(vm.model,"");XCTAssertFalse(vm.running);XCTAssertNotNil(vm.error)
+        try vm.reloadHealth();XCTAssertEqual(vm.model,"nvidia:same")
+        try Data("broken".utf8).write(to:health.url)
+        XCTAssertThrowsError(try vm.reloadHealth());XCTAssertTrue(vm.agentModels.isEmpty);XCTAssertEqual(vm.model,"")
+    }
+    func testNoProbeRecordMeansNoSelectableModelAndRequiredWebDoesNotStartChannel() throws {
+        let vm=VaultRuntimeModel(healthStore:try store([]))
+        let rows:[[String:Any]]=[["id":"groq:m","provider":"groq","model":"m","name":"M","available":true,"mode":"nidus-text","reason":""]]
+        try vm.loadModels(JSONSerialization.data(withJSONObject:rows));XCTAssertNil(vm.selectedModel)
+        vm.requiresWeb=true;vm.startAgent();XCTAssertFalse(vm.running);XCTAssertTrue(vm.error?.contains("웹 검색") == true)
+        vm.receive(try line(["event":"completed","task":["status":"COMPLETED","code":"ok","text":"fixture","webStatus":"unavailable"]]))
+        XCTAssertTrue(vm.events.contains { $0.contains("웹 검색 미수행") })
     }
 }

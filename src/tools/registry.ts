@@ -49,4 +49,4 @@ export function standardTools(): ToolDefinition[] {
 }
 
 /** Enabled only with a trusted Host approval channel and the offline VM gateway. */
-export function offlineShellTools():ToolDefinition[]{return standardTools().map(d=>d.name==='run_shell'?{...d,description:'Run an approved command in the Vault offline Linux VM as an unprivileged user. No network, Host mount or persistent workspace; each session starts empty. Available commands are BusyBox only.',inputSchema:object({command:text(16384)}),implemented:true,approval:'REQUIRE_APPROVAL',timeoutMs:120000,cancellation:'cooperative'}:d);}
+export function offlineShellTools():ToolDefinition[]{return standardTools().map(d=>d.name==='run_shell'?{...d,description:'Run an approved command in the Vault offline Linux VM as an unprivileged user. No network, Host mount or persistent workspace; each session starts empty. Available development commands depend on the bundled image; no command can provide internet access.',inputSchema:object({command:text(16384)}),implemented:true,approval:'REQUIRE_APPROVAL',timeoutMs:120000,cancellation:'cooperative'}:d);}
