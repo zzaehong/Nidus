@@ -1,0 +1,10 @@
+{
+  "scope": "Host candidate HTTPS broker only; NOT Guest Browser network validation",
+  "target": "https://example.com/",
+  "startedAt": "2026-11-03T13:10:45.178Z",
+  "status": "PASS",
+  "httpStatus": 200,
+  "address": "104.20.23.154",
+  "bytes": 577,
+  "contentType": "text/html"
+}
