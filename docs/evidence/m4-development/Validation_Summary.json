@@ -1,0 +1,53 @@
+{
+  "date": "2026-11-03",
+  "scope": "M4 remaining work partial implementation, NOT full M4 completion",
+  "node": {
+    "status": "PASS",
+    "passed": 302,
+    "failed": 0
+  },
+  "swift": {
+    "status": "PASS",
+    "passed": 45,
+    "failed": 0
+  },
+  "realDevelopmentSessions": {
+    "status": "PASS",
+    "count": 14
+  },
+  "realAdmissionRegression": {
+    "status": "PASS",
+    "count": 8
+  },
+  "bundleChannel": {
+    "status": "PASS",
+    "count": 3,
+    "approvalSource": "programmatic fixture, not human consent"
+  },
+  "app": {
+    "build": "PASS",
+    "launchProcess": "PASS",
+    "interactiveUI": "NOT_RUN",
+    "uiReason": "Sky Computer Use native pipe startup failed",
+    "path": "/Users/parkjaehong/Developer/Nidus/dist/Nidus.app",
+    "assets": {
+      "profile": "development",
+      "Image": "256d5fff4bb892edcb9218c1e6353e388bc3646e65f76c2bc9d958b635d1b00e",
+      "initrd": "7850bf20946c94f2b43ed8f53c2dee2e3cd2ff0be1d474a6d80f753474e5c0ec"
+    }
+  },
+  "paidProviderCalls": 0,
+  "browserInternet": "NOT_RUN",
+  "persistentVaultCache": "NOT_IMPLEMENTED",
+  "workspaceProductIntegration": "NOT_IMPLEMENTED",
+  "hostMutation": "DISABLED",
+  "gates": {
+    "A": "FAIL",
+    "B": "FAIL",
+    "C": "FAIL",
+    "D": "NOT_RUN",
+    "E": "FAIL",
+    "F": "FAIL"
+  },
+  "gateMeaning": "FAIL indicates unmet full completion criteria; independently passing checks are listed separately"
+}
