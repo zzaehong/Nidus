@@ -1,0 +1,80 @@
+{
+  "scope": "Real offline Apple VM + separate Node manager + OS clients. Synthetic approval fixtures, NOT actual user approval. No paid API.",
+  "checks": [
+    {
+      "name": "boot-and-reuse",
+      "status": "PASS",
+      "instance": "16862ac4-c875-48bc-9402-1fc72ddb5d59",
+      "generation": 1
+    },
+    {
+      "name": "two-OS-clients-shared-VM-FIFO",
+      "status": "PASS",
+      "results": [
+        {
+          "sessionId": "2bcf50c5-e089-4cf7-9484-355ae8f75096",
+          "vmInstanceId": "16862ac4-c875-48bc-9402-1fc72ddb5d59",
+          "generation": 1,
+          "exitCode": 0,
+          "cleanupConfirmed": true,
+          "reason": "completed",
+          "memoryPeakBytes": 765952,
+          "stdout": "first\n",
+          "stderr": ""
+        },
+        {
+          "sessionId": "77e56e8e-2151-49fd-8660-935e766b6664",
+          "vmInstanceId": "16862ac4-c875-48bc-9402-1fc72ddb5d59",
+          "generation": 1,
+          "exitCode": 0,
+          "cleanupConfirmed": true,
+          "reason": "completed",
+          "memoryPeakBytes": 872448,
+          "stdout": "second\n",
+          "stderr": ""
+        }
+      ]
+    },
+    {
+      "name": "active-cancel-cleanup",
+      "status": "PASS",
+      "result": {
+        "sessionId": "12c8e841-8bd4-4e45-b1bf-fc21fc72a1fd",
+        "vmInstanceId": "16862ac4-c875-48bc-9402-1fc72ddb5d59",
+        "generation": 1,
+        "exitCode": 137,
+        "cleanupConfirmed": true,
+        "reason": "cancelled",
+        "memoryPeakBytes": 749568,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "Agent-Host-read-to-real-VM-Shell",
+      "status": "PASS",
+      "model": "Mock; no Ledger usage",
+      "approval": "synthetic Host fixture; not actual UI consent",
+      "sameInstance": true
+    },
+    {
+      "name": "other-Vault-global-limit",
+      "status": "PASS"
+    },
+    {
+      "name": "framework-stop",
+      "status": "PASS"
+    },
+    {
+      "name": "confirmed-stop-global-slot-handoff",
+      "status": "PASS"
+    },
+    {
+      "name": "manager-SIGKILL-blocks-reentry",
+      "status": "PASS",
+      "actualVMStop": "UNCONFIRMED; never inferred from PID or EOF"
+    }
+  ],
+  "startedAt": "2026-11-03T01:18:27.936Z",
+  "retainedTemporaryJournal": "<retained in /private/tmp; not a production registry>"
+}
