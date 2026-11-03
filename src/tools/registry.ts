@@ -28,7 +28,7 @@ export class ToolRegistry {
     checkSchema(d.inputSchema); checkSchema(d.outputSchema); this.definitions.set(d.name,structuredClone(d));
   }
   get(name: string): ToolDefinition { const d=this.definitions.get(name); if(!d) return fail('unknown_tool'); return structuredClone(d); }
-  available(allowCreate = false) { return [...this.definitions.values()].filter(d=>d.implemented && (!d.sideEffect || allowCreate && d.name==='write_file')).map(d=>structuredClone(d)); }
+  available(allowCreate = false, allowVM = false) { return [...this.definitions.values()].filter(d=>d.implemented && (!d.sideEffect || allowCreate && d.name==='write_file' || allowVM && d.target==='vm' && d.name==='run_shell')).map(d=>structuredClone(d)); }
   validate(name: string,args: unknown) { const d=this.get(name); if(bytes(args)>131072 || !matches(d.inputSchema,args)) fail('invalid_arguments'); return d; }
 }
 export function standardTools(): ToolDefinition[] {
@@ -47,3 +47,6 @@ export function standardTools(): ToolDefinition[] {
   ];
   return specs.map(([name,description,properties,sideEffect,target,implemented])=>({id:`nidus.${name}`,name,version:'1',description,inputSchema:object(properties),outputSchema:object({text:text(131072)}),target,permissions:[target==='host'?(sideEffect?'vault.write':'vault.read'):`${target}.execute`],sideEffect,approval:!implemented?'DENY':sideEffect?'REQUIRE_APPROVAL':'ALLOW',timeoutMs:10000,maxOutputBytes:131072,cancellation:sideEffect?'before-dispatch':'cooperative',implemented}));
 }
+
+/** Enabled only with a trusted Host approval channel and the offline VM gateway. */
+export function offlineShellTools():ToolDefinition[]{return standardTools().map(d=>d.name==='run_shell'?{...d,description:'Run an approved command in the Vault offline Linux VM as an unprivileged user. No network, Host mount or persistent workspace; each session starts empty. Available commands are BusyBox only.',inputSchema:object({command:text(16384)}),implemented:true,approval:'REQUIRE_APPROVAL',timeoutMs:120000,cancellation:'cooperative'}:d);}

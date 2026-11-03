@@ -6,7 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
     }
-    func applicationWillTerminate(_ notification: Notification) { Runtime.shared.shutdown() }
+    func applicationWillTerminate(_ notification: Notification) { VaultRuntimeModel.active?.shutdown(); Runtime.shared.shutdown() }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 }
 
@@ -57,6 +57,7 @@ struct DashboardView: View {
     @State private var showRouting = false
     @State private var showModelTier = false
     @State private var showChat = false
+    @State private var showVault = false
     var body: some View {
         NavigationSplitView {
             VStack(alignment: .leading, spacing: 20) {
@@ -87,6 +88,7 @@ struct DashboardView: View {
             }
         }
         .toolbar {
+            Button("Vault Runtime", systemImage: "externaldrive") { showVault = true }.disabled(!dashboard.ready)
             Button("Model Tier", systemImage: "square.stack.3d.up") { showModelTier = true }.disabled(!dashboard.ready)
             Button("Routing Policy", systemImage: "arrow.triangle.branch") { showRouting = true }.disabled(!dashboard.ready)
             Button("사용량 및 비용", systemImage: "chart.bar") { showUsage = true }.disabled(!dashboard.ready)
@@ -98,6 +100,7 @@ struct DashboardView: View {
         .sheet(isPresented: $showRouting) { RoutingSettingsView(policyOnly: true) }
         .sheet(isPresented: $showUsage) { UsageBudgetView() }
         .sheet(isPresented: $showHealth) { HealthChecksView(initialProvider: selected ?? .openai).environmentObject(dashboard) }
+        .sheet(isPresented: $showVault) { VaultRuntimeView() }
         .sheet(isPresented: $showChat) { ChatRoomsView().environmentObject(dashboard) }
         .overlay {
             if let error = dashboard.runtimeError {

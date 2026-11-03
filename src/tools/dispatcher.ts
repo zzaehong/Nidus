@@ -3,16 +3,17 @@ import { bytes, result, ToolError, fail, type InvocationContext, type ToolCall, 
 import { HostFileGateway } from './files.js';
 import { PermissionGateway } from './permission.js';
 import { ToolRegistry, matches } from './registry.js';
+export interface VMToolPort {invoke(ctx:InvocationContext,call:ToolCall):Promise<ToolResult>}
 export class ToolDispatcher {
   private used=new Map<string,Set<string>>();
   /** Host-owned task scopes. Completed scopes must never be resumed. */
-  finishExecution(executionId:string){this.used.delete(executionId);this.readReserved.delete(executionId);}
+  finishExecution(executionId:string){this.used.delete(executionId);this.readReserved.delete(executionId);this.files.finishExecution(executionId);this.permissions.finishExecution(executionId);}
   get retainedExecutions(){return this.used.size;}
   private readReserved=new Map<string,number>();
   readonly mode:'product'|'test';
-  constructor(readonly registry:ToolRegistry,private readonly files:HostFileGateway,private readonly permissions=new PermissionGateway(),options:{mode?:'product'|'test'}={}){this.mode=options.mode??'product';}
+  constructor(readonly registry:ToolRegistry,private readonly files:HostFileGateway,private readonly permissions=new PermissionGateway(),options:{mode?:'product'|'test'}={},private readonly vm?:VMToolPort){this.mode=options.mode??'product';}
   validateVault(vaultId:string){return this.files.validateVault(vaultId);}
-  available(){return this.registry.available(this.mode==='test' && this.permissions.adapter.source==='mock').filter(d=>this.permissions.policy(d)!=='DENY');}
+  available(){return this.registry.available(this.mode==='test' && this.permissions.adapter.source==='mock',!!this.vm).filter(d=>this.permissions.policy(d)!=='DENY');}
   async invoke(ctx:InvocationContext,call:ToolCall):Promise<ToolResult>{
     let timer:ReturnType<typeof setTimeout>|undefined;
     try{
@@ -20,6 +21,12 @@ export class ToolDispatcher {
       if(!calls){if(this.used.size>=128)fail('execution_scope_limit');calls=new Set();this.used.set(ctx.executionId,calls);}
       if(calls.has(call.id))fail('duplicate_invocation');if(calls.size>=100)fail('tool_limit');calls.add(call.id);
       if(ctx.signal.aborted)fail('cancelled');if(!this.available().some(t=>t.name===d.name))fail('tool_disabled');
+      if(d.target==='vm'){
+        if(!this.vm)fail('tool_disabled');const deadline=new AbortController();timer=setTimeout(()=>deadline.abort(),d.timeoutMs);
+        const r=await this.vm!.invoke({...ctx,signal:AbortSignal.any([ctx.signal,deadline.signal])},call);
+        if(bytes(r)>d.maxOutputBytes||!matches(d.outputSchema,r.content))fail('output_limit');
+        return deadline.signal.aborted&&r.status!=='unknown'?result(call.id,'failed','tool_timeout'):r;
+      }
       const policy=this.permissions.policy(d);if(policy==='DENY')fail('permission_denied');if(!d.sideEffect && policy==='REQUIRE_APPROVAL')fail('read_approval_unsupported');
       const abort=new AbortController();timer=setTimeout(()=>abort.abort(),d.timeoutMs);const work={...ctx,signal:AbortSignal.any([ctx.signal,abort.signal])};
       const a=call.arguments as Record<string,string>;let data:unknown;

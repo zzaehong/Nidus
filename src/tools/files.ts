@@ -13,6 +13,7 @@ export interface ChangePlan {
 }
 export class HostFileGateway {
   private plans = new Map<string,ChangePlan>();
+  finishExecution(executionId:string){for(const [id,p] of this.plans)if(p.executionId===executionId)this.plans.delete(id);}
   constructor(private readonly registry: VaultRegistry) {}
   private async native(ctx: InvocationContext, operation: string, path: string, content?: string, beforeDispatch?: () => void): Promise<any> {
     if(process.platform!=='darwin') return fail('filesystem_platform_unsupported');

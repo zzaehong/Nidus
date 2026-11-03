@@ -23,7 +23,7 @@ async function interruptible<T>(work:Promise<T>,signal:AbortSignal):Promise<T>{
 export class SingleAgentRuntime {
   private running=false;
   constructor(private readonly model:AgentModel,private readonly tools:ToolDispatcher){}
-  async run(input:{vaultId:string;model:string;prompt:string;signal?:AbortSignal;limits?:Partial<AgentLimits>}):Promise<AgentTask>{
+  async run(input:{vaultId:string;model:string;prompt:string;signal?:AbortSignal;limits?:Partial<AgentLimits>;onEvent?:(event:Record<string,unknown>)=>void}):Promise<AgentTask>{
     if(this.running)fail('agent_busy');
     const limits={...defaults,...input.limits};for(const k of Object.keys(defaults) as (keyof AgentLimits)[])if(!Number.isSafeInteger(limits[k])||limits[k]<1||limits[k]>defaults[k])fail('invalid_limits');
     if(typeof input.prompt!=='string'||!input.prompt.trim()||Buffer.byteLength(input.prompt)>65536)fail('invalid_prompt');
@@ -32,10 +32,10 @@ export class SingleAgentRuntime {
     const task:AgentTask={taskId:randomUUID(),executionId:randomUUID(),vaultId:input.vaultId,status:'FAILED',text:'',code:'not_started',modelSource:this.model.source,steps:[]};
     const history:ToolModelRequest['history']=[],seen=new Set<string>();let invocations=0,resultBytes=0;
     try{
-      await this.tools.validateVault(input.vaultId);
+      await this.tools.validateVault(input.vaultId);input.onEvent?.({event:'task',executionId:task.executionId});
       for(let i=0;i<limits.modelCalls;i++){
         if(signal.aborted)fail('cancelled');
-        const step:AgentStep={stepId:randomUUID(),index:i+1,state:'MODEL',invocations:[]};task.steps.push(step);
+        const step:AgentStep={stepId:randomUUID(),index:i+1,state:'MODEL',invocations:[]};task.steps.push(step);input.onEvent?.({event:'step',index:step.index});
         const request:ToolModelRequest={model:input.model,prompt:input.prompt,tools:this.tools.available(),history:structuredClone(history)};
         const turn:ModelTurn=await interruptible(this.model.respond(request,signal),signal);
         if(signal.aborted)fail('cancelled');
@@ -49,7 +49,9 @@ export class SingleAgentRuntime {
           if(signal.aborted)fail('cancelled');if(resultBytes>=limits.resultBytes)fail('result_limit');
           seen.add(c.id);invocations++;
           // Do not race a mutation promise: wait for helper close and classify interruption as unknown.
+          input.onEvent?.({event:'tool',name:c.name,callId:c.id});
           const r=await this.tools.invoke({vaultId:input.vaultId,executionId:task.executionId,signal},c);
+          input.onEvent?.({event:'tool-result',name:c.name,result:r});
           step.invocations.push({invocationId:randomUUID(),callId:c.id,tool:c.name,result:r});results.push(r);resultBytes+=bytes(r);
           if(r.status==='unknown'){task.status='UNCONFIRMED';task.code=r.code;step.state='FAILED';return task;}
           if(signal.aborted)fail('cancelled');if(resultBytes>limits.resultBytes)fail('result_limit');

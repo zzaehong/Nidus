@@ -23,6 +23,7 @@ interface Grant { token:string;request:ApprovalRequest;approvedAt:number;source:
 export class PermissionGateway {
   private revision=1;private overrides=new Map<string,Permission>();private grants=new Map<string,Grant>();
   constructor(readonly adapter:ApprovalAdapter=new DenyApprovalAdapter(),private readonly now=()=>Date.now()){}
+  finishExecution(executionId:string){for(const [token,g] of this.grants)if(g.request.executionId===executionId)this.grants.delete(token);}
   get policyRevision(){return this.revision;}
   setPolicy(tool:string,policy:Permission){if(!['ALLOW','DENY','REQUIRE_APPROVAL'].includes(policy))fail('invalid_policy');this.overrides.set(tool,policy);this.revision++;this.grants.clear();}
   policy(d:ToolDefinition):Permission{if(!d.implemented)return 'DENY';const policy=this.overrides.get(d.name)??d.approval;return d.sideEffect && policy==='ALLOW'?'REQUIRE_APPROVAL':policy;}
