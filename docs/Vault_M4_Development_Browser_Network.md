@@ -124,3 +124,56 @@ M5/M6 검토 항목: 권한 UX 개선, 개발 이미지 배포/업데이트/서�
 - `28fab0f`: 앱 개발 프로필 연결, 취소 사유 수정, 실제 회귀 및 번들 검증.
 
 시작/종료 develop: `d5972bacbb1a41207ce5d15b25d09bcf82c942df`. main: `723c03b59dcecaae27d9fe0a9f97b464c785d706` 유지. develop 병합, 브랜치 삭제, reset, push/PR은 수행하지 않았다. 사용자 검토용 개발 산출물이며 M4 전체 완료 승인을 요청하는 상태는 아니다.
+
+## 2026-11-04 잔여 작업 — 승인 Workspace 앱 연결
+
+**M4 전체는 아직 미완료다.** 이번 변경으로 개발 이미지의 선택 파일 Workspace를 Host 서비스 → 실제 VM → Diff 검토 → SwiftUI까지 연결했다. Browser/인터넷, 영속 패키지 캐시·디스크, Host 변경 반영은 완료로 표시하지 않는다.
+
+### 구현 및 사용 경로
+
+- `run_project(command, paths)`는 신뢰된 코드가 정의하는 VM Tool이다. `paths`는 줄바꿈으로 구분한 최대 32개 Vault 상대 파일 경로다. 개발 이미지인 경우에만 Agent 채널이 광고한다.
+- 서비스가 Native Host File Gateway로 Snapshot을 만들고 승인에 경로·바이트 수·Snapshot 해시를 포함한다. 명령 감사 해시는 명령과 Snapshot 해시에 함께 결합된다. 모델에게 승인 토큰을 전달하지 않는다.
+- 실제 실행 직전에 원본 내용·객체 동일성을 다시 확인한다. 변경되면 실행하지 않는다. 실행 전 검증 실패는 이미 실행된 세션의 종료 미확인과 구분한다.
+- 직렬화된 서비스가 제한된 chunk/ACK/전체 SHA-256 프로토콜로 파일을 전달한다. 게스트의 읽기 전용 `/snapshot`과 쓰기 가능한 `/work`는 Host 원본과 별개다. 실행 완료 후 cgroup 정리를 확인하고 선택 파일의 변경/삭제안을 반환한다.
+- 반환 데이터는 불신 데이터로 다시 검증한다. 새로운 파일 반출은 지원하지 않는다. Diff가 출력 한도를 넘으면 명시적 검토 오류를 반환한다. Host 원본 자동 변경·삭제는 없다.
+- SwiftUI Shell 영역 아래 Workspace 입력란에 상대경로를 한 줄씩 입력하고 명령을 제안한다. 승인 화면에서 파일 목록·Snapshot 해시를 확인한다. 결과 영역의 `workspaceReview`에서 Diff와 충돌 여부를 검토한다.
+- Snapshot은 세션별 임시 데이터다. 영속 캐시나 디스크 구현으로 간주하지 않는다. 보호 파일 정책에 따라 `package.json` 등 일부 설정 파일은 계속 거부된다.
+
+### 새 검증 결과
+
+| 검증 | 결과 | 근거/한계 |
+|---|---|---|
+| 전체 Node 회귀 | PASS 324 | `/private/tmp/nidus-m4-remaining-node-final-2.log`; 이전 기준 321과 구분 |
+| Swift 회귀 | PASS 51 | Workspace 승인 표시 테스트 추가; 이전 기준 50 |
+| 실제 Workspace 왕복 | PASS | `evidence/m4-remaining/workspace-final-real.json` |
+| 동일 VM/Generation 2회 재사용 | PASS | 위 Evidence, 매번 원본 Snapshot으로 시작 |
+| Host 원본 보존, Diff, cgroup cleanup, VM 전체 종료 | PASS | 합성 임시 Vault만 사용, STOP_CONFIRMED |
+| 실제 사용자 승인 클릭 | NOT_RUN | 자동 테스트의 프로그램 승인은 사용자 승인 증거가 아님 |
+| 실제 유료 Provider + Workspace E2E | NOT_RUN | 호출하지 않음 |
+| Chromium namespace sandbox | FAIL | 5회 실제 VM 진단, 아래 설명 |
+| Browser 검색/DOM + 네트워크 보안 통합 | NOT_RUN / 비활성 | URL 정책 단위 테스트를 실제 브라우저 격리로 주장하지 않음 |
+| 영속 캐시·디스크 | 미구현 | 고정 개발 도구 이미지와 별개 |
+| Host 변경 반영 | 비활성 | Native 조건부 교체·삭제 검증이 선행되어야 함 |
+
+### Browser 잔여 원인과 다음 조치
+
+실제 Linux VM에서 Chromium sandbox 경로를 진단했다. 초기 mount 구성 오류를 수정한 뒤에도 Chromium은 `No usable sandbox`, user namespace 생성은 `Operation not permitted`로 실패했다. 정확한 커널/초기 rootfs/namespace 원인은 아직 확정하지 않았다. `--no-sandbox`로 우회해서 인터넷 도구를 활성화하지 않았다.
+
+실험 patch와 다섯 번의 실패 Evidence를 `evidence/m4-remaining/`에 별도 보존했다. namespace 허용 범위를 늘리는 실험 변경은 제품 이미지에서 제외했다. 기존 M0/M4 Evidence는 수정하지 않았다. 과거 `--no-sandbox` 오프라인 DOM 성공은 Chromium sandbox 또는 공개 웹 격리 성공을 의미하지 않는다.
+
+다음 작업은 정식 guest root filesystem/namespace 구성에서 Chromium sandbox를 검증하고, CDP 요청을 Host의 제한된 HTTPS GET 경로에 연결한 후 DNS·redirect·IPv6·WebSocket·Shell 우회 실험을 수행하는 것이다. 참고한 1차 문서는 [CDP Fetch](https://chromedevtools.github.io/devtools-protocol/tot/Fetch/), [clone의 user namespace 제한](https://man7.org/linux/man-pages/man2/clone.2.html), [pivot_root](https://www.man7.org/linux/man-pages/man2/pivot_root.2.html)다. 현재 VM에는 여전히 NIC가 없고 Browser 도구는 광고하지 않는다.
+
+### 직접 검토
+
+1. 개발 앱 `dist/Nidus.app`을 실행한다. 기존 앱/VM이 열려 있다면 활성 실행 종료와 VM STOP_CONFIRMED를 확인하고 앱을 다시 실행한다. 기존 종료 미확인 Journal을 삭제해서 우회하지 않는다.
+2. 개인 프로젝트 대신 `main.py`에 `print(1)`만 넣은 별도 테스트 Vault를 등록한다.
+3. Workspace 입력에 `main.py`, Shell 명령에 `python3 main.py; printf 'print(2)\n' > main.py`를 입력한다.
+4. 파일 목록과 명령의 승인 요청을 확인한다. 거부 시 실행되지 않아야 한다.
+5. 승인하면 stdout `1`, 변경 Diff, `hostApplyEnabled:false`를 확인한다. Host 파일은 `print(1)`이어야 한다.
+6. 다시 실행하여 VM Instance/Generation은 같고 작업 파일은 원본 Snapshot으로 초기화되는지 확인한다.
+7. 모델 검사 통과 모델의 Agent에 같은 작업을 요청할 수 있다. Provider 사용량 과금은 별도이며 이번 자동 검증에는 포함하지 않았다.
+8. Browser/웹 검색은 계속 비활성이다. 이 빌드는 웹 리서치 완료 빌드가 아니다.
+
+이번 구현 커밋: `ac14292`. 개발 앱 빌드 및 번들 Image/initrd SHA-256, VM/File Helper 포함 검사는 PASS이며 `open dist/Nidus.app` 요청도 성공했다. 실제 화면 클릭·승인 조작은 NOT_RUN이다. 최종 검증 요약은 `evidence/m4-remaining/validation-summary.json`에 보존했다. Tool 식별자 결합 보완 후 관련 Node 23개도 다시 통과했다.
+
+Gate 판정: A는 기존 개발 도구 실행 PASS이나 영속 캐시 미완료, B는 선택된 기존 파일 Snapshot/실행/Diff 범위 PASS(Host 반영 비활성), C는 sandbox FAIL, D는 실제 Browser 네트워크 NOT_RUN/비활성, E는 Workspace 도구 연결 PASS이나 실제 Provider·웹 복합 E2E NOT_RUN, F는 빌드·번들 검사 PASS이나 실제 UI 조작 NOT_RUN이다. 이 범위를 넘어 M4 완료 또는 웹 브라우저 제어 완료로 해석해서는 안 된다.
