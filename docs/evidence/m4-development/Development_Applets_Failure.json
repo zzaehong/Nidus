@@ -1,0 +1,69 @@
+{
+  "scope": "Real Linux ARM64 development VM, no network devices or Host mounts",
+  "cases": [
+    {
+      "name": "versions",
+      "exitCode": 127,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 28557312,
+      "stdout": "Python 3.14.10\npip 26.1.2 from /usr/lib/python3.14/site-packages/pip (python 3.14)\nv24.22.1\ngit version 2.54.0\n",
+      "stderr": "/task.sh: /usr/bin/npm: /usr/bin/env: bad interpreter: No such file or directory\n/task.sh: line 1: head: command not found\n/task.sh: line 1: head: command not found\n/task.sh: line 1: head: command not found\n"
+    },
+    {
+      "status": "FAIL",
+      "error": "{'name': 'versions', 'exitCode': 127, 'cleanupConfirmed': True, 'reason': 'completed', 'memoryPeakBytes': 28557312, 'stdout': 'Python 3.14.10\\npip 26.1.2 from /usr/lib/python3.14/site-packages/pip (python 3.14)\\nv24.22.1\\ngit version 2.54.0\\n', 'stderr': '/task.sh: /usr/bin/npm: /usr/bin/env: bad interpreter: No such file or directory\\n/task.sh: line 1: head: command not found\\n/task.sh: line 1: head: command not found\\n/task.sh: line 1: head: command not found\\n'}"
+    }
+  ],
+  "events": [
+    {
+      "event": "starting",
+      "frameworkState": 0,
+      "time": "2026-11-03T07:08:14Z"
+    },
+    {
+      "event": "running",
+      "frameworkState": 1,
+      "time": "2026-11-03T07:08:14Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_DEVELOPMENT ready",
+      "time": "2026-11-03T07:08:17Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_READY cgroup2",
+      "time": "2026-11-03T07:08:17Z"
+    },
+    {
+      "event": "ready",
+      "frameworkState": 1,
+      "time": "2026-11-03T07:08:17Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 0332816d-db70-4b37-a53b-1e6b6f448732 127 1 completed 28557312 UHl0aG9uIDMuMTQuMTAKcGlwIDI2LjEuMiBmcm9tIC91c3IvbGliL3B5dGhvbjMuMTQvc2l0ZS1wYWNrYWdlcy9waXAgKHB5dGhvbiAzLjE0KQp2MjQuMjIuMQpnaXQgdmVyc2lvbiAyLjU0LjAK L3Rhc2suc2g6IC91c3IvYmluL25wbTogL3Vzci9iaW4vZW52OiBiYWQgaW50ZXJwcmV0ZXI6IE5vIHN1Y2ggZmlsZSBvciBkaXJlY3RvcnkKL3Rhc2suc2g6IGxpbmUgMTogaGVhZDogY29tbWFuZCBub3QgZm91bmQKL3Rhc2suc2g6IGxpbmUgMTogaGVhZDogY29tbWFuZCBub3QgZm91bmQKL3Rhc2suc2g6IGxpbmUgMTogaGVhZDogY29tbWFuZCBub3QgZm91bmQK",
+      "time": "2026-11-03T07:08:19Z"
+    },
+    {
+      "event": "stop_requested",
+      "frameworkState": 1,
+      "reason": "user",
+      "time": "2026-11-03T07:08:19Z"
+    },
+    {
+      "event": "STOP_CONFIRMED",
+      "frameworkState": 0,
+      "time": "2026-11-03T07:08:19Z"
+    }
+  ],
+  "managerExit": 0,
+  "assets": {
+    "Image": "256d5fff4bb892edcb9218c1e6353e388bc3646e65f76c2bc9d958b635d1b00e",
+    "initrd": "0c093d54c410ff18ced1bba43b825b617f229a76a7e7f8801af86ad8ff4cf653"
+  }
+}

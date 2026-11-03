@@ -62,10 +62,30 @@ run_session() {
  rm -f "/run/$id.out" "/run/$id.err" "/run/$id.timeout" "/run/$id.cancel"
  echo "NIDUS_RESULT $id $status $clean $reason $peak $out $err"
 }
+if test -d /opt/development; then
+ mount --bind /opt/development /opt/development || { echo NIDUS_BLOCKED development-root; exec sleep 86400; }
+ for path in proc sys dev run sessions; do
+  mkdir -p "/opt/development/$path"
+  mount --bind "/$path" "/opt/development/$path" || { echo NIDUS_BLOCKED development; exec sleep 86400; }
+ done
+ mount --bind /sys/fs/cgroup /opt/development/sys/fs/cgroup || { echo NIDUS_BLOCKED cgroup-view; exec sleep 86400; }
+ echo NIDUS_DEVELOPMENT ready
+fi
 echo 'NIDUS_READY cgroup2'
-while read -r action id payload seconds; do
+while read -r action id payload seconds snapshot; do
  case "$action" in
   probe) echo "NIDUS_PROBE $id $(cat "$CG/cgroup.controllers")" ;;
+  workspace-begin|workspace-chunk|workspace-seal)
+    if test -e /run/busy || ! test -d /opt/development; then echo 'NIDUS_REJECT busy'; continue; fi
+    chroot /opt/development /usr/bin/python3 /nidus/workspace.py "${action#workspace-}" "$id" "$payload" || echo 'NIDUS_REJECT workspace'
+    ;;
+  execute-dev|execute-browser)
+    case "$id" in ''|*[!a-f0-9-]*) echo 'NIDUS_REJECT id'; continue;; esac
+    if test -e /run/busy || ! test -d /opt/development; then echo 'NIDUS_REJECT busy'; continue; fi
+    touch /run/busy
+    profile=shell; test "$action" = execute-browser && profile=browser
+    chroot /opt/development /usr/bin/python3 /nidus/session.py "$id" "$payload" "$seconds" "$profile" "$snapshot" &
+    ;;
   execute)
     case "$id" in ''|*[!a-zA-Z0-9-]*) echo 'NIDUS_REJECT id'; continue;; esac
     case "$seconds" in ''|*[!0-9]*) echo 'NIDUS_REJECT timeout'; continue;; esac

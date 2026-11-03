@@ -25,12 +25,12 @@ final class Manager: NSObject, VZVirtualMachineDelegate {
             }
         }
     }
-    init(kernel: String, initrd: String) throws {
+    init(kernel: String, initrd: String, development: Bool) throws {
         let config = VZVirtualMachineConfiguration()
         let boot = VZLinuxBootLoader(kernelURL: URL(fileURLWithPath: kernel))
         boot.initialRamdiskURL = URL(fileURLWithPath: initrd)
         boot.commandLine = "console=hvc0 rdinit=/init panic=-1"
-        config.bootLoader = boot; config.cpuCount = 2; config.memorySize = 512 * 1024 * 1024
+        config.bootLoader = boot; config.cpuCount = 2; config.memorySize = (development ? 3072 : 512) * 1024 * 1024
         let serial = VZVirtioConsoleDeviceSerialPortConfiguration()
         serial.attachment = VZFileHandleSerialPortAttachment(fileHandleForReading: input.fileHandleForReading, fileHandleForWriting: output.fileHandleForWriting)
         config.serialPorts = [serial]
@@ -97,9 +97,9 @@ final class Manager: NSObject, VZVirtualMachineDelegate {
 }
 signal(SIGPIPE, SIG_IGN)
 let args = CommandLine.arguments
-guard args.count == 3 else { exit(2) }
+guard args.count == 3 || (args.count == 4 && args[3] == "development") else { exit(2) }
 do {
-    let manager = try Manager(kernel: args[1], initrd: args[2])
+    let manager = try Manager(kernel: args[1], initrd: args[2], development: args.count == 4)
     manager.start()
     // Controller loss requests stop, never asserts stop. Independent process owns confirmation.
     DispatchQueue.global().async {
