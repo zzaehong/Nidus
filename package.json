@@ -10,13 +10,14 @@
     "nidus": "bin/nidus.mjs"
   },
   "scripts": {
-    "build:app": "npm run build && npm run build:keychain && node scripts/build-app.mjs",
+    "build:app": "npm run build && npm run build:keychain && npm run build:vm && node scripts/build-app.mjs",
     "build": "tsc -p tsconfig.json && node scripts/build-vault-helper.mjs",
     "build:keychain": "swiftc native/keychain.swift -o dist/nidus-keychain",
     "test": "npm run build && node --test tests/*.test.mjs",
     "test:live": "npm run build && node --test tests/live/*.test.mjs",
     "test:keychain": "npm run build && npm run build:keychain && node --test tests/keychain/*.test.mjs",
-    "start": "node bin/nidus.mjs"
+    "start": "node bin/nidus.mjs",
+    "build:vm": "node scripts/build-vm-helper.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
