@@ -36,6 +36,7 @@ export class VMToolGateway implements VMToolPort {
    if(!value.cleanupConfirmed)return result(call.id,'unknown','session_cleanup_unconfirmed');
    if(browser){
     if(value.reason==='cancelled')return result(call.id,'cancelled','cancelled');
+    if(value.exitCode!==0&&value.stderr==='browser_search_unrelated')return result(call.id,'failed','browser_search_unrelated','검색 결과 본문이 검색어의 핵심 단어와 맞지 않아 사용하지 않았습니다. 해당 결과를 근거로 답변하지 마세요. 검색어를 바꾸거나 공식 출처 URL을 별도로 승인받아 읽을 수 있습니다. 이 검사는 단순 어휘 검사이며 의미상 관련성을 보증하지 않습니다.');
     if(value.exitCode!==0||!value.browser)return result(call.id,'failed',value.reason==='timeout'?'tool_timeout':'browser_render_failed');
     const pageId=randomUUID();this.pages.set(pageId,{vaultId:ctx.vaultId,executionId:ctx.executionId,page:value.browser});
     return result(call.id,'succeeded','ok',JSON.stringify({pageId,...value.browser}));

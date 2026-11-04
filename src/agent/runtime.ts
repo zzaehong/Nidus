@@ -9,7 +9,7 @@ import type { AgentModel, ModelTurn, ToolModelRequest } from './model.js';
 export class EngineAgentModel implements AgentModel {
   readonly source='provider' as const;
   constructor(private readonly engine:ConnectivityEngine,private readonly provider:ProviderId){}
-  respond(request:ToolModelRequest,signal:AbortSignal){return this.engine.agentChat(this.provider,request,{signal});}
+  respond(request:ToolModelRequest,signal:AbortSignal){return this.engine.agentChat(this.provider,request,{signal,timeoutMs:this.provider==='nvidia'?120000:30000});}
 }
 export interface AgentLimits {modelCalls:number;toolInvocations:number;executionMs:number;resultBytes:number}
 export interface AgentStep {stepId:string;index:number;state:'MODEL'|'TOOLS'|'COMPLETED'|'FAILED';invocations:{invocationId:string;callId:string;tool:string;result:ToolResult}[]}
@@ -66,6 +66,7 @@ export class SingleAgentRuntime {
     }catch(e){
       const code=signal.aborted?'cancelled':e instanceof ToolError?e.code:e instanceof NidusError?`provider_${e.code}`:'provider_error';
       task.code=deadline.signal.aborted?'execution_limit':code;
+      if(code==='provider_timeout')task.text='모델 API의 응답 대기 시간이 초과되었습니다. 브라우저 조회와 별개의 모델 호출 실패이며 자동 재시도하지 않았습니다. 반환된 검색 결과만으로 조사가 완료된 것은 아닙니다.';
       task.status=deadline.signal.aborted||['model_limit','tool_limit','result_limit'].includes(code)?'LIMIT_REACHED':code==='cancelled'?'CANCELLED':'FAILED';
       const last=task.steps.at(-1);if(last && last.state!=='COMPLETED')last.state='FAILED';return task;
     }finally{clearTimeout(timer);deadline.abort();this.tools.finishExecution(task.executionId);this.running=false;}

@@ -1,5 +1,5 @@
 import {CacheDiskStore,type CacheAttachment} from './cache-disk.js';
-import {browserRequest,browserSnapshot,browserPage,type BrowserRequest} from './browser.js';
+import {browserRequest,browserSnapshot,browserPage,checkSearchRelevance,type BrowserRequest} from './browser.js';
 import {createHash,randomUUID} from 'node:crypto';
 import {WorkspaceGateway,type WorkspaceSnapshot} from './workspace.js';
 import {HostFileGateway} from '../tools/files.js';
@@ -88,7 +88,7 @@ export class SharedVMController {
    const result:ShellResult={sessionId:job.record.id,vmInstanceId:job.record.vmInstanceId,generation:job.record.generation,...value};
    if(job.browser){
     delete (result as any).workspace;delete (result as any).workspaceStatus;
-    if(value.exitCode===0){try{result.browser=browserPage(value.stdout,job.browser.url);if(job.browser.kind==='search'&&!result.browser.links.length)throw Error();result.stdout='';}catch{delete result.browser;result.exitCode=1;result.stderr='browser_result_invalid';}}
+    if(value.exitCode===0){try{result.browser=browserPage(value.stdout,job.browser.url);if(job.browser.kind==='search'){if(!result.browser.links.length)throw Error();checkSearchRelevance(result.browser,new URL(job.browser.url).searchParams.get('q')??'');}result.stdout='';}catch(error){delete result.browser;result.stdout='';result.exitCode=1;result.stderr=error instanceof VaultError?error.code:'browser_result_invalid';}}
    }
    if(job.snapshot){
     const {workspace:returned,...bounded}=value;Object.assign(result,bounded);delete (result as any).workspace;

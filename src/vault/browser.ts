@@ -4,6 +4,15 @@ import {VaultError} from './types.js';
 
 export interface BrowserRequest {url:string;kind:'navigate'|'search'}
 export interface BrowserPage {url:string;title:string;text:string;links:{text:string;url:string}[];retrievedAt:string;untrusted:true;mode:'read-only-snapshot'}
+/** Conservative lexical mismatch check, not semantic relevance or factual verification.
+ * Ignore the page title: search engines can echo the query above unrelated results.
+ */
+export function checkSearchRelevance(page:BrowserPage,query:string):void {
+ const ignored=new Set(['a','an','the','of','for','and','or','to','in','on','is','are','what','how','latest','spec','specs','specification','specifications','information','about','please','search']);
+ const terms=[...new Set((query.toLowerCase().replace(/site:\S+/g,' ').match(/[\p{L}\p{N}]+/gu)??[]).filter(t=>t.length>1&&!ignored.has(t)))];
+ const words=new Set((page.text+' '+page.links.map(l=>l.text).join(' ')).toLowerCase().match(/[\p{L}\p{N}]+/gu)??[]);
+ if(!terms.length||terms.filter(t=>words.has(t)).length<Math.min(2,terms.length))throw new VaultError('browser_search_unrelated');
+}
 export function browserRequest(tool:string,value:string):BrowserRequest {
  if(typeof value!=='string'||!value.trim())throw new VaultError('browser_invalid_request');
  if(tool==='browser_search'){

@@ -196,7 +196,7 @@ struct ShellApproval: Identifiable { let id: String; let vault: String; let comm
                 approval=nil
                 if task["webStatus"] as? String == "unavailable" { events.append("[Host 확인] 웹 검색 미수행 · 인터넷 조회 불가. 아래 모델 답변은 최신 웹 검증 결과가 아닙니다.") }
                 if task["webStatus"] as? String == "not_used" { events.append("[Host 확인] 성공한 웹 조회가 없습니다.") }
-                if task["webStatus"] as? String == "used" { events.append("[Host 확인] 승인된 웹 조회 성공 · 반환된 출처와 조회 시각을 확인하세요.") }
+                if task["webStatus"] as? String == "used" { events.append("[Host 확인] 승인된 웹 조회 응답을 받았습니다. 내용의 정확성·조사 완료를 보증하지 않습니다. 출처와 조회 시각을 확인하세요.") }
                 events.append("\(task["status"] as? String ?? "") [\(task["code"] as? String ?? "")]\n\(task["text"] as? String ?? "")")
             } else if event=="error" {error=row["code"] as? String ?? "Agent 오류"}
             else if event=="step" {events.append("모델 Step \(row["index"] as? Int ?? 0)")}
