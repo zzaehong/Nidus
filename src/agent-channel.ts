@@ -8,7 +8,7 @@ import {KeychainStore} from './credentials.js';
 import {FileModelStore} from './storage.js';
 import {VaultRegistry} from './vault/registry.js';
 import {VMClient} from './vault/vm-client.js';
-import {ToolRegistry,browserTools,developmentTools,offlineShellTools} from './tools/registry.js';
+import {ToolRegistry,interactiveBrowserTools,browserTools,developmentTools,offlineShellTools} from './tools/registry.js';
 import {ToolDispatcher} from './tools/dispatcher.js';
 import {HostFileGateway} from './tools/files.js';
 import {VMToolGateway} from './tools/vm.js';
@@ -34,12 +34,12 @@ input.on('line',line=>{
    const cancel=()=>answer(false);pending.set(p.approvalId,answer);signal.addEventListener('abort',cancel,{once:true});
    emit({event:'approval',proposal:p});if(signal.aborted)cancel();
   })});
-  let development=false,browser=false;try{const manifest=JSON.parse(await readFile(new URL('./vm-assets/manifest.json',import.meta.url),'utf8'));development=manifest.profile==='development';browser=development&&manifest.browserSnapshotVersion===1;}catch{}
-  const definitions=browser?browserTools():development?developmentTools():offlineShellTools();
+  let development=false,browser=false,interactive=false;try{const manifest=JSON.parse(await readFile(new URL('./vm-assets/manifest.json',import.meta.url),'utf8'));development=manifest.profile==='development';browser=development&&manifest.browserSnapshotVersion===1;interactive=development&&manifest.browserInteractiveVersion===1;}catch{}
+  const definitions=interactive&&r.method==='run'?interactiveBrowserTools():browser?browserTools():development?developmentTools():offlineShellTools();
   const tools=new ToolDispatcher(new ToolRegistry(definitions),new HostFileGateway(registry),undefined,{},vm);
   if(r.method==='direct-shell'||r.method==='direct-browser'){
    const call=r.method==='direct-browser'?{id:randomUUID(),name:r.tool,arguments:{[r.tool==='browser_search'?'query':'url']:r.value}}:{id:randomUUID(),name:r.paths?'run_project':'run_shell',arguments:r.paths?{command:r.command,paths:r.paths}:{command:r.command}};new ToolRegistry(definitions).validate(call.name,call.arguments);
-   emit({event:'tool',name:call.name});const context={vaultId:r.vaultId,executionId:randomUUID(),signal:abort.signal};const result=await tools.invoke(context,call);tools.finishExecution(context.executionId);
+   emit({event:'tool',name:call.name});const context={vaultId:r.vaultId,executionId:randomUUID(),signal:abort.signal};const result=await tools.invoke(context,call);await tools.finishExecution(context.executionId);
    emit({event:'tool-result',name:call.name,result});emit({event:'completed',task:{status:result.status,code:result.code,text:'직접 도구 검토 — Provider 호출 없음',...(r.method==='direct-browser'?{webStatus:result.status==='succeeded'?'used':'not_used'}:{})}});return;
   }
   const engine=new ConnectivityEngine(new KeychainStore(),new FileModelStore());

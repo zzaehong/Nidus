@@ -1,4 +1,5 @@
 import {CacheDiskStore,type CacheAttachment} from './cache-disk.js';
+import {LiveBrowser,type LiveAction,type LiveApprover,type LiveApproval} from './live-browser.js';
 import {browserRequest,browserSnapshot,browserPage,checkSearchRelevance,type BrowserRequest} from './browser.js';
 import {createHash,randomUUID} from 'node:crypto';
 import {WorkspaceGateway,type WorkspaceSnapshot} from './workspace.js';
@@ -17,11 +18,13 @@ export interface ShellProposal {approvalId:string;vaultId:string;executionId:str
 export class SharedVMController {
  private workspace:WorkspaceGateway;private snapshots=new Map<string,WorkspaceSnapshot>();
  private disk:CacheAttachment|undefined;
+ private live:{browser:LiveBrowser;record:SessionRecord;timer:ReturnType<typeof setTimeout>}|undefined;
+ private liveOpening:{abort:AbortController;executionId:string}|undefined;
  private state=initialVMStatus();private backend:SharedBackend|null=null;
  private writes:Promise<void>=Promise.resolve();private lifecycle:Promise<unknown>=Promise.resolve();
  private queue:Pending[]=[];private active:Pending|null=null;private proposals=new Map<string,ShellProposal>();private cancelled=new Set<string>();
  private idle:ReturnType<typeof setTimeout>|undefined;private shutdownRequested=false;private poisoned=false;
- constructor(private readonly registry:VaultRegistry,private readonly journal:VMJournal,private readonly factory:()=>SharedBackend=()=>new AppleOfflineBackend(),private readonly idleMs=300000,private readonly cache?:CacheDiskStore,private readonly browserEnabled=false){this.workspace=new WorkspaceGateway(registry,new HostFileGateway(registry));}
+ constructor(private readonly registry:VaultRegistry,private readonly journal:VMJournal,private readonly factory:()=>SharedBackend=()=>new AppleOfflineBackend(),private readonly idleMs=300000,private readonly cache?:CacheDiskStore,private readonly browserEnabled=false,private readonly interactiveEnabled=false){this.workspace=new WorkspaceGateway(registry,new HostFileGateway(registry));}
  private discardProposal(id:string){const s=this.snapshots.get(id);if(s)this.workspace.discard(s.snapshotId);this.snapshots.delete(id);this.proposals.delete(id);}
  private context(vaultId:string,executionId:string):InvocationContext{return {vaultId,executionId,signal:new AbortController().signal};}
  async initialize(){if(!Number.isSafeInteger(this.idleMs)||this.idleMs<100||this.idleMs>3600000)fail('vm_invalid_idle');this.state=await this.journal.claim();this.state.policy.idleMs=this.idleMs;await this.persist();}
@@ -41,7 +44,7 @@ export class SharedVMController {
   try{await this.backend.start(this.disk);this.guard();this.state.state='RUNNING';this.state.ready=true;await this.persist();this.armIdle();return this.status();}
   catch(e){await this.stopInternal();throw e;}
  }
- private armIdle(){if(this.idle)clearTimeout(this.idle);this.idle=setTimeout(()=>{if(!this.active&&!this.queue.length)void this.stop().catch(()=>{});},this.idleMs);this.idle.unref();}
+ private armIdle(){if(this.idle)clearTimeout(this.idle);this.idle=setTimeout(()=>{if(!this.active&&!this.queue.length&&!this.live)void this.stop().catch(()=>{});},this.idleMs);this.idle.unref();}
  async propose(vaultId:string,executionId:string,callId:string,command:string,paths?:string[]):Promise<ShellProposal>{
   this.guard();if(this.cancelled.has(executionId))fail('cancelled');if(typeof command!=='string'||!command.trim()||Buffer.byteLength(command)>16384||command.includes('\0')||![executionId,callId].every(x=>typeof x==='string'&&/^[a-zA-Z0-9_-]{1,128}$/.test(x)))fail('vm_invalid_request');
   const vault=await this.registry.resolveVault(vaultId);
@@ -57,11 +60,11 @@ export class SharedVMController {
   this.proposals.set(p.approvalId,p);return structuredClone(p);
  }
  async executeApproved(approvalId:string,executionId?:string):Promise<ShellResult>{
-  this.guard();const p=this.proposals.get(approvalId);this.proposals.delete(approvalId);const snapshot=this.snapshots.get(approvalId);this.snapshots.delete(approvalId);
+  this.guard();if(this.live)fail('browser_session_active');const p=this.proposals.get(approvalId);this.proposals.delete(approvalId);const snapshot=this.snapshots.get(approvalId);this.snapshots.delete(approvalId);
   if(!p||(executionId!==undefined&&executionId!==p.executionId)||p.expiresAt<=Date.now()){if(snapshot)this.workspace.discard(snapshot.snapshotId);return fail('approval_invalid_or_expired');}
   // Caller is the trusted Host approval adapter. IDs/tokens never appear in model tools/results.
   const pending=await this.serial(async()=>{
-   this.guard();if(this.cancelled.has(p.executionId))fail('cancelled');await this.ensureStarted(p.vaultId);
+   this.guard();if(this.live)fail('browser_session_active');if(this.cancelled.has(p.executionId))fail('cancelled');await this.ensureStarted(p.vaultId);
    this.guard();if(this.cancelled.has(p.executionId))fail('cancelled');if(p.expiresAt<=Date.now())fail('approval_expired');const vault=await this.registry.resolveVault(p.vaultId);if(vault.environmentId!==p.environmentId||this.state.vaultId!==p.vaultId)fail('vm_environment_changed');
    const invocationKey=hash(JSON.stringify([p.vaultId,p.executionId,p.callId]));
    if(this.state.sessions.some(s=>s.invocationKey===invocationKey))fail('duplicate_invocation');if(this.state.sessions.length>=10000)fail('vm_audit_limit');
@@ -107,6 +110,8 @@ export class SharedVMController {
  async cancel(executionId:string){
   if(!/^[a-zA-Z0-9_-]{1,128}$/.test(executionId))fail('vm_invalid_request');
   if(this.cancelled.size>=10000)fail('vm_audit_limit');this.cancelled.add(executionId);
+  if(this.liveOpening?.executionId===executionId)this.liveOpening.abort.abort();
+  if(this.live?.record.executionId===executionId){this.live.browser.cancel();void this.closeLive(this.live.record.vaultId,executionId).catch(()=>{});}
   for(const [id,p] of this.proposals)if(p.executionId===executionId)this.discardProposal(id);
   if(this.active?.record.executionId===executionId){this.active.abort?.abort();this.backend?.cancel(this.active.record.id);}
   for(const job of this.queue.filter(j=>j.record.executionId===executionId)){
@@ -114,7 +119,7 @@ export class SharedVMController {
    await this.persist();if(job.snapshot)this.workspace.discard(job.snapshot.snapshotId);job.reject(new VaultError('cancelled'));
   }
  }
- async stop(){return this.serial(async()=>{if(this.active||this.queue.length)fail('vm_execution_active');await this.stopInternal();return this.status();});}
+ async stop(){return this.serial(async()=>{if(this.active||this.queue.length||this.live)fail('vm_execution_active');await this.stopInternal();return this.status();});}
  private async stopInternal(){
   if(this.idle)clearTimeout(this.idle);if(!this.backend)return;if(this.state.state==='STOP_UNCONFIRMED')fail('STOP_UNCONFIRMED');
   this.state.state='STOPPING';this.state.ready=false;await this.persist();
@@ -129,6 +134,35 @@ export class SharedVMController {
   p.browser=browser;p.tool=tool as 'browser_search'|'browser_navigate';p.cachePersistent=false;
   p.commandHash=hash(JSON.stringify([p.tool,browser]));this.proposals.set(p.approvalId,structuredClone(p));return p;
  }
- async clearCache(vaultId:string){return this.serial(async()=>{this.guard();if(this.active||this.queue.length||!['STOPPED','STOP_CONFIRMED'].includes(this.state.state))fail('cache_vm_must_stop');const v=await this.registry.resolveVault(vaultId);if(!this.cache)fail('cache_unsupported');await this.cache!.clear(vaultId,v.environmentId);return {cleared:true};});}
- async close(){this.shutdownRequested=true;for(const id of this.proposals.keys())this.discardProposal(id);if(this.active||this.queue.length)fail('vm_execution_active');await this.stop();await this.journal.release(this.state);}
+ private liveOwner(vaultId:string,executionId:string){if(!this.live||this.live.record.vaultId!==vaultId||this.live.record.executionId!==executionId)fail('browser_session_owner');return this.live!;}
+ private async approveLive(vaultId:string,executionId:string,command:string,scope:string,approve:LiveApprover,signal:AbortSignal){
+  const p:LiveApproval={approvalId:randomUUID(),vaultId,executionId,command,commandHash:hash(command),expiresAt:Date.now()+60000,liveBrowser:true,scope};
+  if(!await approve(p,signal)||signal.aborted||Date.now()>=p.expiresAt)fail('browser_permission_denied');
+ }
+ async openLive(vaultId:string,executionId:string,callId:string,approve:LiveApprover){return this.serial(async()=>{
+  this.guard();if(!this.interactiveEnabled)fail('browser_interactive_unsupported');if(this.live||this.active||this.queue.length)fail('vm_execution_active');
+  if(![executionId,callId].every(x=>typeof x==='string'&&/^[a-zA-Z0-9_-]{1,128}$/.test(x)))fail('vm_invalid_request');
+  await this.registry.resolveVault(vaultId);if(this.cancelled.has(executionId))fail('cancelled');
+  const opening=new AbortController();this.liveOpening={abort:opening,executionId};
+  try{await this.approveLive(vaultId,executionId,'이 작업의 브라우저 세션 시작: 공개 HTTPS 페이지·스크립트·리소스 읽기, 임시 쿠키 사용. 클릭·입력 및 전송 요청은 별도 승인. 최대 15분, 300요청, 16 MiB.','session',approve,opening.signal);}finally{this.liveOpening=undefined;}
+  if(this.cancelled.has(executionId))fail('cancelled');await this.ensureStarted(vaultId);if(this.idle)clearTimeout(this.idle);
+  const browser=new LiveBrowser(vaultId,executionId,this.backend!);const record:SessionRecord={id:browser.id,executionId,callId,invocationKey:hash(JSON.stringify([vaultId,executionId,callId])),commandHash:hash('interactive-browser'),vaultId,vmInstanceId:this.state.vmInstanceId!,generation:this.state.generation,state:'RUNNING',createdAt:new Date().toISOString(),completedAt:null,cleanupConfirmed:false,resultHash:null};
+  if(this.state.sessions.length>=10000||this.state.sessions.some(s=>s.invocationKey===record.invocationKey))fail('duplicate_invocation');
+  const timer=setTimeout(()=>{browser.cancel();void this.closeLive(vaultId,executionId).catch(()=>{});},900000);timer.unref();this.live={browser,record,timer};this.state.sessions.push(record);this.state.activeSession=record.id;await this.persist();
+  try{await browser.start();return await browser.action({op:'navigate',url:'https://www.bing.com/'},approve);}catch(e){await this.closeLiveInternal();throw e;}
+ });}
+ async liveAction(vaultId:string,executionId:string,action:LiveAction,approve:LiveApprover){return this.serial(async()=>{
+  this.guard();const live=this.liveOwner(vaultId,executionId);await this.registry.resolveVault(vaultId);
+  if(this.cancelled.has(executionId))fail('cancelled');if(action.op==='navigate')fail('browser_action_invalid');
+  if(['click','type','back'].includes(action.op))await this.approveLive(vaultId,executionId,live.browser.preview(action),'interaction',approve,live.browser.signal);
+  try{return await live.browser.action(action,approve);}catch(error){if(error instanceof VaultError&&['browser_action_timeout','browser_session_ended'].includes(error.code)){await this.closeLiveInternal();throw new VaultError('browser_action_outcome_unknown');}throw error;}
+ });}
+ private async closeLiveInternal(){
+  if(!this.live)return {closed:true};const live=this.live;clearTimeout(live.timer);
+  try{await live.browser.close();live.record.state='COMPLETED';live.record.cleanupConfirmed=true;live.record.completedAt=new Date().toISOString();live.record.resultHash=hash('browser-closed');this.state.activeSession=null;this.live=undefined;await this.persist();this.armIdle();return {closed:true};}
+  catch(e){this.state.state='STOP_UNCONFIRMED';this.state.ready=false;live.record.state='UNCONFIRMED';await this.persist();throw e;}
+ }
+ async closeLive(vaultId:string,executionId:string){return this.serial(async()=>{if(!this.live)return {closed:true};this.liveOwner(vaultId,executionId);return this.closeLiveInternal();});}
+ async clearCache(vaultId:string){return this.serial(async()=>{this.guard();if(this.active||this.queue.length||this.live||!['STOPPED','STOP_CONFIRMED'].includes(this.state.state))fail('cache_vm_must_stop');const v=await this.registry.resolveVault(vaultId);if(!this.cache)fail('cache_unsupported');await this.cache!.clear(vaultId,v.environmentId);return {cleared:true};});}
+ async close(){this.shutdownRequested=true;for(const id of this.proposals.keys())this.discardProposal(id);if(this.live)await this.closeLive(this.live.record.vaultId,this.live.record.executionId);if(this.active||this.queue.length)fail('vm_execution_active');await this.stop();await this.journal.release(this.state);}
 }

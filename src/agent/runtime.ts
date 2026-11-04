@@ -56,6 +56,7 @@ export class SingleAgentRuntime {
           const r=await this.tools.invoke({vaultId:input.vaultId,executionId:task.executionId,signal},c);
           input.onEvent?.({event:'tool-result',name:c.name,result:r});
           if(r.status==='succeeded' && ['browser_search','browser_navigate','browser_read_page'].includes(c.name))task.webStatus='used';
+          if(r.status==='succeeded'&&['browser_start','browser_observe','browser_click','browser_type','browser_scroll','browser_back'].includes(c.name)){try{if(JSON.parse(r.content.text).networkResponses>0)task.webStatus='used';}catch{}}
           step.invocations.push({invocationId:randomUUID(),callId:c.id,tool:c.name,result:r});results.push(r);resultBytes+=bytes(r);
           if(r.status==='unknown'){task.status='UNCONFIRMED';task.code=r.code;step.state='FAILED';return task;}
           if(signal.aborted)fail('cancelled');if(resultBytes>limits.resultBytes)fail('result_limit');
@@ -69,6 +70,6 @@ export class SingleAgentRuntime {
       if(code==='provider_timeout')task.text='모델 API의 응답 대기 시간이 초과되었습니다. 브라우저 조회와 별개의 모델 호출 실패이며 자동 재시도하지 않았습니다. 반환된 검색 결과만으로 조사가 완료된 것은 아닙니다.';
       task.status=deadline.signal.aborted||['model_limit','tool_limit','result_limit'].includes(code)?'LIMIT_REACHED':code==='cancelled'?'CANCELLED':'FAILED';
       const last=task.steps.at(-1);if(last && last.state!=='COMPLETED')last.state='FAILED';return task;
-    }finally{clearTimeout(timer);deadline.abort();this.tools.finishExecution(task.executionId);this.running=false;}
+    }finally{clearTimeout(timer);deadline.abort();try{await this.tools.finishExecution(task.executionId);}catch{task.status='UNCONFIRMED';task.code='browser_cleanup_unconfirmed';}this.running=false;}
   }
 }

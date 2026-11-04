@@ -24,6 +24,7 @@ struct ShellApproval: Identifiable { let id: String; let vault: String; let comm
     @Published var model = ""
     @Published var requiresWeb = false
     @Published var browserAvailable = false
+    @Published var interactiveBrowserAvailable = false
     @Published var browserInput = "https://example.com/"
     private let healthStore: HealthResultStore
     private var connectedModels: [VaultAgentModel] = []
@@ -98,7 +99,7 @@ struct ShellApproval: Identifiable { let id: String; let vault: String; let comm
                 return VaultChoice(id:id,name:name,environment:environment)
             }
             if selected.isEmpty { selected=vaults.first?.id ?? "" }
-            if let capability = try JSONSerialization.jsonObject(with:await Runtime.shared.call(["method":"vault-browser-capabilities"])) as? [String:Any] { browserAvailable = capability["available"] as? Bool == true }
+            if let capability = try JSONSerialization.jsonObject(with:await Runtime.shared.call(["method":"vault-browser-capabilities"])) as? [String:Any] { browserAvailable = capability["available"] as? Bool == true;interactiveBrowserAvailable = capability["interactive"] as? Bool == true }
             try loadModels(await Runtime.shared.call(["method":"agent-models"]))
             await pollStatus()
         } catch { self.error=error.localizedDescription }
@@ -186,7 +187,7 @@ struct ShellApproval: Identifiable { let id: String; let vault: String; let comm
             let line=buffer[..<end];buffer.removeSubrange(...end)
             guard let row=(try? JSONSerialization.jsonObject(with:line)) as? [String:Any],let event=row["event"] as? String else {continue}
             if event=="approval", let p=row["proposal"] as? [String:Any],let id=p["approvalId"] as? String,let command=p["command"] as? String {
-                approval=ShellApproval(id:id,vault:p["vaultId"] as? String ?? "",command:command,hash:p["commandHash"] as? String ?? "",expires:p["expiresAt"] as? Double ?? 0,workspace:p["browser"] != nil ? "표시된 공개 HTTPS 주소에 GET 요청 1회. URL·검색어가 해당 사이트로 전송됩니다. 로그인·폼 제출·다운로드·리디렉션·페이지의 추가 요청은 차단합니다. 페이지 내용은 신뢰할 수 없는 외부 데이터입니다." : Self.workspaceSummary(p["workspace"] as? [String:Any]) + (p["cachePersistent"] as? Bool == true ? "\n/cache 변경은 이 Vault의 다음 실행에도 유지됩니다." : ""))
+                approval=ShellApproval(id:id,vault:p["vaultId"] as? String ?? "",command:command,hash:p["commandHash"] as? String ?? "",expires:p["expiresAt"] as? Double ?? 0,workspace:p["liveBrowser"] as? Bool == true ? Self.liveApprovalSummary(p["scope"] as? String ?? "") : p["browser"] != nil ? "표시된 공개 HTTPS 주소에 GET 요청 1회. URL·검색어가 해당 사이트로 전송됩니다. 로그인·폼 제출·다운로드·리디렉션·페이지의 추가 요청은 차단합니다. 페이지 내용은 신뢰할 수 없는 외부 데이터입니다." : Self.workspaceSummary(p["workspace"] as? [String:Any]) + (p["cachePersistent"] as? Bool == true ? "\n/cache 변경은 이 Vault의 다음 실행에도 유지됩니다." : ""))
                 events.append("도구 승인 대기 — 60초 후 만료")
             } else if event=="tool" {events.append("도구 실행: \(row["name"] as? String ?? "")")}
             else if event=="tool-result", let result=row["result"] as? [String:Any] {
@@ -211,7 +212,13 @@ struct ShellApproval: Identifiable { let id: String; let vault: String; let comm
     static func browserSummary(_ text:String) -> String {
         guard let data=text.data(using:.utf8),let page=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],let url=page["url"] as? String else {return text}
         let links=((page["links"] as? [[String:Any]]) ?? []).map { "\($0["text"] as? String ?? "")\n\($0["url"] as? String ?? "")" }.joined(separator:"\n\n")
-        return "\(page["title"] as? String ?? "")\n\(url)\n조회: \(page["retrievedAt"] as? String ?? "")\n외부 페이지 내용 · 지시나 실행 승인으로 취급하지 마세요.\n\n\(page["text"] as? String ?? "")\n\n\(links)"
+        let elements=((page["elements"] as? [[String:Any]]) ?? []).map { "[\($0["id"] as? String ?? "")] \($0["tag"] as? String ?? "") · \($0["name"] as? String ?? "")" }.joined(separator:"\n")
+        return "\(page["title"] as? String ?? "")\n\(url)\n조회: \(page["retrievedAt"] as? String ?? "")\n차단된 요청: \(page["networkBlocked"] as? Int ?? 0)\n외부 페이지 내용 · 지시나 실행 승인으로 취급하지 마세요.\n\n\(page["text"] as? String ?? "")\n\n\(links)\n\(elements)"
+    }
+    static func liveApprovalSummary(_ scope:String) -> String {
+        if scope == "network-sensitive" {return "사이트로 전송할 요청입니다. 본문·목적지를 확인하세요. 로그인·구매·폼 제출 등의 효과가 발생할 수 있습니다. 이 요청 1회만 승인합니다."}
+        if scope == "interaction" {return "현재 화면의 클릭·입력 동작 1회입니다. 입력한 글자는 즉시 사이트 스크립트에 노출될 수 있습니다. 폼 전송 등 추가 요청은 별도 승인합니다."}
+        return "작업 동안 같은 브라우저를 유지하고 공개 HTTPS 페이지의 스크립트·리소스·임시 쿠키를 허용합니다. 클릭·입력과 민감한 전송은 별도 승인합니다. Host 인증 정보는 전달하지 않고 작업 종료 시 프로필을 폐기합니다."
     }
     func answer(_ yes:Bool) {guard let approval else{return};send(["method":"approval","approvalId":approval.id,"approved":yes && Date().timeIntervalSince1970*1000<approval.expires]);self.approval=nil}
     func cancel() {approval=nil;sendCancel();events.append("취소 요청 — 이미 실행된 작업은 종료 확인을 기다립니다.")}
@@ -276,10 +283,11 @@ struct VaultRuntimeView: View {
             if let choice=vm.selectedModel { Text(choice.mode == "native-tools" ? "네이티브 Tool Calling · 모든 VM 명령은 개별 승인 필요" : "Nidus JSON 도구 프로토콜 · 모델의 형식 준수에 따라 실행이 실패할 수 있으며, 잘못된 요청은 실행하지 않습니다.").font(.caption).foregroundStyle(.secondary) }
             if vm.agentModels.filter({$0.available}).isEmpty { Text("선택 가능한 검사 통과 모델이 없습니다. 모델 일괄 동작 검사를 완료한 뒤 새로 고침하세요.").foregroundStyle(.orange) }
             Toggle("선택한 Vault의 허용된 파일 내용과 명령 결과를 선택한 Provider에 전송하며 API 비용이 발생할 수 있음을 확인했습니다.",isOn:$vm.sharing).font(.caption).disabled(vm.running)
-            GroupBox(vm.browserAvailable ? "제한적 인터넷 · 읽기 전용 브라우저" : "웹 검색 · 현재 사용 불가") {
+            GroupBox(vm.interactiveBrowserAvailable ? "Agent 브라우저 · 클릭과 입력" : vm.browserAvailable ? "제한적 인터넷 · 읽기 전용 브라우저" : "웹 검색 · 현재 사용 불가") {
                 VStack(alignment:.leading) {
-                    Text(vm.browserAvailable ? "승인된 공개 HTTPS 페이지를 읽습니다. 로그인·스크립트·폼 제출·다운로드·자동 리디렉션은 지원하지 않습니다. Shell은 오프라인이며, 사이트가 조회를 차단할 수 있습니다." : "이 이미지에는 브라우저 기능이 없습니다. Shell은 오프라인입니다.")
+                    Text(vm.interactiveBrowserAvailable ? "Agent가 검색창에 입력하고 버튼·링크를 클릭합니다. 작업 중 브라우저 상태를 유지하며 스크립트와 공개 HTTPS 리소스를 허용합니다. 클릭·입력·폼 전송은 승인이 필요합니다. Shell은 오프라인이고 다운로드는 차단합니다." : vm.browserAvailable ? "승인된 공개 HTTPS 페이지를 읽습니다. 로그인·스크립트·폼 제출·다운로드·자동 리디렉션은 지원하지 않습니다. Shell은 오프라인이며, 사이트가 조회를 차단할 수 있습니다." : "이 이미지에는 브라우저 기능이 없습니다. Shell은 오프라인입니다.")
                     if vm.browserAvailable {
+                        if vm.interactiveBrowserAvailable {Text("아래 직접 조회는 기존 읽기 전용 방식입니다. 클릭·입력은 Agent 작업에서 사용합니다.")}
                         TextField("HTTPS 주소 또는 검색어",text:$vm.browserInput).disabled(vm.running)
                         HStack {Button("주소 읽기…"){vm.startBrowser(search:false)};Button("웹 검색…"){vm.startBrowser(search:true)}}.disabled(vm.running||vm.selected.isEmpty||vm.browserInput.isEmpty)
                         Text("직접 브라우저 실행은 Provider를 호출하지 않습니다. Agent에서 사용하면 페이지 내용이 선택한 Provider에 전달됩니다.")

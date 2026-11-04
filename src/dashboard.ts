@@ -18,7 +18,7 @@ export async function dispatch(input: unknown, engine: ConnectivityEngine): Prom
   if(typeof r.method==='string'&&r.method.startsWith('vault-')){
     const registry=new VaultRegistry(process.env.NIDUS_VAULT_REGISTRY),client=new VMClient(registry);
     switch(r.method){
-      case 'vault-browser-capabilities':{try{const m=JSON.parse(await readFile(new URL('./vm-assets/manifest.json',import.meta.url),'utf8'));return {available:m.profile==='development'&&m.browserSnapshotVersion===1,mode:'read-only-snapshot'};}catch{return {available:false};}}
+      case 'vault-browser-capabilities':{try{const m=JSON.parse(await readFile(new URL('./vm-assets/manifest.json',import.meta.url),'utf8'));return {available:m.profile==='development'&&m.browserSnapshotVersion===1,interactive:m.profile==='development'&&m.browserInteractiveVersion===1,mode:m.browserInteractiveVersion===1?'interactive-browser':'read-only-snapshot'};}catch{return {available:false};}}
       case 'vault-list':return registry.listVaults();
       case 'vault-register':if(typeof r.path!=='string')throw new NidusError('invalid_request','Select a directory.');return registry.registerVault(r.path);
       case 'vault-vm-status':return client.status(true);

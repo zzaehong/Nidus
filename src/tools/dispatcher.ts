@@ -3,11 +3,11 @@ import { bytes, result, ToolError, fail, type InvocationContext, type ToolCall, 
 import { HostFileGateway } from './files.js';
 import { PermissionGateway } from './permission.js';
 import { ToolRegistry, matches } from './registry.js';
-export interface VMToolPort {invoke(ctx:InvocationContext,call:ToolCall):Promise<ToolResult>;finishExecution?(executionId:string):void}
+export interface VMToolPort {invoke(ctx:InvocationContext,call:ToolCall):Promise<ToolResult>;finishExecution?(executionId:string):void|Promise<void>}
 export class ToolDispatcher {
   private used=new Map<string,Set<string>>();
   /** Host-owned task scopes. Completed scopes must never be resumed. */
-  finishExecution(executionId:string){this.used.delete(executionId);this.readReserved.delete(executionId);this.files.finishExecution(executionId);this.permissions.finishExecution(executionId);this.vm?.finishExecution?.(executionId);}
+  finishExecution(executionId:string){this.used.delete(executionId);this.readReserved.delete(executionId);this.files.finishExecution(executionId);this.permissions.finishExecution(executionId);return this.vm?.finishExecution?.(executionId);}
   get retainedExecutions(){return this.used.size;}
   private readReserved=new Map<string,number>();
   readonly mode:'product'|'test';

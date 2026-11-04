@@ -22,6 +22,7 @@ with tempfile.TemporaryDirectory() as staging:
  for name in ['session.py','child.py','workspace.py']:shutil.copyfile(scripts/name,helpers/name)
  browser=root/'opt/development/usr/lib/nidus';browser.mkdir(parents=True)
  shutil.copyfile(scripts/'browser.mjs',browser/'browser.mjs')
+ shutil.copyfile(scripts/'browser-live.mjs',browser/'browser-live.mjs')
  # Write outside the input tree so the archive never includes its own output.
  with tempfile.NamedTemporaryFile() as archive:
   write(root,archive.name)
@@ -30,4 +31,5 @@ with tempfile.TemporaryDirectory() as staging:
     with open(path,'rb') as data:shutil.copyfileobj(data,out,1048576)
 shutil.copyfile(source/'Image',destination/'Image')
 manifest['baseInitrdSHA256']=manifest['initrd'];manifest['initrd']=digest(destination/'initrd');manifest['browserSnapshotVersion']=1
+manifest['browserInteractiveVersion']=1
 (destination/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')

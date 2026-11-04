@@ -3,19 +3,21 @@ import {createInterface} from 'node:readline';
 import {fileURLToPath} from 'node:url';
 import {readFile,lstat} from 'node:fs/promises';
 import {createReadStream} from 'node:fs';
-import {createHash} from 'node:crypto';
+import {createHash,randomUUID} from 'node:crypto';
+import {once} from 'node:events';
 import {join} from 'node:path';
 import type {CacheAttachment} from './cache-disk.js';
 import {VaultError} from './types.js';
 export interface ExecutionOptions {workspace?:string;profile?:'shell'|'browser'}
 export interface BackendResult {workspace?:{path:string;content:string|null}[];workspaceStatus?:'complete'|'invalid';exitCode:number;stdout:string;stderr:string;cleanupConfirmed:boolean;reason:string;memoryPeakBytes:number}
-export interface SharedBackend {onFailure?(handler:()=>void):void;start(disk?:CacheAttachment):Promise<void>;execute(id:string,command:string,seconds:number,options?:ExecutionOptions):Promise<BackendResult>;cancel(id:string):void;stop():Promise<void>;cacheClean?:boolean}
+export interface SharedBackend {onFailure?(handler:()=>void):void;start(disk?:CacheAttachment):Promise<void>;execute(id:string,command:string,seconds:number,options?:ExecutionOptions):Promise<BackendResult>;beginLive?(id:string,listener:(event:any)=>void):Promise<void>;sendLive?(value:unknown):Promise<void>;endLive?():Promise<void>;cancel(id:string):void;stop():Promise<void>;cacheClean?:boolean}
 /** Only this adapter can produce actual Framework stop evidence. Mock implementations are test-only. */
 export class AppleOfflineBackend implements SharedBackend {
  cacheClean=false;
  private child:ChildProcessWithoutNullStreams|null=null;
  private development=false;
  private executing:string|null=null;
+ private liveListener:((event:any)=>void)|undefined;private liveClosed:Promise<any>|undefined;private liveId:string|undefined;private liveWrites=Promise.resolve();
  private failureHandler:(()=>void)|undefined;
  onFailure(handler:()=>void){this.failureHandler=handler;}
  private listeners=new Set<(event:any)=>void>();private closed=false;private stopped=false;
@@ -87,6 +89,26 @@ export class AppleOfflineBackend implements SharedBackend {
   }finally{this.listeners.delete(listener);this.executing=null;}
  }
  cancel(id:string){if(!/^[a-zA-Z0-9-]+$/.test(id))throw new VaultError('vm_invalid_session');this.child?.stdin.write(`cancel ${id}\n`);}
+ async beginLive(id:string,listener:(event:any)=>void){
+  if(this.executing||!this.child||this.closed||!this.development)throw new VaultError('vm_execution_active');
+  if(!/^[0-9a-f-]{36}$/.test(id))throw new VaultError('vm_invalid_session');
+  this.executing=id;this.liveId=id;
+  this.liveListener=e=>{if(e.event==='guest'&&typeof e.line==='string'&&e.line.startsWith(`NIDUS_LIVE ${id} `)){try{const value=JSON.parse(Buffer.from(e.line.split(' ')[2],'base64').toString('utf8'));listener(value);}catch{listener({event:'fatal',error:'browser_protocol_invalid'});}}};this.listeners.add(this.liveListener);
+  this.liveClosed=this.wait(e=>e.event==='guest'&&typeof e.line==='string'&&e.line.startsWith(`NIDUS_RESULT ${id} `),915000);void this.liveClosed.then(()=>listener({event:'ended'}),()=>listener({event:'fatal',error:'browser_cleanup_unconfirmed'}));
+  const ready=this.wait(e=>e.event==='guest'&&typeof e.line==='string'&&e.line.startsWith(`NIDUS_LIVE ${id} `)&&JSON.parse(Buffer.from(e.line.split(' ')[2],'base64').toString()).event==='ready',25000);
+  this.child.stdin.write(`browser-open ${id} - 900\n`);await ready;
+ }
+ async sendLive(value:unknown){
+  const raw=Buffer.from(JSON.stringify(value));if(raw.length>3*1024*1024)throw new VaultError('browser_message_limit');
+  const run=this.liveWrites.then(async()=>{if(!this.liveId||!this.child||this.closed)throw new VaultError('browser_not_running');const key=randomUUID();for(let i=0;i<raw.length;i+=9000){const part=Buffer.from(JSON.stringify({id:key,data:raw.subarray(i,i+9000).toString('base64'),last:i+9000>=raw.length})).toString('base64');if(!this.child.stdin.write(`browser-input ${this.liveId} ${part}\n`))await once(this.child.stdin,'drain');}});this.liveWrites=run.catch(()=>{});return run;
+ }
+ async endLive(){
+  if(!this.liveId)return;
+  this.cancel(this.liveId);
+  const e=await Promise.race([this.liveClosed!,new Promise<never>((_,reject)=>{const timer=setTimeout(()=>reject(new VaultError('browser_cleanup_unconfirmed')),10000);timer.unref();})]);
+  if(e.line.split(' ')[3]!=='1')throw new VaultError('browser_cleanup_unconfirmed');
+  if(this.liveListener)this.listeners.delete(this.liveListener);this.liveListener=undefined;this.liveClosed=undefined;this.liveId=undefined;this.executing=null;
+ }
  async stop(){
   if(!this.child)return;if(this.closed){if(!this.stopped)throw new VaultError('STOP_UNCONFIRMED');return;}
   const closed=this.wait(e=>e.event==='closed',12000);this.child.stdin.write('stop\n');await closed;

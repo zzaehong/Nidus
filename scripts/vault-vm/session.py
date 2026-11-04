@@ -3,10 +3,14 @@ import os,sys,pathlib,subprocess,base64,time,json,shutil,threading,hashlib
 ID,ENCODED,SECONDS=sys.argv[1:4]
 if not ID or any(c not in '0123456789abcdef-' for c in ID):raise ValueError('session id')
 SECONDS=int(SECONDS)
-if not 1<=SECONDS<=120:raise ValueError('deadline')
 ROOT=pathlib.Path('/sessions')/ID;CG=pathlib.Path('/sys/fs/cgroup')/ID
 profile=sys.argv[4] if len(sys.argv)>4 else 'shell'
-if profile not in ['shell','browser']:raise ValueError('profile')
+if profile not in ['shell','browser','interactive']:raise ValueError('profile')
+interactive=profile=='interactive'
+if not 1<=SECONDS<=(900 if interactive else 120):raise ValueError('deadline')
+if interactive:
+ profile='browser'
+ ENCODED=base64.b64encode(b'exec /usr/bin/node /usr/lib/nidus/browser-live.mjs').decode()
 CG.mkdir();ROOT.mkdir()
 if profile=='browser':pathlib.Path('/proc/sys/user/max_user_namespaces').write_text('128')
 (CG/'memory.max').write_text(str((1024 if profile=='browser' else 512)*1024*1024))
@@ -39,8 +43,40 @@ def drain(pipe,destination):
 def enter():
  (CG/'cgroup.procs').write_text(str(os.getpid()))
  if pathlib.Path('/run/'+ID+'.cancel').exists():os._exit(130)
-p=subprocess.Popen(['/bin/busybox','unshare','--mount','--pid','--fork','/usr/bin/python3','/nidus/child.py',str(ROOT),ID,profile],stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.PIPE,env={'PATH':'/usr/bin:/bin'},close_fds=True,preexec_fn=enter)
-threads=[threading.Thread(target=drain,args=(pipe,destination),daemon=True) for pipe,destination in zip([p.stdout,p.stderr],outputs)]
+p=subprocess.Popen(['/bin/busybox','unshare','--mount','--pid','--fork','/usr/bin/python3','/nidus/child.py',str(ROOT),ID,profile],stdin=subprocess.PIPE if interactive else subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.PIPE,env={'PATH':'/usr/bin:/bin'},close_fds=True,preexec_fn=enter)
+if interactive:
+ def relay_output():
+  total=0
+  while True:
+   line=p.stdout.readline(131073)
+   if not line:break
+   total+=len(line)
+   if len(line)>131072 or total>8*1024*1024:
+    (CG/'cgroup.kill').write_text('1');break
+   print('NIDUS_LIVE',ID,base64.b64encode(line).decode(),flush=True)
+ def relay_input():
+  packets={};received=0
+  try:
+   fd=os.open('/run/'+ID+'.input',os.O_RDWR)
+   with os.fdopen(fd,'r') as source:
+    for line in source:
+     received+=len(line)
+     if received>40*1024*1024 or len(line)>24000:raise ValueError('live input limit')
+     part=json.loads(base64.b64decode(line,validate=False));key=part['id']
+     if not isinstance(key,str) or len(key)>64:raise ValueError('packet id')
+     if key not in packets and len(packets)>=8:raise ValueError('packet limit')
+     data=packets.setdefault(key,bytearray());data.extend(base64.b64decode(part['data'],validate=True))
+     if len(data)>3*1024*1024:raise ValueError('packet size')
+     if part['last']:
+      value=json.loads(data);del packets[key]
+      p.stdin.write(json.dumps(value).encode()+b'\n');p.stdin.flush()
+  except Exception:
+   try:(CG/'cgroup.kill').write_text('1')
+   except OSError:pass
+ threading.Thread(target=relay_input,daemon=True).start()
+ stdout_drain=threading.Thread(target=relay_output,daemon=True)
+else:stdout_drain=threading.Thread(target=drain,args=(p.stdout,outputs[0]),daemon=True)
+threads=[stdout_drain,threading.Thread(target=drain,args=(p.stderr,outputs[1]),daemon=True)]
 for thread in threads:thread.start()
 started=time.monotonic();reason='completed'
 while p.poll() is None:
@@ -71,5 +107,6 @@ if clean:
  CG.rmdir();shutil.rmtree(ROOT)
  pathlib.Path('/run/busy').unlink(missing_ok=True)
 pathlib.Path('/run/'+ID+'.cancel').unlink(missing_ok=True)
+if interactive:pathlib.Path('/run/'+ID+'.input').unlink(missing_ok=True)
 encoded=[base64.b64encode(data).decode() if data else '-' for data in outputs]
 print('NIDUS_RESULT',ID,code if code>=0 else 128-code,int(clean),reason,peak,*encoded,flush=True)

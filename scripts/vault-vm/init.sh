@@ -115,12 +115,17 @@ while read -r action id payload seconds snapshot; do
     if test -e /run/busy || ! test -d /opt/development; then echo 'NIDUS_REJECT busy'; continue; fi
     chroot /opt/development /usr/bin/python3 /nidus/workspace.py "${action#workspace-}" "$id" "$payload" || echo 'NIDUS_REJECT workspace'
     ;;
-  execute-dev|execute-browser)
+  browser-input)
+    case "$id" in ''|*[!a-f0-9-]*) continue;; esac
+    if test -p "/run/$id.input"; then printf '%s\n' "$payload" > "/run/$id.input"; fi
+    ;;
+  execute-dev|execute-browser|browser-open)
     case "$id" in ''|*[!a-f0-9-]*) echo 'NIDUS_REJECT id'; continue;; esac
     if test -e /run/busy || ! test -d /opt/development; then echo 'NIDUS_REJECT busy'; continue; fi
     touch /run/busy
     profile=shell; test "$action" = execute-browser && profile=browser
-    if test "$profile" = browser; then
+    if test "$action" = browser-open; then profile=interactive; seconds=900; snapshot=; mkfifo "/run/$id.input" || exit 1; fi
+    if test "$profile" != shell; then
      # pivot the namespace root before entering Python: a chroot ancestor blocks
      # Chromium's unprivileged user namespace even after the session pivot.
      unshare -m -f /bin/sh -c 'mount --make-rprivate / && cd /opt/development && mkdir -p .old-root && pivot_root . .old-root && /bin/busybox umount -l /.old-root && exec /usr/bin/python3 /nidus/session.py "$@"' sh "$id" "$payload" "$seconds" "$profile" "$snapshot" &

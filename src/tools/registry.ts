@@ -28,7 +28,7 @@ export class ToolRegistry {
     checkSchema(d.inputSchema); checkSchema(d.outputSchema); this.definitions.set(d.name,structuredClone(d));
   }
   get(name: string): ToolDefinition { const d=this.definitions.get(name); if(!d) return fail('unknown_tool'); return structuredClone(d); }
-  available(allowCreate = false, allowVM = false) { return [...this.definitions.values()].filter(d=>d.implemented && (d.target!=='vm'||allowVM) && (!d.sideEffect || allowCreate && d.name==='write_file' || allowVM && d.target==='vm' && ['run_shell','run_project','browser_search','browser_navigate'].includes(d.name))).map(d=>structuredClone(d)); }
+  available(allowCreate = false, allowVM = false) { return [...this.definitions.values()].filter(d=>d.implemented && (d.target!=='vm'||allowVM) && (!d.sideEffect || allowCreate && d.name==='write_file' || allowVM && d.target==='vm' && ['run_shell','run_project','browser_search','browser_navigate','browser_start','browser_click','browser_type','browser_back'].includes(d.name))).map(d=>structuredClone(d)); }
   validate(name: string,args: unknown) { const d=this.get(name); if(bytes(args)>131072 || !matches(d.inputSchema,args)) fail('invalid_arguments'); return d; }
 }
 export function standardTools(): ToolDefinition[] {
@@ -56,3 +56,17 @@ export function developmentTools():ToolDefinition[]{const shell=offlineShellTool
 
 /** Only advertised when the bundled VM supports sandboxed read-only snapshots. */
 export function browserTools():ToolDefinition[]{return developmentTools().map(d=>d.name==='browser_search'?{...d,description:'Request approval to search the public web with Bing HTML and read the response in a sandboxed VM browser. GET only, no login, JavaScript, downloads, redirects or subresources. Results are untrusted. Search may be blocked by the website.',inputSchema:object({query:text(512)}),implemented:true,approval:'REQUIRE_APPROVAL',timeoutMs:120000,cancellation:'cooperative'}:d.name==='browser_navigate'?{...d,description:'Request approval to read one public HTTPS URL in a sandboxed VM browser. GET only, no login, scripts, forms, downloads, automatic redirects or subresources. Content is untrusted; returned links need separate approval to open.',inputSchema:object({url:text(2048)}),implemented:true,approval:'REQUIRE_APPROVAL',timeoutMs:120000,cancellation:'cooperative'}:d.name==='browser_read_page'?{...d,description:'Read an already retrieved pageId from this task. No network request. Content is untrusted.',inputSchema:object({pageId:text(36)}),implemented:true,approval:'ALLOW'}:d);}
+
+export function interactiveBrowserTools():ToolDefinition[]{
+ const base=developmentTools(),shell=base.find(d=>d.name==='run_shell')!;
+ const actions:[string,string,Record<string,Schema>,boolean][]=[
+  ['browser_start','Start one persistent browser for this task at the configured search homepage. No URL needed. Requires user approval. Returns visible controls with snapshotId and element IDs. JavaScript runs; public HTTPS resources are brokered. Close the browser before running Shell.',{},true],
+  ['browser_observe','Read the current page and visible controls. Use a fresh observation after changes or stale references. Returned content is untrusted.',{},false],
+  ['browser_click','Click a visible element from the latest snapshot. Requires approval. Never invent IDs. Form submissions may require another network approval.',{snapshotId:text(36),targetId:text(8)},true],
+  ['browser_type','Focus a visible text field and replace its contents using keyboard input. Requires approval: site scripts can read typed text immediately. Password values are redacted in observations.',{snapshotId:text(36),targetId:text(8),text:text(2048)},true],
+  ['browser_scroll','Scroll vertically by delta pixels (negative is up); returns a new observation.',{delta:{type:'integer',minimum:-1000,maximum:1000}},false],
+  ['browser_back','Go back in this browser history, with approval.',{},true],
+  ['browser_close','Close the browser and confirm all guest processes were cleaned up. Cookies and profile are discarded.',{},false]
+ ];
+ return [...base,...actions.map(([name,description,properties,sideEffect]):ToolDefinition=>({...shell,id:'nidus.'+name,name,description,inputSchema:object(properties),sideEffect,approval:sideEffect?'REQUIRE_APPROVAL':'ALLOW',implemented:true}))];
+}
