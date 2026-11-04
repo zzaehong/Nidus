@@ -1,0 +1,399 @@
+{
+  "scope": "Real Apple VM, synthetic per-Vault cache, programmatic test approvals only",
+  "cases": [
+    {
+      "sessionId": "3110bc83-2fdd-4d75-b17f-8458a6c22462",
+      "vmInstanceId": "d14ccf90-d536-4a96-91f3-c7a75164bcfd",
+      "generation": 1,
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 28491776,
+      "stdout": "/cache/pip\n/cache/npm\n",
+      "stderr": ""
+    },
+    {
+      "sessionId": "4a6a9187-6b5b-4c39-be89-dd528f227f3c",
+      "vmInstanceId": "d14ccf90-d536-4a96-91f3-c7a75164bcfd",
+      "generation": 1,
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 41160704,
+      "stdout": "nidus-cache-fixture-1.0.0.tgz\n",
+      "stderr": "npm notice\nnpm notice 📦  nidus-cache-fixture@1.0.0\nnpm notice Tarball Contents\nnpm notice 20B index.js\nnpm notice 66B package.json\nnpm notice Tarball Details\nnpm notice name: nidus-cache-fixture\nnpm notice version: 1.0.0\nnpm notice filename: nidus-cache-fixture-1.0.0.tgz\nnpm notice package size: 197 B\nnpm notice unpacked size: 86 B\nnpm notice shasum: 3aa03dee86c60040349eb12d1ddd6f8c3f383dc0\nnpm notice integrity: sha512-H02T4b0gL3IMt[...]V3f3A2id2NgWw==\nnpm notice total files: 2\nnpm notice\n"
+    },
+    {
+      "sessionId": "1d23c7a6-839b-4935-b842-a3c4fd6df07e",
+      "vmInstanceId": "d14ccf90-d536-4a96-91f3-c7a75164bcfd",
+      "generation": 1,
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 7991296,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "sessionId": "902ab437-b6a9-4126-91c1-3d53e98c2616",
+      "vmInstanceId": "fe221954-b43d-4248-b918-c7467287e335",
+      "generation": 2,
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 8871936,
+      "stdout": "persisted",
+      "stderr": ""
+    },
+    {
+      "sessionId": "5bc0eb1f-bcb5-43f2-9cc1-d864e98d0277",
+      "vmInstanceId": "fe221954-b43d-4248-b918-c7467287e335",
+      "generation": 2,
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 45039616,
+      "stdout": "Cache verified and compressed (/cache/npm/_cacache)\nContent verified: 1 (197 bytes)\nIndex entries: 2\nFinished in 0.022s\n\nadded 1 package in 203ms\nProcessing /cache/artifacts/nidus_cache_fixture-1.0-py3-none-any.whl\nInstalling collected packages: nidus-cache-fixture\nSuccessfully installed nidus-cache-fixture-1.0\n",
+      "stderr": ""
+    },
+    {
+      "sessionId": "335a11ec-8f9c-4f26-8151-c615fa585c9e",
+      "vmInstanceId": "c151d286-6a2b-4c65-862f-12ea85ab6f09",
+      "generation": 3,
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 8867840,
+      "stdout": "isolated",
+      "stderr": ""
+    },
+    {
+      "sessionId": "9fe0e74c-5c59-4bfb-a2d5-c31e6f3498bd",
+      "vmInstanceId": "b2830550-28c9-4b3e-9838-237640258e6c",
+      "generation": 4,
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 8847360,
+      "stdout": "cleared",
+      "stderr": ""
+    }
+  ],
+  "events": [
+    {
+      "event": "starting",
+      "frameworkState": 0,
+      "time": "2026-11-04T05:23:11Z"
+    },
+    {
+      "event": "running",
+      "frameworkState": 1,
+      "time": "2026-11-04T05:23:12Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_DEVELOPMENT ready",
+      "time": "2026-11-04T05:23:15Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_CACHE_READY",
+      "time": "2026-11-04T05:23:19Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_READY cgroup2",
+      "time": "2026-11-04T05:23:19Z"
+    },
+    {
+      "event": "ready",
+      "frameworkState": 1,
+      "time": "2026-11-04T05:23:19Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 3110bc83-2fdd-4d75-b17f-8458a6c22462 0 1 completed 28491776 L2NhY2hlL3BpcAovY2FjaGUvbnBtCg== -",
+      "time": "2026-11-04T05:23:20Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 4a6a9187-6b5b-4c39-be89-dd528f227f3c 0 1 completed 41160704 bmlkdXMtY2FjaGUtZml4dHVyZS0xLjAuMC50Z3oK bnBtIG5vdGljZQpucG0gbm90aWNlIPCfk6YgIG5pZHVzLWNhY2hlLWZpeHR1cmVAMS4wLjAKbnBtIG5vdGljZSBUYXJiYWxsIENvbnRlbnRzCm5wbSBub3RpY2UgMjBCIGluZGV4LmpzCm5wbSBub3RpY2UgNjZCIHBhY2thZ2UuanNvbgpucG0gbm90aWNlIFRhcmJhbGwgRGV0YWlscwpucG0gbm90aWNlIG5hbWU6IG5pZHVzLWNhY2hlLWZpeHR1cmUKbnBtIG5vdGljZSB2ZXJzaW9uOiAxLjAuMApucG0gbm90aWNlIGZpbGVuYW1lOiBuaWR1cy1jYWNoZS1maXh0dXJlLTEuMC4wLnRnegpucG0gbm90aWNlIHBhY2thZ2Ugc2l6ZTogMTk3IEIKbnBtIG5vdGljZSB1bnBhY2tlZCBzaXplOiA4NiBCCm5wbSBub3RpY2Ugc2hhc3VtOiAzYWEwM2RlZTg2YzYwMDQwMzQ5ZWIxMmQxZGRkNmY4YzNmMzgzZGMwCm5wbSBub3RpY2UgaW50ZWdyaXR5OiBzaGE1MTItSDAyVDRiMGdMM0lNdFsuLi5dVjNmM0EyaWQyTmdXdz09Cm5wbSBub3RpY2UgdG90YWwgZmlsZXM6IDIKbnBtIG5vdGljZQo=",
+      "time": "2026-11-04T05:23:21Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 1d23c7a6-839b-4935-b842-a3c4fd6df07e 0 1 completed 7991296 - -",
+      "time": "2026-11-04T05:23:21Z"
+    },
+    {
+      "event": "stop_requested",
+      "frameworkState": 1,
+      "reason": "user",
+      "time": "2026-11-04T05:23:21Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_CACHE_CLEAN",
+      "time": "2026-11-04T05:23:21Z"
+    },
+    {
+      "event": "STOP_CONFIRMED",
+      "frameworkState": 0,
+      "time": "2026-11-04T05:23:21Z"
+    },
+    {
+      "event": "closed"
+    },
+    {
+      "event": "starting",
+      "frameworkState": 0,
+      "time": "2026-11-04T05:23:21Z"
+    },
+    {
+      "event": "running",
+      "frameworkState": 1,
+      "time": "2026-11-04T05:23:21Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_DEVELOPMENT ready",
+      "time": "2026-11-04T05:23:25Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_CACHE_READY",
+      "time": "2026-11-04T05:23:25Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_READY cgroup2",
+      "time": "2026-11-04T05:23:25Z"
+    },
+    {
+      "event": "ready",
+      "frameworkState": 1,
+      "time": "2026-11-04T05:23:25Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 902ab437-b6a9-4126-91c1-3d53e98c2616 0 1 completed 8871936 cGVyc2lzdGVk -",
+      "time": "2026-11-04T05:23:26Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 5bc0eb1f-bcb5-43f2-9cc1-d864e98d0277 0 1 completed 45039616 Q2FjaGUgdmVyaWZpZWQgYW5kIGNvbXByZXNzZWQgKC9jYWNoZS9ucG0vX2NhY2FjaGUpCkNvbnRlbnQgdmVyaWZpZWQ6IDEgKDE5NyBieXRlcykKSW5kZXggZW50cmllczogMgpGaW5pc2hlZCBpbiAwLjAyMnMKCmFkZGVkIDEgcGFja2FnZSBpbiAyMDNtcwpQcm9jZXNzaW5nIC9jYWNoZS9hcnRpZmFjdHMvbmlkdXNfY2FjaGVfZml4dHVyZS0xLjAtcHkzLW5vbmUtYW55LndobApJbnN0YWxsaW5nIGNvbGxlY3RlZCBwYWNrYWdlczogbmlkdXMtY2FjaGUtZml4dHVyZQpTdWNjZXNzZnVsbHkgaW5zdGFsbGVkIG5pZHVzLWNhY2hlLWZpeHR1cmUtMS4wCg== -",
+      "time": "2026-11-04T05:23:28Z"
+    },
+    {
+      "event": "stop_requested",
+      "frameworkState": 1,
+      "reason": "user",
+      "time": "2026-11-04T05:23:28Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_CACHE_CLEAN",
+      "time": "2026-11-04T05:23:28Z"
+    },
+    {
+      "event": "STOP_CONFIRMED",
+      "frameworkState": 0,
+      "time": "2026-11-04T05:23:28Z"
+    },
+    {
+      "event": "closed"
+    },
+    {
+      "event": "starting",
+      "frameworkState": 0,
+      "time": "2026-11-04T05:23:28Z"
+    },
+    {
+      "event": "running",
+      "frameworkState": 1,
+      "time": "2026-11-04T05:23:28Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_DEVELOPMENT ready",
+      "time": "2026-11-04T05:23:31Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_CACHE_READY",
+      "time": "2026-11-04T05:23:35Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_READY cgroup2",
+      "time": "2026-11-04T05:23:35Z"
+    },
+    {
+      "event": "ready",
+      "frameworkState": 1,
+      "time": "2026-11-04T05:23:35Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 335a11ec-8f9c-4f26-8151-c615fa585c9e 0 1 completed 8867840 aXNvbGF0ZWQ= -",
+      "time": "2026-11-04T05:23:36Z"
+    },
+    {
+      "event": "stop_requested",
+      "frameworkState": 1,
+      "reason": "user",
+      "time": "2026-11-04T05:23:36Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_CACHE_CLEAN",
+      "time": "2026-11-04T05:23:36Z"
+    },
+    {
+      "event": "STOP_CONFIRMED",
+      "frameworkState": 0,
+      "time": "2026-11-04T05:23:36Z"
+    },
+    {
+      "event": "closed"
+    },
+    {
+      "event": "starting",
+      "frameworkState": 0,
+      "time": "2026-11-04T05:23:37Z"
+    },
+    {
+      "event": "running",
+      "frameworkState": 1,
+      "time": "2026-11-04T05:23:37Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_DEVELOPMENT ready",
+      "time": "2026-11-04T05:23:40Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_CACHE_READY",
+      "time": "2026-11-04T05:23:44Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_READY cgroup2",
+      "time": "2026-11-04T05:23:44Z"
+    },
+    {
+      "event": "ready",
+      "frameworkState": 1,
+      "time": "2026-11-04T05:23:44Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 9fe0e74c-5c59-4bfb-a2d5-c31e6f3498bd 0 1 completed 8847360 Y2xlYXJlZA== -",
+      "time": "2026-11-04T05:23:46Z"
+    },
+    {
+      "event": "stop_requested",
+      "frameworkState": 1,
+      "reason": "user",
+      "time": "2026-11-04T05:23:46Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_CACHE_CLEAN",
+      "time": "2026-11-04T05:23:46Z"
+    },
+    {
+      "event": "STOP_CONFIRMED",
+      "frameworkState": 0,
+      "time": "2026-11-04T05:23:46Z"
+    },
+    {
+      "event": "closed"
+    },
+    {
+      "event": "starting",
+      "frameworkState": 0,
+      "time": "2026-11-04T05:23:46Z"
+    },
+    {
+      "event": "running",
+      "frameworkState": 1,
+      "time": "2026-11-04T05:23:46Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_DEVELOPMENT ready",
+      "time": "2026-11-04T05:23:49Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_CACHE_READY",
+      "time": "2026-11-04T05:23:49Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_READY cgroup2",
+      "time": "2026-11-04T05:23:49Z"
+    },
+    {
+      "event": "ready",
+      "frameworkState": 1,
+      "time": "2026-11-04T05:23:49Z"
+    },
+    {
+      "event": "stop_requested",
+      "frameworkState": 1,
+      "reason": "user_force",
+      "time": "2026-11-04T05:23:49Z"
+    },
+    {
+      "event": "force_stop_requested",
+      "frameworkState": 1,
+      "time": "2026-11-04T05:23:49Z"
+    },
+    {
+      "event": "force_stop_completed",
+      "frameworkState": 0,
+      "time": "2026-11-04T05:23:49Z"
+    },
+    {
+      "event": "STOP_CONFIRMED",
+      "frameworkState": 0,
+      "time": "2026-11-04T05:23:49Z"
+    },
+    {
+      "event": "closed"
+    }
+  ],
+  "forceStopDirtyBlocked": true,
+  "status": "PASS",
+  "stop": "STOP_CONFIRMED",
+  "retainedTestDirectory": "/private/tmp/nidus-cache-real-ZceiqA"
+}

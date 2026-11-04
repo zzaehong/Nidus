@@ -18,6 +18,11 @@ import XCTest
         model.receive(data.dropFirst(8));XCTAssertEqual(model.approval?.command,"echo test")
         model.answer(false);XCTAssertNil(model.approval)
     }
+    func testPersistentCacheIsDisclosedInTrustedApproval() throws {
+        let model=VaultRuntimeModel()
+        model.receive(try line(["event":"approval","proposal":["approvalId":"cache","vaultId":"v","command":"npm cache verify","commandHash":"bound","expiresAt":Date().timeIntervalSince1970*1000+60000,"cachePersistent":true]]))
+        XCTAssertTrue(model.approval?.workspace.contains("/cache 변경은 이 Vault의 다음 실행에도 유지됩니다") == true)
+    }
     func testWorkspaceApprovalShowsBoundFilesAndReviewOnlyPolicy() throws {
         let model=VaultRuntimeModel()
         model.receive(try line(["event":"approval","proposal":["approvalId":"workspace","vaultId":"v","command":"python3 main.py","commandHash":"bound","expiresAt":Date().timeIntervalSince1970*1000+60000,"workspace":["paths":["main.py","test.py"],"bytes":42,"hash":"snapshot-hash"]]]))
