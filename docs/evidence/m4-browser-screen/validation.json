@@ -1,0 +1,25 @@
+{
+  "node": {
+    "pass": 351,
+    "fail": 0
+  },
+  "swift": {
+    "pass": 55,
+    "fail": 0
+  },
+  "appBuild": "PASS",
+  "bundledGuestHashes": "PASS",
+  "guestManifest": {
+    "profile": "development",
+    "cacheDiskVersion": 1,
+    "Image": "256d5fff4bb892edcb9218c1e6353e388bc3646e65f76c2bc9d958b635d1b00e",
+    "initrd": "e6e5358535712af0d88248b00535696ba22fd21d5bf58849ab94f2cf2d65b622",
+    "baseInitrdSHA256": "63ade01da8add63522f6a88659c852b5be41aba1b3a81b513fdbedf3e25ee383",
+    "browserSnapshotVersion": 1,
+    "browserInteractiveVersion": 1
+  },
+  "realGoogleInputAndFrame": "PASS",
+  "liveNIM": "NOT RUN",
+  "manualGUI": "NOT RUN",
+  "fifteenMinuteLoad": "NOT RUN"
+}

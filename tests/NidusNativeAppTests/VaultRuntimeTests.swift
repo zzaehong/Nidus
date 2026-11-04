@@ -1,4 +1,5 @@
 import XCTest
+import AppKit
 @testable import NidusNativeApp
 
 @MainActor final class VaultRuntimeTests: XCTestCase {
@@ -101,5 +102,16 @@ import XCTest
         XCTAssertTrue(VaultRuntimeModel.liveApprovalSummary("network-sensitive").contains("전송"))
         XCTAssertTrue(VaultRuntimeModel.liveApprovalSummary("interaction").contains("스크립트"))
         XCTAssertTrue(VaultRuntimeModel.liveApprovalSummary("session").contains("쿠키"))
+    }
+    func testBrowserFramesStayOutOfEventLogAndClearOnCompletion() throws {
+        let vm=VaultRuntimeModel(healthStore:try store([]))
+        let bitmap=NSBitmapImageRep(bitmapDataPlanes:nil,pixelsWide:2,pixelsHigh:2,bitsPerSample:8,samplesPerPixel:3,hasAlpha:false,isPlanar:false,colorSpaceName:.deviceRGB,bytesPerRow:0,bitsPerPixel:0)!
+        let data=bitmap.representation(using:.jpeg,properties:[:])!
+        vm.receive(try line(["event":"browser-frame","frame":["data":data.base64EncodedString()]]))
+        XCTAssertNotNil(vm.browserFrame);XCTAssertTrue(vm.events.isEmpty)
+        vm.receive(try line(["event":"completed","task":["status":"COMPLETED"]]))
+        XCTAssertNil(vm.browserFrame)
+        vm.receive(try line(["event":"browser-frame","frame":["data":"invalid"]]))
+        XCTAssertNil(vm.browserFrame)
     }
 }

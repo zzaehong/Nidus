@@ -68,6 +68,7 @@ test('interactive browser reserves VM, binds task ownership and confirms cleanup
  await assert.rejects(runtime.openLive(f.v.vaultId,'denied','call',async()=>false),/permission_denied/);assert.equal(b.starts,0);
  await runtime.openLive(f.v.vaultId,'live','call',async p=>p.scope==='session');
  await assert.rejects(runtime.liveAction(f.v.vaultId,'other',{op:'observe'},async()=>true),/session_owner/);
+ await assert.rejects(runtime.liveFrame(f.other.vaultId,'live'),/session_owner/);
  await assert.rejects(runtime.stop(),/execution_active/);
  await assert.rejects(runtime.liveAction(f.v.vaultId,'live',{op:'navigate',url:'https://example.com/'},async()=>true),/action_invalid/);
  await runtime.closeLive(f.v.vaultId,'live');assert.equal(b.closed,true);assert.equal(runtime.status().sessions.at(-1).cleanupConfirmed,true);await runtime.close();

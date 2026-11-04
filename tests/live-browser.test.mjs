@@ -37,3 +37,9 @@ test('Agent waits for browser cleanup and reports uncertainty instead of complet
  let cleaned=false;const tools={available:()=>[],validateVault:async()=>{},finishExecution:async()=>{await flush();cleaned=true;throw Error('cleanup');}};
  const runtime=new SingleAgentRuntime(new MockAgentModel(async()=>({text:'done',calls:[],continuation:null,usage:null})),tools);const task=await runtime.run({vaultId:'v',model:'m',prompt:'test'});assert.equal(cleaned,true);assert.equal(task.status,'UNCONFIRMED');assert.equal(task.code,'browser_cleanup_unconfirmed');
 });
+
+test('UI frames have independent bounded replies and never alter model observations',async()=>{
+ const b=new Backend(),live=new LiveBrowser('vault','task',b);await live.start();const page=await live.action({op:'observe'},async()=>true);
+ b.sendLive=async function(m){this.messages.push(m);if(m.op==='frame')queueMicrotask(()=>this.listener({event:'frame',id:m.id,data:Buffer.from([255,216,255,217]).toString('base64')}));};
+ const frame=await live.frame();assert.ok(frame.data);assert.ok(frame.capturedAt);assert.equal(page.data,undefined);assert.equal(await live.frame(),null);await live.close();assert.equal(await live.frame(),null);
+});

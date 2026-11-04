@@ -6,7 +6,7 @@ import {SingleAgentRuntime} from '../dist/agent/runtime.js';import {MockAgentMod
 const signal=()=>new AbortController().signal;
 const response=(overrides={})=>({status:200,body:Buffer.from('<h1>test</h1>').toString('base64'),contentType:'text/html',url:'https://example.com/',address:'93.184.215.14',...overrides});
 test('browser: only bounded search or public HTTPS navigation is accepted',()=>{
- assert.equal(browserRequest('browser_search','a & b').url,'https://www.bing.com/search?q=a%20%26%20b&setlang=en&cc=US');
+ assert.equal(browserRequest('browser_search','a & b').url,'https://www.google.com/search?q=a%20%26%20b&hl=ko');
  for(const url of ['http://example.com/','https://127.0.0.1/','https://[::1]/','https://169.254.169.254/','file:///etc/passwd','data:text/html,hi','https://example.com:8443/'])assert.throws(()=>browserRequest('browser_navigate',url));
  assert.throws(()=>browserRequest('browser_search','x'.repeat(513)));assert.throws(()=>browserRequest('run_shell','https://example.com/'));
 });

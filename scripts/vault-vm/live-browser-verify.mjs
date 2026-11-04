@@ -8,9 +8,10 @@ const live=new LiveBrowser('synthetic-vault','synthetic-task',b,async r=>{e.requ
 let grant=false;const approve=async p=>{e.approvals.push({scope:p.scope,hash:p.commandHash});return grant;};
 try{
  await b.start();await live.start();let page=await live.action({op:'navigate',url:'https://example.com/'},approve);assert.match(page.text,/External script loaded/);assert.equal(e.requests.some(r=>r.url.includes('127.0.0.1')),false);e.initial=page;
+ const initialFrame=await live.frame();assert.ok(initialFrame?.data);e.frame={format:'jpeg',initialBytes:Buffer.from(initialFrame.data,'base64').length};if(process.argv[4])await writeFile(process.argv[4],Buffer.from(initialFrame.data,'base64'));
  const original=page.snapshotId;page=await live.action({op:'type',snapshotId:page.snapshotId,targetId:page.elements.find(x=>x.tag==='INPUT').id,text:'Mac mini'},approve);assert.equal(page.elements.find(x=>x.tag==='INPUT').value,'Mac mini');
  await assert.rejects(live.action({op:'click',snapshotId:original,targetId:'1'},approve),/stale/);
- page=await live.action({op:'click',snapshotId:page.snapshotId,targetId:page.elements.find(x=>x.name==='Change').id},approve);assert.match(page.text,/JavaScript clicked/);
+ page=await live.action({op:'click',snapshotId:page.snapshotId,targetId:page.elements.find(x=>x.name==='Change').id},approve);assert.match(page.text,/JavaScript clicked/);await new Promise(r=>setTimeout(r,1000));const changedFrame=await live.frame();assert.ok(changedFrame?.data);assert.notEqual(initialFrame.data,changedFrame.data);e.frame.changed=true;
  page=await live.action({op:'click',snapshotId:page.snapshotId,targetId:page.elements.find(x=>x.name==='Search now').id},approve);assert.match(page.url,/q=Mac\+mini/);assert.match(page.text,/Mac mini result/);e.search=page;
  page=await live.action({op:'type',snapshotId:page.snapshotId,targetId:page.elements.find(x=>x.tag==='INPUT').id,text:'synthetic'},approve);
  page=await live.action({op:'click',snapshotId:page.snapshotId,targetId:page.elements.find(x=>x.name==='Submit').id},approve);assert.equal(e.requests.filter(r=>r.method==='POST').length,0);e.deniedPost=true;
