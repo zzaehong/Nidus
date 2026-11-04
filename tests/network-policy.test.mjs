@@ -18,3 +18,22 @@ test('development network: real local test server receives zero denied requests'
  const {createServer}=await import('node:http');let received=0;const server=createServer((_q,r)=>{received++;r.end('private');});await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>server.close(r)));
  await assert.rejects(publicGet(`https://127.0.0.1:${server.address().port}/`,new AbortController().signal));assert.equal(received,0);
 });
+
+test('browser network: TLS destination is pinned to validated DNS with no credentials or tunnel',async()=>{
+ const {EventEmitter}=await import('node:events');let calls=0,lookups=0;
+ const transport=(url,options,respond)=>{
+  calls++;assert.equal(url.hostname,'example.com');assert.equal(options.method,'GET');assert.equal(options.servername,'example.com');assert.equal(options.agent,false);assert.equal(options.family,4);assert.equal(options.headers.Authorization,undefined);assert.equal(options.headers.Cookie,undefined);assert.equal(options.headers['Accept-Encoding'],'identity');
+  options.lookup('example.com',{},(_e,address,family)=>{assert.equal(address,'93.184.215.14');assert.equal(family,4)});
+  const req=new EventEmitter();req.destroy=e=>queueMicrotask(()=>req.emit('error',e));req.end=()=>queueMicrotask(()=>{const socket=new EventEmitter();socket.remoteAddress='93.184.215.14';req.emit('socket',socket);socket.emit('connect');const res=new EventEmitter();res.statusCode=200;res.headers={'content-type':'text/html'};res.destroy=()=>{};respond(res);res.emit('data',Buffer.from('safe'));res.emit('end');});return req;
+ };
+ const r=await publicGet('https://example.com/',new AbortController().signal,{lookup:async()=>{lookups++;return [{family:4,address:lookups===1?'93.184.215.14':'127.0.0.1'}]},request:transport});assert.equal(Buffer.from(r.body,'base64').toString(),'safe');assert.equal(calls,1);assert.equal(lookups,1);
+});
+test('browser network: compressed responses, downloads, oversized content and peer mismatch are rejected',async()=>{
+ const {EventEmitter}=await import('node:events');
+ for(const variant of ['compression','download','size','peer','private-redirect']){
+  const request=(_url,_options,respond)=>{
+   const req=new EventEmitter();req.destroy=e=>queueMicrotask(()=>req.emit('error',e));req.end=()=>queueMicrotask(()=>{const socket=new EventEmitter();socket.remoteAddress=variant==='peer'?'127.0.0.1':'93.184.215.14';req.emit('socket',socket);socket.emit('connect');if(variant==='peer')return;const res=new EventEmitter();res.statusCode=variant==='private-redirect'?302:200;res.headers={'content-type':'text/html',...(variant==='compression'?{'content-encoding':'gzip'}:{}),...(variant==='download'?{'content-disposition':'attachment'}:{}),...(variant==='private-redirect'?{location:'https://169.254.169.254/'}:{})};res.destroy=()=>{};respond(res);res.emit('data',Buffer.alloc(variant==='size'?524289:1));res.emit('end');});return req;
+  };
+  await assert.rejects(publicGet('https://example.com/',new AbortController().signal,{lookup:async()=>[{family:4,address:'93.184.215.14'}],request}),/network_/);
+ }
+});

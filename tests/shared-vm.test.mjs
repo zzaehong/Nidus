@@ -51,3 +51,12 @@ test('Workspace changed after approval proposal is never dispatched',async t=>{
 test('cache lifecycle: only verified guest flush plus VM stop permits reuse; deletion requires stopped VM',async t=>{
  const {CacheDiskStore}=await import('../dist/vault/cache-disk.js');const f=await fixture(t);await f.runtime.close();const cache=new CacheDiskStore(join(f.base,'disks'));const backend=new Backend();backend.cacheClean=false;const runtime=new SharedVMController(f.registry,new VMJournal(f.journal.directory),()=>backend,300000,cache);await runtime.initialize();await runtime.start(f.v.vaultId);await assert.rejects(runtime.clearCache(f.v.vaultId),/must_stop/);await runtime.stop();assert.equal((await runtime.cacheStatus(f.v.vaultId)).state,'dirty');await assert.rejects(runtime.start(f.v.vaultId),/cache_dirty/);assert.equal(runtime.status().state,'STOP_CONFIRMED');await runtime.clearCache(f.v.vaultId);backend.cacheClean=true;await runtime.start(f.v.vaultId);await runtime.stop();assert.equal((await runtime.cacheStatus(f.v.vaultId)).state,'clean');await runtime.close();
 });
+
+test('browser Host proposal: feature gate, immutable URL binding and cancellation before dispatch',async t=>{
+ const f=await fixture(t);await assert.rejects(f.runtime.proposeBrowser(f.v.vaultId,'web','call','browser_navigate','https://example.com/'),/browser_unsupported/);await f.runtime.close();
+ const runtime=new SharedVMController(f.registry,new VMJournal(f.journal.directory),()=>f.backend,300000,undefined,true);await runtime.initialize();
+ const p=await runtime.proposeBrowser(f.v.vaultId,'web','call','browser_navigate','https://example.com/');
+ assert.equal(p.cachePersistent,false);assert.equal(p.tool,'browser_navigate');assert.equal(f.backend.starts,0);assert.equal(runtime.status().sessions.length,0);
+ p.browser.url='https://127.0.0.1/';assert.equal(runtime.proposals.get(p.approvalId).browser.url,'https://example.com/');
+ await runtime.cancel('web');await assert.rejects(runtime.executeApproved(p.approvalId),/approval_invalid/);assert.equal(f.backend.commands.length,0);await runtime.close();
+});

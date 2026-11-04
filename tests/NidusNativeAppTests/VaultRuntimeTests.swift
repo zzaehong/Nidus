@@ -86,4 +86,15 @@ import XCTest
         vm.receive(try line(["event":"completed","task":["status":"COMPLETED","code":"ok","text":"fixture","webStatus":"unavailable"]]))
         XCTAssertTrue(vm.events.contains { $0.contains("웹 검색 미수행") })
     }
+    func testBrowserApprovalAndResultsShowNetworkScopeAndUntrustedProvenance() throws {
+        let vm=VaultRuntimeModel(healthStore:try store([]))
+        vm.receive(try line(["event":"approval","proposal":["approvalId":"web","vaultId":"vault","command":"HTTPS GET https://example.com/","commandHash":"hash","expiresAt":Date().timeIntervalSince1970*1000+60000,"browser":["url":"https://example.com/","kind":"navigate"]]]))
+        XCTAssertTrue(vm.approval?.workspace.contains("GET 요청 1회") == true)
+        XCTAssertTrue(vm.approval?.workspace.contains("리디렉션") == true)
+        let page:[String:Any] = ["title":"Example","url":"https://example.com/","text":"Page text","retrievedAt":"2026-11-04","links":[["text":"Link","url":"https://example.org/"]]]
+        let summary=VaultRuntimeModel.browserSummary(String(data:try JSONSerialization.data(withJSONObject:page),encoding:.utf8)!)
+        XCTAssertTrue(summary.contains("https://example.org/"));XCTAssertTrue(summary.contains("외부 페이지 내용"));XCTAssertTrue(summary.contains("2026-11-04"))
+        vm.receive(try line(["event":"completed","task":["status":"FAILED","code":"web_not_used","text":"","webStatus":"not_used"]]))
+        XCTAssertTrue(vm.events.contains { $0.contains("성공한 웹 조회가 없습니다") })
+    }
 }
