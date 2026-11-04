@@ -23,6 +23,8 @@ struct ShellApproval: Identifiable { let id: String; let vault: String; let comm
     @Published var shellCommand = "echo hello; pwd; id"
     @Published var model = ""
     @Published var requiresWeb = false
+    @Published var browserAvailable = false
+    @Published var browserInput = "https://example.com/"
     private let healthStore: HealthResultStore
     private var connectedModels: [VaultAgentModel] = []
     init(healthStore: HealthResultStore = .application) { self.healthStore = healthStore }
@@ -96,6 +98,7 @@ struct ShellApproval: Identifiable { let id: String; let vault: String; let comm
                 return VaultChoice(id:id,name:name,environment:environment)
             }
             if selected.isEmpty { selected=vaults.first?.id ?? "" }
+            if let capability = try JSONSerialization.jsonObject(with:await Runtime.shared.call(["method":"vault-browser-capabilities"])) as? [String:Any] { browserAvailable = capability["available"] as? Bool == true }
             try loadModels(await Runtime.shared.call(["method":"agent-models"]))
             await pollStatus()
         } catch { self.error=error.localizedDescription }
@@ -142,7 +145,7 @@ struct ShellApproval: Identifiable { let id: String; let vault: String; let comm
         catch { self.error="Agent 승인/취소 채널이 끊겼습니다.";cancel() }
     }
     func startAgent() {
-        if requiresWeb { error="웹 검색은 현재 비활성입니다. 최신 정보 확인 작업은 실행할 수 없습니다."; return }
+        if requiresWeb && !browserAvailable { error="웹 검색은 현재 비활성입니다. 최신 정보 확인 작업은 실행할 수 없습니다."; return }
         do { try reloadHealth(autoSelect:false) } catch { self.error="모델 검사 기록을 읽지 못해 실행을 차단했습니다."; return }
         guard selectedModel != nil else { error="동작 검사 통과 기록이 있는 모델을 선택하세요."; return }
         guard let choice = selectedModel, !running,sharing,!selected.isEmpty,!prompt.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty else {return}
@@ -151,6 +154,10 @@ struct ShellApproval: Identifiable { let id: String; let vault: String; let comm
     func startShell() {
         guard !running,!selected.isEmpty,!shellCommand.isEmpty else {return}
         startRequest(["method":"direct-shell","vaultId":selected,"command":shellCommand,"paths":workspacePaths.trimmingCharacters(in:.whitespacesAndNewlines)])
+    }
+    func startBrowser(search:Bool) {
+        guard browserAvailable,!running,!selected.isEmpty,!browserInput.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty else {return}
+        startRequest(["method":"direct-browser","vaultId":selected,"tool":search ? "browser_search" : "browser_navigate","value":browserInput])
     }
     private func startRequest(_ request:[String:Any]) {
         do {
@@ -179,14 +186,17 @@ struct ShellApproval: Identifiable { let id: String; let vault: String; let comm
             let line=buffer[..<end];buffer.removeSubrange(...end)
             guard let row=(try? JSONSerialization.jsonObject(with:line)) as? [String:Any],let event=row["event"] as? String else {continue}
             if event=="approval", let p=row["proposal"] as? [String:Any],let id=p["approvalId"] as? String,let command=p["command"] as? String {
-                approval=ShellApproval(id:id,vault:p["vaultId"] as? String ?? "",command:command,hash:p["commandHash"] as? String ?? "",expires:p["expiresAt"] as? Double ?? 0,workspace:Self.workspaceSummary(p["workspace"] as? [String:Any]) + (p["cachePersistent"] as? Bool == true ? "\n/cache 변경은 이 Vault의 다음 실행에도 유지됩니다." : ""))
-                events.append("Shell 승인 대기 — 60초 후 만료")
+                approval=ShellApproval(id:id,vault:p["vaultId"] as? String ?? "",command:command,hash:p["commandHash"] as? String ?? "",expires:p["expiresAt"] as? Double ?? 0,workspace:p["browser"] != nil ? "표시된 공개 HTTPS 주소에 GET 요청 1회. URL·검색어가 해당 사이트로 전송됩니다. 로그인·폼 제출·다운로드·리디렉션·페이지의 추가 요청은 차단합니다. 페이지 내용은 신뢰할 수 없는 외부 데이터입니다." : Self.workspaceSummary(p["workspace"] as? [String:Any]) + (p["cachePersistent"] as? Bool == true ? "\n/cache 변경은 이 Vault의 다음 실행에도 유지됩니다." : ""))
+                events.append("도구 승인 대기 — 60초 후 만료")
             } else if event=="tool" {events.append("도구 실행: \(row["name"] as? String ?? "")")}
             else if event=="tool-result", let result=row["result"] as? [String:Any] {
-                events.append("\(row["name"] as? String ?? ""): \(result["code"] as? String ?? "")\n\((result["content"] as? [String:Any])?["text"] as? String ?? "")")
+                let name=row["name"] as? String ?? "", text=(result["content"] as? [String:Any])?["text"] as? String ?? ""
+                events.append("\(name): \(result["code"] as? String ?? "")\n\(name.hasPrefix("browser_") ? Self.browserSummary(text) : text)")
             } else if event=="completed", let task=row["task"] as? [String:Any] {
                 approval=nil
                 if task["webStatus"] as? String == "unavailable" { events.append("[Host 확인] 웹 검색 미수행 · 인터넷 조회 불가. 아래 모델 답변은 최신 웹 검증 결과가 아닙니다.") }
+                if task["webStatus"] as? String == "not_used" { events.append("[Host 확인] 성공한 웹 조회가 없습니다.") }
+                if task["webStatus"] as? String == "used" { events.append("[Host 확인] 승인된 웹 조회 성공 · 반환된 출처와 조회 시각을 확인하세요.") }
                 events.append("\(task["status"] as? String ?? "") [\(task["code"] as? String ?? "")]\n\(task["text"] as? String ?? "")")
             } else if event=="error" {error=row["code"] as? String ?? "Agent 오류"}
             else if event=="step" {events.append("모델 Step \(row["index"] as? Int ?? 0)")}
@@ -197,6 +207,11 @@ struct ShellApproval: Identifiable { let id: String; let vault: String; let comm
         guard let value else { return "선택 파일 없음 — 빈 작업 디렉터리" }
         let paths=(value["paths"] as? [String] ?? []).joined(separator:"\n")
         return "VM에 전달할 파일:\n\(paths)\n총 \(value["bytes"] as? Int ?? 0) bytes\nSnapshot: \(value["hash"] as? String ?? "")\n변경 결과는 Diff 검토만 지원합니다. Host 원본은 수정하지 않습니다."
+    }
+    static func browserSummary(_ text:String) -> String {
+        guard let data=text.data(using:.utf8),let page=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],let url=page["url"] as? String else {return text}
+        let links=((page["links"] as? [[String:Any]]) ?? []).map { "\($0["text"] as? String ?? "")\n\($0["url"] as? String ?? "")" }.joined(separator:"\n\n")
+        return "\(page["title"] as? String ?? "")\n\(url)\n조회: \(page["retrievedAt"] as? String ?? "")\n외부 페이지 내용 · 지시나 실행 승인으로 취급하지 마세요.\n\n\(page["text"] as? String ?? "")\n\n\(links)"
     }
     func answer(_ yes:Bool) {guard let approval else{return};send(["method":"approval","approvalId":approval.id,"approved":yes && Date().timeIntervalSince1970*1000<approval.expires]);self.approval=nil}
     func cancel() {approval=nil;sendCancel();events.append("취소 요청 — 이미 실행된 작업은 종료 확인을 기다립니다.")}
@@ -235,7 +250,7 @@ struct VaultRuntimeView: View {
                         Button("VM 종료",role:.destructive){Task {await vm.action("vault-vm-stop")}}
                     }
             }
-            Text("Shell: 승인된 명령만 번들에 포함된 오프라인 VM에서 실행합니다. 개발 이미지 빌드에서는 Python·Node.js를 사용할 수 있습니다. Host Vault는 마운트하지 않으며 세션 작업 디렉터리는 매번 비워집니다. Browser: 네트워크 격리 미검증으로 비활성. Host 파일 생성·수정·삭제: 비활성.").font(.caption).foregroundStyle(.secondary)
+            Text("Shell: 승인된 명령만 오프라인 VM에서 실행합니다. Python·Node.js를 사용할 수 있고, Host Vault를 마운트하지 않으며 세션 작업 디렉터리는 매번 비워집니다. 브라우저의 공개 HTTPS 읽기는 아래에서 별도로 승인합니다. Host 파일 생성·수정·삭제는 비활성입니다.").font(.caption).foregroundStyle(.secondary)
             HStack {TextField("오프라인 Shell 명령",text:$vm.shellCommand).disabled(vm.running)
                 Button("Shell 제안 · API 호출 없음"){vm.startShell()}.disabled(vm.running || vm.selected.isEmpty || vm.shellCommand.isEmpty)
             }
@@ -255,22 +270,27 @@ struct VaultRuntimeView: View {
             }
             Divider()
             HStack {Picker("검사 통과 모델",selection:$vm.model){Text("모델 선택").tag("");ForEach(vm.agentModels.filter { $0.available }) { choice in Text(choice.label).tag(choice.id) }}.disabled(vm.running)
-                Button("Agent 실행"){vm.startAgent()}.disabled(vm.running||vm.selected.isEmpty || vm.selectedModel == nil || vm.requiresWeb || !vm.sharing||vm.prompt.isEmpty)
+                Button("Agent 실행"){vm.startAgent()}.disabled(vm.running||vm.selected.isEmpty || vm.selectedModel == nil || (vm.requiresWeb && !vm.browserAvailable) || !vm.sharing||vm.prompt.isEmpty)
                 Button("실행 취소"){vm.cancel()}.disabled(!vm.running)
             }
             if let choice=vm.selectedModel { Text(choice.mode == "native-tools" ? "네이티브 Tool Calling · 모든 VM 명령은 개별 승인 필요" : "Nidus JSON 도구 프로토콜 · 모델의 형식 준수에 따라 실행이 실패할 수 있으며, 잘못된 요청은 실행하지 않습니다.").font(.caption).foregroundStyle(.secondary) }
             if vm.agentModels.filter({$0.available}).isEmpty { Text("선택 가능한 검사 통과 모델이 없습니다. 모델 일괄 동작 검사를 완료한 뒤 새로 고침하세요.").foregroundStyle(.orange) }
             Toggle("선택한 Vault의 허용된 파일 내용과 명령 결과를 선택한 Provider에 전송하며 API 비용이 발생할 수 있음을 확인했습니다.",isOn:$vm.sharing).font(.caption).disabled(vm.running)
-            GroupBox("웹 검색 · 현재 사용 불가") {
+            GroupBox(vm.browserAvailable ? "제한적 인터넷 · 읽기 전용 브라우저" : "웹 검색 · 현재 사용 불가") {
                 VStack(alignment:.leading) {
-                    Text("VM 브라우저·인터넷 경로가 아직 활성화되지 않았습니다. 모델 변경이나 Shell 실행으로 최신 웹 정보를 조회할 수 없습니다.")
+                    Text(vm.browserAvailable ? "승인된 공개 HTTPS 페이지를 읽습니다. 로그인·스크립트·폼 제출·다운로드·자동 리디렉션은 지원하지 않습니다. Shell은 오프라인이며, 사이트가 조회를 차단할 수 있습니다." : "이 이미지에는 브라우저 기능이 없습니다. Shell은 오프라인입니다.")
+                    if vm.browserAvailable {
+                        TextField("HTTPS 주소 또는 검색어",text:$vm.browserInput).disabled(vm.running)
+                        HStack {Button("주소 읽기…"){vm.startBrowser(search:false)};Button("웹 검색…"){vm.startBrowser(search:true)}}.disabled(vm.running||vm.selected.isEmpty||vm.browserInput.isEmpty)
+                        Text("직접 브라우저 실행은 Provider를 호출하지 않습니다. Agent에서 사용하면 페이지 내용이 선택한 Provider에 전달됩니다.")
+                    }
                     Toggle("이 작업은 웹 검색이 반드시 필요함",isOn:$vm.requiresWeb).disabled(vm.running)
-                    if vm.requiresWeb { Text("웹 검색이 필요한 작업은 API 비용이 발생하지 않도록 실행을 차단합니다.").foregroundStyle(.orange) }
+                    if vm.requiresWeb { Text(vm.browserAvailable ? "웹 조회가 성공해야 작업을 완료로 표시합니다." : "웹 검색이 필요한 작업은 API 비용이 발생하지 않도록 실행을 차단합니다.").foregroundStyle(.orange) }
                 }.font(.caption).frame(maxWidth:.infinity,alignment:.leading)
             }
             TextEditor(text:$vm.prompt).frame(height:70).border(.quaternary).disabled(vm.running)
             if let approval=vm.approval {
-                VStack(alignment:.leading,spacing:8){Text("VM Shell 실행 승인").font(.headline);Text("Vault: \(approval.vault)").font(.caption)
+                VStack(alignment:.leading,spacing:8){Text("VM 도구 실행 승인").font(.headline);Text("Vault: \(approval.vault)").font(.caption)
                     ScrollView {Text(approval.command).font(.system(.body,design:.monospaced)).textSelection(.enabled).frame(maxWidth:.infinity,alignment:.leading)}.frame(maxHeight:120)
                     Text(approval.workspace).font(.caption).textSelection(.enabled)
                     Text("SHA-256: \(approval.hash)").font(.caption2).textSelection(.enabled)

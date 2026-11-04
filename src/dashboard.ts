@@ -10,6 +10,7 @@ import type { ChatRequest } from "./types.js";
 import {VaultRegistry} from './vault/registry.js';
 import {VaultError} from './vault/types.js';
 import {VMClient} from './vault/vm-client.js';
+import {readFile} from 'node:fs/promises';
 export async function dispatch(input: unknown, engine: ConnectivityEngine): Promise<unknown> {
   if (!input || typeof input !== "object") throw new NidusError("invalid_request", "Invalid dashboard request.");
   const r = input as Record<string, unknown>;
@@ -17,6 +18,7 @@ export async function dispatch(input: unknown, engine: ConnectivityEngine): Prom
   if(typeof r.method==='string'&&r.method.startsWith('vault-')){
     const registry=new VaultRegistry(process.env.NIDUS_VAULT_REGISTRY),client=new VMClient(registry);
     switch(r.method){
+      case 'vault-browser-capabilities':{try{const m=JSON.parse(await readFile(new URL('./vm-assets/manifest.json',import.meta.url),'utf8'));return {available:m.profile==='development'&&m.browserSnapshotVersion===1,mode:'read-only-snapshot'};}catch{return {available:false};}}
       case 'vault-list':return registry.listVaults();
       case 'vault-register':if(typeof r.path!=='string')throw new NidusError('invalid_request','Select a directory.');return registry.registerVault(r.path);
       case 'vault-vm-status':return client.status(true);

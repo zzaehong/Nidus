@@ -11,8 +11,8 @@ import {VMJournal,durableFile} from './vm-journal.js';
 import {VaultError} from './types.js';
 export async function serve(registryPath:string){
  const registry=new VaultRegistry(registryPath),directory=join(registry.directory,'vm-runtime');
- let cache:CacheDiskStore|undefined;try{if(JSON.parse(await readFile(new URL('../vm-assets/manifest.json',import.meta.url),'utf8')).cacheDiskVersion===1)cache=new CacheDiskStore(join(directory,'cache-disks'));}catch{}
- const controller=new SharedVMController(registry,new VMJournal(directory),undefined,Number(process.env.NIDUS_VM_IDLE_MS??300000),cache);await controller.initialize();
+ let cache:CacheDiskStore|undefined,browser=false;try{const manifest=JSON.parse(await readFile(new URL('../vm-assets/manifest.json',import.meta.url),'utf8'));if(manifest.cacheDiskVersion===1)cache=new CacheDiskStore(join(directory,'cache-disks'));browser=manifest.profile==='development'&&manifest.browserSnapshotVersion===1;}catch{}
+ const controller=new SharedVMController(registry,new VMJournal(directory),undefined,Number(process.env.NIDUS_VM_IDLE_MS??300000),cache,browser);await controller.initialize();
  const token=randomBytes(32).toString('hex');await durableFile(join(directory,'owner','token'),token);
  const path=join(directory,'control.sock');if(Buffer.byteLength(path)>=104)throw new VaultError('vm_socket_path_limit');
  // An old socket is removed only after an exclusive clean Journal claim, never after owner death.
@@ -34,6 +34,7 @@ export async function serve(registryPath:string){
      case 'start':return controller.start(r.vaultId);
      case 'stop':return controller.stop();
      case 'propose':return controller.propose(r.vaultId,r.executionId,r.callId,r.command,r.paths);
+     case 'propose-browser':return controller.proposeBrowser(r.vaultId,r.executionId,r.callId,r.tool,r.value);
      case 'executeApproved':if(typeof r.executionId!=='string')throw new VaultError('vm_invalid_request');cancelExecution=r.executionId;return controller.executeApproved(r.approvalId,r.executionId);
      case 'cancel':await controller.cancel(r.executionId);return {cancelRequested:true};
      default:throw new VaultError('vm_unknown_method');

@@ -4,7 +4,7 @@ import {request} from 'node:https';
 import {VaultError} from './types.js';
 export function publicIPv4(address:string):boolean {
  if(isIP(address)!==4)return false;const [a,b,c]=address.split('.').map(Number) as [number,number,number,number];
- return !(a===0||a===10||a===127||a>=224||a===169&&b===254||a===172&&b>=16&&b<=31||a===192&&b===168||a===100&&b>=64&&b<=127||a===198&&(b===18||b===19)||a===192&&b===0||a===192&&b===2||a===198&&b===51&&c===100||a===203&&b===0&&c===113);
+ return !(a===0||a===10||a===127||a>=224||a===169&&b===254||a===172&&b>=16&&b<=31||a===192&&b===168||a===100&&b>=64&&b<=127||a===198&&(b===18||b===19)||a===192&&b===0||a===192&&b===2||a===192&&b===88&&c===99||a===198&&b===51&&c===100||a===203&&b===0&&c===113);
 }
 export function publicURL(input:string):URL {
  if(typeof input!=='string'||input.length>2048||/[\x00-\x20\\]/.test(input))throw new VaultError('network_url_denied');
@@ -20,17 +20,17 @@ export async function resolvePublic(url:URL,lookup:typeof dnsLookup=dnsLookup):P
 }
 export interface PublicResponse {status:number;contentType:string;body:string;location?:string;address:string;url:string}
 /** GET-only HTTPS, fresh DNS per request and an IP-pinned TLS socket. No raw CONNECT tunnel. */
-export async function publicGet(input:string,signal:AbortSignal):Promise<PublicResponse>{
+export async function publicGet(input:string,signal:AbortSignal,dependencies:{lookup?:typeof dnsLookup;request?:typeof request}={}):Promise<PublicResponse>{
  const url=publicURL(input);signal.throwIfAborted();
  const deadline=AbortSignal.any([signal,AbortSignal.timeout(10000)]);
  const address=await new Promise<string>((resolve,reject)=>{
   const abort=()=>{deadline.removeEventListener('abort',abort);reject(new VaultError(signal.aborted?'cancelled':'network_timeout'));};
   deadline.addEventListener('abort',abort,{once:true});
-  resolvePublic(url).then(value=>{deadline.removeEventListener('abort',abort);resolve(value);},error=>{deadline.removeEventListener('abort',abort);reject(error);});
+  resolvePublic(url,dependencies.lookup??dnsLookup).then(value=>{deadline.removeEventListener('abort',abort);resolve(value);},error=>{deadline.removeEventListener('abort',abort);reject(error instanceof VaultError?error:new VaultError('network_dns_failed'));});
   if(deadline.aborted)abort();
  });deadline.throwIfAborted();
  return new Promise((resolve,reject)=>{
-  const req=request(url,{method:'GET',family:4,agent:false,servername:url.hostname,lookup:(_host,_options,callback)=>callback(null,address,4),headers:{'User-Agent':'Nidus-ReadOnly-Browser/1','Accept':'text/html,text/plain,text/css','Accept-Encoding':'identity'},signal:deadline,timeout:8000},res=>{
+  const req=(dependencies.request??request)(url,{method:'GET',family:4,agent:false,servername:url.hostname,lookup:(_host,_options,callback)=>callback(null,address,4),headers:{'User-Agent':'Nidus-ReadOnly-Browser/1','Accept':'text/html,text/plain,text/css','Accept-Encoding':'identity'},signal:deadline,timeout:8000},res=>{
    const type=String(res.headers['content-type']??'').split(';')[0]!.toLowerCase();const status=res.statusCode??502;
    if(res.headers['content-disposition']||res.headers['content-encoding']&&res.headers['content-encoding']!=='identity'||![301,302,303,307,308].includes(status)&&!['text/html','text/plain','text/css','application/xhtml+xml'].includes(type)){res.destroy();reject(new VaultError('network_content_denied'));return;}
    let size=0;const chunks:Buffer[]=[];

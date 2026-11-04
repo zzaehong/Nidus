@@ -8,6 +8,7 @@ ROOT=pathlib.Path('/sessions')/ID;CG=pathlib.Path('/sys/fs/cgroup')/ID
 profile=sys.argv[4] if len(sys.argv)>4 else 'shell'
 if profile not in ['shell','browser']:raise ValueError('profile')
 CG.mkdir();ROOT.mkdir()
+if profile=='browser':pathlib.Path('/proc/sys/user/max_user_namespaces').write_text('128')
 (CG/'memory.max').write_text(str((1024 if profile=='browser' else 512)*1024*1024))
 (CG/'pids.max').write_text('256' if profile=='browser' else '64')
 (CG/'cpu.max').write_text('100000 100000')
@@ -38,7 +39,7 @@ def drain(pipe,destination):
 def enter():
  (CG/'cgroup.procs').write_text(str(os.getpid()))
  if pathlib.Path('/run/'+ID+'.cancel').exists():os._exit(130)
-p=subprocess.Popen(['/bin/busybox','unshare','--mount','--pid','--fork','/usr/bin/python3','/nidus/child.py',str(ROOT),ID],stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.PIPE,env={'PATH':'/usr/bin:/bin'},close_fds=True,preexec_fn=enter)
+p=subprocess.Popen(['/bin/busybox','unshare','--mount','--pid','--fork','/usr/bin/python3','/nidus/child.py',str(ROOT),ID,profile],stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.PIPE,env={'PATH':'/usr/bin:/bin'},close_fds=True,preexec_fn=enter)
 threads=[threading.Thread(target=drain,args=(pipe,destination),daemon=True) for pipe,destination in zip([p.stdout,p.stderr],outputs)]
 for thread in threads:thread.start()
 started=time.monotonic();reason='completed'
@@ -58,7 +59,8 @@ for thread in threads:thread.join(timeout=2)
 if any(thread.is_alive() for thread in threads):clean=False
 peak=int((CG/'memory.peak').read_text())
 if clean:
- if snapshot is not None:
+ if profile=='browser':pathlib.Path('/proc/sys/user/max_user_namespaces').write_text('0')
+ if snapshot is not None and profile=='shell':
   try:
    result=json.dumps(workspace.export(ROOT,snapshot),ensure_ascii=False).encode('utf8')
    for index,offset in enumerate(range(0,len(result),12288)):

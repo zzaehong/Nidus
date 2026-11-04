@@ -78,12 +78,12 @@ export class AppleOfflineBackend implements SharedBackend {
   if(parts.length!==8||!/^\d+$/.test(parts[2])||!['0','1'].includes(parts[3])||!['completed','cancelled','timeout'].includes(parts[4])||!/^\d+$/.test(parts[5]))throw new VaultError('vm_protocol_invalid');
   const decode=(v:string)=>{if(v==='-')return '';if(!/^[A-Za-z0-9+/]*={0,2}$/.test(v)||v.length>87384)throw new VaultError('vm_output_invalid');return Buffer.from(v,'base64').toString('utf8');};
   let workspace:BackendResult['workspace'];
-  if(options.workspace){
+  if(options.workspace&&options.profile!=='browser'){
    const raw=Buffer.concat(chunks);
    if(invalid||!workspaceDigest||createHash('sha256').update(raw).digest('hex')!==workspaceDigest)invalid=true;
    else{try{workspace=JSON.parse(raw.toString('utf8'));if(!Array.isArray(workspace))invalid=true;}catch{invalid=true;}}
   }
-  return {...(options.workspace?{workspaceStatus:invalid?'invalid' as const:'complete' as const,...(!invalid?{workspace}:{})}:{}),exitCode:Number(parts[2]),cleanupConfirmed:parts[3]==='1',reason:parts[4],memoryPeakBytes:Number(parts[5]),stdout:decode(parts[6]),stderr:decode(parts[7])};
+  return {...(options.workspace&&options.profile!=='browser'?{workspaceStatus:invalid?'invalid' as const:'complete' as const,...(!invalid?{workspace}:{})}:{}),exitCode:Number(parts[2]),cleanupConfirmed:parts[3]==='1',reason:parts[4],memoryPeakBytes:Number(parts[5]),stdout:decode(parts[6]),stderr:decode(parts[7])};
   }finally{this.listeners.delete(listener);this.executing=null;}
  }
  cancel(id:string){if(!/^[a-zA-Z0-9-]+$/.test(id))throw new VaultError('vm_invalid_session');this.child?.stdin.write(`cancel ${id}\n`);}

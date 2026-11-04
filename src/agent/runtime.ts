@@ -45,7 +45,7 @@ export class SingleAgentRuntime {
         if(!turn || typeof turn.text!=='string'||!Array.isArray(turn.calls)||bytes(turn)>1048576)fail('invalid_model_turn');
         // Validate a whole batch before any side effect, including duplicate IDs across steps.
         const batch=new Set<string>();for(const c of turn.calls){if(!c || typeof c.id!=='string'||!/^[a-zA-Z0-9_-]{1,128}$/.test(c.id)||typeof c.name!=='string'||seen.has(c.id)||batch.has(c.id))fail('duplicate_or_invalid_call');batch.add(c.id);}
-        if(!turn.calls.length){if(!turn.text)fail('empty_model_turn');step.state='COMPLETED';task.status='COMPLETED';task.code='ok';task.text=turn.text;return task;}
+        if(!turn.calls.length){if(!turn.text)fail('empty_model_turn');if(input.requiresWeb&&task.webStatus!=='used'){task.code='web_not_used';task.text='웹 조회가 성공하지 않아 웹 필수 작업을 완료하지 않았습니다.';step.state='FAILED';return task;}step.state='COMPLETED';task.status='COMPLETED';task.code='ok';task.text=turn.text;return task;}
         if(invocations+turn.calls.length>limits.toolInvocations)fail('tool_limit');
         step.state='TOOLS';const results:ToolResult[]=[];
         for(const c of turn.calls){

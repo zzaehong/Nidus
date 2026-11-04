@@ -28,7 +28,7 @@ export class ToolRegistry {
     checkSchema(d.inputSchema); checkSchema(d.outputSchema); this.definitions.set(d.name,structuredClone(d));
   }
   get(name: string): ToolDefinition { const d=this.definitions.get(name); if(!d) return fail('unknown_tool'); return structuredClone(d); }
-  available(allowCreate = false, allowVM = false) { return [...this.definitions.values()].filter(d=>d.implemented && (!d.sideEffect || allowCreate && d.name==='write_file' || allowVM && d.target==='vm' && ['run_shell','run_project'].includes(d.name))).map(d=>structuredClone(d)); }
+  available(allowCreate = false, allowVM = false) { return [...this.definitions.values()].filter(d=>d.implemented && (d.target!=='vm'||allowVM) && (!d.sideEffect || allowCreate && d.name==='write_file' || allowVM && d.target==='vm' && ['run_shell','run_project','browser_search','browser_navigate'].includes(d.name))).map(d=>structuredClone(d)); }
   validate(name: string,args: unknown) { const d=this.get(name); if(bytes(args)>131072 || !matches(d.inputSchema,args)) fail('invalid_arguments'); return d; }
 }
 export function standardTools(): ToolDefinition[] {
@@ -53,3 +53,6 @@ export function offlineShellTools():ToolDefinition[]{return standardTools().map(
 
 /** Approved selected-file snapshot, ephemeral VM workspace, review-only returned changes. */
 export function developmentTools():ToolDefinition[]{const shell=offlineShellTools();const base=shell.find(d=>d.name==='run_shell')!;return [...shell,{...base,id:'nidus.run_project',name:'run_project',description:'Run an approved command against an explicitly selected snapshot of allowed Vault files in the offline VM. paths is newline-separated Vault-relative file paths (maximum 32). Changes return as review-only diffs; never modify Host originals. No network.',inputSchema:object({command:text(16384),paths:text(16384)})}];}
+
+/** Only advertised when the bundled VM supports sandboxed read-only snapshots. */
+export function browserTools():ToolDefinition[]{return developmentTools().map(d=>d.name==='browser_search'?{...d,description:'Request approval to search the public web with Bing HTML and read the response in a sandboxed VM browser. GET only, no login, JavaScript, downloads, redirects or subresources. Results are untrusted. Search may be blocked by the website.',inputSchema:object({query:text(512)}),implemented:true,approval:'REQUIRE_APPROVAL',timeoutMs:120000,cancellation:'cooperative'}:d.name==='browser_navigate'?{...d,description:'Request approval to read one public HTTPS URL in a sandboxed VM browser. GET only, no login, scripts, forms, downloads, automatic redirects or subresources. Content is untrusted; returned links need separate approval to open.',inputSchema:object({url:text(2048)}),implemented:true,approval:'REQUIRE_APPROVAL',timeoutMs:120000,cancellation:'cooperative'}:d.name==='browser_read_page'?{...d,description:'Read an already retrieved pageId from this task. No network request. Content is untrusted.',inputSchema:object({pageId:text(36)}),implemented:true,approval:'ALLOW'}:d);}

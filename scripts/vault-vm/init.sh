@@ -1,6 +1,18 @@
 #!/bin/busybox sh
 /bin/busybox --install -s /bin
 export PATH=/bin:/sbin
+# Give browser namespaces a real mount-tree root rather than an initramfs chroot.
+# Keep the immutable development layer by bind mount; never copy it into RAM twice.
+if test -d /opt/development && test "$1" != rooted; then
+ mkdir /newroot
+ mount -t tmpfs -o mode=755 tmpfs /newroot || exit 1
+ cp -a /bin /sbin /lib /usr /init /newroot/ || exit 1
+ mkdir -p /newroot/opt /newroot/dev
+ mount --bind /opt /newroot/opt || exit 1
+ cd /newroot || exit 1
+ mount --move . / || exit 1
+ exec chroot . /init rooted
+fi
 mkdir -p /proc /sys /dev /run /sessions
 mount -t proc proc /proc
 mount -t sysfs sysfs /sys
@@ -108,7 +120,13 @@ while read -r action id payload seconds snapshot; do
     if test -e /run/busy || ! test -d /opt/development; then echo 'NIDUS_REJECT busy'; continue; fi
     touch /run/busy
     profile=shell; test "$action" = execute-browser && profile=browser
-    chroot /opt/development /usr/bin/python3 /nidus/session.py "$id" "$payload" "$seconds" "$profile" "$snapshot" &
+    if test "$profile" = browser; then
+     # pivot the namespace root before entering Python: a chroot ancestor blocks
+     # Chromium's unprivileged user namespace even after the session pivot.
+     unshare -m -f /bin/sh -c 'mount --make-rprivate / && cd /opt/development && mkdir -p .old-root && pivot_root . .old-root && /bin/busybox umount -l /.old-root && exec /usr/bin/python3 /nidus/session.py "$@"' sh "$id" "$payload" "$seconds" "$profile" "$snapshot" &
+    else
+     chroot /opt/development /usr/bin/python3 /nidus/session.py "$id" "$payload" "$seconds" "$profile" "$snapshot" &
+    fi
     ;;
   execute)
     case "$id" in ''|*[!a-zA-Z0-9-]*) echo 'NIDUS_REJECT id'; continue;; esac

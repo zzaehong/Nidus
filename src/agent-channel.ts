@@ -8,7 +8,7 @@ import {KeychainStore} from './credentials.js';
 import {FileModelStore} from './storage.js';
 import {VaultRegistry} from './vault/registry.js';
 import {VMClient} from './vault/vm-client.js';
-import {ToolRegistry,developmentTools,offlineShellTools} from './tools/registry.js';
+import {ToolRegistry,browserTools,developmentTools,offlineShellTools} from './tools/registry.js';
 import {ToolDispatcher} from './tools/dispatcher.js';
 import {HostFileGateway} from './tools/files.js';
 import {VMToolGateway} from './tools/vm.js';
@@ -25,7 +25,7 @@ input.on('line',line=>{
  let r:any;try{r=JSON.parse(line);}catch{abort.abort();return;}
  if(r.method==='cancel'){abort.abort();return;}
  if(r.method==='approval'){const resolve=pending.get(r.approvalId);if(resolve){pending.delete(r.approvalId);resolve(r.approved===true);}return;}
- if(started||!['run','direct-shell'].includes(r.method)||typeof r.vaultId!=='string'||(r.method==='run'&&(r.confirmDataSharing!==true||typeof r.provider!=='string'||typeof r.model!=='string'||typeof r.prompt!=='string'))||(r.method==='direct-shell'&&typeof r.command!=='string')){emit({event:'error',code:'invalid_agent_request'});return;}
+ if(started||!['run','direct-shell','direct-browser'].includes(r.method)||typeof r.vaultId!=='string'||(r.method==='run'&&(r.confirmDataSharing!==true||typeof r.provider!=='string'||typeof r.model!=='string'||typeof r.prompt!=='string'))||(r.method==='direct-shell'&&typeof r.command!=='string')||(r.method==='direct-browser'&&(!['browser_search','browser_navigate'].includes(r.tool)||typeof r.value!=='string'))){emit({event:'error',code:'invalid_agent_request'});return;}
  started=true;
  void (async()=>{
   const registry=new VaultRegistry(process.env.NIDUS_VAULT_REGISTRY),client=new VMClient(registry);
@@ -34,13 +34,13 @@ input.on('line',line=>{
    const cancel=()=>answer(false);pending.set(p.approvalId,answer);signal.addEventListener('abort',cancel,{once:true});
    emit({event:'approval',proposal:p});if(signal.aborted)cancel();
   })});
-  let development=false;try{development=JSON.parse(await readFile(new URL('./vm-assets/manifest.json',import.meta.url),'utf8')).profile==='development';}catch{}
-  const definitions=development?developmentTools():offlineShellTools();
+  let development=false,browser=false;try{const manifest=JSON.parse(await readFile(new URL('./vm-assets/manifest.json',import.meta.url),'utf8'));development=manifest.profile==='development';browser=development&&manifest.browserSnapshotVersion===1;}catch{}
+  const definitions=browser?browserTools():development?developmentTools():offlineShellTools();
   const tools=new ToolDispatcher(new ToolRegistry(definitions),new HostFileGateway(registry),undefined,{},vm);
-  if(r.method==='direct-shell'){
-   const call={id:randomUUID(),name:r.paths?'run_project':'run_shell',arguments:r.paths?{command:r.command,paths:r.paths}:{command:r.command}};new ToolRegistry(definitions).validate(call.name,call.arguments);
+  if(r.method==='direct-shell'||r.method==='direct-browser'){
+   const call=r.method==='direct-browser'?{id:randomUUID(),name:r.tool,arguments:{[r.tool==='browser_search'?'query':'url']:r.value}}:{id:randomUUID(),name:r.paths?'run_project':'run_shell',arguments:r.paths?{command:r.command,paths:r.paths}:{command:r.command}};new ToolRegistry(definitions).validate(call.name,call.arguments);
    emit({event:'tool',name:call.name});const context={vaultId:r.vaultId,executionId:randomUUID(),signal:abort.signal};const result=await tools.invoke(context,call);tools.finishExecution(context.executionId);
-   emit({event:'tool-result',name:call.name,result});emit({event:'completed',task:{status:result.status,code:result.code,text:'직접 Shell 검토 — Provider 호출 없음'}});return;
+   emit({event:'tool-result',name:call.name,result});emit({event:'completed',task:{status:result.status,code:result.code,text:'직접 도구 검토 — Provider 호출 없음',...(r.method==='direct-browser'?{webStatus:result.status==='succeeded'?'used':'not_used'}:{})}});return;
   }
   const engine=new ConnectivityEngine(new KeychainStore(),new FileModelStore());
   const runtime=new SingleAgentRuntime(new EngineAgentModel(engine,providerId(r.provider)),tools);
