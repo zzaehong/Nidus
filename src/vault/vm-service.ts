@@ -35,6 +35,7 @@ export async function serve(registryPath:string){
     switch(r.method){
      case 'live-answer':{const p=approvals.get(r.approvalId);if(!p||p.executionId!==r.executionId)throw new VaultError('browser_approval_invalid');p.answer(r.approved===true);return {accepted:true};}
      case 'live-open':cancelExecution=r.executionId;return controller.openLive(r.vaultId,r.executionId,r.callId,approve);
+     case 'live-frame':return controller.liveFrame(r.vaultId,r.executionId);
      case 'live-action':cancelExecution=r.executionId;return controller.liveAction(r.vaultId,r.executionId,r.action,approve);
      case 'live-close':return controller.closeLive(r.vaultId,r.executionId);
      case 'cache-status':return controller.cacheStatus(r.vaultId);

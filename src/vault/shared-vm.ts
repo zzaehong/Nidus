@@ -149,8 +149,9 @@ export class SharedVMController {
   const browser=new LiveBrowser(vaultId,executionId,this.backend!);const record:SessionRecord={id:browser.id,executionId,callId,invocationKey:hash(JSON.stringify([vaultId,executionId,callId])),commandHash:hash('interactive-browser'),vaultId,vmInstanceId:this.state.vmInstanceId!,generation:this.state.generation,state:'RUNNING',createdAt:new Date().toISOString(),completedAt:null,cleanupConfirmed:false,resultHash:null};
   if(this.state.sessions.length>=10000||this.state.sessions.some(s=>s.invocationKey===record.invocationKey))fail('duplicate_invocation');
   const timer=setTimeout(()=>{browser.cancel();void this.closeLive(vaultId,executionId).catch(()=>{});},900000);timer.unref();this.live={browser,record,timer};this.state.sessions.push(record);this.state.activeSession=record.id;await this.persist();
-  try{await browser.start();return await browser.action({op:'navigate',url:'https://www.bing.com/'},approve);}catch(e){await this.closeLiveInternal();throw e;}
+  try{await browser.start();return await browser.action({op:'navigate',url:'https://www.google.com/'},approve);}catch(e){await this.closeLiveInternal();throw e;}
  });}
+ async liveFrame(vaultId:string,executionId:string){return this.liveOwner(vaultId,executionId).browser.frame();}
  async liveAction(vaultId:string,executionId:string,action:LiveAction,approve:LiveApprover){return this.serial(async()=>{
   this.guard();const live=this.liveOwner(vaultId,executionId);await this.registry.resolveVault(vaultId);
   if(this.cancelled.has(executionId))fail('cancelled');if(action.op==='navigate')fail('browser_action_invalid');

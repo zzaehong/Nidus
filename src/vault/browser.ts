@@ -17,7 +17,7 @@ export function browserRequest(tool:string,value:string):BrowserRequest {
  if(typeof value!=='string'||!value.trim())throw new VaultError('browser_invalid_request');
  if(tool==='browser_search'){
   if(value.length>512)throw new VaultError('browser_query_limit');
-  return {kind:'search',url:publicURL('https://www.bing.com/search?q='+encodeURIComponent(value)+'&setlang=en&cc=US').href};
+  return {kind:'search',url:publicURL('https://www.google.com/search?q='+encodeURIComponent(value)+'&hl=ko').href};
  }
  if(tool!=='browser_navigate')throw new VaultError('browser_invalid_request');
  return {kind:'navigate',url:publicURL(value).href};
@@ -41,6 +41,6 @@ export function browserPage(stdout:string,url:string):BrowserPage {
  let value:any;try{value=JSON.parse(stdout);}catch{throw new VaultError('browser_result_invalid');}
  if(value.sandboxVerified!==true||typeof value.title!=='string'||typeof value.text!=='string'||!Array.isArray(value.links)||value.title.length>512||value.text.length>16000||value.links.length>40)throw new VaultError('browser_result_invalid');
  const links:BrowserPage['links']=[];
- for(const link of value.links){if(typeof link.text!=='string'||typeof link.url!=='string')throw new VaultError('browser_result_invalid');try{let candidate=new URL(link.url,url);const wrapped=candidate.searchParams.get('u');if(candidate.hostname==='www.bing.com'&&candidate.pathname==='/ck/a'&&wrapped?.startsWith('a1'))candidate=new URL(Buffer.from(wrapped.slice(2),'base64url').toString('utf8'));candidate.hash='';links.push({text:link.text.slice(0,160),url:publicURL(candidate.href).href});}catch{}}
+ for(const link of value.links){if(typeof link.text!=='string'||typeof link.url!=='string')throw new VaultError('browser_result_invalid');try{let candidate=new URL(link.url,url);const wrapped=candidate.searchParams.get('u');if(candidate.hostname==='www.bing.com'&&candidate.pathname==='/ck/a'&&wrapped?.startsWith('a1'))candidate=new URL(Buffer.from(wrapped.slice(2),'base64url').toString('utf8'));if(candidate.hostname==='www.google.com'&&candidate.pathname==='/url'){const target=candidate.searchParams.get('q')??candidate.searchParams.get('url');if(target)candidate=new URL(target);}candidate.hash='';links.push({text:link.text.slice(0,160),url:publicURL(candidate.href).href});}catch{}}
  return {url,title:value.title,text:value.text,links,retrievedAt:new Date().toISOString(),untrusted:true,mode:'read-only-snapshot'};
 }

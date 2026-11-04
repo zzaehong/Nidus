@@ -46,12 +46,15 @@ def enter():
 p=subprocess.Popen(['/bin/busybox','unshare','--mount','--pid','--fork','/usr/bin/python3','/nidus/child.py',str(ROOT),ID,profile],stdin=subprocess.PIPE if interactive else subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.PIPE,env={'PATH':'/usr/bin:/bin'},close_fds=True,preexec_fn=enter)
 if interactive:
  def relay_output():
-  total=0
+  total=0;frames=0
   while True:
    line=p.stdout.readline(131073)
    if not line:break
-   total+=len(line)
-   if len(line)>131072 or total>8*1024*1024:
+   try:is_frame=json.loads(line).get('event')=='frame'
+   except Exception:is_frame=False
+   if is_frame:frames+=len(line)
+   else:total+=len(line)
+   if len(line)>131072 or total>8*1024*1024 or frames>96*1024*1024:
     (CG/'cgroup.kill').write_text('1');break
    print('NIDUS_LIVE',ID,base64.b64encode(line).decode(),flush=True)
  def relay_input():

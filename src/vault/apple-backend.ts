@@ -38,9 +38,10 @@ export class AppleOfflineBackend implements SharedBackend {
   const ready=this.wait(e=>e.event==='ready',35000);
   const child=this.child=spawn(fileURLToPath(new URL('../nidus-vault-vm',import.meta.url)),[join(this.assets,'Image'),join(this.assets,'initrd'),...(this.development?['development']:[]),...(disk?[disk.path,disk.fresh?'new':'existing',disk.diskId]:[])],{stdio:['pipe','pipe','pipe'],env:{PATH:'/usr/bin:/bin'}});
   child.stdin.on('error',()=>{});child.stderr.resume();
-  const lines=createInterface({input:child.stdout});let size=0;
-  child.stdout.on('data',(b:Buffer)=>{size+=b.length;if(size>8*1024*1024){void this.stop().catch(()=>{});this.event({event:'lost'});}});
-  lines.on('line',line=>{try{if(line.length>262144)throw Error();const e=JSON.parse(line);if(e.event==='guest'&&e.line==='NIDUS_CACHE_CLEAN')this.cacheClean=true;if(e.event==='STOP_CONFIRMED'&&e.frameworkState===0)this.stopped=true;this.event(e);}catch{this.event({event:'lost'});}});
+  const lines=createInterface({input:child.stdout});let size=0,frames=0,windowBytes=0;
+  const budgetTimer=setInterval(()=>{windowBytes=0;},1000);budgetTimer.unref();child.once('close',()=>clearInterval(budgetTimer));
+  child.stdout.on('data',(b:Buffer)=>{windowBytes+=b.length;if(windowBytes>4*1024*1024){void this.stop().catch(()=>{});this.event({event:'lost'});}});
+  lines.on('line',line=>{try{if(line.length>262144)throw Error();const e=JSON.parse(line);let frame=false;if(this.liveId&&e.event==='guest'&&typeof e.line==='string'&&e.line.startsWith(`NIDUS_LIVE ${this.liveId} `)){frame=JSON.parse(Buffer.from(e.line.split(' ')[2],'base64').toString()).event==='frame';}if(frame)frames+=line.length;else size+=line.length;if(size>8*1024*1024||frames>128*1024*1024){void this.stop().catch(()=>{});throw Error('output limit');}if(e.event==='guest'&&e.line==='NIDUS_CACHE_CLEAN')this.cacheClean=true;if(e.event==='STOP_CONFIRMED'&&e.frameworkState===0)this.stopped=true;this.event(e);}catch{this.event({event:'lost'});}});
   child.on('error',()=>this.event({event:'lost'}));child.on('close',()=>{this.closed=true;this.event({event:this.stopped?'closed':'lost'});});
   await ready;
  }

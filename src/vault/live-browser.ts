@@ -9,12 +9,18 @@ export type LiveApprover=(p:LiveApproval,signal:AbortSignal)=>Promise<boolean>;
 export class LiveBrowser {
  private pending=new Map<string,{resolve:(v:any)=>void;reject:(e:Error)=>void;timer:ReturnType<typeof setTimeout>}>();
  private abort=new AbortController();private approve:LiveApprover|undefined;private approving=Promise.resolve();private requests=0;private bytes=0;private busy=false;private failed=false;private responses=0;private blocked=0;private observation:any;private observedId='';
+ private framePending:{id:string;resolve:(v:any)=>void;timer:ReturnType<typeof setTimeout>}|undefined;private lastFrameAt=0;
+ async frame(){
+  if(this.failed||this.signal.aborted||this.framePending||Date.now()-this.lastFrameAt<900)return null;this.lastFrameAt=Date.now();
+  return new Promise<any>(resolve=>{const id=randomUUID(),timer=setTimeout(()=>{this.framePending=undefined;resolve(null);},5000);this.framePending={id,resolve,timer};void this.backend.sendLive!({op:'frame',id}).catch(()=>{if(this.framePending?.id===id){clearTimeout(timer);this.framePending=undefined;resolve(null);}});});
+ }
  readonly id=randomUUID();
  get signal(){return this.abort.signal;}
  cancel(){this.abort.abort();this.backend.cancel(this.id);}
  constructor(readonly vaultId:string,readonly executionId:string,private backend:SharedBackend,private transport=liveRequest){}
  async start(){if(!this.backend.beginLive||!this.backend.sendLive||!this.backend.endLive)throw new VaultError('browser_interactive_unsupported');await this.backend.beginLive(this.id,e=>this.event(e));}
  private event(e:any){
+  if(e.event==='frame'){const p=this.framePending;if(!p||p.id!==e.id)return;clearTimeout(p.timer);this.framePending=undefined;const data=e.data;const valid=!e.error&&typeof data==='string'&&data.length<=90000&&/^[A-Za-z0-9+/]+={0,2}$/.test(data)&&Buffer.from(data,'base64').subarray(0,3).equals(Buffer.from([255,216,255]));p.resolve(valid?{data,capturedAt:new Date().toISOString()}:null);return;}
   if(e.event==='request'){void this.fetch(e);return;}
   if(e.event==='result'){const p=this.pending.get(e.id);if(!p)return;clearTimeout(p.timer);this.pending.delete(e.id);e.error?p.reject(new VaultError(/^browser_[a-z_]+$/.test(e.error)?e.error:'browser_action_failed')):p.resolve(e.value);}
   if(e.event==='fatal'||e.event==='ended'){this.failed=true;this.abort.abort();for(const p of this.pending.values()){clearTimeout(p.timer);p.reject(new VaultError('browser_session_ended'));}this.pending.clear();}
@@ -49,5 +55,5 @@ export class LiveBrowser {
   }finally{this.busy=false;this.approve=undefined;}
  }
  preview(action:LiveAction){const e=this.observation?.elements?.find((e:any)=>e.id===action.targetId);return `${action.op} ${e?.tag??''} ${e?.name??''}\n대상 링크: ${e?.href??''}\n페이지: ${this.observation?.url??''}\n${action.op==='type'?`입력 ${action.text?.length??0}자: ${action.text??''}\n(입력 중에도 사이트 스크립트가 읽을 수 있음)`:''}`;}
- async close(){this.abort.abort();await this.backend.endLive!();this.failed=true;}
+ async close(){if(this.framePending){clearTimeout(this.framePending.timer);this.framePending.resolve(null);this.framePending=undefined;}this.abort.abort();await this.backend.endLive!();this.failed=true;}
 }

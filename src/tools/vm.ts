@@ -10,6 +10,7 @@ export interface ShellApprovalChannel {request(proposal:ShellProposal|LiveApprov
 export class VMToolGateway implements VMToolPort {
  private pages=new Map<string,{vaultId:string;executionId:string;page:unknown}>();
  private liveOwners=new Map<string,string>();
+ async browserFrame(){const entry=this.liveOwners.entries().next().value;if(!entry)return null;const [executionId,vaultId]=entry;return this.client.request('live-frame',{vaultId,executionId});}
  finishExecution(executionId:string){for(const [id,p] of this.pages)if(p.executionId===executionId)this.pages.delete(id);const vaultId=this.liveOwners.get(executionId);if(vaultId){this.liveOwners.delete(executionId);return this.client.request('live-close',{vaultId,executionId}).then(()=>{});}}
  constructor(private readonly client:VMClient,private readonly approval:ShellApprovalChannel){}
  async invoke(ctx:InvocationContext,call:ToolCall):Promise<ToolResult>{

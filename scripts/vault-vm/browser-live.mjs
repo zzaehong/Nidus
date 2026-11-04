@@ -41,12 +41,14 @@ async function action(a){
  if(!now?.connected||now.disabled||now.x!==e.x||now.y!==e.y||now.href!==e.href||now.type!==e.type||now.name!==e.name||!now.hit)throw Error('browser_stale_observation');
  if(a.op==='type'){
   if(!['INPUT','TEXTAREA'].includes(e.tag))throw Error('browser_not_text_input');
-  if(!['','text','search','email','url','tel','password','number'].includes(e.type))throw Error('browser_input_type_denied');
+  if(e.tag!=='TEXTAREA'&&!['','text','search','email','url','tel','password','number'].includes(e.type))throw Error('browser_input_type_denied');
   await call('DOM.focus',{objectId:e.objectId});await call('Input.dispatchKeyEvent',{type:'keyDown',key:'a',code:'KeyA',modifiers:2,windowsVirtualKeyCode:65});await call('Input.dispatchKeyEvent',{type:'keyUp',key:'a',code:'KeyA',modifiers:2,windowsVirtualKeyCode:65});await call('Input.insertText',{text:a.text});
  }else{await call('Input.dispatchMouseEvent',{type:'mousePressed',x:e.x,y:e.y,button:'left',clickCount:1});await call('Input.dispatchMouseEvent',{type:'mouseReleased',x:e.x,y:e.y,button:'left',clickCount:1});}
  await settle();return observe();
 }
-let chain=Promise.resolve();const input=createInterface({input:process.stdin});input.on('line',line=>{let m;try{m=JSON.parse(line)}catch{return;}if(m.op==='response'){
+let capturing=false;
+async function frame(id){if(capturing){emit({event:'frame',id,error:true});return;}capturing=true;try{const layout=await call('Page.getLayoutMetrics');const viewport=layout.cssVisualViewport??layout.visualViewport;const {data}=await call('Page.captureScreenshot',{format:'jpeg',quality:35,captureBeyondViewport:false,clip:{x:viewport.pageX,y:viewport.pageY,width:1280,height:900,scale:0.625}});if(data.length>90000)throw Error('frame limit');emit({event:'frame',id,data});}catch{emit({event:'frame',id,error:true});}finally{capturing=false;}}
+let chain=Promise.resolve();const input=createInterface({input:process.stdin});input.on('line',line=>{let m;try{m=JSON.parse(line)}catch{return;}if(m.op==='frame'){void frame(m.id);return;}if(m.op==='response'){
  if(!requests.delete(m.requestId))return;
  void (m.error?call('Fetch.failRequest',{requestId:m.requestId,errorReason:'BlockedByClient'}):call('Fetch.fulfillRequest',{requestId:m.requestId,responseCode:m.status,responseHeaders:m.headers,body:m.body})).catch(()=>{});return;
  }

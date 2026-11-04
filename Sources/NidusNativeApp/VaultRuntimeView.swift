@@ -25,6 +25,9 @@ struct ShellApproval: Identifiable { let id: String; let vault: String; let comm
     @Published var requiresWeb = false
     @Published var browserAvailable = false
     @Published var interactiveBrowserAvailable = false
+    @Published var browserFrame: NSImage?
+    @Published var browserFrameAt: Date?
+    private var frameBytes = 0
     @Published var browserInput = "https://example.com/"
     private let healthStore: HealthResultStore
     private var connectedModels: [VaultAgentModel] = []
@@ -166,26 +169,35 @@ struct ShellApproval: Identifiable { let id: String; let vault: String; let comm
             child.executableURL=location.node;child.arguments=[location.script.deletingLastPathComponent().appendingPathComponent("agent-channel.js").path]
             child.standardInput=stdin;child.standardOutput=stdout;child.standardError=FileHandle.nullDevice
             channelID=UUID();let runID=channelID
-            buffer=Data();outputBytes=0;events=[];error=nil
+            buffer=Data();outputBytes=0;frameBytes=0;browserFrame=nil;browserFrameAt=nil;events=[];error=nil
             stdout.fileHandleForReading.readabilityHandler={ [weak self] handle in
                 let data=handle.availableData
                 if data.isEmpty {handle.readabilityHandler=nil;return}
                 Task { @MainActor in guard let self, self.channelID==runID else {return};self.receive(data) }
             }
             child.terminationHandler={ [weak self] _ in Task { @MainActor in
-                guard let self, self.channelID==runID else {return};self.running=false;self.approval=nil;self.input=nil;self.process=nil
+                guard let self, self.channelID==runID else {return};self.running=false;self.approval=nil;self.input=nil;self.process=nil;self.browserFrame=nil;self.browserFrameAt=nil
             }}
             try child.run();process=child;input=stdin.fileHandleForWriting;running=true;Self.active=self
             send(request)
         } catch {self.error=error.localizedDescription;running=false}
     }
     func receive(_ data:Data) {
-        outputBytes+=data.count
-        guard outputBytes<=4*1024*1024 else {error="Agent 표시 한도를 초과했습니다.";cancel();return}
         buffer.append(data)
+        guard buffer.count<=512*1024 else {error="Agent 표시 한도를 초과했습니다.";cancel();return}
         while let end=buffer.firstIndex(of:10) {
             let line=buffer[..<end];buffer.removeSubrange(...end)
             guard let row=(try? JSONSerialization.jsonObject(with:line)) as? [String:Any],let event=row["event"] as? String else {continue}
+            if event=="browser-frame" {
+                frameBytes+=line.count
+                guard frameBytes<=96*1024*1024 else {browserFrame=nil;continue}
+                if let frame=row["frame"] as? [String:Any],let encoded=frame["data"] as? String,encoded.count<=90000,let bytes=Data(base64Encoded:encoded),let image=NSImage(data:bytes),image.size.width<=1280,image.size.height<=900 {
+                    browserFrame=image;browserFrameAt=Date()
+                } else {browserFrame=nil;browserFrameAt=nil}
+                continue
+            }
+            outputBytes+=line.count
+            guard outputBytes<=4*1024*1024 else {error="Agent 표시 한도를 초과했습니다.";cancel();return}
             if event=="approval", let p=row["proposal"] as? [String:Any],let id=p["approvalId"] as? String,let command=p["command"] as? String {
                 approval=ShellApproval(id:id,vault:p["vaultId"] as? String ?? "",command:command,hash:p["commandHash"] as? String ?? "",expires:p["expiresAt"] as? Double ?? 0,workspace:p["liveBrowser"] as? Bool == true ? Self.liveApprovalSummary(p["scope"] as? String ?? "") : p["browser"] != nil ? "표시된 공개 HTTPS 주소에 GET 요청 1회. URL·검색어가 해당 사이트로 전송됩니다. 로그인·폼 제출·다운로드·리디렉션·페이지의 추가 요청은 차단합니다. 페이지 내용은 신뢰할 수 없는 외부 데이터입니다." : Self.workspaceSummary(p["workspace"] as? [String:Any]) + (p["cachePersistent"] as? Bool == true ? "\n/cache 변경은 이 Vault의 다음 실행에도 유지됩니다." : ""))
                 events.append("도구 승인 대기 — 60초 후 만료")
@@ -194,7 +206,7 @@ struct ShellApproval: Identifiable { let id: String; let vault: String; let comm
                 let name=row["name"] as? String ?? "", text=(result["content"] as? [String:Any])?["text"] as? String ?? ""
                 events.append("\(name): \(result["code"] as? String ?? "")\n\(name.hasPrefix("browser_") ? Self.browserSummary(text) : text)")
             } else if event=="completed", let task=row["task"] as? [String:Any] {
-                approval=nil
+                approval=nil;browserFrame=nil;browserFrameAt=nil
                 if task["webStatus"] as? String == "unavailable" { events.append("[Host 확인] 웹 검색 미수행 · 인터넷 조회 불가. 아래 모델 답변은 최신 웹 검증 결과가 아닙니다.") }
                 if task["webStatus"] as? String == "not_used" { events.append("[Host 확인] 성공한 웹 조회가 없습니다.") }
                 if task["webStatus"] as? String == "used" { events.append("[Host 확인] 승인된 웹 조회 응답을 받았습니다. 내용의 정확성·조사 완료를 보증하지 않습니다. 출처와 조회 시각을 확인하세요.") }
@@ -285,16 +297,27 @@ struct VaultRuntimeView: View {
             Toggle("선택한 Vault의 허용된 파일 내용과 명령 결과를 선택한 Provider에 전송하며 API 비용이 발생할 수 있음을 확인했습니다.",isOn:$vm.sharing).font(.caption).disabled(vm.running)
             GroupBox(vm.interactiveBrowserAvailable ? "Agent 브라우저 · 클릭과 입력" : vm.browserAvailable ? "제한적 인터넷 · 읽기 전용 브라우저" : "웹 검색 · 현재 사용 불가") {
                 VStack(alignment:.leading) {
-                    Text(vm.interactiveBrowserAvailable ? "Agent가 검색창에 입력하고 버튼·링크를 클릭합니다. 작업 중 브라우저 상태를 유지하며 스크립트와 공개 HTTPS 리소스를 허용합니다. 클릭·입력·폼 전송은 승인이 필요합니다. Shell은 오프라인이고 다운로드는 차단합니다." : vm.browserAvailable ? "승인된 공개 HTTPS 페이지를 읽습니다. 로그인·스크립트·폼 제출·다운로드·자동 리디렉션은 지원하지 않습니다. Shell은 오프라인이며, 사이트가 조회를 차단할 수 있습니다." : "이 이미지에는 브라우저 기능이 없습니다. Shell은 오프라인입니다.")
+                    Text(vm.interactiveBrowserAvailable ? "Agent가 Google에서 시작해 검색창에 입력하고 버튼·링크를 클릭합니다. 작업 중 브라우저 상태를 유지하며 스크립트와 공개 HTTPS 리소스를 허용합니다. 클릭·입력·폼 전송은 승인이 필요합니다. Shell은 오프라인이고 다운로드는 차단합니다." : vm.browserAvailable ? "승인된 공개 HTTPS 페이지를 읽습니다. 로그인·스크립트·폼 제출·다운로드·자동 리디렉션은 지원하지 않습니다. Shell은 오프라인이며, 사이트가 조회를 차단할 수 있습니다." : "이 이미지에는 브라우저 기능이 없습니다. Shell은 오프라인입니다.")
                     if vm.browserAvailable {
                         if vm.interactiveBrowserAvailable {Text("아래 직접 조회는 기존 읽기 전용 방식입니다. 클릭·입력은 Agent 작업에서 사용합니다.")}
                         TextField("HTTPS 주소 또는 검색어",text:$vm.browserInput).disabled(vm.running)
-                        HStack {Button("주소 읽기…"){vm.startBrowser(search:false)};Button("웹 검색…"){vm.startBrowser(search:true)}}.disabled(vm.running||vm.selected.isEmpty||vm.browserInput.isEmpty)
+                        HStack {Button("주소 읽기…"){vm.startBrowser(search:false)};Button("Google 검색…"){vm.startBrowser(search:true)}}.disabled(vm.running||vm.selected.isEmpty||vm.browserInput.isEmpty)
                         Text("직접 브라우저 실행은 Provider를 호출하지 않습니다. Agent에서 사용하면 페이지 내용이 선택한 Provider에 전달됩니다.")
                     }
                     Toggle("이 작업은 웹 검색이 반드시 필요함",isOn:$vm.requiresWeb).disabled(vm.running)
                     if vm.requiresWeb { Text(vm.browserAvailable ? "웹 조회가 성공해야 작업을 완료로 표시합니다." : "웹 검색이 필요한 작업은 API 비용이 발생하지 않도록 실행을 차단합니다.").foregroundStyle(.orange) }
                 }.font(.caption).frame(maxWidth:.infinity,alignment:.leading)
+            }
+            if vm.interactiveBrowserAvailable {
+                GroupBox("브라우저 화면 · 실시간 보기") {
+                    VStack(alignment:.leading,spacing:6) {
+                        if let image=vm.browserFrame {
+                            Image(nsImage:image).resizable().aspectRatio(contentMode:.fit).frame(maxHeight:450)
+                            if let date=vm.browserFrameAt {Text("마지막 화면: \(date.formatted(date:.omitted,time:.standard)) · 약 1초 간격 갱신").font(.caption2)}
+                        } else {Text(vm.running ? "브라우저 시작 또는 화면 수신 대기 중" : "Agent가 브라우저를 사용하면 여기에 화면이 표시됩니다.").foregroundStyle(.secondary).frame(maxWidth:.infinity,minHeight:120)}
+                        Text("보기 전용 · 화면 이미지는 Provider에 전송하거나 저장하지 않습니다.").font(.caption)
+                    }.frame(maxWidth:.infinity,alignment:.leading)
+                }
             }
             TextEditor(text:$vm.prompt).frame(height:70).border(.quaternary).disabled(vm.running)
             if let approval=vm.approval {

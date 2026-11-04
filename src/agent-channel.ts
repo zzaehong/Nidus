@@ -15,7 +15,7 @@ import {VMToolGateway} from './tools/vm.js';
 import {SingleAgentRuntime,EngineAgentModel} from './agent/runtime.js';
 import {NidusError} from './errors.js';
 const emit=(value:unknown)=>process.stdout.write(JSON.stringify(value)+'\n');
-const abort=new AbortController();let started=false;let total=0;
+const abort=new AbortController();let started=false;let total=0;let frameTimer:ReturnType<typeof setInterval>|undefined;
 const pending=new Map<string,(approved:boolean)=>void>();
 process.stdin.on('data',b=>{total+=b.length;if(total>1048576)abort.abort();});
 const input=createInterface({input:process.stdin});
@@ -42,8 +42,9 @@ input.on('line',line=>{
    emit({event:'tool',name:call.name});const context={vaultId:r.vaultId,executionId:randomUUID(),signal:abort.signal};const result=await tools.invoke(context,call);await tools.finishExecution(context.executionId);
    emit({event:'tool-result',name:call.name,result});emit({event:'completed',task:{status:result.status,code:result.code,text:'직접 도구 검토 — Provider 호출 없음',...(r.method==='direct-browser'?{webStatus:result.status==='succeeded'?'used':'not_used'}:{})}});return;
   }
+  let polling=false;frameTimer=setInterval(()=>{if(polling||abort.signal.aborted||process.stdout.writableLength>262144)return;polling=true;void vm.browserFrame().then(frame=>{if(!abort.signal.aborted)emit({event:'browser-frame',frame});}).catch(()=>{if(!abort.signal.aborted)emit({event:'browser-frame',frame:null});}).finally(()=>{polling=false;});},1000);
   const engine=new ConnectivityEngine(new KeychainStore(),new FileModelStore());
   const runtime=new SingleAgentRuntime(new EngineAgentModel(engine,providerId(r.provider)),tools);
   const task=await runtime.run({vaultId:r.vaultId,model:r.model,prompt:r.prompt,requiresWeb:r.requiresWeb===true,signal:abort.signal,onEvent:emit});emit({event:'completed',task});
- })().catch(e=>emit({event:'error',code:e instanceof NidusError?e.code:'agent_failed'})).finally(()=>{abort.abort();pending.clear();input.close();process.stdin.destroy();});
+ })().catch(e=>emit({event:'error',code:e instanceof NidusError?e.code:'agent_failed'})).finally(()=>{if(frameTimer)clearInterval(frameTimer);abort.abort();pending.clear();input.close();process.stdin.destroy();});
 });
