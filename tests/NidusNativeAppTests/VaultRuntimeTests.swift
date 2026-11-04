@@ -97,4 +97,9 @@ import XCTest
         vm.receive(try line(["event":"completed","task":["status":"FAILED","code":"web_not_used","text":"","webStatus":"not_used"]]))
         XCTAssertTrue(vm.events.contains { $0.contains("성공한 웹 조회가 없습니다") })
     }
+    func testInteractiveBrowserApprovalScopes() {
+        XCTAssertTrue(VaultRuntimeModel.liveApprovalSummary("network-sensitive").contains("전송"))
+        XCTAssertTrue(VaultRuntimeModel.liveApprovalSummary("interaction").contains("스크립트"))
+        XCTAssertTrue(VaultRuntimeModel.liveApprovalSummary("session").contains("쿠키"))
+    }
 }

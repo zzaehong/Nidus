@@ -60,3 +60,15 @@ test('browser Host proposal: feature gate, immutable URL binding and cancellatio
  p.browser.url='https://127.0.0.1/';assert.equal(runtime.proposals.get(p.approvalId).browser.url,'https://example.com/');
  await runtime.cancel('web');await assert.rejects(runtime.executeApproved(p.approvalId),/approval_invalid/);assert.equal(f.backend.commands.length,0);await runtime.close();
 });
+
+test('interactive browser reserves VM, binds task ownership and confirms cleanup',async t=>{
+ const f=await fixture(t);await f.runtime.close();const b=f.backend;
+ b.beginLive=async(id,listener)=>{b.liveListener=listener;};b.sendLive=async m=>{if(m.op!=='response')b.liveListener({event:'result',id:m.id,value:{snapshotId:'s',url:'https://www.bing.com/',title:'fixture',text:'',elements:[],sandboxVerified:true}});};b.endLive=async()=>{b.liveListener({event:'ended'});b.closed=true;};
+ const runtime=new SharedVMController(f.registry,new VMJournal(f.journal.directory),()=>b,300000,undefined,true,true);await runtime.initialize();
+ await assert.rejects(runtime.openLive(f.v.vaultId,'denied','call',async()=>false),/permission_denied/);assert.equal(b.starts,0);
+ await runtime.openLive(f.v.vaultId,'live','call',async p=>p.scope==='session');
+ await assert.rejects(runtime.liveAction(f.v.vaultId,'other',{op:'observe'},async()=>true),/session_owner/);
+ await assert.rejects(runtime.stop(),/execution_active/);
+ await assert.rejects(runtime.liveAction(f.v.vaultId,'live',{op:'navigate',url:'https://example.com/'},async()=>true),/action_invalid/);
+ await runtime.closeLive(f.v.vaultId,'live');assert.equal(b.closed,true);assert.equal(runtime.status().sessions.at(-1).cleanupConfirmed,true);await runtime.close();
+});

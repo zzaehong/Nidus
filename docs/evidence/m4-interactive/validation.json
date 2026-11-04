@@ -1,0 +1,26 @@
+{
+  "node": {
+    "pass": 350,
+    "fail": 0
+  },
+  "swift": {
+    "pass": 54,
+    "fail": 0
+  },
+  "realVMFixture": "PASS",
+  "publicHTTPS": "PASS",
+  "serviceObserveAndType": "PASS",
+  "workspaceRegression": "PASS",
+  "liveNIM": "NOT RUN",
+  "realLoginPurchase": "NOT RUN",
+  "manualGUI": "NOT RUN",
+  "guestManifest": {
+    "profile": "development",
+    "cacheDiskVersion": 1,
+    "Image": "256d5fff4bb892edcb9218c1e6353e388bc3646e65f76c2bc9d958b635d1b00e",
+    "initrd": "871d41bea57d00a54d255a18fea33e78ca96666f68db17bbb3ab4f7d4a693e88",
+    "baseInitrdSHA256": "e3206148acd0951942ed06a8a6bf7455e451af1c8496f846c595d0d8877017e9",
+    "browserSnapshotVersion": 1,
+    "browserInteractiveVersion": 1
+  }
+}

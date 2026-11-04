@@ -1,0 +1,20 @@
+// Persistent real Chromium + deterministic HTTPS broker fixture. No Provider or user data.
+import {writeFile} from 'node:fs/promises';import assert from 'node:assert/strict';
+import {AppleOfflineBackend} from '../../dist/vault/apple-backend.js';import {LiveBrowser} from '../../dist/vault/live-browser.js';
+const b=new AppleOfflineBackend(process.argv[2]),e={scope:'Real VM/Chromium; deterministic synthetic broker responses; not live Internet or Provider',requests:[],approvals:[]};
+const main=`<title>Live fixture</title><form action='/search' method='get'><input name='q' placeholder='Search'><button>Search now</button></form><button onclick="document.querySelector('h1').textContent='JavaScript clicked'">Change</button><h1>Ready</h1><script src='/app.js'></script><img src='https://127.0.0.1/private'>`;
+const result=`<title>Results</title><h1>Mac mini result</h1><a href='/detail'>Open detail</a><form method='post' action='/submit'><input name='message' placeholder='Message'><button>Submit</button></form>`;
+const live=new LiveBrowser('synthetic-vault','synthetic-task',b,async r=>{e.requests.push({url:r.url,method:r.method,body:r.body});let body=main,type='text/html';const u=new URL(r.url);if(u.pathname==='/app.js'){body="document.querySelector('h1').textContent='External script loaded';";type='application/javascript';}else if(u.pathname==='/search')body=result;else if(u.pathname==='/detail')body='<title>Detail</title><p>Detail page</p>';else if(u.pathname==='/submit')body='<title>Submitted</title><p>Submission received</p>';return {status:200,headers:[{name:'content-type',value:type}],body:Buffer.from(body).toString('base64')};});
+let grant=false;const approve=async p=>{e.approvals.push({scope:p.scope,hash:p.commandHash});return grant;};
+try{
+ await b.start();await live.start();let page=await live.action({op:'navigate',url:'https://example.com/'},approve);assert.match(page.text,/External script loaded/);assert.equal(e.requests.some(r=>r.url.includes('127.0.0.1')),false);e.initial=page;
+ const original=page.snapshotId;page=await live.action({op:'type',snapshotId:page.snapshotId,targetId:page.elements.find(x=>x.tag==='INPUT').id,text:'Mac mini'},approve);assert.equal(page.elements.find(x=>x.tag==='INPUT').value,'Mac mini');
+ await assert.rejects(live.action({op:'click',snapshotId:original,targetId:'1'},approve),/stale/);
+ page=await live.action({op:'click',snapshotId:page.snapshotId,targetId:page.elements.find(x=>x.name==='Change').id},approve);assert.match(page.text,/JavaScript clicked/);
+ page=await live.action({op:'click',snapshotId:page.snapshotId,targetId:page.elements.find(x=>x.name==='Search now').id},approve);assert.match(page.url,/q=Mac\+mini/);assert.match(page.text,/Mac mini result/);e.search=page;
+ page=await live.action({op:'type',snapshotId:page.snapshotId,targetId:page.elements.find(x=>x.tag==='INPUT').id,text:'synthetic'},approve);
+ page=await live.action({op:'click',snapshotId:page.snapshotId,targetId:page.elements.find(x=>x.name==='Submit').id},approve);assert.equal(e.requests.filter(r=>r.method==='POST').length,0);e.deniedPost=true;
+ page=await live.action({op:'back'},approve);if(!page.elements.some(x=>x.name==='Submit'))page=await live.action({op:'navigate',url:'https://example.com/search?q=Mac+mini'},approve);
+ page=await live.action({op:'type',snapshotId:page.snapshotId,targetId:page.elements.find(x=>x.tag==='INPUT').id,text:'synthetic'},approve);grant=true;
+ page=await live.action({op:'click',snapshotId:page.snapshotId,targetId:page.elements.find(x=>x.name==='Submit').id},approve);assert.equal(e.requests.filter(r=>r.method==='POST').length,1);assert.match(page.text,/Submission received/);e.submitted=page;e.status='PASS';
+}catch(error){e.status='FAIL';e.error=String(error);process.exitCode=1;}finally{try{await live.close();e.cleanup='CONFIRMED';}catch(error){e.cleanup=String(error);process.exitCode=1;}try{await b.stop();e.stop='STOP_CONFIRMED';}catch(error){e.stop=String(error);process.exitCode=1;}await writeFile(process.argv[3],JSON.stringify(e,null,2));}
