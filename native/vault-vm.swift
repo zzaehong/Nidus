@@ -4,6 +4,7 @@ import Virtualization
 import Darwin
 
 final class Manager: NSObject, VZVirtualMachineDelegate {
+    var diskFD: Int32 = -1
     let vm: VZVirtualMachine
     let input = Pipe(), output = Pipe()
     var stopping = false
@@ -25,19 +26,29 @@ final class Manager: NSObject, VZVirtualMachineDelegate {
             }
         }
     }
-    init(kernel: String, initrd: String, development: Bool) throws {
+    init(kernel: String, initrd: String, development: Bool, disk: String? = nil, fresh: Bool = false, diskId: String = "") throws {
         let config = VZVirtualMachineConfiguration()
         let boot = VZLinuxBootLoader(kernelURL: URL(fileURLWithPath: kernel))
         boot.initialRamdiskURL = URL(fileURLWithPath: initrd)
         boot.commandLine = "console=hvc0 rdinit=/init panic=-1"
+        if disk != nil { boot.commandLine += " nidus_cache=\(fresh ? "new" : "existing") nidus_disk=\(diskId)" }
         config.bootLoader = boot; config.cpuCount = 2; config.memorySize = (development ? 3072 : 512) * 1024 * 1024
         let serial = VZVirtioConsoleDeviceSerialPortConfiguration()
         serial.attachment = VZFileHandleSerialPortAttachment(fileHandleForReading: input.fileHandleForReading, fileHandleForWriting: output.fileHandleForWriting)
         config.serialPorts = [serial]
         config.networkDevices = []; config.directorySharingDevices = []; config.storageDevices = []
+        var lockedFD: Int32 = -1
+        if let disk {
+            guard development, UUID(uuidString:diskId) != nil else {throw NSError(domain:"cache",code:1)}
+            lockedFD = Darwin.open(disk,O_RDWR|O_NOFOLLOW)
+            var info=stat()
+            guard lockedFD >= 0, fstat(lockedFD,&info)==0, (info.st_mode & S_IFMT)==S_IFREG, info.st_nlink==1, info.st_uid==getuid(), (info.st_mode & 0o077)==0, info.st_size==512*1024*1024 else {throw NSError(domain:"cache",code:2)}
+            let attachment=try VZDiskImageStorageDeviceAttachment(url:URL(fileURLWithPath:disk),readOnly:false,cachingMode:.uncached,synchronizationMode:.full)
+            config.storageDevices=[VZVirtioBlockDeviceConfiguration(attachment:attachment)]
+        }
         config.entropyDevices = [VZVirtioEntropyDeviceConfiguration()]
         try config.validate(); vm = VZVirtualMachine(configuration: config)
-        super.init(); vm.delegate = self
+        super.init(); diskFD=lockedFD; vm.delegate = self
         output.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let bytes = handle.availableData
             if !bytes.isEmpty { DispatchQueue.main.async { self?.receive(bytes) } }
@@ -60,7 +71,7 @@ final class Manager: NSObject, VZVirtualMachineDelegate {
         vm.start { [self] result in
             switch result {
             case .success: event("running")
-            case .failure: event("start_failed"); stop("start_failed")
+            case .failure(let error): event("start_failed",["error":error.localizedDescription]); stop("start_failed")
             }
         }
         DispatchQueue.main.asyncAfter(deadline: .now()+30) { [self] in if !ready { stop("boot_timeout") } }
@@ -97,9 +108,9 @@ final class Manager: NSObject, VZVirtualMachineDelegate {
 }
 signal(SIGPIPE, SIG_IGN)
 let args = CommandLine.arguments
-guard args.count == 3 || (args.count == 4 && args[3] == "development") else { exit(2) }
+guard args.count == 3 || ([4,7].contains(args.count) && args[3] == "development") else { exit(2) }
 do {
-    let manager = try Manager(kernel: args[1], initrd: args[2], development: args.count == 4)
+    let manager = try Manager(kernel: args[1], initrd: args[2], development: args.count >= 4, disk:args.count==7 ? args[4] : nil, fresh:args.count==7 && args[5]=="new",diskId:args.count==7 ? args[6] : "")
     manager.start()
     // Controller loss requests stop, never asserts stop. Independent process owns confirmation.
     DispatchQueue.global().async {
@@ -114,4 +125,4 @@ do {
         DispatchQueue.main.async { manager.stop("controller_disconnected") }
     }
     dispatchMain()
-} catch { exit(2) }
+} catch { FileHandle.standardError.write(Data("VM configuration failed: \(error)\n".utf8)); exit(2) }

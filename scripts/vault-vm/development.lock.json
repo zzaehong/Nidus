@@ -12,7 +12,8 @@
     "curl",
     "build-base",
     "chromium",
-    "ca-certificates-bundle"
+    "ca-certificates-bundle",
+    "e2fsprogs"
   ],
   "indexesSHA256": {
     "main": "53a29ff0128acca42db07e6d932133eba385bb36df0e926bb06029ac9ddea22c",
@@ -279,6 +280,24 @@
       "bytes": 37274,
       "license": "BSD-3-Clause",
       "dependencies": "so:libc.musl-aarch64.so.1 so:libgcc_s.so.1 so:libstdc++.so.6"
+    },
+    {
+      "name": "e2fsprogs",
+      "version": "1.47.4-r0",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/aarch64/e2fsprogs-1.47.4-r0.apk",
+      "sha256": "52fd401e79ce6b0ff7648733ba4de3135083cd0132543534e72106e7ea767a00",
+      "bytes": 184461,
+      "license": "GPL-2.0-or-later AND LGPL-2.0-or-later AND BSD-3-Clause AND MIT",
+      "dependencies": "so:libblkid.so.1 so:libc.musl-aarch64.so.1 so:libcom_err.so.2 so:libe2p.so.2 so:libext2fs.so.2 so:libuuid.so.1"
+    },
+    {
+      "name": "e2fsprogs-libs",
+      "version": "1.47.4-r0",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/aarch64/e2fsprogs-libs-1.47.4-r0.apk",
+      "sha256": "52124971ae397d599aadd79263fcd68fc9e271922ccf8185b124f35fe24c60c8",
+      "bytes": 216701,
+      "license": "GPL-2.0-or-later AND LGPL-2.0-or-later AND BSD-3-Clause AND MIT",
+      "dependencies": "so:libc.musl-aarch64.so.1 so:libcom_err.so.2"
     },
     {
       "name": "eudev-libs",
@@ -665,6 +684,15 @@
       "sha256": "e13be383f18b1fcfe895361d816ff7cfd2b3c265e442bb371c4a234b29b0e4a9",
       "bytes": 23993,
       "license": "BSD-3-Clause OR GPL-2.0-only",
+      "dependencies": "so:libc.musl-aarch64.so.1"
+    },
+    {
+      "name": "libcom_err",
+      "version": "1.47.4-r0",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/aarch64/libcom_err-1.47.4-r0.apk",
+      "sha256": "a75b5955ff57046e33fc2842cfe466dc77d8e68305d5c86c6646b38a069490a2",
+      "bytes": 6577,
+      "license": "GPL-2.0-or-later AND LGPL-2.0-or-later AND BSD-3-Clause AND MIT",
       "dependencies": "so:libc.musl-aarch64.so.1"
     },
     {
@@ -1990,5 +2018,6 @@
       "license": "BSD-3-Clause OR GPL-2.0-or-later",
       "dependencies": "so:libc.musl-aarch64.so.1"
     }
-  ]
+  ],
+  "cacheToolsIndexSHA256": "0ead7e9c3c4947ab5b0d773422e2560276e49f5c2928a6c5a3351093e5022b1e"
 }

@@ -5,6 +5,9 @@ def mount(*args):subprocess.run(['/bin/busybox','mount',*args],check=True,stdin=
 mount('--make-rprivate','/')
 for path in ['bin','lib','usr']:
  mount('--bind','/'+path,str(root/path));mount('-o','remount,bind,ro,nosuid,nodev',str(root/path))
+if pathlib.Path('/cache').is_mount():
+ (root/'cache').mkdir()
+ mount('--bind','/cache',str(root/'cache'));mount('-o','remount,bind,nosuid,nodev,noexec',str(root/'cache'))
 # Expose only guest CPU topology, never cgroup controls or Host resources.
 (root/'sys/devices/system/cpu').mkdir(parents=True)
 mount('--bind','/sys/devices/system/cpu',str(root/'sys/devices/system/cpu'))
@@ -17,4 +20,4 @@ resource.setrlimit(resource.RLIMIT_CORE,(0,0));resource.setrlimit(resource.RLIMI
 if pathlib.Path('/run/'+identity+'.cancel').exists():sys.exit(130)
 os.chroot(root);os.chdir('/work');os.setgroups([]);os.setgid(1000);os.setuid(1000)
 if ctypes.CDLL(None).prctl(38,1,0,0,0)!=0:raise OSError('no_new_privs')
-os.execve('/bin/bash',['bash','--noprofile','--norc','/task.sh'],{'PATH':'/usr/bin:/bin','HOME':'/home','TMPDIR':'/tmp','LANG':'C.UTF-8','PYTHONDONTWRITEBYTECODE':'1','PIP_DISABLE_PIP_VERSION_CHECK':'1','PIP_NO_INDEX':'1','npm_config_offline':'true','npm_config_cache':'/tmp/npm','GIT_CONFIG_NOSYSTEM':'1'})
+os.execve('/bin/bash',['bash','--noprofile','--norc','/task.sh'],{'PATH':'/usr/bin:/bin','HOME':'/home','TMPDIR':'/tmp','LANG':'C.UTF-8','PYTHONDONTWRITEBYTECODE':'1','PIP_DISABLE_PIP_VERSION_CHECK':'1','PIP_NO_INDEX':'1','npm_config_offline':'true','PIP_CACHE_DIR':'/cache/pip' if pathlib.Path('/cache').exists() else '/tmp/pip','npm_config_cache':'/cache/npm' if pathlib.Path('/cache').exists() else '/tmp/npm','GIT_CONFIG_NOSYSTEM':'1'})

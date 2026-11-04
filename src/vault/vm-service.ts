@@ -1,16 +1,18 @@
 // Trusted, single-owner local service. No Provider keys; selected Vault contents enter only via the validated Workspace gateway.
 import {createServer} from 'node:net';
-import {chmod,unlink} from 'node:fs/promises';
+import {chmod,unlink,readFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {randomBytes,timingSafeEqual} from 'node:crypto';
 import {pathToFileURL} from 'node:url';
 import {VaultRegistry} from './registry.js';
+import {CacheDiskStore} from './cache-disk.js';
 import {SharedVMController} from './shared-vm.js';
 import {VMJournal,durableFile} from './vm-journal.js';
 import {VaultError} from './types.js';
 export async function serve(registryPath:string){
  const registry=new VaultRegistry(registryPath),directory=join(registry.directory,'vm-runtime');
- const controller=new SharedVMController(registry,new VMJournal(directory),undefined,Number(process.env.NIDUS_VM_IDLE_MS??300000));await controller.initialize();
+ let cache:CacheDiskStore|undefined;try{if(JSON.parse(await readFile(new URL('../vm-assets/manifest.json',import.meta.url),'utf8')).cacheDiskVersion===1)cache=new CacheDiskStore(join(directory,'cache-disks'));}catch{}
+ const controller=new SharedVMController(registry,new VMJournal(directory),undefined,Number(process.env.NIDUS_VM_IDLE_MS??300000),cache);await controller.initialize();
  const token=randomBytes(32).toString('hex');await durableFile(join(directory,'owner','token'),token);
  const path=join(directory,'control.sock');if(Buffer.byteLength(path)>=104)throw new VaultError('vm_socket_path_limit');
  // An old socket is removed only after an exclusive clean Journal claim, never after owner death.
@@ -24,6 +26,8 @@ export async function serve(registryPath:string){
     const r=JSON.parse(buffer),provided=Buffer.from(typeof r.token==='string'?r.token:'');
     if(provided.length!==64||!timingSafeEqual(provided,Buffer.from(token)))throw new VaultError('vm_unauthorized');
     switch(r.method){
+     case 'cache-status':return controller.cacheStatus(r.vaultId);
+     case 'cache-clear':return controller.clearCache(r.vaultId);
      case 'summary':return controller.summary();
      case 'status':return controller.status();
      case 'shutdown':await controller.close();await unlink(path);server.close();return {shutdownConfirmed:true};

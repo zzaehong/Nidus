@@ -5,12 +5,14 @@ import {readFile,lstat} from 'node:fs/promises';
 import {createReadStream} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {join} from 'node:path';
+import type {CacheAttachment} from './cache-disk.js';
 import {VaultError} from './types.js';
 export interface ExecutionOptions {workspace?:string;profile?:'shell'|'browser'}
 export interface BackendResult {workspace?:{path:string;content:string|null}[];workspaceStatus?:'complete'|'invalid';exitCode:number;stdout:string;stderr:string;cleanupConfirmed:boolean;reason:string;memoryPeakBytes:number}
-export interface SharedBackend {onFailure?(handler:()=>void):void;start():Promise<void>;execute(id:string,command:string,seconds:number,options?:ExecutionOptions):Promise<BackendResult>;cancel(id:string):void;stop():Promise<void>}
+export interface SharedBackend {onFailure?(handler:()=>void):void;start(disk?:CacheAttachment):Promise<void>;execute(id:string,command:string,seconds:number,options?:ExecutionOptions):Promise<BackendResult>;cancel(id:string):void;stop():Promise<void>;cacheClean?:boolean}
 /** Only this adapter can produce actual Framework stop evidence. Mock implementations are test-only. */
 export class AppleOfflineBackend implements SharedBackend {
+ cacheClean=false;
  private child:ChildProcessWithoutNullStreams|null=null;
  private development=false;
  private executing:string|null=null;
@@ -24,18 +26,19 @@ export class AppleOfflineBackend implements SharedBackend {
    const listener=(e:any)=>{if(predicate(e)){clearTimeout(timer);this.listeners.delete(listener);resolve(e);}else if(e.event==='lost'){clearTimeout(timer);this.listeners.delete(listener);reject(new VaultError('STOP_UNCONFIRMED'));}};this.listeners.add(listener);
   });
  }
- async start(){
+ async start(disk?:CacheAttachment){
   if(this.child)throw new VaultError('vm_duplicate_start');
   const manifest=JSON.parse(await readFile(join(this.assets,'manifest.json'),'utf8'));
   if(manifest.profile!==undefined&&!['offline','development'].includes(manifest.profile))throw new VaultError('vm_asset_profile');
   this.development=manifest.profile==='development';
   for(const name of ['Image','initrd']){const path=join(this.assets,name),s=await lstat(path);if(!s.isFile()||s.isSymbolicLink()||s.nlink!==1||s.size>(this.development&&name==='initrd'?768:64)*1024*1024)throw new VaultError('vm_asset_invalid');const hash=createHash('sha256');for await(const chunk of createReadStream(path))hash.update(chunk);if(hash.digest('hex')!==manifest[name])throw new VaultError('vm_asset_hash');}
+  if(disk&&!this.development)throw new VaultError('cache_development_required');
   const ready=this.wait(e=>e.event==='ready',35000);
-  const child=this.child=spawn(fileURLToPath(new URL('../nidus-vault-vm',import.meta.url)),[join(this.assets,'Image'),join(this.assets,'initrd'),...(this.development?['development']:[])],{stdio:['pipe','pipe','pipe'],env:{PATH:'/usr/bin:/bin'}});
+  const child=this.child=spawn(fileURLToPath(new URL('../nidus-vault-vm',import.meta.url)),[join(this.assets,'Image'),join(this.assets,'initrd'),...(this.development?['development']:[]),...(disk?[disk.path,disk.fresh?'new':'existing',disk.diskId]:[])],{stdio:['pipe','pipe','pipe'],env:{PATH:'/usr/bin:/bin'}});
   child.stdin.on('error',()=>{});child.stderr.resume();
   const lines=createInterface({input:child.stdout});let size=0;
   child.stdout.on('data',(b:Buffer)=>{size+=b.length;if(size>8*1024*1024){void this.stop().catch(()=>{});this.event({event:'lost'});}});
-  lines.on('line',line=>{try{if(line.length>262144)throw Error();const e=JSON.parse(line);if(e.event==='STOP_CONFIRMED'&&e.frameworkState===0)this.stopped=true;this.event(e);}catch{this.event({event:'lost'});}});
+  lines.on('line',line=>{try{if(line.length>262144)throw Error();const e=JSON.parse(line);if(e.event==='guest'&&e.line==='NIDUS_CACHE_CLEAN')this.cacheClean=true;if(e.event==='STOP_CONFIRMED'&&e.frameworkState===0)this.stopped=true;this.event(e);}catch{this.event({event:'lost'});}});
   child.on('error',()=>this.event({event:'lost'}));child.on('close',()=>{this.closed=true;this.event({event:this.stopped?'closed':'lost'});});
   await ready;
  }

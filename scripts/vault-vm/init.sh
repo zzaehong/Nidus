@@ -71,6 +71,30 @@ if test -d /opt/development; then
  mount --bind /sys/fs/cgroup /opt/development/sys/fs/cgroup || { echo NIDUS_BLOCKED cgroup-view; exec sleep 86400; }
  echo NIDUS_DEVELOPMENT ready
 fi
+# Only Host-managed block storage; original Vault is never attached.
+cache_mode=; disk_id=
+for option in $(cat /proc/cmdline); do
+ case "$option" in nidus_cache=*) cache_mode="${option#*=}";; nidus_disk=*) disk_id="${option#*=}";; esac
+done
+if test -n "$cache_mode"; then
+ modprobe virtio_blk; modprobe ext4
+ n=0; while ! test -b /dev/vda && test "$n" -lt 100; do sleep .05; n=$((n+1)); done
+ if ! test -b /dev/vda || ! test -d /opt/development; then echo NIDUS_BLOCKED cache-device; exec sleep 86400; fi
+ if test "$cache_mode" = new; then
+  chroot /opt/development /sbin/mke2fs -q -t ext4 -F -m 0 -E lazy_itable_init=0,lazy_journal_init=0 /dev/vda || { echo NIDUS_BLOCKED cache-format; exec sleep 86400; }
+ else
+  chroot /opt/development /sbin/e2fsck -fn /dev/vda || { echo NIDUS_BLOCKED cache-filesystem; exec sleep 86400; }
+ fi
+ mkdir -p /persistent /opt/development/cache
+ mount -t ext4 -o nosuid,nodev,noexec /dev/vda /persistent > /run/cache-mount.log 2>&1 || { echo NIDUS_BLOCKED cache-mount "$(cat /run/cache-mount.log)" "$(dmesg | tail -n 3)"; exec sleep 86400; }
+ if test "$cache_mode" = new; then
+  echo "$disk_id" > /persistent/owner-id
+  mkdir /persistent/packages; chown 1000:1000 /persistent/packages; chmod 700 /persistent/packages
+ fi
+ if ! test "$(cat /persistent/owner-id)" = "$disk_id" || ! test -d /persistent/packages || test -L /persistent/packages; then echo NIDUS_BLOCKED cache-owner; exec sleep 86400; fi
+ mount --bind /persistent/packages /opt/development/cache || { echo NIDUS_BLOCKED cache-view; exec sleep 86400; }
+ echo NIDUS_CACHE_READY
+fi
 echo 'NIDUS_READY cgroup2'
 while read -r action id payload seconds snapshot; do
  case "$action" in
@@ -95,7 +119,14 @@ while read -r action id payload seconds snapshot; do
     ;;
   cancel) case "$id" in ''|*[!a-zA-Z0-9-]*) continue;; esac
     touch "/run/$id.cancel"; if test -d "$CG/$id"; then echo 1 > "$CG/$id/cgroup.kill"; fi ;;
-  stop) poweroff -f ;;
+  stop)
+    if test -e /run/busy; then echo NIDUS_REJECT busy; continue; fi
+    if test -n "$cache_mode"; then
+     sync
+     umount /opt/development/cache && umount /persistent || { echo NIDUS_BLOCKED cache-unmount; continue; }
+     echo NIDUS_CACHE_CLEAN
+    fi
+    poweroff -f ;;
  esac
 done < /dev/hvc0
 while :; do sleep 60; done

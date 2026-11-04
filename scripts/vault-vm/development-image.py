@@ -1,7 +1,7 @@
 """Explicit official-package lock/update/build. No downloaded installation scripts execute on Host."""
 import argparse, pathlib, tarfile, hashlib, json, re, urllib.request, concurrent.futures, os, shutil
 BASE='https://dl-cdn.alpinelinux.org/alpine/v3.24/'
-ROOTS=['python3','py3-pip','nodejs','npm','git','bash','curl','build-base','chromium','ca-certificates-bundle']
+ROOTS=['python3','py3-pip','nodejs','npm','git','bash','curl','build-base','chromium','ca-certificates-bundle','e2fsprogs']
 def sha(p):
  h=hashlib.sha256()
  with open(p,'rb') as f:

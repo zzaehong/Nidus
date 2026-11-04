@@ -1,5 +1,5 @@
 """Build the offline diagnostic guest from pinned public Alpine artifacts. No downloads here."""
-import pathlib, hashlib, gzip, struct, subprocess, tempfile, shutil, sys, os
+import pathlib, hashlib, gzip, struct, subprocess, tempfile, shutil, sys, os, json, importlib.util
 from newc import write as write_initramfs, tree_digest
 assets = pathlib.Path(sys.argv[1]).resolve()
 pins = {'vmlinuz-virt':'849394914e6a93cc9bb17e901f445ce21fcd7e4528541d9496a74d6a6ccee319','initramfs-virt':'7b75e0475ce73eca283ab60eac28f2fe1a8b62e8ffd870c056baaafc9d6e9b1b'}
@@ -14,6 +14,12 @@ with tempfile.TemporaryDirectory(prefix='nidus-m4-build-') as tmp:
     root=pathlib.Path(tmp)
     subprocess.run(['tar','-xf',str(assets/'initramfs-virt'),'-C',tmp],check=True)
     shutil.copyfile(pathlib.Path(__file__).with_name('init.sh'),root/'init');(root/'init').chmod(0o755)
+    cache_package=os.environ.get('NIDUS_VM_CACHE_KERNEL_APK')
+    if cache_package and not os.environ.get('NIDUS_VM_DEVELOPMENT_ROOT'):raise ValueError('cache requires managed development image')
+    if cache_package:
+        spec=importlib.util.spec_from_file_location('cache_modules',pathlib.Path(__file__).with_name('cache-modules.py'));module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        module.install(cache_package,root,pins['vmlinuz-virt'])
+    (assets/'features.json').write_text(json.dumps({'cacheDiskVersion':1 if cache_package else 0}))
     boot=assets/'boot-layer.gz';write_initramfs(root,boot)
     layers=[boot]
     development=os.environ.get('NIDUS_VM_DEVELOPMENT_ROOT')

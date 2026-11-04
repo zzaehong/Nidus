@@ -21,6 +21,8 @@ export async function dispatch(input: unknown, engine: ConnectivityEngine): Prom
       case 'vault-register':if(typeof r.path!=='string')throw new NidusError('invalid_request','Select a directory.');return registry.registerVault(r.path);
       case 'vault-vm-status':return client.status(true);
       case 'vault-vm-start':if(typeof r.vaultId!=='string')throw new NidusError('invalid_request','Select a Vault.');await registry.resolveVault(r.vaultId);return client.request('start',{vaultId:r.vaultId},true);
+      case 'vault-vm-service-restart':{const state=await client.status(true);if(state.statusSource!=='live-service'||!['STOPPED','STOP_CONFIRMED'].includes(state.state)||state.activeSession||state.queued)throw new NidusError('invalid_request','VM must be confirmed stopped before restarting its service.');await client.request('shutdown');return {restarted:false,stopped:true};}
+      case 'vault-cache-status':case 'vault-cache-clear':if(typeof r.vaultId!=='string')throw new NidusError('invalid_request','Select a Vault.');await registry.resolveVault(r.vaultId);return client.request(r.method==='vault-cache-status'?'cache-status':'cache-clear',{vaultId:r.vaultId},true);
       case 'vault-vm-stop':return client.request('stop');
       default:throw new NidusError('invalid_request','Unknown Vault action.');
     }

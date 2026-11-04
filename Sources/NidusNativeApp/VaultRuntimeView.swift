@@ -11,6 +11,7 @@ struct ShellApproval: Identifiable { let id: String; let vault: String; let comm
 @MainActor final class VaultRuntimeModel: ObservableObject {
     @Published var vaults: [VaultChoice] = []
     @Published var selected = ""
+    @Published var cacheStatus = "캐시 상태 조회 전"
     @Published var status = "상태 조회 전"
     @Published var error: String?
     @Published var busy = false
@@ -111,6 +112,21 @@ struct ShellApproval: Identifiable { let id: String; let vault: String; let comm
             } catch { self.error=error.localizedDescription }
         }
     }
+    func cacheAction(clear:Bool = false, vaultId:String? = nil, restart:Bool = false) async {
+        let target=vaultId ?? selected
+        guard !target.isEmpty else {return};busy=true;defer {busy=false}
+        do {
+            if restart { _ = try await Runtime.shared.call(["method":"vault-vm-service-restart"]) }
+            if clear { _ = try await Runtime.shared.call(["method":"vault-cache-clear","vaultId":target]) }
+            let data=try await Runtime.shared.call(["method":"vault-cache-status","vaultId":target])
+            if let value=try JSONSerialization.jsonObject(with:data) as? [String:Any] {
+                let state=value["state"] as? String ?? "unknown"
+                let label=state == "dirty" ? (value["owned"] as? Bool == true ? "사용 중 또는 종료 미확인" : "정상 해제 미확인 — 재사용 차단") : state == "clean" ? "정상 해제됨" : state == "absent" ? "아직 생성되지 않음" : state
+                guard target == selected else {return}
+                cacheStatus="\(label) · 용량 512 MiB · Host 할당 \((value["allocatedBytes"] as? Int ?? 0)/1048576) MiB"
+            }
+        } catch { self.error=error.localizedDescription }
+    }
     func action(_ method:String) async {
         busy=true;defer {busy=false}
         do {
@@ -163,7 +179,7 @@ struct ShellApproval: Identifiable { let id: String; let vault: String; let comm
             let line=buffer[..<end];buffer.removeSubrange(...end)
             guard let row=(try? JSONSerialization.jsonObject(with:line)) as? [String:Any],let event=row["event"] as? String else {continue}
             if event=="approval", let p=row["proposal"] as? [String:Any],let id=p["approvalId"] as? String,let command=p["command"] as? String {
-                approval=ShellApproval(id:id,vault:p["vaultId"] as? String ?? "",command:command,hash:p["commandHash"] as? String ?? "",expires:p["expiresAt"] as? Double ?? 0,workspace:Self.workspaceSummary(p["workspace"] as? [String:Any]))
+                approval=ShellApproval(id:id,vault:p["vaultId"] as? String ?? "",command:command,hash:p["commandHash"] as? String ?? "",expires:p["expiresAt"] as? Double ?? 0,workspace:Self.workspaceSummary(p["workspace"] as? [String:Any]) + (p["cachePersistent"] as? Bool == true ? "\n/cache 변경은 이 Vault의 다음 실행에도 유지됩니다." : ""))
                 events.append("Shell 승인 대기 — 60초 후 만료")
             } else if event=="tool" {events.append("도구 실행: \(row["name"] as? String ?? "")")}
             else if event=="tool-result", let result=row["result"] as? [String:Any] {
@@ -191,9 +207,11 @@ struct ShellApproval: Identifiable { let id: String; let vault: String; let comm
 struct VaultRuntimeView: View {
     @Environment(\.dismiss) var dismiss
     @StateObject private var vm=VaultRuntimeModel()
+    @State private var cacheClearVault = ""
+    @State private var confirmCacheClear = false
     @State private var confirmStop = false
     var body: some View {
-        VStack(alignment:.leading,spacing:12) {
+        ScrollView { VStack(alignment:.leading,spacing:12) {
             HStack {Text("Vault Runtime · M4 개발 검토").font(.title2);Spacer();Button("닫기"){if !vm.running {dismiss()}}.disabled(vm.running)}
             HStack {
                 Picker("Vault",selection:$vm.selected){Text("선택").tag("");ForEach(vm.vaults){Text($0.name).tag($0.id)}}.disabled(vm.running)
@@ -223,6 +241,18 @@ struct VaultRuntimeView: View {
             }
             Text("Workspace 파일 (Vault 상대경로, 한 줄에 하나, 최대 32개). 다음 Shell 승인에 포함됩니다.").font(.caption)
             TextEditor(text:$vm.workspacePaths).frame(height:50).border(.quaternary).disabled(vm.running)
+            GroupBox("Vault 전용 패키지 캐시") {
+                VStack(alignment:.leading) {
+                    Text(vm.cacheStatus).font(.caption)
+                    Text("/cache의 pip·npm 캐시는 재부팅 후에도 유지됩니다. 작업 폴더·환경변수·인증 정보는 보존하지 않습니다. 인터넷 패키지 다운로드는 아직 지원하지 않습니다.").font(.caption)
+                    HStack {
+                        Button("캐시 상태 조회"){Task {await vm.cacheAction()}}.disabled(vm.selected.isEmpty||vm.busy)
+                        Button("정지된 서비스 갱신"){Task {await vm.cacheAction(restart:true)}}.disabled(vm.busy||vm.running || !["STOPPED","STOP_CONFIRMED"].contains(vm.vmState))
+                        Button("선택 Vault 캐시 삭제…",role:.destructive){cacheClearVault=vm.selected;confirmCacheClear=true}.disabled(vm.selected.isEmpty||vm.busy||vm.running || !["STOPPED","STOP_CONFIRMED"].contains(vm.vmState))
+                            .confirmationDialog("선택 Vault의 패키지 캐시를 삭제할까요? Host 원본 파일은 유지됩니다.",isPresented:$confirmCacheClear,titleVisibility:.visible){Button("캐시 삭제",role:.destructive){Task {await vm.cacheAction(clear:true,vaultId:cacheClearVault)}}}
+                    }
+                }.frame(maxWidth:.infinity,alignment:.leading)
+            }
             Divider()
             HStack {Picker("검사 통과 모델",selection:$vm.model){Text("모델 선택").tag("");ForEach(vm.agentModels.filter { $0.available }) { choice in Text(choice.label).tag(choice.id) }}.disabled(vm.running)
                 Button("Agent 실행"){vm.startAgent()}.disabled(vm.running||vm.selected.isEmpty || vm.selectedModel == nil || vm.requiresWeb || !vm.sharing||vm.prompt.isEmpty)
@@ -248,11 +278,11 @@ struct VaultRuntimeView: View {
                 }.padding().background(.orange.opacity(0.12),in:RoundedRectangle(cornerRadius:8))
             }
             if let error=vm.error {Text(error).foregroundStyle(.red).textSelection(.enabled)}
-            ScrollView {Text(vm.events.joined(separator:"\n\n")).font(.system(.caption,design:.monospaced)).textSelection(.enabled).frame(maxWidth:.infinity,alignment:.leading)}
-        }.padding(24).frame(minWidth:850,minHeight:720).task {
+            ScrollView {Text(vm.events.joined(separator:"\n\n")).font(.system(.caption,design:.monospaced)).textSelection(.enabled).frame(maxWidth:.infinity,alignment:.leading)}.frame(minHeight:120,maxHeight:300)
+        }.padding(24) }.frame(minWidth:850,minHeight:720).task {
             await vm.refresh()
             while !Task.isCancelled { do {try await Task.sleep(nanoseconds:2_000_000_000)} catch {break}; await vm.pollStatus() }
         }.onChange(of:vm.model) { _ in vm.sharing=false }
-         .onChange(of:vm.selected) { _ in Task {await vm.pollStatus()} }
+         .onChange(of:vm.selected) { _ in vm.cacheStatus="캐시 상태 조회 전";Task {await vm.pollStatus()} }
     }
 }

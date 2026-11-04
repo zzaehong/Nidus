@@ -1,3 +1,4 @@
+import {CacheDiskStore,type CacheAttachment} from './cache-disk.js';
 import {createHash,randomUUID} from 'node:crypto';
 import {WorkspaceGateway,type WorkspaceSnapshot} from './workspace.js';
 import {HostFileGateway} from '../tools/files.js';
@@ -10,15 +11,16 @@ import {summarizeVMStatus,initialVMStatus,type SharedVMStatus,type ShellResult,t
 const hash=(value:string)=>createHash('sha256').update(value).digest('hex');
 const fail=(code:string):never=>{throw new VaultError(code);};
 interface Pending {snapshot?:WorkspaceSnapshot;record:SessionRecord;command:string;seconds:number;expiresAt:number;resolve:(r:ShellResult)=>void;reject:(e:unknown)=>void}
-export interface ShellProposal {approvalId:string;vaultId:string;executionId:string;callId:string;command:string;commandHash:string;policyRevision:1;expiresAt:number;environmentId:string;workspace?:{snapshotId:string;hash:string;paths:string[];bytes:number};tool:'run_shell'|'run_project';version:'1';requestedAt:number}
+export interface ShellProposal {approvalId:string;vaultId:string;executionId:string;callId:string;command:string;commandHash:string;policyRevision:1;expiresAt:number;environmentId:string;cachePersistent?:boolean;workspace?:{snapshotId:string;hash:string;paths:string[];bytes:number};tool:'run_shell'|'run_project';version:'1';requestedAt:number}
 /** A single authenticated Host service owns FIFO across clients. No lease expiry or PID reclamation. */
 export class SharedVMController {
  private workspace:WorkspaceGateway;private snapshots=new Map<string,WorkspaceSnapshot>();
+ private disk:CacheAttachment|undefined;
  private state=initialVMStatus();private backend:SharedBackend|null=null;
  private writes:Promise<void>=Promise.resolve();private lifecycle:Promise<unknown>=Promise.resolve();
  private queue:Pending[]=[];private active:Pending|null=null;private proposals=new Map<string,ShellProposal>();private cancelled=new Set<string>();
  private idle:ReturnType<typeof setTimeout>|undefined;private shutdownRequested=false;private poisoned=false;
- constructor(private readonly registry:VaultRegistry,private readonly journal:VMJournal,private readonly factory:()=>SharedBackend=()=>new AppleOfflineBackend(),private readonly idleMs=300000){this.workspace=new WorkspaceGateway(registry,new HostFileGateway(registry));}
+ constructor(private readonly registry:VaultRegistry,private readonly journal:VMJournal,private readonly factory:()=>SharedBackend=()=>new AppleOfflineBackend(),private readonly idleMs=300000,private readonly cache?:CacheDiskStore){this.workspace=new WorkspaceGateway(registry,new HostFileGateway(registry));}
  private discardProposal(id:string){const s=this.snapshots.get(id);if(s)this.workspace.discard(s.snapshotId);this.snapshots.delete(id);this.proposals.delete(id);}
  private context(vaultId:string,executionId:string):InvocationContext{return {vaultId,executionId,signal:new AbortController().signal};}
  async initialize(){if(!Number.isSafeInteger(this.idleMs)||this.idleMs<100||this.idleMs>3600000)fail('vm_invalid_idle');this.state=await this.journal.claim();this.state.policy.idleMs=this.idleMs;await this.persist();}
@@ -32,9 +34,10 @@ export class SharedVMController {
   this.guard();const vault=await this.registry.resolveVault(vaultId);
   if(this.state.state==='RUNNING'){if(this.state.vaultId!==vaultId||this.state.environmentId!==vault.environmentId)fail('vm_global_limit');return this.status();}
   if(!['STOPPED','STOP_CONFIRMED'].includes(this.state.state)||this.backend)fail('vm_busy');
+  if(this.cache)this.disk=await this.cache.acquire(vaultId,vault.environmentId);
   this.state.vaultId=vaultId;this.state.environmentId=vault.environmentId;this.state.vmInstanceId=randomUUID();this.state.generation++;this.state.state='STARTING';this.state.ready=false;
   await this.persist();this.backend=this.factory();this.backend.onFailure?.(()=>{if(this.state.state==='STOP_UNCONFIRMED')return;this.state.state='STOP_UNCONFIRMED';this.state.ready=false;void this.persist().catch(()=>{});void this.backend?.stop().catch(()=>{});});
-  try{await this.backend.start();this.guard();this.state.state='RUNNING';this.state.ready=true;await this.persist();this.armIdle();return this.status();}
+  try{await this.backend.start(this.disk);this.guard();this.state.state='RUNNING';this.state.ready=true;await this.persist();this.armIdle();return this.status();}
   catch(e){await this.stopInternal();throw e;}
  }
  private armIdle(){if(this.idle)clearTimeout(this.idle);this.idle=setTimeout(()=>{if(!this.active&&!this.queue.length)void this.stop().catch(()=>{});},this.idleMs);this.idle.unref();}
@@ -43,7 +46,7 @@ export class SharedVMController {
   const vault=await this.registry.resolveVault(vaultId);
   for(const [id,p] of this.proposals)if(p.expiresAt<Date.now())this.discardProposal(id);
   if(this.proposals.size>=100)fail('approval_limit');
-  const p:ShellProposal={approvalId:randomUUID(),vaultId,executionId,callId,command,commandHash:hash(command),policyRevision:1,expiresAt:Date.now()+60000,environmentId:vault.environmentId,tool:'run_shell',version:'1',requestedAt:Date.now()};if(paths!==undefined){
+  const p:ShellProposal={approvalId:randomUUID(),vaultId,executionId,callId,command,commandHash:hash(command),policyRevision:1,expiresAt:Date.now()+60000,environmentId:vault.environmentId,tool:'run_shell',version:'1',requestedAt:Date.now(),cachePersistent:!!this.cache};if(paths!==undefined){
    const snapshot=await this.workspace.prepare(this.context(vaultId,executionId),paths);
    if(this.cancelled.has(executionId)){this.workspace.discard(snapshot.snapshotId);fail('cancelled');}
    p.tool='run_project';
@@ -89,7 +92,7 @@ export class SharedVMController {
    job.record.cleanupConfirmed=true;job.record.state=value.reason==='cancelled'?'CANCELLED':value.exitCode===0?'COMPLETED':'FAILED';job.record.completedAt=new Date().toISOString();job.record.resultHash=hash(JSON.stringify(result));this.state.activeSession=null;
    await this.persist();job.resolve(result);
   }catch(e){
-   if(!dispatched&&!this.poisoned&&this.state.state==='RUNNING'){job.record.state='FAILED';job.record.cleanupConfirmed=true;job.record.completedAt=new Date().toISOString();this.state.activeSession=null;await this.persist();job.reject(e);return;}
+   if(!dispatched&&!this.poisoned&&this.state.state==='RUNNING'){job.record.state='FAILED';job.record.cleanupConfirmed=true;job.record.resultHash=hash('not-dispatched');job.record.completedAt=new Date().toISOString();this.state.activeSession=null;await this.persist();job.reject(e);return;}
    job.record.state='UNCONFIRMED';this.state.state='STOP_UNCONFIRMED';this.state.ready=false;
    try{await this.persist();}catch{};try{await this.backend?.stop();}catch{};
    job.reject(e);for(const q of this.queue){q.record.state='UNCONFIRMED';q.reject(new VaultError('STOP_UNCONFIRMED'));}this.queue=[];this.state.queued=0;try{await this.persist();}catch{}
@@ -109,8 +112,10 @@ export class SharedVMController {
  private async stopInternal(){
   if(this.idle)clearTimeout(this.idle);if(!this.backend)return;if(this.state.state==='STOP_UNCONFIRMED')fail('STOP_UNCONFIRMED');
   this.state.state='STOPPING';this.state.ready=false;await this.persist();
-  try{await this.backend.stop();this.state.state='STOP_CONFIRMED';this.backend=null;await this.persist();}
+  try{await this.backend.stop();this.state.state='STOP_CONFIRMED';if(this.disk){await this.cache!.release(this.disk.diskId,this.backend.cacheClean===true);this.disk=undefined;}this.backend=null;await this.persist();}
   catch(e){this.state.state='STOP_UNCONFIRMED';await this.persist();throw e;}
  }
+ async cacheStatus(vaultId:string){const v=await this.registry.resolveVault(vaultId);return this.cache?.status(vaultId,v.environmentId)??{state:'unsupported'};}
+ async clearCache(vaultId:string){return this.serial(async()=>{this.guard();if(this.active||this.queue.length||!['STOPPED','STOP_CONFIRMED'].includes(this.state.state))fail('cache_vm_must_stop');const v=await this.registry.resolveVault(vaultId);if(!this.cache)fail('cache_unsupported');await this.cache!.clear(vaultId,v.environmentId);return {cleared:true};});}
  async close(){this.shutdownRequested=true;for(const id of this.proposals.keys())this.discardProposal(id);if(this.active||this.queue.length)fail('vm_execution_active');await this.stop();await this.journal.release(this.state);}
 }
