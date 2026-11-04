@@ -52,3 +52,20 @@ test('browser: web-required agent cannot complete without a successful tool resu
   assert.equal(result.webStatus,useWeb?'used':'not_used');assert.equal(result.status,useWeb?'COMPLETED':'FAILED');assert.equal(result.code,useWeb?'ok':'web_not_used');assert.equal(f.vm.pages.size,0);
  }
 });
+
+test('search relevance: query echo in title cannot legitimize unrelated result bodies',async()=>{
+ const {checkSearchRelevance}=await import('../dist/vault/browser.js');
+ const page={title:'Mac mini M6 specs - Search',text:'Enterprise AI security and compliance frameworks',links:[{text:'Enterprise AI',url:'https://example.com/'}]};
+ assert.throws(()=>checkSearchRelevance(page,'Mac mini M6 specs'),/browser_search_unrelated/);
+ assert.throws(()=>checkSearchRelevance({...page,text:'Windows Group Policy scope'},'Mac mini M6 specs'),/browser_search_unrelated/);
+ assert.doesNotThrow(()=>checkSearchRelevance({...page,text:'Mac mini specifications. No confirmed M6 information.'},'Mac mini M6 specs'));
+ assert.throws(()=>checkSearchRelevance({...page,text:'Machine minimalist designs'},'Mac mini M6 specs'),/browser_search_unrelated/);
+});
+test('search mismatch is a failed tool result and never exposes irrelevant content',async()=>{
+ const f=gateway(true,{exitCode:1,cleanupConfirmed:true,stderr:'browser_search_unrelated',stdout:'unrelated content'});
+ const r=await f.vm.invoke(ctx,navigate);assert.equal(r.status,'failed');assert.equal(r.code,'browser_search_unrelated');assert.doesNotMatch(r.content.text,/unrelated content/);assert.equal(f.vm.pages.size,0);
+});
+test('NIM Agent allows 120 seconds without retry; other providers retain 30 seconds and caller cancellation',async()=>{
+ const {EngineAgentModel}=await import('../dist/agent/runtime.js');const {NidusError}=await import('../dist/errors.js');
+ for(const provider of ['nvidia','groq']){let calls=0;const abort=new AbortController();const engine={agentChat:async(p,r,options)=>{calls++;assert.equal(p,provider);assert.equal(options.signal,abort.signal);assert.equal(options.timeoutMs,provider==='nvidia'?120000:30000);throw new NidusError('timeout','fixture');}};await assert.rejects(new EngineAgentModel(engine,provider).respond({},abort.signal),e=>e.code==='timeout');assert.equal(calls,1);}
+});
