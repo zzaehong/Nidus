@@ -67,6 +67,7 @@ export class SingleAgentRuntime {
     }catch(e){
       const code=signal.aborted?'cancelled':e instanceof ToolError?e.code:e instanceof NidusError?`provider_${e.code}`:'provider_error';
       task.code=deadline.signal.aborted?'execution_limit':code;
+      if(code==='provider_invalid_response'){const reasons:Record<string,string>={text_protocol_truncated:'모델 응답이 토큰 한도로 잘렸습니다.',text_protocol_filtered:'Provider가 응답을 필터링했습니다.',text_protocol_empty:'모델이 빈 응답을 반환했습니다.',text_protocol_json:'모델 응답이 유효한 JSON이 아닙니다.',text_protocol_shape:'모델 응답이 Nidus 응답 구조와 맞지 않습니다.',text_protocol_call:'모델의 도구 호출 구조가 잘못됐습니다.',text_protocol_arguments:'모델이 미지원 도구 또는 잘못된 도구 인자를 반환했습니다.',text_protocol_size:'모델 응답이 크기 한도를 초과했습니다.'};const reason=e instanceof NidusError?e.reason:undefined;task.text=(reason&&reasons[reason]?`[${reason}] ${reasons[reason]}`:'Provider 응답 형식을 해석하지 못했습니다.')+' 이 단계의 도구는 실행하지 않았으며 자동 재시도하지 않았습니다. 앞선 브라우저 입력 성공과는 별개의 모델 응답 오류입니다.';}
       if(code==='provider_timeout')task.text='모델 API의 응답 대기 시간이 초과되었습니다. 브라우저 조회와 별개의 모델 호출 실패이며 자동 재시도하지 않았습니다. 반환된 검색 결과만으로 조사가 완료된 것은 아닙니다.';
       task.status=deadline.signal.aborted||['model_limit','tool_limit','result_limit'].includes(code)?'LIMIT_REACHED':code==='cancelled'?'CANCELLED':'FAILED';
       const last=task.steps.at(-1);if(last && last.state!=='COMPLETED')last.state='FAILED';return task;

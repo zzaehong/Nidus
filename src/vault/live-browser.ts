@@ -47,7 +47,7 @@ export class LiveBrowser {
    if(action.op==='type'&&(typeof action.text!=='string'||action.text.length>2048))throw new VaultError('browser_input_limit');
   }
   if(action.op==='scroll'&&(!Number.isSafeInteger(action.delta)||Math.abs(action.delta!)>1000))throw new VaultError('browser_action_invalid');
-  this.busy=true;this.approve=approve;const id=randomUUID();
+  this.busy=true;this.approve=['click','type','back'].includes(action.op)?approve:undefined;const id=randomUUID();
   try{
    const value=await new Promise<any>((resolve,reject)=>{const timer=setTimeout(()=>{this.pending.delete(id);this.cancel();reject(new VaultError('browser_action_timeout'));},75000);this.pending.set(id,{resolve,reject,timer});void this.backend.sendLive!({...action,id}).catch(error=>{clearTimeout(timer);this.pending.delete(id);reject(error);});});
    if(!value||value.sandboxVerified!==true||typeof value.url!=='string'||typeof value.title!=='string'||typeof value.text!=='string'||!Array.isArray(value.elements)||value.elements.length>60||typeof value.snapshotId!=='string'||Buffer.byteLength(JSON.stringify(value))>60000)throw new VaultError('browser_observation_invalid');

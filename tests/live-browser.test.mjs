@@ -31,7 +31,8 @@ test('background POST is denied before transport; public GET may use only the br
 test('network approval refusal sends no request; grant is one exact immutable request',async()=>{
  for(const answer of [false,true]){const b=new Backend();b.sendLive=async function(m){this.messages.push(m);if(m.op!=='response'){this.action=m;queueMicrotask(()=>this.listener({event:'request',...request({method:'POST',body:'q=query'})}));}};
  const sent=[],live=new LiveBrowser('vault','task',b,async r=>{sent.push(r);return {status:200,headers:[],body:''}});await live.start();let approvals=0;
- const action=live.action({op:'observe'},async p=>{approvals++;assert.equal(p.scope,'network-sensitive');assert.match(p.command,/POST https:\/\/example.com/);return answer;});await flush();b.listener({event:'result',id:b.action.id,value:observation()});await action;assert.equal(approvals,1);assert.equal(sent.length,answer?1:0);await live.close();}
+ live.observation=observation();live.observedId='snapshot';
+ const action=live.action({op:'click',snapshotId:'snapshot',targetId:'1'},async p=>{approvals++;assert.equal(p.scope,'network-sensitive');assert.match(p.command,/POST https:\/\/example.com/);return answer;});await flush();b.listener({event:'result',id:b.action.id,value:observation()});await action;assert.equal(approvals,1);assert.equal(sent.length,answer?1:0);await live.close();}
 });
 test('Agent waits for browser cleanup and reports uncertainty instead of completed on cleanup failure',async()=>{
  let cleaned=false;const tools={available:()=>[],validateVault:async()=>{},finishExecution:async()=>{await flush();cleaned=true;throw Error('cleanup');}};
@@ -42,4 +43,10 @@ test('UI frames have independent bounded replies and never alter model observati
  const b=new Backend(),live=new LiveBrowser('vault','task',b);await live.start();const page=await live.action({op:'observe'},async()=>true);
  b.sendLive=async function(m){this.messages.push(m);if(m.op==='frame')queueMicrotask(()=>this.listener({event:'frame',id:m.id,data:Buffer.from([255,216,255,217]).toString('base64')}));};
  const frame=await live.frame();assert.ok(frame.data);assert.ok(frame.capturedAt);assert.equal(page.data,undefined);assert.equal(await live.frame(),null);await live.close();assert.equal(await live.frame(),null);
+});
+
+test('automatic page-load POST is blocked without asking user; GET page load remains available',async()=>{
+ const b=new Backend(),sent=[],live=new LiveBrowser('vault','task',b,async r=>{sent.push(r);return {status:200,headers:[],body:''}});await live.start();let prompts=0;
+ b.sendLive=async function(m){this.messages.push(m);if(m.op!=='response'){this.action=m;queueMicrotask(()=>this.listener({event:'request',...request({method:'POST',body:'telemetry'})}));}};
+ const action=live.action({op:'navigate',url:'https://example.com/'},async()=>{prompts++;return true;});await flush();b.listener({event:'result',id:b.action.id,value:observation()});const page=await action;assert.equal(prompts,0);assert.equal(sent.length,0);assert.equal(page.networkBlocked,1);await live.close();
 });

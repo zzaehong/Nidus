@@ -39,3 +39,11 @@ test('VM summary supports existing daemon protocol without changing live state t
  client.request=async method=>{methods.push(method);if(method==='summary')throw new VaultError('vm_unknown_method');return state;};
  const result=await client.status(true);assert.deepEqual(methods,['summary','status']);assert.equal(result.state,'RUNNING');assert.equal(result.statusSource,'live-service');assert.equal(result.sessionCount,0);
 });
+
+test('text protocol accepts only an entire JSON fence and reports safe diagnostic categories',()=>{
+ const valid=JSON.stringify({text:'done',calls:[]});assert.equal(parseTextTools(response('```json\n'+valid+'\n```'),request()).text,'done');
+ for(const [text,reason] of [['Explanation\n'+valid,'text_protocol_json'],['','text_protocol_empty'],['{}','text_protocol_shape'],[JSON.stringify({text:'',calls:[{name:'browser_click',arguments:{}}]}),'text_protocol_arguments']]){
+  assert.throws(()=>parseTextTools(response(text),request()),e=>e.reason===reason&&e.code==='invalid_response');
+ }
+ assert.throws(()=>parseTextTools({...response(valid),finishReason:'length'},request()),e=>e.reason==='text_protocol_truncated');
+});
