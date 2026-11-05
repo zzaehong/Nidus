@@ -38,8 +38,8 @@ UI의 캐시 삭제는 명시적인 확인을 거치며, Controller는 전체 VM
 - PASS: `npm test` — 330개, 실패 0. 최초 제한 환경에서는 Swift module cache 접근이 차단되어 빌드가 중단되었으며, 허용된 실행 환경에서 재실행하여 통과했다.
 - PASS: `swift test` — 52개, 실패 0.
 - PASS: `npm run build:vm`, `npm run build:app` — 네이티브 helper 빌드·로컬 서명 및 macOS 개발 앱 번들 생성. 앱 번들은 배포 서명하지 않았다.
-- PASS: [실제 VM 검증](evidence/Vault_Cache_Real_2026-11-04.json) — 재부팅 후 파일 및 오프라인 pip wheel/npm tarball 재사용, 임시 홈·세션 초기화, Vault 간 격리, 캐시 삭제 후 재생성, 강제 종료 뒤 dirty 재사용 차단. 7개 실행 모두 종료 코드 0 및 cleanup 확인.
-- PASS: [장애 검증](evidence/Vault_Cache_Failures_2026-11-04.json) — ext4 superblock 손상 시 자동 복구·포맷 없이 차단, Manager SIGKILL 뒤 STOP_UNCONFIRMED 및 소유권 잠금 유지, 시작·삭제 거부. 합성 장애 테스트 디렉터리는 종료 미확인 정책에 따라 보존했다.
+- PASS: [실제 VM 검증](../evidence/Vault_Cache_Real_2026-11-04.json) — 재부팅 후 파일 및 오프라인 pip wheel/npm tarball 재사용, 임시 홈·세션 초기화, Vault 간 격리, 캐시 삭제 후 재생성, 강제 종료 뒤 dirty 재사용 차단. 7개 실행 모두 종료 코드 0 및 cleanup 확인.
+- PASS: [장애 검증](../evidence/Vault_Cache_Failures_2026-11-04.json) — ext4 superblock 손상 시 자동 복구·포맷 없이 차단, Manager SIGKILL 뒤 STOP_UNCONFIRMED 및 소유권 잠금 유지, 시작·삭제 거부. 합성 장애 테스트 디렉터리는 종료 미확인 정책에 따라 보존했다.
 - NOT RUN: GUI 수동 조작 검증. Swift 화면 관련 테스트는 위 테스트에 포함된다.
 
 실제 VM 테스트는 합성 Vault와 테스트 코드의 명시적 프로그램 승인을 사용했다. Provider 인증 정보나 사용자 Vault는 사용하지 않았다. 네트워크 패키지 다운로드는 지원 범위 밖이다.

@@ -273,11 +273,11 @@ Phase 5–6은 단일 Agent의 현재 Task·순차 Step·실행 안전 감사까
 
 이는 위 M0 채택 기준의 “App Sandbox·XPC 전환안은 별도 설계 승인 대상으로 보고한다”에 해당한다. 사용자 승인 전 전환 구현과 develop 병합을 수행하지 않는다.
 
-재현 보고서: [M0 JSON evidence](evidence/Phase5_6_M0_Sandbox.json). 민감한 경로·키·본문·PID는 포함하지 않는다. `eligible: false`는 이 진단이 제품 backend를 활성화할 수 없다는 뜻이며, 파일 테스트 일부가 성공해도 전체 자격으로 승격하지 않는다.
+재현 보고서: [M0 JSON evidence](../evidence/Phase5_6_M0_Sandbox.json). 민감한 경로·키·본문·PID는 포함하지 않는다. `eligible: false`는 이 진단이 제품 backend를 활성화할 수 없다는 뜻이며, 파일 테스트 일부가 성공해도 전체 자격으로 승격하지 않는다.
 
 ### 회귀 및 검증 이력
 
-단계별 테스트 수와 앱 빌드·실제 API 미검증 기록은 [검증 이력](VALIDATION.md)에 통합했다. Node·Swift 회귀와 기존 앱 빌드 PASS를 M0 보안 게이트 또는 Agent 기능 완료로 간주하지 않는다. 위 M0 실패와 원본 evidence는 그대로 유지한다.
+단계별 테스트 수와 앱 빌드·실제 API 미검증 기록은 [검증 이력](../validation/VALIDATION.md)에 통합했다. Node·Swift 회귀와 기존 앱 빌드 PASS를 M0 보안 게이트 또는 Agent 기능 완료로 간주하지 않는다. 위 M0 실패와 원본 evidence는 그대로 유지한다.
 
 ## M0 생명주기 재검증 — 2026-10-30
 
@@ -339,12 +339,12 @@ npm test
 
 두 진단은 미자격 상태이므로 **exit 1이 예상 결과**다. 이를 Node 회귀 테스트 실패와 혼동하지 않는다. 최초 네트워크 허용 대조군은 profile selector 문제로 workload가 시작되지 않아 NOT_RUN이었고, 허용 host를 `localhost`로 수정했다. 이후 AF_INET socket 생성 권한 부재도 확인하여 명시적 loopback 대조군에만 추가하고 재검증했다. 기본 차단 profile은 변경하지 않았다. 비동기 connect 직후 close로 양성 대조군 접속이 관측되지 않던 fixture도 연결 완료를 최대 100ms 기다리도록 수정했다. 이 중간 상태에서 네트워크 격리는 NOT_RUN으로 유지했다. 시작 실패를 네트워크 차단 PASS로 기록하지 않았다.
 
-원본 [2026-10-28 evidence](evidence/Phase5_6_M0_Sandbox.json)는 보존한다. 이번 결과와 source hash는 [생명주기 재검증 evidence](evidence/Phase5_6_M0_Lifecycle.json)에 기록한다. **현재 종료 보장 범위는 검증된 일반 자식의 제한된 상황뿐이며, 임의 Shell 전체 트리 종료 보장은 없다.**
+원본 [2026-10-28 evidence](../evidence/Phase5_6_M0_Sandbox.json)는 보존한다. 이번 결과와 source hash는 [생명주기 재검증 evidence](../evidence/Phase5_6_M0_Lifecycle.json)에 기록한다. **현재 종료 보장 범위는 검증된 일반 자식의 제한된 상황뿐이며, 임의 Shell 전체 트리 종료 보장은 없다.**
 
 
 ## VM 기반 M0 재검증 — 2026-10-30
 
-기존 native/PGID 실패 기록과 JSON은 그대로 보존한다. 새 [VM Evidence](evidence/Phase5_6_M0_VM.json)는 별도 검증이다. **Apple Virtualization Linux ARM64 Backend의 실제 부팅·강제 종료는 동작하지만 전체 Sandbox 자격은 미통과(`eligible: false`)다.** M1~M6와 제품 Shell을 활성화하지 않는다.
+기존 native/PGID 실패 기록과 JSON은 그대로 보존한다. 새 [VM Evidence](../evidence/Phase5_6_M0_VM.json)는 별도 검증이다. **Apple Virtualization Linux ARM64 Backend의 실제 부팅·강제 종료는 동작하지만 전체 Sandbox 자격은 미통과(`eligible: false`)다.** M1~M6와 제품 Shell을 활성화하지 않는다.
 
 ### 실행 및 파일 경계
 
@@ -427,7 +427,7 @@ python3 scripts/agent-vm/test_manager.py
 python3 scripts/agent-vm/test_workspace.py
 ```
 
-전체 M0 미자격이므로 진단 exit 1은 예상 결과다. 환경은 macOS 27.0.1 (26A434), Linux 6.18.58-0-virt, 2 vCPU/512MiB로 유지한다. 신규 [Manager Evidence](evidence/Phase5_6_M0_VM_Manager.json)에 source hash와 회귀 결과를 저장한다. Node 174개, Swift 42개, 파일 테스트 6개, Manager 정책 테스트 4개 PASS. 첫 Node 실행은 sandbox의 localhost listen EPERM으로 실패했고 로컬 mock listener 허용 후 통과했다. 실제 API 호출, 제품 앱 packaging, 제품 서명 변경은 수행하지 않았다.
+전체 M0 미자격이므로 진단 exit 1은 예상 결과다. 환경은 macOS 27.0.1 (26A434), Linux 6.18.58-0-virt, 2 vCPU/512MiB로 유지한다. 신규 [Manager Evidence](../evidence/Phase5_6_M0_VM_Manager.json)에 source hash와 회귀 결과를 저장한다. Node 174개, Swift 42개, 파일 테스트 6개, Manager 정책 테스트 4개 PASS. 첫 Node 실행은 sandbox의 localhost listen EPERM으로 실패했고 로컬 mock listener 허용 후 통과했다. 실제 API 호출, 제품 앱 packaging, 제품 서명 변경은 수행하지 않았다.
 
 ## M0 Lifecycle Reliability & Recovery — 2026-10-31
 
@@ -475,7 +475,7 @@ python3 scripts/agent-vm/test_manager.py
 python3 scripts/agent-vm/test_workspace.py
 ```
 
-진단 exit 1은 M0 미자격을 의미한다. 각 반복은 독립된 합성 suite이며, 이전 미확인 작업의 registry를 초기화하거나 같은 Workspace에서 재실행하지 않는다. 임시 진단 자료는 보존한다. 결과는 [Lifecycle Recovery Evidence](evidence/Phase5_6_M0_VM_Recovery.json)에 별도로 저장한다. 기존 Evidence는 수정하지 않는다.
+진단 exit 1은 M0 미자격을 의미한다. 각 반복은 독립된 합성 suite이며, 이전 미확인 작업의 registry를 초기화하거나 같은 Workspace에서 재실행하지 않는다. 임시 진단 자료는 보존한다. 결과는 [Lifecycle Recovery Evidence](../evidence/Phase5_6_M0_VM_Recovery.json)에 별도로 저장한다. 기존 Evidence는 수정하지 않는다.
 
 **결론: 소유자 상실 후 종료의 공개 API 근거가 확보되지 않아 M0 전체 통과 및 M1~M6 착수는 보류한다.** 확인 가능한 상태 조회·재연결 기능이 필요하면 Apple에 해당 수명 계약을 확인하거나, 안정적인 실행 ID 기반 재조회와 종료 확인을 제공하는 Backend를 별도 검증해야 한다. Supervisor를 하나 더 쌓거나 재시작 성공을 종료 증거로 삼는 것은 해결책으로 인정하지 않는다.
 
@@ -523,4 +523,4 @@ npm test
 npm run build:app
 ```
 
-진단은 M0 미자격이므로 exit 1이다. [사용자 복구 Evidence](evidence/Phase5_6_M0_VM_User_Recovery.json)를 새로 저장하고 이전 결과는 보존했다. **장애 대응 경로는 추가했지만 Manager 소멸 후 즉시 종료 확정 문제를 해결한 것으로 간주하지 않는다. M0 전체 미통과와 M1~M6 보류를 유지한다.**
+진단은 M0 미자격이므로 exit 1이다. [사용자 복구 Evidence](../evidence/Phase5_6_M0_VM_User_Recovery.json)를 새로 저장하고 이전 결과는 보존했다. **장애 대응 경로는 추가했지만 Manager 소멸 후 즉시 종료 확정 문제를 해결한 것으로 간주하지 않는다. M0 전체 미통과와 M1~M6 보류를 유지한다.**

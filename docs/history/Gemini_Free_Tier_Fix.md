@@ -1,5 +1,7 @@
 # Gemini 프로젝트 Free Tier와 Budget Guard
 
+> 과거 정책 기록입니다. 현재 실행 권한은 [Phase 4.3](../routing/Phase4_3_Account_Permissions.md), Soft Budget은 [Phase 4.4](../routing/Phase4_4_Routing_Context.md)를 참고하세요.
+
 2026-10-25 / `feature/usage-ledger-budget-guard`
 
 실제 로컬 장부를 읽기 전용으로 조사한 결과, Gemini probe 24건 중 가격이 등록된 2건은 `budget_not_configured`, 나머지 22건은 `unknown_price_or_bound`로 차단됐다. 예산 설정은 없었다. 기존 경로는 프로젝트 결제 상태 없이 유료 가격으로 최대 컨텍스트 비용을 예약했다. 모델별 무료 사용 승인은 과금 동의이며 무료 비용을 뜻하지 않았다.

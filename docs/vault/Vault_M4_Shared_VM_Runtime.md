@@ -137,12 +137,12 @@ Browser를 활성화하지 않은 이유는 실제 Chromium/DOM 실행과 브라
 
 새 Evidence:
 
-- [실제 세션 및 격리](evidence/Vault_M4_Sessions.json)
-- [공유 VM·Agent·OS 프로세스](evidence/Vault_M4_Integration.json)
-- [앱 번들 승인 채널](evidence/Vault_M4_Bundle_Channel.json)
-- [실제 강제 종료](evidence/Vault_M4_Force_Stop.json)
-- [초기 실패 시도](evidence/Vault_M4_Attempts.json)
-- [검증 요약·소스/이미지 hash](evidence/Vault_M4_Validation.json)
+- [실제 세션 및 격리](../evidence/Vault_M4_Sessions.json)
+- [공유 VM·Agent·OS 프로세스](../evidence/Vault_M4_Integration.json)
+- [앱 번들 승인 채널](../evidence/Vault_M4_Bundle_Channel.json)
+- [실제 강제 종료](../evidence/Vault_M4_Force_Stop.json)
+- [초기 실패 시도](../evidence/Vault_M4_Attempts.json)
+- [검증 요약·소스/이미지 hash](../evidence/Vault_M4_Validation.json)
 
 Evidence의 Mock 모델과 프로그램 승인 결정은 각각 명시했다. 기존 M0 Evidence는 그대로 보존했다.
 

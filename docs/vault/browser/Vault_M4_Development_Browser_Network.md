@@ -145,7 +145,7 @@ M5/M6 검토 항목: 권한 UX 개선, 개발 이미지 배포/업데이트/서�
 |---|---|---|
 | 전체 Node 회귀 | PASS 324 | `/private/tmp/nidus-m4-remaining-node-final-2.log`; 이전 기준 321과 구분 |
 | Swift 회귀 | PASS 51 | Workspace 승인 표시 테스트 추가; 이전 기준 50 |
-| 실제 Workspace 왕복 | PASS | `evidence/m4-remaining/workspace-final-real.json` |
+| 실제 Workspace 왕복 | PASS | `docs/evidence/m4-remaining/workspace-final-real.json` |
 | 동일 VM/Generation 2회 재사용 | PASS | 위 Evidence, 매번 원본 Snapshot으로 시작 |
 | Host 원본 보존, Diff, cgroup cleanup, VM 전체 종료 | PASS | 합성 임시 Vault만 사용, STOP_CONFIRMED |
 | 실제 사용자 승인 클릭 | NOT_RUN | 자동 테스트의 프로그램 승인은 사용자 승인 증거가 아님 |
@@ -159,7 +159,7 @@ M5/M6 검토 항목: 권한 UX 개선, 개발 이미지 배포/업데이트/서�
 
 실제 Linux VM에서 Chromium sandbox 경로를 진단했다. 초기 mount 구성 오류를 수정한 뒤에도 Chromium은 `No usable sandbox`, user namespace 생성은 `Operation not permitted`로 실패했다. 정확한 커널/초기 rootfs/namespace 원인은 아직 확정하지 않았다. `--no-sandbox`로 우회해서 인터넷 도구를 활성화하지 않았다.
 
-실험 patch와 다섯 번의 실패 Evidence를 `evidence/m4-remaining/`에 별도 보존했다. namespace 허용 범위를 늘리는 실험 변경은 제품 이미지에서 제외했다. 기존 M0/M4 Evidence는 수정하지 않았다. 과거 `--no-sandbox` 오프라인 DOM 성공은 Chromium sandbox 또는 공개 웹 격리 성공을 의미하지 않는다.
+실험 patch와 다섯 번의 실패 Evidence를 `docs/evidence/m4-remaining/`에 별도 보존했다. namespace 허용 범위를 늘리는 실험 변경은 제품 이미지에서 제외했다. 기존 M0/M4 Evidence는 수정하지 않았다. 과거 `--no-sandbox` 오프라인 DOM 성공은 Chromium sandbox 또는 공개 웹 격리 성공을 의미하지 않는다.
 
 다음 작업은 정식 guest root filesystem/namespace 구성에서 Chromium sandbox를 검증하고, CDP 요청을 Host의 제한된 HTTPS GET 경로에 연결한 후 DNS·redirect·IPv6·WebSocket·Shell 우회 실험을 수행하는 것이다. 참고한 1차 문서는 [CDP Fetch](https://chromedevtools.github.io/devtools-protocol/tot/Fetch/), [clone의 user namespace 제한](https://man7.org/linux/man-pages/man2/clone.2.html), [pivot_root](https://www.man7.org/linux/man-pages/man2/pivot_root.2.html)다. 현재 VM에는 여전히 NIC가 없고 Browser 도구는 광고하지 않는다.
 
@@ -174,6 +174,6 @@ M5/M6 검토 항목: 권한 UX 개선, 개발 이미지 배포/업데이트/서�
 7. 모델 검사 통과 모델의 Agent에 같은 작업을 요청할 수 있다. Provider 사용량 과금은 별도이며 이번 자동 검증에는 포함하지 않았다.
 8. Browser/웹 검색은 계속 비활성이다. 이 빌드는 웹 리서치 완료 빌드가 아니다.
 
-이번 구현 커밋: `ac14292`. 개발 앱 빌드 및 번들 Image/initrd SHA-256, VM/File Helper 포함 검사는 PASS이며 `open dist/Nidus.app` 요청도 성공했다. 실제 화면 클릭·승인 조작은 NOT_RUN이다. 최종 검증 요약은 `evidence/m4-remaining/validation-summary.json`에 보존했다. Tool 식별자 결합 보완 후 관련 Node 23개도 다시 통과했다.
+이번 구현 커밋: `ac14292`. 개발 앱 빌드 및 번들 Image/initrd SHA-256, VM/File Helper 포함 검사는 PASS이며 `open dist/Nidus.app` 요청도 성공했다. 실제 화면 클릭·승인 조작은 NOT_RUN이다. 최종 검증 요약은 `docs/evidence/m4-remaining/validation-summary.json`에 보존했다. Tool 식별자 결합 보완 후 관련 Node 23개도 다시 통과했다.
 
 Gate 판정: A는 기존 개발 도구 실행 PASS이나 영속 캐시 미완료, B는 선택된 기존 파일 Snapshot/실행/Diff 범위 PASS(Host 반영 비활성), C는 sandbox FAIL, D는 실제 Browser 네트워크 NOT_RUN/비활성, E는 Workspace 도구 연결 PASS이나 실제 Provider·웹 복합 E2E NOT_RUN, F는 빌드·번들 검사 PASS이나 실제 UI 조작 NOT_RUN이다. 이 범위를 넘어 M4 완료 또는 웹 브라우저 제어 완료로 해석해서는 안 된다.

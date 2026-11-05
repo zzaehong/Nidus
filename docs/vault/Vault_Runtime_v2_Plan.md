@@ -31,7 +31,7 @@
 
 1. [최신 Vault 설계](Phase5_6_Agent_Runtime_Vault_Sandbox.md): 앞부분 현재 설계를 v2 목표로 사용한다. 원문에 적힌 브랜치/기준 코드는 당시 출처다. v2 구현 상태와 기준점은 이 계획서를 따른다.
 2. `docs/evidence/Phase5_6_M0_{Sandbox,Lifecycle,VM,VM_Manager,VM_Recovery,VM_User_Recovery}.json`: 6개 원본 결과. 설계의 상대 링크와 실패 근거를 보존하기 위한 기록 이관이다.
-3. [VALIDATION.md](VALIDATION.md)와 [USER_GUIDE.md](USER_GUIDE.md): 설계→검증 이력→사용 안내의 참조를 유지하는 역사 스냅샷. **이 문서들의 M0 복구 UI/명령/기능은 v2 현재 코드에 존재하지 않는다.** v2 사용 가능 기능은 기반 코드와 기존 README를 기준으로 판단한다.
+3. [VALIDATION.md](../validation/VALIDATION.md)와 [USER_GUIDE.md](../guides/USER_GUIDE.md): 설계→검증 이력→사용 안내의 참조를 유지하는 역사 스냅샷. **이 문서들의 M0 복구 UI/명령/기능은 v2 현재 코드에 존재하지 않는다.** v2 사용 가능 기능은 기반 코드와 기존 README를 기준으로 판단한다.
 
 M0 실행 스크립트, Swift 복구 UI, build-app 변경, Provider 리팩터링은 이관하지 않는다. 역사 문서의 재현 명령은 기존 feature 커밋의 별도 checkout에서만 실행할 수 있다. 이관 evidence는 v2 실행 결과가 아니며 다시 생성하거나 기존 FAIL/UNCONFIRMED를 수정하지 않는다.
 

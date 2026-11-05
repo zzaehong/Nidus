@@ -6,7 +6,7 @@
 
 현재 설계는 Vault 소유 VM Environment/Instance, Host·VM·Provider Gateway, 단일 Agent의 순차 Step으로 갱신했다. VM 브라우저 검색/탐색은 필수이며 검색 API는 도입하지 않는다. 이 변경은 문서 작업으로 신규 실행/검증 결과가 아니다. M0 잔여 검증·Manager 사망 후 추가 복구 개발은 후속 과제로 두며, 미검증 조건을 우회해 Shell/browser를 활성화하지 않는다.
 
-이하 「현재 기준」 및 날짜별 기록은 당시 상태를 보존한다. 새 Session 정리·VM 재사용·이미지 API·공유 VM 격리는 아직 검증되지 않았다. 최신 설계는 [Phase 5–6 문서](Phase5_6_Agent_Runtime_Vault_Sandbox.md) 앞부분을 따른다.
+이하 「현재 기준」 및 날짜별 기록은 당시 상태를 보존한다. 새 Session 정리·VM 재사용·이미지 API·공유 VM 격리는 아직 검증되지 않았다. 최신 설계는 [Phase 5–6 문서](../vault/Phase5_6_Agent_Runtime_Vault_Sandbox.md) 앞부분을 따른다.
 
 ## 현재 기준
 
@@ -20,7 +20,7 @@
 - 기존 setsid 종료 실패 재현. 독립 Supervisor prototype도 setsid·이중 fork·추가 자손·Supervisor SIGKILL에서 FAIL. 제품 backend는 미채택, M1–M6는 계속 보류합니다.
 - Node 전체 회귀 174개 PASS, 진단 판정 단위 테스트 3개 PASS. Swift·앱 빌드·실제 Provider API는 NOT_RUN(제품 코드 변경 없음).
 - 파일 쓰기와 외부 loopback listener로 실제 활동을 관측했습니다. fixture의 자체 수명 종료, PID 존재 확인, 신호 전송만으로 생명주기 PASS를 부여하지 않습니다.
-- [상세 대안·재현 절차](Phase5_6_Agent_Runtime_Vault_Sandbox.md#m0-생명주기-재검증--2026-10-30), [실측 JSON·소스 해시](evidence/Phase5_6_M0_Lifecycle.json). 원본 M0 evidence와 과거 FAIL 기록은 보존합니다.
+- [상세 대안·재현 절차](../vault/Phase5_6_Agent_Runtime_Vault_Sandbox.md#m0-생명주기-재검증--2026-10-30), [실측 JSON·소스 해시](../evidence/Phase5_6_M0_Lifecycle.json). 원본 M0 evidence와 과거 FAIL 기록은 보존합니다.
 
 ## Ponytail 원칙 적용 점검 (2026-10-30)
 
@@ -73,7 +73,7 @@ Node는 `npm test`, Swift는 `swift test` 또는 당시 임시 scratch 경로를
 
 ## M0 보안 게이트: 미통과
 
-[원본 JSON evidence](evidence/Phase5_6_M0_Sandbox.json)는 변경 없이 보존합니다. [설계와 다음 검증안](Phase5_6_Agent_Runtime_Vault_Sandbox.md)을 참고하세요.
+[원본 JSON evidence](../evidence/Phase5_6_M0_Sandbox.json)는 변경 없이 보존합니다. [설계와 다음 검증안](../vault/Phase5_6_Agent_Runtime_Vault_Sandbox.md)을 참고하세요.
 
 - PASS: 최소 실행, Vault 내부 읽기·쓰기, 외부 파일 읽기·쓰기 거부, `.nidus`·`.env` 보호, 외부 symlink 거부, localhost socket 권한 거부.
 - FAIL: process group 종료 뒤 `setsid()`로 분리된 자식이 heartbeat 파일 쓰기를 계속함. 별도 SIGKILL 및 fixture 자체 10초 수명 제한으로 정리.
@@ -98,7 +98,7 @@ npm run test:live
 
 ## 통합한 문서
 
-현재 사용법은 [사용 가이드](USER_GUIDE.md), 데이터·호출 구조는 [아키텍처](API_CONNECTIVITY.md), JSON 계약은 [Routing Context](Phase4_4_Routing_Context.md)에 모았습니다.
+현재 사용법은 [사용 가이드](../guides/USER_GUIDE.md), 데이터·호출 구조는 [아키텍처](../architecture/API_CONNECTIVITY.md), JSON 계약은 [Routing Context](../routing/Phase4_4_Routing_Context.md)에 모았습니다.
 
 삭제한 중복 문서: `CONNECTIVITY_VALIDATION.md`, `DASHBOARD_VALIDATION.md`, `MODEL_HEALTH.md`, `Phase3_Usage_Budget.md`, `Phase4_Model_Router.md`, `Phase4_1_Tier_Router.md`, `Phase4_1_Free_Use.md`, `Gemini_Free_Tier_Fix.md`, `Phase4_2_Provider_Expansion.md`, `NVIDIA_Model_Classification.md`, `NVIDIA_Free_Setup_Fix.md`, `Budget_Guard_Removal.md`, `Phase4_3_Account_Permissions.md`, `Settings_UI_Refinement.md`.
 
@@ -109,22 +109,22 @@ npm run test:live
 
 Apple Virtualization + Linux ARM64 별도 prototype 실제 실행: 시나리오 **9 PASS / 1 NOT_RUN**, 제한된 보안 검사 **7 PASS**. Worker SIGKILL 이후 활동은 멈췄지만 실제 VM 정지는 확인하지 못하여 전체 자격은 미통과다. M1~M6/제품 Shell은 비활성 상태로 유지한다. 기존 native 실패 Evidence는 보존한다.
 
-Node 174개, Swift 42개, workspace 6개 PASS. 제품 앱 packaging·실제 API·실제 SwiftUI crash는 NOT_RUN. 환경, 초기 실패, 재현 명령, 파일·네트워크 범위 및 정리 보류 항목은 [설계 기록](Phase5_6_Agent_Runtime_Vault_Sandbox.md#vm-기반-m0-재검증--2026-10-30)과 [VM Evidence](evidence/Phase5_6_M0_VM.json)를 참조한다.
+Node 174개, Swift 42개, workspace 6개 PASS. 제품 앱 packaging·실제 API·실제 SwiftUI crash는 NOT_RUN. 환경, 초기 실패, 재현 명령, 파일·네트워크 범위 및 정리 보류 항목은 [설계 기록](../vault/Phase5_6_Agent_Runtime_Vault_Sandbox.md#vm-기반-m0-재검증--2026-10-30)과 [VM Evidence](../evidence/Phase5_6_M0_VM.json)를 참조한다.
 
 ## 독립 VM Manager M0 (2026-10-31)
 
 작업 Worker와 VM 소유 Manager를 분리한 실제 VM 검증은 8 PASS / 1 NOT_RUN이다. Worker SIGKILL·연결 단절·heartbeat 만료·timeout 후 Manager가 VM 종료를 확인했다. Manager 자체 SIGKILL은 종료 미확인으로 남고 신규 실행을 차단한다. M0 전체 자격 및 M1~M6 보류는 유지한다.
 
-Node 174, Swift 42, workspace 6, Manager 정책 4개 PASS. 기존 VM 모드 회귀는 9 PASS / 1 NOT_RUN, 보안 검사 7 PASS. 최초 Node 실행의 localhost EPERM은 환경 제한으로 기록하고 권한 허용 후 재검증했다. 상세 제한과 원시 이벤트는 [Manager Evidence](evidence/Phase5_6_M0_VM_Manager.json)를 참조한다. 기존 실패 Evidence는 수정하지 않았다.
+Node 174, Swift 42, workspace 6, Manager 정책 4개 PASS. 기존 VM 모드 회귀는 9 PASS / 1 NOT_RUN, 보안 검사 7 PASS. 최초 Node 실행의 localhost EPERM은 환경 제한으로 기록하고 권한 허용 후 재검증했다. 상세 제한과 원시 이벤트는 [Manager Evidence](../evidence/Phase5_6_M0_VM_Manager.json)를 참조한다. 기존 실패 Evidence는 수정하지 않았다.
 
 ## VM Lifecycle Recovery (2026-10-31)
 
 실제 Manager SIGKILL 5회: 5초간 파일·로컬 패킷 추가 활동 없음, 관측된 Virtualization 서비스 소멸. 활동 관측은 모두 PASS지만 권위 있는 종료 근거는 **5 UNCONFIRMED**다. 정상 취소/중복 종료, 중복 시작 차단, Worker 종료, Supervisor 종료, 합성 앱 연결 상실은 **5 PASS**. 종료 오류·완료 미도착 주입 2건은 종료 증명 NOT_RUN, 미확인 처리·재실행 차단 정책은 PASS다. 실제 framework 내부 오류와 실제 SwiftUI crash로 확대 해석하지 않는다.
 
-Node 174, Swift 42, workspace 6, Manager 4, lifecycle 4개 PASS. 상태 불일치는 단위 테스트에서 현재 상태를 주입해 검증한다. launchd는 공식 기능을 검토했으며 설치하지 않았다. M0 전체 미통과 및 M1~M6 보류를 유지한다. [Recovery Evidence](evidence/Phase5_6_M0_VM_Recovery.json)에 원시 관측과 판정 근거를 보존한다.
+Node 174, Swift 42, workspace 6, Manager 4, lifecycle 4개 PASS. 상태 불일치는 단위 테스트에서 현재 상태를 주입해 검증한다. launchd는 공식 기능을 검토했으며 설치하지 않았다. M0 전체 미통과 및 M1~M6 보류를 유지한다. [Recovery Evidence](../evidence/Phase5_6_M0_VM_Recovery.json)에 원시 관측과 판정 근거를 보존한다.
 
 ## M0 사용자 복구 UI (2026-10-31)
 
 실제 VM 복구 bridge: 안전 종료와 Worker 종료 2 PASS, Manager 사망의 종료 증명 1 UNCONFIRMED. 장애 차단/채널 비활성 정책은 PASS. Swift 46개(복구 Mock 4개), Python 21개, Node 174개 PASS. macOS release 앱 packaging PASS.
 
-부팅 UUID 조회는 확인했으나 실제 호스트 재부팅·실제 앱 crash·수동 UI E2E는 NOT_RUN이다. headless 캡처는 텍스트 표시가 확인되지 않아 시각 QA PASS로 계산하지 않는다. 새 [사용자 복구 Evidence](evidence/Phase5_6_M0_VM_User_Recovery.json)와 [설계 문서](Phase5_6_Agent_Runtime_Vault_Sandbox.md)에 제한을 기록했다. M0 전체 통과가 아니며 M1~M6는 보류한다.
+부팅 UUID 조회는 확인했으나 실제 호스트 재부팅·실제 앱 crash·수동 UI E2E는 NOT_RUN이다. headless 캡처는 텍스트 표시가 확인되지 않아 시각 QA PASS로 계산하지 않는다. 새 [사용자 복구 Evidence](../evidence/Phase5_6_M0_VM_User_Recovery.json)와 [설계 문서](../vault/Phase5_6_Agent_Runtime_Vault_Sandbox.md)에 제한을 기록했다. M0 전체 통과가 아니며 M1~M6는 보류한다.

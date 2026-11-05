@@ -1,5 +1,7 @@
 # Phase 3 — Usage Ledger & Budget Guard
 
+> 과거 정책 기록입니다. 현재 실행 권한은 [Phase 4.3](../routing/Phase4_3_Account_Permissions.md), Soft Budget은 [Phase 4.4](../routing/Phase4_4_Routing_Context.md)를 참고하세요.
+
 ## 범위와 데이터 흐름
 
 기준: `develop` `85ab4a8609e6a9f0a5a6a4064f02a346ffc2df5b`.

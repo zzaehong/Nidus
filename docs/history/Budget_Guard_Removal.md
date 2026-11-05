@@ -1,5 +1,7 @@
 # Budget Guard 제거 — 2026-10-26
 
+> 과거 정책 기록입니다. 현재 실행 권한은 [Phase 4.3](../routing/Phase4_3_Account_Permissions.md), Soft Budget은 [Phase 4.4](../routing/Phase4_4_Routing_Context.md)를 참고하세요.
+
 사용자 요청에 따라 현재 `feature/usage-ledger-budget-guard`에서 비용 제한 기능을 제거했다. 과거 Phase 3·4·4.1·4.2 문서의 예산 차단, 비용 예약, 자동 유료 허용 및 무료 모델별 호출 승인 규칙은 현재 실행 정책이 아니다. 기존 문서는 구현·검증 이력으로 보존한다.
 
 ## 변경 동작

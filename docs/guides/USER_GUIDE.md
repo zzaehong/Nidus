@@ -1,6 +1,6 @@
 # 사용 가이드
 
-설치와 실행은 [README](../README.md), 데이터·전달 계층은 [아키텍처](API_CONNECTIVITY.md)를 참고하세요. 이 문서는 현재 동작만 설명합니다.
+설치와 실행은 [README](../../README.md), 데이터·전달 계층은 [아키텍처](../architecture/API_CONNECTIVITY.md)를 참고하세요. 이 문서는 현재 동작만 설명합니다.
 
 ## Provider 연결
 
@@ -97,7 +97,7 @@ Model Tier의 무료 상태는 verified / unverified / unavailable / unsupported
 
 ## 사용량·비용·문제 해결
 
-**사용량 및 비용**에서 요청·모델별 토큰, 추정·확인·미확인 비용, 과거 예약 기록을 확인합니다. Provider별 Soft Budget은 저장·수정·삭제 가능한 목표이며 실행 제한이 아닙니다. [비용 데이터 의미와 사용률](Phase4_4_Routing_Context.md)을 참고하세요.
+**사용량 및 비용**에서 요청·모델별 토큰, 추정·확인·미확인 비용, 과거 예약 기록을 확인합니다. Provider별 Soft Budget은 저장·수정·삭제 가능한 목표이며 실행 제한이 아닙니다. [비용 데이터 의미와 사용률](../routing/Phase4_4_Routing_Context.md)을 참고하세요.
 
 ```sh
 nidus usage

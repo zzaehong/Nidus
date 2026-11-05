@@ -46,14 +46,14 @@ Chromium은 비특권 UID로 실행하고 renderer의 `Seccomp: 2`, `NoNewPrivs:
 |---|---|---|
 | 전체 Node 테스트 | PASS 340, 실패 0 | 승인·URL/DNS/TLS pinning·응답 제한·페이지 범위·웹 완료 판정 포함 |
 | Swift 테스트 | PASS 53, 실패 0 | Browser 승인 범위·출처·미조회 상태 표시 포함 |
-| 앱 빌드·번들 이미지 검증 | PASS | [최종 검증 요약](evidence/m4-browser/Validation_Summary.json), 로컬 개발 번들이며 배포 서명 없음 |
-| 실제 HTTPS 읽기와 검색 | PASS | [Browser HTTPS/Search](evidence/m4-browser/Browser_HTTPS_Search_PASS.json) |
+| 앱 빌드·번들 이미지 검증 | PASS | [최종 검증 요약](../../evidence/m4-browser/Validation_Summary.json), 로컬 개발 번들이며 배포 서명 없음 |
+| 실제 HTTPS 읽기와 검색 | PASS | [Browser HTTPS/Search](../../evidence/m4-browser/Browser_HTTPS_Search_PASS.json) |
 | 스크립트·사설 주소·file URL·프로필/캐시 접근 제한 | PASS | 같은 Evidence의 합성 악성 HTML 및 격리 검사 |
-| 제품 승인 채널 | PASS | [거부 시 실행 0, 승인 후 조회](evidence/m4-browser/Product_Approval_Channel.json) |
-| 영속 캐시 회귀 | PASS | [Cache regression](evidence/m4-browser/Cache_Regression_PASS.json) |
-| Workspace 회귀 | PASS | [Workspace regression](evidence/m4-browser/Workspace_Regression_PASS.json) |
-| GPU 별도 프로세스 초기 실험 | FAIL, 기록 보존 | [GPU seccomp failure](evidence/m4-browser/Chromium_GPU_Seccomp_Failure.json) |
-| 초기 CDP Context 정리 | FAIL 후 수정 | [Context disposal failure](evidence/m4-browser/Context_Disposal_Failure.json) |
+| 제품 승인 채널 | PASS | [거부 시 실행 0, 승인 후 조회](../../evidence/m4-browser/Product_Approval_Channel.json) |
+| 영속 캐시 회귀 | PASS | [Cache regression](../../evidence/m4-browser/Cache_Regression_PASS.json) |
+| Workspace 회귀 | PASS | [Workspace regression](../../evidence/m4-browser/Workspace_Regression_PASS.json) |
+| GPU 별도 프로세스 초기 실험 | FAIL, 기록 보존 | [GPU seccomp failure](../../evidence/m4-browser/Chromium_GPU_Seccomp_Failure.json) |
+| 초기 CDP Context 정리 | FAIL 후 수정 | [Context disposal failure](../../evidence/m4-browser/Context_Disposal_Failure.json) |
 | GUI 실제 클릭·유료 Provider 웹 복합 E2E | NOT RUN | 자동 승인은 사용자 클릭 증거가 아니다 |
 
 실제 VM 테스트는 합성 Vault와 프로그램 승인을 사용했다. 사용자 Vault나 Provider 인증 정보를 사용하지 않았다. 모든 최종 실VM 검사에서 STOP_CONFIRMED를 확인했다. VM root 변경 회귀는 동일 root/supervisor 구성에서 수행했으며 마지막 Browser 전용 Snapshot 반환 생략 변경은 최종 Browser 및 제품 승인 채널 검사에 포함했다.
@@ -75,4 +75,4 @@ Chromium은 비특권 UID로 실행하고 renderer의 `Seccomp: 2`, `NoNewPrivs:
 - NIM Agent 호출만 요청 제한을 30초에서 120초로 늘렸다. 다른 Provider는 30초를 유지한다. 사용자 취소와 전체 작업 제한은 유지하고 자동 재시도하지 않는다. 실제 NIM 호출 지연의 원인을 확정하거나 모델 응답 성공을 보증하는 변경이 아니다.
 - `provider_timeout`에 모델 호출 실패 설명을 추가하고, Host UI의 조회 성공 표시도 내용 정확성·조사 완료와 구분했다.
 
-검증: 전체 Node PASS 343, Swift PASS 53. [실제 검색 HTML의 VM 재생 및 불일치 차단](evidence/m4-browser/Search_Mismatch_Regression.json) PASS, STOP_CONFIRMED. 실제 NIM 호출은 수행하지 않았고 비용도 발생시키지 않았다. 사용자 화면의 모델명만 확인했으며 정확한 API 모델 ID와 live 후속 호출 성능은 미검증이다. 개발 앱 빌드 결과는 후속 보완 요약에 기록한다.
+검증: 전체 Node PASS 343, Swift PASS 53. [실제 검색 HTML의 VM 재생 및 불일치 차단](../../evidence/m4-browser/Search_Mismatch_Regression.json) PASS, STOP_CONFIRMED. 실제 NIM 호출은 수행하지 않았고 비용도 발생시키지 않았다. 사용자 화면의 모델명만 확인했으며 정확한 API 모델 ID와 live 후속 호출 성능은 미검증이다. 개발 앱 빌드 결과는 후속 보완 요약에 기록한다.

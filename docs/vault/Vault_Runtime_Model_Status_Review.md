@@ -2,7 +2,7 @@
 
 2026-11-04, `feature/vault-runtime-v2`.
 
-후속 변경: 현재 Vault Runtime 선택 목록은 연결된 텍스트 모델 중 저장된 동작 검사에 통과한 모델만 표시한다. [검사 통과 필터와 웹 검색 상태](Vault_Runtime_Health_Filter_Web_Status.md)를 참조한다.
+후속 변경: 현재 Vault Runtime 선택 목록은 연결된 텍스트 모델 중 저장된 동작 검사에 통과한 모델만 표시한다. [검사 통과 필터와 웹 검색 상태](browser/Vault_Runtime_Health_Filter_Web_Status.md)를 참조한다.
 
 ## 문제 및 수정
 
