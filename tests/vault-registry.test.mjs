@@ -187,3 +187,71 @@ test('host registry symlink and permissive storage directory rejected', async t 
   await assert.rejects(f.registry.listVaults()); await rm(f.host); await mkdir(f.host, {mode:0o755});
   await assert.rejects(f.registry.listVaults(), code('registry_permissions'));
 });
+
+const volumeA = '11111111-1111-4111-8111-111111111111';
+const volumeB = '22222222-2222-4222-8222-222222222222';
+async function alterRegistration(f, change) {
+  const s = JSON.parse(await readFile(f.file)); change(s.vaults[0]); await writeFile(f.file, JSON.stringify(s));
+}
+test('stable volume UUID bridges device renumbering and returns current identity for native tools', async t => {
+  const f = await fixture(t); const r = new VaultRegistry(f.host, async () => volumeA);
+  const v = await r.registerVault(f.root);
+  await alterRegistration(f, entry => { entry.identity.device = '999999'; });
+  const before = await readFile(f.file, 'utf8');
+  assert.deepEqual((await r.resolveVault(v.vaultId)).identity, v.identity);
+  assert.equal((await r.listVaults())[0].lastValidation.result, 'valid');
+  assert.equal(await readFile(f.file, 'utf8'), before, 'reads do not rewrite stored identity');
+  assert.deepEqual((await r.registerVault(f.root)).identity, v.identity);
+});
+test('different volume UUID is rejected even if device/inode/birthtime match', async t => {
+  const f = await fixture(t); const r = new VaultRegistry(f.host, async () => volumeA);
+  const v = await r.registerVault(f.root), other = new VaultRegistry(f.host, async () => volumeB);
+  for (const operation of [() => other.resolveVault(v.vaultId), () => other.registerVault(f.root), () => other.rebindVaultDevice(v.vaultId)]) {
+    await assert.rejects(operation(), code('root_replaced'));
+  }
+});
+test('legacy device drift requires explicit rebind and preserves descriptor and IDs', async t => {
+  const f = await fixture(t); const r = new VaultRegistry(f.host, async () => volumeA);
+  const v = await r.registerVault(f.root), descriptor = await readFile(f.descriptor, 'utf8');
+  await alterRegistration(f, entry => { delete entry.volumeUuid; entry.identity.device = '999999'; });
+  await assert.rejects(r.resolveVault(v.vaultId), code('root_replaced'));
+  await assert.rejects(r.registerVault(f.root), code('identity_unconfirmed'));
+  const repaired = await r.rebindVaultDevice(v.vaultId);
+  assert.equal(repaired.volumeUuid, volumeA); assert.equal(repaired.environmentId, v.environmentId);
+  assert.deepEqual(repaired.identity, v.identity);
+  assert.equal(await readFile(f.descriptor, 'utf8'), descriptor);
+  assert.equal((await r.resolveVault(v.vaultId)).vaultId, v.vaultId);
+});
+test('explicit device rebind rejects changed inode, birthtime or descriptor', async t => {
+  const f = await fixture(t), r = new VaultRegistry(f.host, async () => volumeA);
+  const v = await r.registerVault(f.root), original = await readFile(f.file, 'utf8');
+  for (const field of ['inode', 'birthtimeNs']) {
+    await writeFile(f.file, original);
+    await alterRegistration(f, entry => { entry.identity[field] = '999999'; });
+    const before = await readFile(f.file, 'utf8');
+    await assert.rejects(r.rebindVaultDevice(v.vaultId), code('root_replaced'));
+    assert.equal(await readFile(f.file, 'utf8'), before);
+  }
+  await writeFile(f.file, original);
+  const d = JSON.parse(await readFile(f.descriptor)); d.environmentId = volumeB;
+  await writeFile(f.descriptor, JSON.stringify(d));
+  await assert.rejects(r.rebindVaultDevice(v.vaultId), code('descriptor_identity_changed'));
+  assert.equal(await readFile(f.file, 'utf8'), original);
+});
+test('unavailable volume identity and malformed persisted UUID fail closed', async t => {
+  const f = await fixture(t), r = new VaultRegistry(f.host, async () => volumeA);
+  const v = await r.registerVault(f.root);
+  const unavailable = new VaultRegistry(f.host, async () => { throw new Error('unavailable'); });
+  await assert.rejects(unavailable.resolveVault(v.vaultId));
+  await assert.rejects(unavailable.rebindVaultDevice(v.vaultId));
+  await alterRegistration(f, entry => { entry.volumeUuid = 'invalid'; });
+  await assert.rejects(r.resolveVault(v.vaultId), code('registry_corrupt'));
+});
+test('root replacement during explicit rebind cannot publish updated registration', async t => {
+  const f = await fixture(t), r = new VaultRegistry(f.host, async () => volumeA);
+  const v = await r.registerVault(f.root), before = await readFile(f.file, 'utf8');
+  const save = r.save.bind(r);
+  r.save = async (...args) => { await rename(f.root, join(f.base, 'old')); await cp(join(f.base, 'old'), f.root, {recursive: true}); return save(...args); };
+  await assert.rejects(r.rebindVaultDevice(v.vaultId), code('root_replaced'));
+  assert.equal(await readFile(f.file, 'utf8'), before);
+});

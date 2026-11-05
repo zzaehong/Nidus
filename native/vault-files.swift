@@ -81,6 +81,9 @@ func run(_ r:[String:Any]) throws -> [String:Any] {
     let fd=try rootFD(root,expected);defer{close(fd)}
     var output:[String:Any]
     switch op {
+    case "volume":
+        guard let uuid = try URL(fileURLWithPath: root).resourceValues(forKeys: [.volumeUUIDStringKey]).volumeUUIDString else { try deny("volume_identity_unavailable") }
+        output=["volumeUuid":uuid.lowercased()]
     case "read": output=try readText(fd,path)
     case "list": output=["entries":try list(fd,path)]
     case "inspect":

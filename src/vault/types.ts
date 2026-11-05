@@ -9,6 +9,7 @@ export interface FileIdentity { device: string; inode: string; birthtimeNs: stri
 export interface VaultRegistration extends VaultDescriptor {
   canonicalRoot: string;
   identity: FileIdentity;
+  volumeUuid?: string;
   status: 'registered';
   revision: number;
   lastValidation: { checkedAt: string; result: 'valid' | 'invalid'; code?: string };

@@ -37,6 +37,7 @@
 - [M2 + M3 — Unified Tools and Single-Agent Runtime](vault/Vault_M2_M3_Tool_Agent_Runtime.md)
 - [M4 Vault 영속 디스크와 패키지 캐시](vault/Vault_M4_Persistent_Cache.md)
 - [M2/M3 보완 및 M4 Shared VM Runtime — 개발 검토 결과](vault/Vault_M4_Shared_VM_Runtime.md)
+- [Vault와 캐시의 장치 번호 변경 복구](vault/Vault_Device_Identity.md)
 - [VM 관리 서비스 유실 복구](vault/Vault_M4_VM_Recovery.md)
 - [Vault Runtime 모델 선택·VM 상태 개선](vault/Vault_Runtime_Model_Status_Review.md)
 - [Vault Runtime v2 개발 기준과 M1~M6 계획](vault/Vault_Runtime_v2_Plan.md)

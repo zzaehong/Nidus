@@ -1,3 +1,4 @@
+import { macVolumeIdentity } from './volume-identity.js';
 import { constants } from 'node:fs';
 import { open, lstat, realpath, mkdir, readdir, rename, unlink, link, rmdir } from 'node:fs/promises';
 import { resolve, join, dirname, basename, parse, sep } from 'node:path';
@@ -78,7 +79,8 @@ export async function classifyVaultLocation(old: VaultRegistration, path: string
 export class VaultRegistry {
   readonly directory: string;
   private writeUncertain = false;
-  constructor(directory = join(homedir(), '.local', 'share', 'nidus', 'vaults')) { this.directory = resolve(directory); }
+  constructor(directory = join(homedir(), '.local', 'share', 'nidus', 'vaults'),
+    private readonly volumeIdentity: ((root: string, id: FileIdentity) => Promise<string>) | undefined = process.platform === 'darwin' ? macVolumeIdentity : undefined) { this.directory = resolve(directory); }
   private async locked<T>(action: () => Promise<T>): Promise<T> {
     await ensureDirectory(this.directory);
     await checkedPath(this.directory);
@@ -116,6 +118,7 @@ export class VaultRegistry {
       descriptor({ schemaVersion: v.schemaVersion, vaultId: v.vaultId, environmentId: v.environmentId, displayName: v.displayName, createdAt: v.createdAt });
       if (v.status !== 'registered' || typeof v.canonicalRoot !== 'string' || resolve(v.canonicalRoot) !== v.canonicalRoot ||
           !v.identity || ![v.identity.device, v.identity.inode, v.identity.birthtimeNs].every(x => typeof x === 'string' && /^\d+$/.test(x)) ||
+          (v.volumeUuid !== undefined && (typeof v.volumeUuid !== 'string' || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(v.volumeUuid))) ||
           !Number.isSafeInteger(v.revision) || v.revision < 1 || v.revision > s.revision || !v.lastValidation ||
           !date(v.lastValidation.checkedAt) || !['valid', 'invalid'].includes(v.lastValidation.result) ||
           ids.has(v.vaultId) || envs.has(v.environmentId) || paths.some(p => within(p, v.canonicalRoot) || within(v.canonicalRoot, p))) fail('registry_corrupt');
@@ -149,6 +152,16 @@ export class VaultRegistry {
     await this.root(root);
     if (!same(expected, await identity(root))) fail('root_replaced');
   }
+  private async registeredIdentity(v: VaultRegistration): Promise<FileIdentity> {
+    await this.root(v.canonicalRoot);
+    const current = await identity(v.canonicalRoot);
+    if (v.volumeUuid) {
+      if (!this.volumeIdentity || await this.volumeIdentity(v.canonicalRoot, current) !== v.volumeUuid ||
+          current.inode !== v.identity.inode || current.birthtimeNs !== v.identity.birthtimeNs) fail('root_replaced');
+      await this.checkRoot(v.canonicalRoot, current);
+    } else await this.checkRoot(v.canonicalRoot, v.identity);
+    return current;
+  }
   private async readDescriptor(root: string): Promise<VaultDescriptor | null> {
     const meta = join(root, '.nidus');
     let metaId: FileIdentity;
@@ -178,6 +191,7 @@ export class VaultRegistry {
     return this.locked(async () => {
       const { snapshot: s, raw } = await this.load();
       const root = await this.root(path), id = await identity(root);
+      const volumeUuid = await this.volumeIdentity?.(root, id);
       await this.noNested(root);
       let d = await this.readDescriptor(root);
       for (const old of s.vaults) {
@@ -198,14 +212,19 @@ export class VaultRegistry {
         await link(pending, join(meta, 'vault.json'));
         await unlink(pending); await syncDirectory(meta);
       }
-      const old = s.vaults.find(v => v.vaultId === d.vaultId);
+      const stored = s.vaults.find(v => v.vaultId === d.vaultId);
+      // Device numbers are mount-local. Only a previously recorded volume UUID can bridge a change.
+      const old = stored && stored.volumeUuid && stored.volumeUuid === volumeUuid &&
+        stored.identity.inode === id.inode && stored.identity.birthtimeNs === id.birthtimeNs
+        ? {...stored, identity: id} : stored;
+      if (stored?.volumeUuid && stored.volumeUuid !== volumeUuid) fail('root_replaced');
       if (old) {
         const relation = await classifyVaultLocation(old, root, id);
         if (relation === 'clone' || relation === 'unconfirmed') fail(`identity_${relation}`);
         if (old.environmentId !== d.environmentId || old.createdAt !== d.createdAt) fail('descriptor_identity_changed');
       }
       if (s.vaults.some(v => v.vaultId !== d.vaultId && v.environmentId === d.environmentId)) fail('environment_conflict');
-      const entry: VaultRegistration = { ...d, canonicalRoot: root, identity: id, status: 'registered', revision: ++s.revision, lastValidation: { checkedAt: new Date().toISOString(), result: 'valid' } };
+      const entry: VaultRegistration = { ...d, canonicalRoot: root, identity: id, ...(volumeUuid ? {volumeUuid} : {}), status: 'registered', revision: ++s.revision, lastValidation: { checkedAt: new Date().toISOString(), result: 'valid' } };
       s.vaults = s.vaults.filter(v => v.vaultId !== entry.vaultId).concat(entry);
       const expected = JSON.stringify(d);
       await this.save(s, raw, async () => {
@@ -220,9 +239,31 @@ export class VaultRegistry {
     });
   }
   private async validate(v: VaultRegistration) {
-    await this.checkRoot(v.canonicalRoot, v.identity);
+    const current = await this.registeredIdentity(v);
     const d = await this.readDescriptor(v.canonicalRoot);
     if (!d || d.vaultId !== v.vaultId || d.environmentId !== v.environmentId || d.createdAt !== v.createdAt) fail('descriptor_identity_changed');
+    // Native file tools need the current mount's device number, not the persisted one.
+    v.identity = current;
+  }
+  /** Explicit legacy repair: never called by resolve/list or automatic admission. */
+  async rebindVaultDevice(vaultId: string): Promise<VaultRegistration> {
+    return this.locked(async () => {
+      const {snapshot: s, raw} = await this.load();
+      const v = s.vaults.find(v => v.vaultId === vaultId);
+      if (!v) return fail('not_registered');
+      if (!this.volumeIdentity) return fail('volume_identity_unavailable');
+      await this.root(v.canonicalRoot);
+      const current = await identity(v.canonicalRoot);
+      if (current.inode !== v.identity.inode || current.birthtimeNs !== v.identity.birthtimeNs) fail('root_replaced');
+      const volumeUuid = await this.volumeIdentity(v.canonicalRoot, current);
+      if (v.volumeUuid && v.volumeUuid !== volumeUuid) fail('root_replaced');
+      const updated = {...v, identity: current, volumeUuid, revision: ++s.revision};
+      await this.validate(updated);
+      updated.lastValidation = {checkedAt: new Date().toISOString(), result: 'valid'};
+      s.vaults = s.vaults.map(entry => entry.vaultId === vaultId ? updated : entry);
+      await this.save(s, raw, async () => { await this.checkRoot(updated.canonicalRoot, current); await this.validate(updated); });
+      return updated;
+    });
   }
   async listVaults(): Promise<VaultRegistration[]> {
     return this.locked(async () => {
