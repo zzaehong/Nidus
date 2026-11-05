@@ -1,4 +1,5 @@
-import { mkdir, copyFile, cp, readdir } from 'node:fs/promises';
+import { mkdir, cp, readdir } from 'node:fs/promises';
+import {atomicCopy as copyFile} from './atomic-copy.mjs';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';

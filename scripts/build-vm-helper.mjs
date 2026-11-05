@@ -1,11 +1,12 @@
 import {execFileSync} from 'node:child_process';
-import {mkdirSync,existsSync,copyFileSync,readFileSync,writeFileSync} from 'node:fs';
+import {mkdirSync,existsSync,copyFileSync,readFileSync,writeFileSync,renameSync,rmSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {join} from 'node:path';
 if(process.platform==='darwin'){
  mkdirSync('dist',{recursive:true});
- execFileSync('swiftc',['native/vault-vm.swift','-o','dist/nidus-vault-vm'],{stdio:'inherit'});
- execFileSync('codesign',['--force','--sign','-','--entitlements','native/vault-vm.entitlements','dist/nidus-vault-vm'],{stdio:'inherit'});
+ const output='dist/nidus-vault-vm.new-'+process.pid;
+ try{execFileSync('swiftc',['native/vault-vm.swift','-o',output],{stdio:'inherit'});
+ execFileSync('codesign',['--force','--sign','-','--entitlements','native/vault-vm.entitlements',output],{stdio:'inherit'});renameSync(output,'dist/nidus-vault-vm');}finally{rmSync(output,{force:true});}
  const source=process.env.NIDUS_VM_BUILD_ASSETS;
  if(source){
   // Explicit build input only. Runtime never downloads or trusts a model-selected image.
