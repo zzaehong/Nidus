@@ -1,0 +1,18 @@
+{
+  "nodePass": 367,
+  "swiftPass": 55,
+  "appBuild": "PASS",
+  "bundledGuestHashes": "PASS",
+  "guestManifest": {
+    "profile": "development",
+    "cacheDiskVersion": 1,
+    "Image": "256d5fff4bb892edcb9218c1e6353e388bc3646e65f76c2bc9d958b635d1b00e",
+    "initrd": "702abb66d029c0630f2aea412e5b2c48d1430acc07e3ee1b47e007b811888b25",
+    "baseInitrdSHA256": "e6e5358535712af0d88248b00535696ba22fd21d5bf58849ab94f2cf2d65b622",
+    "browserSnapshotVersion": 1,
+    "browserInteractiveVersion": 1
+  },
+  "liveNIM": "NOT RUN",
+  "liveGoogleEachLanguage": "NOT RUN",
+  "manualGUI": "NOT RUN"
+}

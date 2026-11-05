@@ -4,7 +4,7 @@
 
 ## 동작
 
-모델은 `browser_start`로 시작한 뒤 `browser_observe`, `browser_type`, `browser_click`, `browser_scroll`, `browser_back`, `browser_close`를 호출한다. 시작 페이지는 Host가 정한 Google이다. 실시간 화면은 [화면 보기 문서](Vault_M4_Browser_Screen.md)를 참고한다. 모델이 단계마다 URL을 만들거나 HTML 전체를 받을 필요가 없다. 같은 Chromium의 DOM·임시 쿠키·페이지 상태가 작업 종료까지 유지된다. 관찰 결과는 텍스트와 보이는 요소의 이름·ID·위치를 담는다. 텍스트 도구 호출 모델도 사용할 수 있고 비전 모델은 필수가 아니다.
+모델은 `browser_start`로 시작한 뒤 `browser_observe`, `browser_type`, `browser_click`, `browser_scroll`, `browser_back`, `browser_close`를 호출한다. 기본 시작 페이지는 Host가 정한 Google이다. 사용자 제공 문서는 browser_open으로 직접 열 수 있다. CAPTCHA·다국어·실패 분류는 [신뢰성 문서](Vault_M4_Browser_Reliability.md)를 참고한다. 실시간 화면은 [화면 보기 문서](Vault_M4_Browser_Screen.md)를 참고한다. 모델이 단계마다 URL을 만들거나 HTML 전체를 받을 필요가 없다. 같은 Chromium의 DOM·임시 쿠키·페이지 상태가 작업 종료까지 유지된다. 관찰 결과는 텍스트와 보이는 요소의 이름·ID·위치를 담는다. 텍스트 도구 호출 모델도 사용할 수 있고 비전 모델은 필수가 아니다.
 
 현재 관찰의 snapshotId와 targetId만 조작할 수 있다. 게스트는 실제 DOM 객체 참조와 이름·링크·위치·hit-test를 다시 확인한다. 입력은 Chromium 키보드 이벤트, 클릭은 마우스 이벤트를 사용한다. 모델이 임의 JavaScript나 CDP 명령을 실행하는 도구는 제공하지 않는다.
 

@@ -1,0 +1,72 @@
+{
+  "scope": "Real VM/Chromium with synthetic HTTPS responses; no live search engine or Provider",
+  "languages": [
+    {
+      "query": "맥 미니 사양",
+      "language": "ko-KR",
+      "languages": [
+        "ko-KR",
+        "ko",
+        "en-US",
+        "en",
+        "ja",
+        "zh-CN"
+      ],
+      "url": "https://example.com/search?q=%EB%A7%A5+%EB%AF%B8%EB%8B%88+%EC%82%AC%EC%96%91+%26+%2B",
+      "status": "PASS"
+    },
+    {
+      "query": "Mac mini specifications",
+      "language": "ko-KR",
+      "languages": [
+        "ko-KR",
+        "ko",
+        "en-US",
+        "en",
+        "ja",
+        "zh-CN"
+      ],
+      "url": "https://example.com/search?q=Mac+mini+specifications+%26+%2B",
+      "status": "PASS"
+    },
+    {
+      "query": "日本語の仕様",
+      "language": "ko-KR",
+      "languages": [
+        "ko-KR",
+        "ko",
+        "en-US",
+        "en",
+        "ja",
+        "zh-CN"
+      ],
+      "url": "https://example.com/search?q=%E6%97%A5%E6%9C%AC%E8%AA%9E%E3%81%AE%E4%BB%95%E6%A7%98+%26+%2B",
+      "status": "PASS"
+    },
+    {
+      "query": "中文规格",
+      "language": "ko-KR",
+      "languages": [
+        "ko-KR",
+        "ko",
+        "en-US",
+        "en",
+        "ja",
+        "zh-CN"
+      ],
+      "url": "https://example.com/search?q=%E4%B8%AD%E6%96%87%E8%A7%84%E6%A0%BC+%26+%2B",
+      "status": "PASS"
+    }
+  ],
+  "browserLanguages": [
+    "ko-KR",
+    "ko",
+    "en-US",
+    "en",
+    "ja",
+    "zh-CN"
+  ],
+  "captcha": "stopped-and-latched",
+  "status": "PASS",
+  "cleanup": "confirmed"
+}
