@@ -218,6 +218,9 @@ struct ShellApproval: Identifiable { let id: String; let vault: String; let comm
                 approval=nil;browserFrame=nil;browserFrameAt=nil
                 if task["webStatus"] as? String == "unavailable" { events.append("[Host 확인] 웹 검색 미수행 · 인터넷 조회 불가. 아래 모델 답변은 최신 웹 검증 결과가 아닙니다.") }
                 if task["webStatus"] as? String == "not_used" { events.append("[Host 확인] 성공한 웹 조회가 없습니다.") }
+                if task["webStatus"] as? String == "captcha_required" { events.append("[Host 확인] CAPTCHA 감지 · 자동 탐색 중단. 일반 브라우저에서 수동 확인하거나 공식 문서 URL로 새 작업을 시작하세요.") }
+                if task["webStatus"] as? String == "search_failed" { events.append("[Host 확인] 웹 조회 실패 · 정보가 없다는 뜻은 아닙니다.") }
+                if task["webStatus"] as? String == "no_results" { events.append("[Host 확인] 해당 검색어의 결과 없음 · 실제 정보 부재를 의미하지 않습니다.") }
                 if task["webStatus"] as? String == "used" { events.append("[Host 확인] 승인된 웹 조회 응답을 받았습니다. 내용의 정확성·조사 완료를 보증하지 않습니다. 출처와 조회 시각을 확인하세요.") }
                 events.append("\(task["status"] as? String ?? "") [\(task["code"] as? String ?? "")]\n\(task["text"] as? String ?? "")")
             } else if event=="error" {error=row["code"] as? String ?? "Agent 오류"}
@@ -314,7 +317,7 @@ struct VaultRuntimeView: View {
             Toggle("선택한 Vault의 허용된 파일 내용과 명령 결과를 선택한 Provider에 전송하며 API 비용이 발생할 수 있음을 확인했습니다.",isOn:$vm.sharing).font(.caption).disabled(vm.running)
             GroupBox(vm.interactiveBrowserAvailable ? "Agent 브라우저 · 클릭과 입력" : vm.browserAvailable ? "제한적 인터넷 · 읽기 전용 브라우저" : "웹 검색 · 현재 사용 불가") {
                 VStack(alignment:.leading) {
-                    Text(vm.interactiveBrowserAvailable ? "Agent가 Google에서 시작해 검색창에 입력하고 버튼·링크를 클릭합니다. 작업 중 브라우저 상태를 유지하며 스크립트와 공개 HTTPS 리소스를 허용합니다. 클릭·입력·폼 전송은 승인이 필요합니다. Shell은 오프라인이고 다운로드는 차단합니다." : vm.browserAvailable ? "승인된 공개 HTTPS 페이지를 읽습니다. 로그인·스크립트·폼 제출·다운로드·자동 리디렉션은 지원하지 않습니다. Shell은 오프라인이며, 사이트가 조회를 차단할 수 있습니다." : "이 이미지에는 브라우저 기능이 없습니다. Shell은 오프라인입니다.")
+                    Text(vm.interactiveBrowserAvailable ? "공식 문서 URL을 요청에 포함하면 직접 열 수 있습니다. 검색은 Google에서 시작합니다. CAPTCHA 감지 시 자동 탐색을 중단합니다. 작업 중 브라우저 상태를 유지하며 스크립트와 공개 HTTPS 리소스를 허용합니다. 클릭·입력·폼 전송은 승인이 필요합니다. Shell은 오프라인이고 다운로드는 차단합니다." : vm.browserAvailable ? "승인된 공개 HTTPS 페이지를 읽습니다. 로그인·스크립트·폼 제출·다운로드·자동 리디렉션은 지원하지 않습니다. Shell은 오프라인이며, 사이트가 조회를 차단할 수 있습니다." : "이 이미지에는 브라우저 기능이 없습니다. Shell은 오프라인입니다.")
                     if vm.browserAvailable {
                         if vm.interactiveBrowserAvailable {Text("아래 직접 조회는 기존 읽기 전용 방식입니다. 클릭·입력은 Agent 작업에서 사용합니다.")}
                         TextField("HTTPS 주소 또는 검색어",text:$vm.browserInput).disabled(vm.running)

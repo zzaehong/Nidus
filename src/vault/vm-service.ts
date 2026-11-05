@@ -34,7 +34,7 @@ export async function serve(registryPath:string){
     if(provided.length!==64||!timingSafeEqual(provided,Buffer.from(token)))throw new VaultError('vm_unauthorized');
     switch(r.method){
      case 'live-answer':{const p=approvals.get(r.approvalId);if(!p||p.executionId!==r.executionId)throw new VaultError('browser_approval_invalid');p.answer(r.approved===true);return {accepted:true};}
-     case 'live-open':cancelExecution=r.executionId;return controller.openLive(r.vaultId,r.executionId,r.callId,approve);
+     case 'live-open':cancelExecution=r.executionId;return controller.openLive(r.vaultId,r.executionId,r.callId,approve,r.url);
      case 'live-frame':return controller.liveFrame(r.vaultId,r.executionId);
      case 'live-action':cancelExecution=r.executionId;return controller.liveAction(r.vaultId,r.executionId,r.action,approve);
      case 'live-close':return controller.closeLive(r.vaultId,r.executionId);

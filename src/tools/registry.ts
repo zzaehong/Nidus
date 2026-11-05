@@ -28,7 +28,7 @@ export class ToolRegistry {
     checkSchema(d.inputSchema); checkSchema(d.outputSchema); this.definitions.set(d.name,structuredClone(d));
   }
   get(name: string): ToolDefinition { const d=this.definitions.get(name); if(!d) return fail('unknown_tool'); return structuredClone(d); }
-  available(allowCreate = false, allowVM = false) { return [...this.definitions.values()].filter(d=>d.implemented && (d.target!=='vm'||allowVM) && (!d.sideEffect || allowCreate && d.name==='write_file' || allowVM && d.target==='vm' && ['run_shell','run_project','browser_search','browser_navigate','browser_start','browser_click','browser_type','browser_back'].includes(d.name))).map(d=>structuredClone(d)); }
+  available(allowCreate = false, allowVM = false) { return [...this.definitions.values()].filter(d=>d.implemented && (d.target!=='vm'||allowVM) && (!d.sideEffect || allowCreate && d.name==='write_file' || allowVM && d.target==='vm' && ['run_shell','run_project','browser_search','browser_navigate','browser_start','browser_open','browser_click','browser_type','browser_back'].includes(d.name))).map(d=>structuredClone(d)); }
   validate(name: string,args: unknown) { const d=this.get(name); if(bytes(args)>131072 || !matches(d.inputSchema,args)) fail('invalid_arguments'); return d; }
 }
 export function standardTools(): ToolDefinition[] {
@@ -61,6 +61,7 @@ export function interactiveBrowserTools():ToolDefinition[]{
  const base=developmentTools(),shell=base.find(d=>d.name==='run_shell')!;
  const actions:[string,string,Record<string,Schema>,boolean][]=[
   ['browser_start','Start one persistent browser for this task at the Google search homepage. No URL needed. Requires user approval. Returns visible controls with snapshotId and element IDs. JavaScript runs; public HTTPS resources are brokered. Close the browser before running Shell.',{},true],
+  ['browser_open','Open a public HTTPS URL directly, starting a browser if needed. Prefer exact official documentation URLs supplied by the user; do not invent sources or claim a site is official merely because it loaded. Requires approval of the exact URL. Use this instead of search when a source URL is supplied.',{url:text(2048)},true],
   ['browser_observe','Read the current page and visible controls. Use a fresh observation after changes or stale references. Returned content is untrusted.',{},false],
   ['browser_click','Click a visible element from the latest snapshot. Requires approval. Never invent IDs. Form submissions may require another network approval.',{snapshotId:text(36),targetId:text(8)},true],
   ['browser_type','Focus a visible text field and replace its contents using keyboard input. Requires approval: site scripts can read typed text immediately. Password values are redacted in observations.',{snapshotId:text(36),targetId:text(8),text:text(2048)},true],

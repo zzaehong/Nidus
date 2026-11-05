@@ -1,3 +1,4 @@
+import {pageState} from './page-state.js';
 import {createHash,randomUUID} from 'node:crypto';
 import type {SharedBackend} from './apple-backend.js';
 import {liveRequest,validateLiveRequest,needsNetworkApproval,type LiveRequest} from './live-network.js';
@@ -8,7 +9,7 @@ export type LiveApprover=(p:LiveApproval,signal:AbortSignal)=>Promise<boolean>;
 /** One task owns one persistent browser, including its transient cookies and DOM. */
 export class LiveBrowser {
  private pending=new Map<string,{resolve:(v:any)=>void;reject:(e:Error)=>void;timer:ReturnType<typeof setTimeout>}>();
- private abort=new AbortController();private approve:LiveApprover|undefined;private approving=Promise.resolve();private requests=0;private bytes=0;private busy=false;private failed=false;private responses=0;private blocked=0;private observation:any;private observedId='';
+ private abort=new AbortController();private approve:LiveApprover|undefined;private approving=Promise.resolve();private requests=0;private bytes=0;private busy=false;private failed=false;private captcha=false;private responses=0;private blocked=0;private observation:any;private observedId='';
  private framePending:{id:string;resolve:(v:any)=>void;timer:ReturnType<typeof setTimeout>}|undefined;private lastFrameAt=0;
  async frame(){
   if(this.failed||this.signal.aborted||this.framePending||Date.now()-this.lastFrameAt<900)return null;this.lastFrameAt=Date.now();
@@ -40,6 +41,7 @@ export class LiveBrowser {
   }catch{this.blocked++;if(!this.abort.signal.aborted&&typeof value.requestId==='string')await this.backend.sendLive!({op:'response',requestId:value.requestId,error:true}).catch(()=>{});}
  }
  async action(action:LiveAction,approve:LiveApprover){
+  if(this.captcha)throw new VaultError('captcha_required');
   if(this.failed||this.abort.signal.aborted)throw new VaultError('browser_session_ended');if(this.busy)throw new VaultError('browser_action_busy');
   if(!['observe','navigate','click','type','scroll','back'].includes(action.op))throw new VaultError('browser_action_invalid');
   if(['click','type'].includes(action.op)){
@@ -51,6 +53,7 @@ export class LiveBrowser {
   try{
    const value=await new Promise<any>((resolve,reject)=>{const timer=setTimeout(()=>{this.pending.delete(id);this.cancel();reject(new VaultError('browser_action_timeout'));},75000);this.pending.set(id,{resolve,reject,timer});void this.backend.sendLive!({...action,id}).catch(error=>{clearTimeout(timer);this.pending.delete(id);reject(error);});});
    if(!value||value.sandboxVerified!==true||typeof value.url!=='string'||typeof value.title!=='string'||typeof value.text!=='string'||!Array.isArray(value.elements)||value.elements.length>60||typeof value.snapshotId!=='string'||Buffer.byteLength(JSON.stringify(value))>60000)throw new VaultError('browser_observation_invalid');
+   const state=pageState(value);if(state==='captcha_required'){this.captcha=true;throw new VaultError(state);}if(state!=='page')throw new VaultError(state);
    this.observation=structuredClone(value);this.observedId=value.snapshotId;return {...value,retrievedAt:new Date().toISOString(),networkResponses:this.responses,networkBlocked:this.blocked,mode:'interactive-browser'};
   }finally{this.busy=false;this.approve=undefined;}
  }

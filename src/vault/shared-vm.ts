@@ -1,3 +1,4 @@
+import {publicURL} from './network-policy.js';
 import {CacheDiskStore,type CacheAttachment} from './cache-disk.js';
 import {LiveBrowser,type LiveAction,type LiveApprover,type LiveApproval} from './live-browser.js';
 import {browserRequest,browserSnapshot,browserPage,checkSearchRelevance,type BrowserRequest} from './browser.js';
@@ -91,7 +92,7 @@ export class SharedVMController {
    const result:ShellResult={sessionId:job.record.id,vmInstanceId:job.record.vmInstanceId,generation:job.record.generation,...value};
    if(job.browser){
     delete (result as any).workspace;delete (result as any).workspaceStatus;
-    if(value.exitCode===0){try{result.browser=browserPage(value.stdout,job.browser.url);if(job.browser.kind==='search'){if(!result.browser.links.length)throw Error();checkSearchRelevance(result.browser,new URL(job.browser.url).searchParams.get('q')??'');}result.stdout='';}catch(error){delete result.browser;result.stdout='';result.exitCode=1;result.stderr=error instanceof VaultError?error.code:'browser_result_invalid';}}
+    if(value.exitCode===0){try{result.browser=browserPage(value.stdout,job.browser.url);if(job.browser.kind==='search'){if(!result.browser.links.length)throw new VaultError('browser_search_results_unavailable');checkSearchRelevance(result.browser,new URL(job.browser.url).searchParams.get('q')??'');}result.stdout='';}catch(error){delete result.browser;result.stdout='';result.exitCode=1;result.stderr=error instanceof VaultError?error.code:'browser_result_invalid';}}
    }
    if(job.snapshot){
     const {workspace:returned,...bounded}=value;Object.assign(result,bounded);delete (result as any).workspace;
@@ -139,22 +140,22 @@ export class SharedVMController {
   const p:LiveApproval={approvalId:randomUUID(),vaultId,executionId,command,commandHash:hash(command),expiresAt:Date.now()+60000,liveBrowser:true,scope};
   if(!await approve(p,signal)||signal.aborted||Date.now()>=p.expiresAt)fail('browser_permission_denied');
  }
- async openLive(vaultId:string,executionId:string,callId:string,approve:LiveApprover){return this.serial(async()=>{
-  this.guard();if(!this.interactiveEnabled)fail('browser_interactive_unsupported');if(this.live||this.active||this.queue.length)fail('vm_execution_active');
+ async openLive(vaultId:string,executionId:string,callId:string,approve:LiveApprover,url='https://www.google.com/'){return this.serial(async()=>{
+  url=publicURL(url).href;this.guard();if(!this.interactiveEnabled)fail('browser_interactive_unsupported');if(this.live||this.active||this.queue.length)fail('vm_execution_active');
   if(![executionId,callId].every(x=>typeof x==='string'&&/^[a-zA-Z0-9_-]{1,128}$/.test(x)))fail('vm_invalid_request');
   await this.registry.resolveVault(vaultId);if(this.cancelled.has(executionId))fail('cancelled');
   const opening=new AbortController();this.liveOpening={abort:opening,executionId};
-  try{await this.approveLive(vaultId,executionId,'이 작업의 브라우저 세션 시작: 공개 HTTPS 페이지·스크립트·리소스 읽기, 임시 쿠키 사용. 클릭·입력 및 전송 요청은 별도 승인. 최대 15분, 300요청, 16 MiB.','session',approve,opening.signal);}finally{this.liveOpening=undefined;}
+  try{await this.approveLive(vaultId,executionId,`시작 주소: ${url}\n이 작업의 브라우저 세션 시작: 공개 HTTPS 페이지·스크립트·리소스 읽기, 임시 쿠키 사용. 클릭·입력 및 전송 요청은 별도 승인. 최대 15분, 300요청, 16 MiB.`,'session',approve,opening.signal);}finally{this.liveOpening=undefined;}
   if(this.cancelled.has(executionId))fail('cancelled');await this.ensureStarted(vaultId);if(this.idle)clearTimeout(this.idle);
   const browser=new LiveBrowser(vaultId,executionId,this.backend!);const record:SessionRecord={id:browser.id,executionId,callId,invocationKey:hash(JSON.stringify([vaultId,executionId,callId])),commandHash:hash('interactive-browser'),vaultId,vmInstanceId:this.state.vmInstanceId!,generation:this.state.generation,state:'RUNNING',createdAt:new Date().toISOString(),completedAt:null,cleanupConfirmed:false,resultHash:null};
   if(this.state.sessions.length>=10000||this.state.sessions.some(s=>s.invocationKey===record.invocationKey))fail('duplicate_invocation');
   const timer=setTimeout(()=>{browser.cancel();void this.closeLive(vaultId,executionId).catch(()=>{});},900000);timer.unref();this.live={browser,record,timer};this.state.sessions.push(record);this.state.activeSession=record.id;await this.persist();
-  try{await browser.start();return await browser.action({op:'navigate',url:'https://www.google.com/'},approve);}catch(e){await this.closeLiveInternal();throw e;}
+  try{await browser.start();return await browser.action({op:'navigate',url},approve);}catch(e){await this.closeLiveInternal();throw e;}
  });}
  async liveFrame(vaultId:string,executionId:string){return this.liveOwner(vaultId,executionId).browser.frame();}
  async liveAction(vaultId:string,executionId:string,action:LiveAction,approve:LiveApprover){return this.serial(async()=>{
   this.guard();const live=this.liveOwner(vaultId,executionId);await this.registry.resolveVault(vaultId);
-  if(this.cancelled.has(executionId))fail('cancelled');if(action.op==='navigate')fail('browser_action_invalid');
+  if(this.cancelled.has(executionId))fail('cancelled');if(action.op==='navigate'){action={op:'navigate',url:publicURL(action.url!).href};await this.approveLive(vaultId,executionId,`공개 HTTPS 주소 직접 열기: ${action.url}`,'interaction',approve,live.browser.signal);}
   if(['click','type','back'].includes(action.op))await this.approveLive(vaultId,executionId,live.browser.preview(action),'interaction',approve,live.browser.signal);
   try{return await live.browser.action(action,approve);}catch(error){if(error instanceof VaultError&&['browser_action_timeout','browser_session_ended'].includes(error.code)){await this.closeLiveInternal();throw new VaultError('browser_action_outcome_unknown');}throw error;}
  });}

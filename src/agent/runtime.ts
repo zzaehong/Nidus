@@ -1,3 +1,4 @@
+import {webFailureMessage} from '../vault/page-state.js';
 import {webToolsAvailable} from './capabilities.js';
 import { randomUUID } from 'node:crypto';
 import { NidusError } from '../errors.js';
@@ -13,7 +14,7 @@ export class EngineAgentModel implements AgentModel {
 }
 export interface AgentLimits {modelCalls:number;toolInvocations:number;executionMs:number;resultBytes:number}
 export interface AgentStep {stepId:string;index:number;state:'MODEL'|'TOOLS'|'COMPLETED'|'FAILED';invocations:{invocationId:string;callId:string;tool:string;result:ToolResult}[]}
-export interface AgentTask {taskId:string;executionId:string;vaultId:string;status:'COMPLETED'|'LIMIT_REACHED'|'CANCELLED'|'FAILED'|'UNCONFIRMED';text:string;code:string;modelSource:'mock'|'provider';webStatus:'unavailable'|'not_used'|'used';steps:AgentStep[]}
+export interface AgentTask {taskId:string;executionId:string;vaultId:string;status:'COMPLETED'|'LIMIT_REACHED'|'CANCELLED'|'FAILED'|'UNCONFIRMED';text:string;code:string;modelSource:'mock'|'provider';webStatus:'unavailable'|'not_used'|'used'|'captcha_required'|'search_failed'|'no_results';steps:AgentStep[]}
 const defaults:AgentLimits={modelCalls:20,toolInvocations:100,executionMs:900000,resultBytes:1048576};
 async function interruptible<T>(work:Promise<T>,signal:AbortSignal):Promise<T>{
   let listener:(()=>void)|undefined;
@@ -45,7 +46,7 @@ export class SingleAgentRuntime {
         if(!turn || typeof turn.text!=='string'||!Array.isArray(turn.calls)||bytes(turn)>1048576)fail('invalid_model_turn');
         // Validate a whole batch before any side effect, including duplicate IDs across steps.
         const batch=new Set<string>();for(const c of turn.calls){if(!c || typeof c.id!=='string'||!/^[a-zA-Z0-9_-]{1,128}$/.test(c.id)||typeof c.name!=='string'||seen.has(c.id)||batch.has(c.id))fail('duplicate_or_invalid_call');batch.add(c.id);}
-        if(!turn.calls.length){if(!turn.text)fail('empty_model_turn');if(input.requiresWeb&&task.webStatus!=='used'){task.code='web_not_used';task.text='웹 조회가 성공하지 않아 웹 필수 작업을 완료하지 않았습니다.';step.state='FAILED';return task;}step.state='COMPLETED';task.status='COMPLETED';task.code='ok';task.text=turn.text;return task;}
+        if(!turn.calls.length){if(!turn.text)fail('empty_model_turn');if(input.requiresWeb&&task.webStatus!=='used'){task.code='web_not_used';task.text=webFailureMessage(task.webStatus==='no_results'?'search_no_results':'search_failed');step.state='FAILED';return task;}step.state='COMPLETED';task.status='COMPLETED';task.code='ok';task.text=(task.webStatus==='search_failed'||task.webStatus==='no_results'?webFailureMessage(task.webStatus==='no_results'?'search_no_results':'search_failed')+'\n\n':'')+turn.text;return task;}
         if(invocations+turn.calls.length>limits.toolInvocations)fail('tool_limit');
         step.state='TOOLS';const results:ToolResult[]=[];
         for(const c of turn.calls){
@@ -56,8 +57,10 @@ export class SingleAgentRuntime {
           const r=await this.tools.invoke({vaultId:input.vaultId,executionId:task.executionId,signal},c);
           input.onEvent?.({event:'tool-result',name:c.name,result:r});
           if(r.status==='succeeded' && ['browser_search','browser_navigate','browser_read_page'].includes(c.name))task.webStatus='used';
-          if(r.status==='succeeded'&&['browser_start','browser_observe','browser_click','browser_type','browser_scroll','browser_back'].includes(c.name)){try{if(JSON.parse(r.content.text).networkResponses>0)task.webStatus='used';}catch{}}
+          if(r.status==='succeeded'&&['browser_start','browser_open','browser_observe','browser_click','browser_type','browser_scroll','browser_back'].includes(c.name)){try{if(JSON.parse(r.content.text).networkResponses>0)task.webStatus='used';}catch{}}
           step.invocations.push({invocationId:randomUUID(),callId:c.id,tool:c.name,result:r});results.push(r);resultBytes+=bytes(r);
+          if(r.code==='captcha_required'){task.webStatus='captcha_required';task.status='FAILED';task.code='captcha_required';task.text=webFailureMessage(r.code);step.state='FAILED';return task;}
+          if(c.name.startsWith('browser_')&&r.status==='failed')task.webStatus=r.code==='search_no_results'?'no_results':'search_failed';
           if(r.status==='unknown'){task.status='UNCONFIRMED';task.code=r.code;step.state='FAILED';return task;}
           if(signal.aborted)fail('cancelled');if(resultBytes>limits.resultBytes)fail('result_limit');
         }
