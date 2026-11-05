@@ -9,6 +9,7 @@ import type { ChatRequest } from "./types.js";
 
 import {VaultRegistry} from './vault/registry.js';
 import {VaultError} from './vault/types.js';
+import {archiveStoppedRuntime} from './vault/vm-recovery.js';
 import {VMClient} from './vault/vm-client.js';
 import {readFile} from 'node:fs/promises';
 export async function dispatch(input: unknown, engine: ConnectivityEngine): Promise<unknown> {
@@ -21,6 +22,7 @@ export async function dispatch(input: unknown, engine: ConnectivityEngine): Prom
       case 'vault-browser-capabilities':{try{const m=JSON.parse(await readFile(new URL('./vm-assets/manifest.json',import.meta.url),'utf8'));return {available:m.profile==='development'&&m.browserSnapshotVersion===1,interactive:m.profile==='development'&&m.browserInteractiveVersion===1,mode:m.browserInteractiveVersion===1?'interactive-browser':'read-only-snapshot'};}catch{return {available:false};}}
       case 'vault-list':return registry.listVaults();
       case 'vault-register':if(typeof r.path!=='string')throw new NidusError('invalid_request','Select a directory.');return registry.registerVault(r.path);
+      case 'vault-vm-recover':return archiveStoppedRuntime(client.directory);
       case 'vault-vm-status':return client.status(true);
       case 'vault-vm-start':if(typeof r.vaultId!=='string')throw new NidusError('invalid_request','Select a Vault.');await registry.resolveVault(r.vaultId);return client.request('start',{vaultId:r.vaultId},true);
       case 'vault-vm-service-restart':{const state=await client.status(true);if(state.statusSource!=='live-service'||!['STOPPED','STOP_CONFIRMED'].includes(state.state)||state.activeSession||state.queued)throw new NidusError('invalid_request','VM must be confirmed stopped before restarting its service.');await client.request('shutdown');return {restarted:false,stopped:true};}

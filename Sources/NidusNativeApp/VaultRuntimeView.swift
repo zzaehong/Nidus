@@ -134,13 +134,22 @@ struct ShellApproval: Identifiable { let id: String; let vault: String; let comm
             }
         } catch { self.error=error.localizedDescription }
     }
+    func recoverVM() async {
+        busy=true;defer {busy=false}
+        do {
+            let data=try await Runtime.shared.call(["method":"vault-vm-recover"])
+            guard let state=try JSONSerialization.jsonObject(with:data) as? [String:Any] else {return}
+            applyStatus(state);error=nil;cacheStatus="복구 후 새 캐시 사용"
+            events.append("VM 복구 완료 · 이전 기록과 캐시 보관: \(state["archivePath"] as? String ?? "")")
+        } catch { self.error="복구하지 못했습니다. 실행 중인 VM 관리 서비스가 있거나 종료 여부를 확인할 수 없습니다. 앱 작업을 종료한 뒤 다시 시도하세요. \(error.localizedDescription)" }
+    }
     func action(_ method:String) async {
         busy=true;defer {busy=false}
         do {
             let data=try await Runtime.shared.call(["method":method,"vaultId":selected])
             if let state=try JSONSerialization.jsonObject(with:data) as? [String:Any] {
                 applyStatus(state)
-                if state["state"] as? String == "STOP_UNCONFIRMED" {error="VM 종료 근거를 확인할 수 없어 새 실행을 차단했습니다. 자동 복구·잠금 초기화는 지원하지 않습니다."}
+                if state["state"] as? String == "STOP_UNCONFIRMED" {error="VM 종료 근거를 확인할 수 없어 새 실행을 차단했습니다. VM 현황의 ‘종료 상태 복구’를 사용하세요. 관련 프로세스가 없을 때만 기존 기록을 보관하고 새 실행을 허용합니다."}
             }
         } catch { self.error=error.localizedDescription }
     }
@@ -244,6 +253,7 @@ struct VaultRuntimeView: View {
     @State private var cacheClearVault = ""
     @State private var confirmCacheClear = false
     @State private var confirmStop = false
+    @State private var confirmRecovery = false
     var body: some View {
         ScrollView { VStack(alignment:.leading,spacing:12) {
             HStack {Text("Vault Runtime · M4 개발 검토").font(.title2);Spacer();Button("닫기"){if !vm.running {dismiss()}}.disabled(vm.running)}
@@ -255,6 +265,13 @@ struct VaultRuntimeView: View {
             GroupBox(vm.vmSummaryTitle) {
                 VStack(alignment:.leading,spacing:5) {
                     Text(vm.status).font(.headline).foregroundStyle(vm.statusUnavailable || vm.vmState == "STOP_UNCONFIRMED" ? .red : .primary)
+                    if vm.vmState == "STOP_UNCONFIRMED" || vm.statusUnavailable {
+                        Text("관리 서비스 연결이 끊어졌을 수 있습니다. 복구는 관련 프로세스가 모두 종료된 경우에만 진행하며, 이전 기록과 캐시는 보관하고 작업을 자동 재실행하지 않습니다.")
+                        Button("종료 상태 복구…"){confirmRecovery=true}.disabled(vm.busy || vm.running)
+                            .confirmationDialog("이전 실행 기록과 캐시를 보관하고 VM 실행 환경을 복구할까요?",isPresented:$confirmRecovery,titleVisibility:.visible) {
+                                Button("상태 확인 후 복구"){Task {await vm.recoverVM()}}
+                            }
+                    }
                     Text("VM 소유 Vault: \(vm.vmOwner)")
                     Text("Instance: \(vm.vmInstance)")
                     Text("활성 실행: \(vm.activeSession)")

@@ -12,6 +12,7 @@ export class VMClient {
  constructor(private readonly registry=new VaultRegistry()){this.directory=join(registry.directory,'vm-runtime');}
  async request(method:string,args:Record<string,unknown>={},startService=false,onEvent?:(event:any)=>void):Promise<any>{
   if(startService){
+   try{await lstat(join(this.registry.directory,'vm-recovery-lock'));throw new VaultError('vm_recovery_busy');}catch(e){if((e as NodeJS.ErrnoException).code!=='ENOENT')throw e;}
    try{await lstat(join(this.directory,'owner'));}catch(e){if((e as NodeJS.ErrnoException).code!=='ENOENT')throw e;
     const child=spawn(process.execPath,[fileURLToPath(new URL('./vm-service.js',import.meta.url)),this.registry.directory],{detached:true,stdio:'ignore',env:{PATH:process.env.PATH??'/usr/bin:/bin',HOME:process.env.HOME??'',NIDUS_VM_IDLE_MS:process.env.NIDUS_VM_IDLE_MS??'300000'}});child.unref();
     await new Promise<void>((resolve,reject)=>{child.once('spawn',resolve);child.once('error',reject);});
