@@ -3,7 +3,7 @@ import {createHash,randomUUID} from 'node:crypto';
 import type {SharedBackend} from './apple-backend.js';
 import {liveRequest,validateLiveRequest,needsNetworkApproval,type LiveRequest} from './live-network.js';
 import {VaultError} from './types.js';
-export interface LiveAction {op:'observe'|'navigate'|'click'|'type'|'scroll'|'back';url?:string;snapshotId?:string;targetId?:string;text?:string;delta?:number}
+export interface LiveAction {op:'observe'|'navigate'|'click'|'type'|'scroll'|'back'|'press'|'select'|'check'|'read';url?:string;snapshotId?:string;targetId?:string;text?:string;delta?:number;key?:string;value?:string;checked?:boolean;offset?:number}
 export interface LiveApproval {approvalId:string;vaultId:string;executionId:string;command:string;commandHash:string;expiresAt:number;liveBrowser:true;scope:string}
 export type LiveApprover=(p:LiveApproval,signal:AbortSignal)=>Promise<boolean>;
 /** One task owns one persistent browser, including its transient cookies and DOM. */
@@ -43,20 +43,24 @@ export class LiveBrowser {
  async action(action:LiveAction,approve:LiveApprover){
   if(this.captcha)throw new VaultError('captcha_required');
   if(this.failed||this.abort.signal.aborted)throw new VaultError('browser_session_ended');if(this.busy)throw new VaultError('browser_action_busy');
-  if(!['observe','navigate','click','type','scroll','back'].includes(action.op))throw new VaultError('browser_action_invalid');
-  if(['click','type'].includes(action.op)){
+  if(!['observe','navigate','click','type','scroll','back','press','select','check','read'].includes(action.op))throw new VaultError('browser_action_invalid');
+  if(['click','type','press','select','check'].includes(action.op)){
    if(action.snapshotId!==this.observedId||!this.observation?.elements?.some((e:any)=>e.id===action.targetId))throw new VaultError('browser_stale_observation');
    if(action.op==='type'&&(typeof action.text!=='string'||action.text.length>2048))throw new VaultError('browser_input_limit');
   }
+  if(action.op==='press'&&!['Enter','Tab','Escape','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(action.key??''))throw new VaultError('browser_key_denied');
+  if(action.op==='select'&&(typeof action.value!=='string'||action.value.length>160))throw new VaultError('browser_option_unavailable');
+  if(action.op==='check'&&typeof action.checked!=='boolean')throw new VaultError('browser_action_invalid');
+  if(action.op==='read'&&(action.snapshotId!==this.observedId||!Number.isSafeInteger(action.offset)||action.offset!<0||action.offset!>60000))throw new VaultError('browser_stale_observation');
   if(action.op==='scroll'&&(!Number.isSafeInteger(action.delta)||Math.abs(action.delta!)>1000))throw new VaultError('browser_action_invalid');
-  this.busy=true;this.approve=['click','type','back'].includes(action.op)?approve:undefined;const id=randomUUID();
+  this.busy=true;this.approve=['click','type','press','select','check','back'].includes(action.op)?approve:undefined;const id=randomUUID();
   try{
    const value=await new Promise<any>((resolve,reject)=>{const timer=setTimeout(()=>{this.pending.delete(id);this.cancel();reject(new VaultError('browser_action_timeout'));},75000);this.pending.set(id,{resolve,reject,timer});void this.backend.sendLive!({...action,id}).catch(error=>{clearTimeout(timer);this.pending.delete(id);reject(error);});});
    if(!value||value.sandboxVerified!==true||typeof value.url!=='string'||typeof value.title!=='string'||typeof value.text!=='string'||!Array.isArray(value.elements)||value.elements.length>60||typeof value.snapshotId!=='string'||Buffer.byteLength(JSON.stringify(value))>60000)throw new VaultError('browser_observation_invalid');
    const state=pageState(value);if(state==='captcha_required'){this.captcha=true;throw new VaultError(state);}if(state!=='page')throw new VaultError(state);
-   this.observation=structuredClone(value);this.observedId=value.snapshotId;return {...value,retrievedAt:new Date().toISOString(),networkResponses:this.responses,networkBlocked:this.blocked,mode:'interactive-browser'};
-  }finally{this.busy=false;this.approve=undefined;}
+   if(action.op!=='read'){this.observation=structuredClone(value);this.observedId=value.snapshotId;}return {...value,retrievedAt:new Date().toISOString(),networkResponses:this.responses,networkBlocked:this.blocked,mode:'interactive-browser'};
+  }catch(error){if(action.op!=='read'){this.observedId='';this.observation=undefined;}throw error;}finally{this.busy=false;this.approve=undefined;}
  }
- preview(action:LiveAction){const e=this.observation?.elements?.find((e:any)=>e.id===action.targetId);return `${action.op} ${e?.tag??''} ${e?.name??''}\n대상 링크: ${e?.href??''}\n페이지: ${this.observation?.url??''}\n${action.op==='type'?`입력 ${action.text?.length??0}자: ${action.text??''}\n(입력 중에도 사이트 스크립트가 읽을 수 있음)`:''}`;}
+ preview(action:LiveAction){const e=this.observation?.elements?.find((e:any)=>e.id===action.targetId);return `${action.op} ${action.key??action.value??(action.checked===undefined?'':String(action.checked))} ${e?.tag??''} ${e?.name??''}\n대상 링크: ${e?.href??''}\n페이지: ${this.observation?.url??''}\n${action.op==='type'?`입력 ${action.text?.length??0}자: ${action.text??''}\n(입력 중에도 사이트 스크립트가 읽을 수 있음)`:''}`;}
  async close(){if(this.framePending){clearTimeout(this.framePending.timer);this.framePending.resolve(null);this.framePending=undefined;}this.abort.abort();await this.backend.endLive!();this.failed=true;}
 }

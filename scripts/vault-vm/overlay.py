@@ -23,6 +23,7 @@ with tempfile.TemporaryDirectory() as staging:
  browser=root/'opt/development/usr/lib/nidus';browser.mkdir(parents=True)
  shutil.copyfile(scripts/'browser.mjs',browser/'browser.mjs')
  shutil.copyfile(scripts/'browser-live.mjs',browser/'browser-live.mjs')
+ shutil.copyfile(scripts/'browser-dom.mjs',browser/'browser-dom.mjs')
  # Write outside the input tree so the archive never includes its own output.
  with tempfile.NamedTemporaryFile() as archive:
   write(root,archive.name)

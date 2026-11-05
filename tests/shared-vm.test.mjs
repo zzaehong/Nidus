@@ -73,3 +73,11 @@ test('interactive browser reserves VM, binds task ownership and confirms cleanup
  await assert.rejects(runtime.liveAction(f.v.vaultId,'live',{op:'navigate',url:'https://example.com/'},async()=>false),/permission_denied/);
  await runtime.closeLive(f.v.vaultId,'live');assert.equal(b.closed,true);assert.equal(runtime.status().sessions.at(-1).cleanupConfirmed,true);await runtime.close();
 });
+
+test('new browser actions require interaction approval and denial prevents guest dispatch',async t=>{
+ const f=await fixture(t);await f.runtime.close();const b=f.backend;let sent=[];
+ b.beginLive=async(id,listener)=>{b.liveListener=listener;};b.sendLive=async m=>{sent.push(m);if(m.op!=='response')b.liveListener({event:'result',id:m.id,value:{snapshotId:'s',url:'https://example.com/',title:'fixture',text:'',elements:[{id:'1',tag:'INPUT',name:'field'}],sandboxVerified:true}});};b.endLive=async()=>{b.liveListener({event:'ended'});};
+ const runtime=new SharedVMController(f.registry,new VMJournal(f.journal.directory),()=>b,300000,undefined,true,true);await runtime.initialize();await runtime.openLive(f.v.vaultId,'live','call',async()=>true);
+ for(const action of [{op:'press',key:'Enter'},{op:'select',value:'a'},{op:'check',checked:true}]){const n=sent.length;await assert.rejects(runtime.liveAction(f.v.vaultId,'live',{...action,snapshotId:'s',targetId:'1'},async()=>false),/permission_denied/);assert.equal(sent.length,n);}
+ await runtime.closeLive(f.v.vaultId,'live');assert.equal(runtime.status().sessions.at(-1).cleanupConfirmed,true);await runtime.close();
+});

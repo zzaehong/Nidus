@@ -40,6 +40,7 @@ with tempfile.TemporaryDirectory(prefix='nidus-m4-build-') as tmp:
             browser=helpers.parent/'usr/lib/nidus';browser.mkdir(parents=True)
             shutil.copyfile(pathlib.Path(__file__).with_name('browser.mjs'),browser/'browser.mjs')
             shutil.copyfile(pathlib.Path(__file__).with_name('browser-live.mjs'),browser/'browser-live.mjs')
+            shutil.copyfile(pathlib.Path(__file__).with_name('browser-dom.mjs'),browser/'browser-dom.mjs')
             # APK post-install hooks are intentionally not executed on the Host.
             # Install only the BusyBox applets required by the managed development profile.
             binaries=helpers.parent/'usr/bin';binaries.mkdir(parents=True)

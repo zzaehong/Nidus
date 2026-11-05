@@ -154,9 +154,9 @@ export class SharedVMController {
  });}
  async liveFrame(vaultId:string,executionId:string){return this.liveOwner(vaultId,executionId).browser.frame();}
  async liveAction(vaultId:string,executionId:string,action:LiveAction,approve:LiveApprover){return this.serial(async()=>{
-  this.guard();const live=this.liveOwner(vaultId,executionId);await this.registry.resolveVault(vaultId);
+  action=structuredClone(action);this.guard();const live=this.liveOwner(vaultId,executionId);await this.registry.resolveVault(vaultId);
   if(this.cancelled.has(executionId))fail('cancelled');if(action.op==='navigate'){action={op:'navigate',url:publicURL(action.url!).href};await this.approveLive(vaultId,executionId,`공개 HTTPS 주소 직접 열기: ${action.url}`,'interaction',approve,live.browser.signal);}
-  if(['click','type','back'].includes(action.op))await this.approveLive(vaultId,executionId,live.browser.preview(action),'interaction',approve,live.browser.signal);
+  if(['click','type','press','select','check','back'].includes(action.op))await this.approveLive(vaultId,executionId,live.browser.preview(action),'interaction',approve,live.browser.signal);
   try{return await live.browser.action(action,approve);}catch(error){if(error instanceof VaultError&&['browser_action_timeout','browser_session_ended'].includes(error.code)){await this.closeLiveInternal();throw new VaultError('browser_action_outcome_unknown');}throw error;}
  });}
  private async closeLiveInternal(){

@@ -19,7 +19,7 @@ export class VMToolGateway implements VMToolPort {
   const abort=()=>{void this.client.request('cancel',{executionId:ctx.executionId}).catch(()=>{});};
   try{
    if(ctx.signal.aborted)return result(call.id,'cancelled','cancelled');
-   if(['browser_start','browser_open','browser_observe','browser_click','browser_type','browser_scroll','browser_back','browser_close'].includes(call.name))return await this.invokeLive(ctx,call);
+   if(['browser_start','browser_open','browser_observe','browser_click','browser_type','browser_press','browser_select','browser_check','browser_read','browser_scroll','browser_back','browser_close'].includes(call.name))return await this.invokeLive(ctx,call);
    if(call.name==='browser_read_page'){
     const pageId=(call.arguments as {pageId:string}).pageId,p=this.pages.get(pageId);
     return p&&p.vaultId===ctx.vaultId&&p.executionId===ctx.executionId?result(call.id,'succeeded','ok',JSON.stringify({pageId,...p.page as object})):result(call.id,'failed','browser_page_unavailable');
@@ -64,7 +64,7 @@ export class VMToolGateway implements VMToolPort {
    });
    if(close)this.liveOwners.delete(ctx.executionId);
    return result(call.id,'succeeded','ok',JSON.stringify(value));
-  }catch(e){const code=e instanceof VaultError?e.code:'browser_channel_failed';return result(call.id,code==='STOP_UNCONFIRMED'||code.includes('cleanup_unconfirmed')||code==='browser_action_outcome_unknown'?'unknown':ctx.signal.aborted?'cancelled':code==='browser_permission_denied'?'denied':'failed',code,['captcha_required','search_no_results','browser_access_blocked'].includes(code)?webFailureMessage(code):'');}
+  }catch(e){const code=e instanceof VaultError?e.code:'browser_channel_failed';return result(call.id,code==='STOP_UNCONFIRMED'||code.includes('cleanup_unconfirmed')||['browser_action_outcome_unknown','browser_action_unverified'].includes(code)?'unknown':ctx.signal.aborted?'cancelled':code==='browser_permission_denied'?'denied':'failed',code,['captcha_required','search_no_results','browser_access_blocked'].includes(code)?webFailureMessage(code):'');}
   finally{ctx.signal.removeEventListener('abort',abort);}
  }
 }

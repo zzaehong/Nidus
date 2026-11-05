@@ -57,7 +57,7 @@ export class SingleAgentRuntime {
           const r=await this.tools.invoke({vaultId:input.vaultId,executionId:task.executionId,signal},c);
           input.onEvent?.({event:'tool-result',name:c.name,result:r});
           if(r.status==='succeeded' && ['browser_search','browser_navigate','browser_read_page'].includes(c.name))task.webStatus='used';
-          if(r.status==='succeeded'&&['browser_start','browser_open','browser_observe','browser_click','browser_type','browser_scroll','browser_back'].includes(c.name)){try{if(JSON.parse(r.content.text).networkResponses>0)task.webStatus='used';}catch{}}
+          if(r.status==='succeeded'&&['browser_start','browser_open','browser_observe','browser_click','browser_type','browser_press','browser_select','browser_check','browser_read','browser_scroll','browser_back'].includes(c.name)){try{if(JSON.parse(r.content.text).networkResponses>0)task.webStatus='used';}catch{}}
           step.invocations.push({invocationId:randomUUID(),callId:c.id,tool:c.name,result:r});results.push(r);resultBytes+=bytes(r);
           if(r.code==='captcha_required'){task.webStatus='captcha_required';task.status='FAILED';task.code='captcha_required';task.text=webFailureMessage(r.code);step.state='FAILED';return task;}
           if(c.name.startsWith('browser_')&&r.status==='failed')task.webStatus=r.code==='search_no_results'?'no_results':'search_failed';

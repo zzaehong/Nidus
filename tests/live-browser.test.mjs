@@ -50,3 +50,10 @@ test('automatic page-load POST is blocked without asking user; GET page load rem
  b.sendLive=async function(m){this.messages.push(m);if(m.op!=='response'){this.action=m;queueMicrotask(()=>this.listener({event:'request',...request({method:'POST',body:'telemetry'})}));}};
  const action=live.action({op:'navigate',url:'https://example.com/'},async()=>{prompts++;return true;});await flush();b.listener({event:'result',id:b.action.id,value:observation()});const page=await action;assert.equal(prompts,0);assert.equal(sent.length,0);assert.equal(page.networkBlocked,1);await live.close();
 });
+
+test('new actions validate stale references and bounded arguments before guest dispatch',async()=>{
+ const b=new Backend(),live=new LiveBrowser('vault','task',b);await live.start();await live.action({op:'observe'},async()=>true);const count=b.messages.length;
+ for(const action of [{op:'press',key:'F12'},{op:'select',value:'x'.repeat(161)},{op:'check',checked:'yes'}])await assert.rejects(live.action({...action,snapshotId:'snapshot',targetId:'1'},async()=>true));
+ for(const op of ['press','select','check'])await assert.rejects(live.action({op,snapshotId:'old',targetId:'1',key:'Enter',value:'a',checked:true},async()=>true),/stale/);
+ assert.equal(b.messages.length,count);await live.close();
+});

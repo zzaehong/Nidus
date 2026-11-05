@@ -44,6 +44,8 @@
 
 ## 브라우저
 
+- [격리 브라우저 DOM 조작 개선](vault/browser/Vault_Browser_DOM.md)
+
 - [브라우저 신뢰성 P0–P2](vault/browser/Vault_M4_Browser_Reliability.md)
 - [브라우저 후속 모델 응답 실패 진단 및 초기 승인 개선](vault/browser/Vault_M4_Browser_Response_Fix.md)
 - [Google 기본 검색과 브라우저 실시간 보기](vault/browser/Vault_M4_Browser_Screen.md)
