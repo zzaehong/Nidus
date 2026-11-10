@@ -39,8 +39,10 @@ swift run NidusNativeApp
 
 ```sh
 npm run build:app
-open dist/Nidus.app
+open "dist/Nidus Base.app"
 ```
+
+이 앱은 Provider 연결·모델 검사·채팅용 기존 대시보드이며 이름은 **Nidus Base**(`com.nidus.base`)입니다. `Nidus.app` 이름은 Vault 기반 새 앱이 사용합니다. 저장 데이터 위치(`~/Library/Application Support/Nidus/`)와 Keychain 항목은 그대로입니다.
 
 현재 머신의 Node 실행 파일, 컴파일한 Runtime과 Keychain helper를 포함합니다. 로컬 `.app` 실행과 엔진 준비 상태를 확인했습니다. **배포용 서명·공증 및 다른 Mac에서의 실행은 검증하지 않았습니다.** 앱 아키텍처와 포함한 Node의 macOS 요구사항은 빌드 머신에 따릅니다. Node를 갱신하면 앱도 다시 빌드하세요.
 

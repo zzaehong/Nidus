@@ -8,14 +8,14 @@ if (process.platform !== 'darwin') throw new Error('The dashboard requires macOS
 const root = fileURLToPath(new URL('..', import.meta.url));
 execFileSync('swift', ['build', '-c', 'release'], { cwd: root, stdio: 'inherit' });
 const bin = execFileSync('swift', ['build', '-c', 'release', '--show-bin-path'], { cwd: root, encoding: 'utf8' }).trim();
-const contents = join(root, 'dist', 'Nidus.app', 'Contents');
+const contents = join(root, 'dist', 'Nidus Base.app', 'Contents');
 const resources = join(contents, 'Resources');
 for (const directory of ['MacOS', 'Resources/bin', 'Resources/dist']) await mkdir(join(contents, directory), { recursive: true });
 await copyFile(join(root, 'native', 'Info.plist'), join(contents, 'Info.plist'));
 await copyFile(join(bin, 'NidusNativeApp'), join(contents, 'MacOS', 'NidusNativeApp'));
 await copyFile(process.execPath, join(resources, 'bin', 'node'));
 for (const entry of await readdir(join(root, 'dist'), { withFileTypes: true })) {
-  if (['adapters', 'vault', 'tools', 'agent', 'vm-assets'].includes(entry.name) && entry.isDirectory()) await cp(join(root, 'dist', entry.name), join(resources, 'dist', entry.name), { recursive: true });
+  if (['adapters', 'vault', 'tools', 'agent', 'gateway', 'vm-assets'].includes(entry.name) && entry.isDirectory()) await cp(join(root, 'dist', entry.name), join(resources, 'dist', entry.name), { recursive: true });
   else if (entry.name.endsWith('.js') || ['nidus-keychain', 'nidus-vault-files', 'nidus-vault-vm'].includes(entry.name)) await copyFile(join(root, 'dist', entry.name), join(resources, 'dist', entry.name));
 }
-console.log('Built dist/Nidus.app (local unsigned development bundle; Node included).');
+console.log('Built dist/Nidus Base.app (local unsigned development bundle; Node included).');
