@@ -1,7 +1,7 @@
 // Per-vault usage log. One row per model call, in .nidus/local/usage.sqlite.
 import { DatabaseSync } from 'node:sqlite';
 import { chmodSync, mkdirSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { NidusError } from '../errors.js';
@@ -158,6 +158,15 @@ export async function loadBudget(path: string): Promise<bigint | null> {
     return raw.monthlyUSD === null || raw.monthlyUSD === undefined ? null : money(raw.monthlyUSD);
   } catch {
     throw new NidusError('invalid_request', 'Invalid .nidus/budget.json: expected { "version": 1, "monthlyUSD": "<decimal>" | null }.');
+  }
+}
+
+export async function saveBudget(path: string, monthlyUSD: string | null): Promise<void> {
+  if (monthlyUSD !== null) money(monthlyUSD);
+  try {
+    await writeFile(path, `${JSON.stringify({ version: 1, monthlyUSD }, null, 2)}\n`);
+  } catch {
+    throw new NidusError('storage', 'Could not save .nidus/budget.json.');
   }
 }
 

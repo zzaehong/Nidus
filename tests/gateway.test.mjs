@@ -224,3 +224,47 @@ test('CLI: init, connect, models, assign, ask and usage against one vault', asyn
   await assert.rejects(run(['nonsense']), { code: 'invalid_request' });
   assert.equal(toolCallsOf([]).length, 0);
 });
+
+test('app bridge: vault status, init, overview, candidate and budget edits, ask', async t => {
+  const { dispatch } = await import('../dist/gateway/bridge.js');
+  const root = await mkdtemp(join(tmpdir(), 'nidus-gateway-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const credentials = new MemoryCredentials();
+  const { providers } = fakeProviders({ deepseek: ['deepseek-flash'], anthropic: ['claude-big'] }, () => completionText('pong'));
+  const call = (method, extra = {}) => dispatch({ method, vault: root, ...extra }, { credentials, providers });
+
+  assert.deepEqual(await dispatch({ method: 'ping' }), { ready: true });
+  assert.equal((await call('vault-status')).initialized, false);
+  await assert.rejects(call('overview'), { code: 'storage' });
+  await call('vault-init');
+  assert.equal((await call('vault-status')).initialized, true);
+
+  assert.deepEqual(await call('connect', { provider: 'deepseek', key: 'kd' }), { provider: 'deepseek', models: 1 });
+  assert.deepEqual(await call('models', { provider: 'deepseek' }), [{ id: 'deepseek-flash', name: 'deepseek-flash', tools: 'unknown' }]);
+
+  let overview = await call('overview');
+  assert.deepEqual(overview.slots.map(slot => slot.id), ['roles.main', 'roles.lead-manager', 'roles.manager', 'worker.simple', 'worker.normal', 'worker.complex']);
+  assert.ok(overview.slots.every(slot => slot.resolved === null && /no candidates listed/.test(slot.problem)));
+  assert.deepEqual(overview.providers.filter(p => p.connected).map(p => [p.id, p.models]), [['deepseek', 1]]);
+  assert.equal(JSON.stringify(overview).includes('kd'), false, 'keys never appear in responses');
+
+  overview = await call('set-candidates', { slot: 'worker.normal', candidates: ['anthropic:claude-big', 'deepseek:deepseek-flash'] });
+  const normal = overview.slots.find(slot => slot.id === 'worker.normal');
+  assert.equal(normal.resolved, 'deepseek:deepseek-flash');
+  assert.match(normal.reason, /fallback #1/);
+  assert.deepEqual(JSON.parse(await readFile(join(root, '.nidus', 'models.json'), 'utf8')).worker.normal, ['anthropic:claude-big', 'deepseek:deepseek-flash']);
+  await assert.rejects(call('set-candidates', { slot: 'worker.normal', candidates: ['deepseek:deepseek-flash', 'deepseek:deepseek-flash'] }), { code: 'invalid_request' });
+  await assert.rejects(call('set-candidates', { slot: 'roles.ghost', candidates: [] }), { code: 'invalid_request' });
+
+  assert.equal((await call('set-budget', { monthlyUSD: '12.5' })).budgetUSD, '12.500000000');
+  await assert.rejects(call('set-budget', { monthlyUSD: 'much' }), { code: 'invalid_request' });
+  assert.equal((await call('set-budget', { monthlyUSD: null })).budgetUSD, null);
+
+  const answer = await call('ask', { role: 'worker', difficulty: 'normal', prompt: 'ping' });
+  assert.equal(answer.text, 'pong');
+  assert.equal(answer.model, 'deepseek:deepseek-flash');
+  assert.equal((await call('overview')).usage.calls, 1);
+
+  await call('disconnect', { provider: 'deepseek' });
+  assert.equal((await call('overview')).providers.some(p => p.connected), false);
+});

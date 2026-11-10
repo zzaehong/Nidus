@@ -1,6 +1,7 @@
 // Model Assignment: role and worker difficulty decide the model.
 // The caller that delegates the work states the difficulty; nothing here guesses it.
-import { readFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { readFile, rename, writeFile } from 'node:fs/promises';
 import { NidusError } from '../errors.js';
 import { providerIds, type Model, type ProviderId } from '../types.js';
 
@@ -107,6 +108,23 @@ export async function loadTable(path: string): Promise<AssignmentTable> {
     invalidTable('not valid JSON.');
   }
   return parseTable(json);
+}
+
+/** Writes the table in its on-disk form: candidates as "provider:model" strings. */
+export async function saveTable(path: string, table: AssignmentTable): Promise<void> {
+  const names = (list: ModelRef[]) => list.map(refName);
+  const disk = {
+    version: 1,
+    roles: Object.fromEntries(Object.entries(table.roles).map(([role, list]) => [role, names(list)])),
+    worker: { simple: names(table.worker.simple), normal: names(table.worker.normal), complex: names(table.worker.complex) },
+  };
+  const temporary = `${path}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporary, `${JSON.stringify(disk, null, 2)}\n`);
+    await rename(temporary, path);
+  } catch {
+    throw new NidusError('storage', 'Could not save .nidus/models.json.');
+  }
 }
 
 function slot(table: AssignmentTable, target: AssignTarget): { list: ModelRef[]; name: string } {

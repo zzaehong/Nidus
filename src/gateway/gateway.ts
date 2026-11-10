@@ -8,10 +8,13 @@ import { dollars } from '../money.js';
 import { calculatedCost, priceFor } from '../pricing.js';
 import { FileModelStore, type ModelStore } from '../storage.js';
 import type { Model, ProviderId, RequestOptions } from '../types.js';
-import { assign, loadTable, refName, type Assignment, type AssignTarget, type Availability, type Difficulty } from './assignment.js';
+import { assign, difficulties, loadTable, parseRef, refName, saveTable, type Assignment, type AssignTarget, type Availability, type Difficulty } from './assignment.js';
 import { DEFAULT_MAX_OUTPUT_TOKENS, textOf, toolCallsOf, userText, type Message, type ModelRequest, type ModelResponse, type StreamEvent, type ToolSpec } from './contract.js';
 import { ProviderClient } from './providers.js';
-import { budgetWarning, loadBudget, monthOf, UsageLog, type UsageSummary, type Warning } from './usage.js';
+import { budgetWarning, loadBudget, monthOf, saveBudget, UsageLog, type UsageSummary, type Warning } from './usage.js';
+import { providerMetadata } from '../providers.js';
+import { providerIds } from '../types.js';
+import { classifyModel } from '../classification.js';
 import type { VaultPaths } from './vault.js';
 
 export interface CallTarget {
@@ -37,6 +40,31 @@ export interface GatewayDependencies {
   models?: ModelStore;
   usage?: UsageLog;
   now?: () => Date;
+}
+
+export interface SlotView {
+  id: string;
+  role: string;
+  difficulty: Difficulty | null;
+  candidates: string[];
+  resolved: string | null;
+  reason: string | null;
+  problem: string | null;
+}
+
+export interface VaultOverview {
+  vault: string;
+  slots: SlotView[];
+  providers: { id: ProviderId; name: string; keyURL: string; needsAccountId: boolean; connected: boolean; models: number; fetchedAt: string | null }[];
+  usage: UsageSummary;
+  budgetUSD: string | null;
+  budgetWarning: string | null;
+}
+
+export interface ModelChoice {
+  id: string;
+  name: string;
+  tools: 'supported' | 'unsupported' | 'unknown' | 'verified';
 }
 
 const probeTool: ToolSpec = {
@@ -205,6 +233,75 @@ export class ModelGateway implements Availability {
     await writeFile(temporary, `${JSON.stringify(verified, null, 2)}\n`, { mode: 0o600 });
     await rename(temporary, this.paths.verifiedFile);
     return { supported: true, detail: 'Tool call round trip succeeded.' };
+  }
+
+  async disconnect(provider: ProviderId): Promise<void> {
+    await this.credentials.delete(provider);
+    this.keys.set(provider, null);
+    await this.models.remove(provider);
+  }
+
+  // --- Views for the app -----------------------------------------------------
+
+  /** Everything the vault overview shows: each slot with the model it resolves to, providers, usage and budget. */
+  async overview(): Promise<VaultOverview> {
+    const table = await loadTable(this.paths.modelsFile);
+    const targets: { id: string; target: AssignTarget; candidates: string[] }[] = [
+      ...Object.entries(table.roles).map(([role, list]) => ({ id: `roles.${role}`, target: { role }, candidates: list.map(refName) })),
+      ...difficulties.map(difficulty => ({ id: `worker.${difficulty}`, target: { role: 'worker', difficulty }, candidates: table.worker[difficulty].map(refName) })),
+    ];
+    const slots: SlotView[] = [];
+    for (const { id, target, candidates } of targets) {
+      const view: SlotView = { id, role: target.role, difficulty: target.difficulty ?? null, candidates, resolved: null, reason: null, problem: null };
+      try {
+        // Agents call tools, so slots are resolved the way an agent would use them.
+        const chosen = await assign(table, { ...target, needs: { tools: true } }, this);
+        view.resolved = refName(chosen);
+        view.reason = chosen.reason;
+      } catch (error) {
+        view.problem = error instanceof NidusError ? error.message : 'Could not resolve this slot.';
+      }
+      slots.push(view);
+    }
+
+    const providers = await Promise.all(providerIds.map(async id => {
+      const snapshot = await this.models.load(id);
+      return { id, name: providerMetadata[id].name, keyURL: providerMetadata[id].keyURL, needsAccountId: providerMetadata[id].accountId,
+        connected: await this.hasKey(id), models: snapshot?.models.length ?? 0, fetchedAt: snapshot?.fetchedAt ?? null };
+    }));
+
+    const usage = this.usage.summary();
+    const budget = await loadBudget(this.paths.budgetFile);
+    return { vault: this.paths.root, slots, providers, usage, budgetUSD: budget === null ? null : dollars(budget),
+      budgetWarning: budgetWarning(budget, this.usage.monthCost(usage.month), usage.month)?.message ?? null };
+  }
+
+  /** Text models of a provider with their tool support, for choosing candidates. */
+  async modelChoices(provider: ProviderId): Promise<ModelChoice[]> {
+    const verified = await this.verified();
+    const { models } = await this.cachedModels(provider);
+    return models.filter(model => classifyModel(model).kind === 'text' && model.capabilities.chat !== 'unsupported').map(model => ({
+      id: model.id,
+      name: model.name,
+      tools: verified[refName({ provider, model: model.id })] ? 'verified' : model.capabilities.tools,
+    }));
+  }
+
+  /** Replaces the ordered candidates of one slot ("roles.<role>" or "worker.<difficulty>"). */
+  async setCandidates(slot: string, candidates: unknown): Promise<void> {
+    if (!Array.isArray(candidates)) throw new NidusError('invalid_request', 'Candidates must be an array.');
+    const refs = candidates.map(parseRef);
+    if (new Set(refs.map(refName)).size !== refs.length) throw new NidusError('invalid_request', 'A model can appear only once in a slot.');
+    const table = await loadTable(this.paths.modelsFile);
+    const [group, name] = [slot.slice(0, slot.indexOf('.')), slot.slice(slot.indexOf('.') + 1)];
+    if (group === 'worker' && difficulties.includes(name as Difficulty)) table.worker[name as Difficulty] = refs;
+    else if (group === 'roles' && table.roles[name]) table.roles[name] = refs;
+    else throw new NidusError('invalid_request', 'Unknown slot.');
+    await saveTable(this.paths.modelsFile, table);
+  }
+
+  setBudget(monthlyUSD: string | null): Promise<void> {
+    return saveBudget(this.paths.budgetFile, monthlyUSD);
   }
 
   usageSummary(month?: string): UsageSummary {
