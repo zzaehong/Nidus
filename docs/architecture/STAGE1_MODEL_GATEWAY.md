@@ -206,6 +206,14 @@ nidus gateway usage [--month YYYY-MM]
 
 모든 명령은 `--vault <dir>`를 받는다. 생략하면 현재 디렉터리를 Vault로 본다.
 
+## 앱
+
+`Nidus.app`(`com.nidus.app`, Swift 타깃 `Nidus`)이 이 Gateway의 화면이다. 요청마다 Node 프로세스를 하나 띄워 `dist/gateway/bridge.js`에 JSON 요청을 stdin으로 보내고 결과를 stdout으로 받는다. API 키도 stdin으로만 전달한다.
+
+기존 Provider 대시보드는 `Nidus Base.app`(`com.nidus.base`)으로 이름을 바꿔 따로 유지한다. 두 앱은 Keychain의 키를 함께 쓴다.
+
+2단계에서 에이전트 실행과 격리 환경 모니터링을 붙이려면 요청마다 프로세스를 띄우는 방식 대신 계속 연결된 양방향 통로가 필요하다.
+
 ## 알려진 제한
 
 - 토큰 단위 스트리밍이 없다.

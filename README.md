@@ -15,6 +15,23 @@ OpenAI(GPT), Anthropic(Claude), Google Gemini, DeepSeek를 지원합니다. 작�
 
 Node.js 22.13 이상(검증: 24.21.0), npm이 필요합니다. macOS Keychain 사용에는 Xcode Command Line Tools의 `swiftc`가 필요합니다. 대시보드는 macOS 13 이상을 대상으로 하며 Swift 5.9 이상으로 빌드합니다. API 연결 엔진과 CLI는 TypeScript이고, UI는 SwiftUI/AppKit입니다. 외부 npm 런타임 라이브러리는 없습니다.
 
+## Nidus 앱 (Vault 기반)
+
+```sh
+npm ci
+npm run build:nidus
+open dist/Nidus.app
+```
+
+폴더 하나를 Agent Vault로 열고, 그 Vault의 모델 배정·Provider 연결·사용량을 관리합니다. 개발 중에는 `npm run build && npm run build:keychain && swift run Nidus`로도 실행할 수 있습니다.
+
+- **모델 배정**: Main, Lead Manager, Manager와 Worker 난이도(단순·보통·복잡)마다 모델 후보를 우선순위 순서로 정합니다. 설정은 Vault의 `.nidus/models.json`에 저장됩니다.
+- **Provider**: API 키를 등록하고 모델 목록을 조회합니다. 키는 이 Mac의 Keychain에 저장되며 모든 Vault가 함께 씁니다. 모델별 **도구 검사**는 실제 API를 호출하므로 요금이 발생할 수 있습니다.
+- **사용량**: 이번 달 호출을 역할·난이도·모델별로 집계합니다. 기록은 `.nidus/local/usage.sqlite`에 있고 Git에서 제외됩니다. 월 예산을 넘어도 호출을 막지 않고 경고만 합니다.
+- **시험 호출**: 역할을 골라 메시지를 한 번 보내 배정된 모델이 응답하는지 확인합니다. 요금이 발생할 수 있습니다.
+
+설계는 [1단계 설계 문서](docs/architecture/STAGE1_MODEL_GATEWAY.md)를 참고하세요. 로컬 개발용 서명 없는 번들이며 배포용 서명·공증은 하지 않았습니다. 아래의 기존 대시보드는 **Nidus Base**라는 별도 앱으로 남아 있습니다.
+
 ## macOS 대시보드
 
 ```sh
