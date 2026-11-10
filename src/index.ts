@@ -29,3 +29,4 @@ export * from './tools/permission.js';
 export * from './tools/dispatcher.js';
 export * from './agent/model.js';
 export * from './agent/runtime.js';
+export * as gateway from './gateway/index.js';

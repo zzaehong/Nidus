@@ -1,6 +1,6 @@
 # 1단계 설계 — Model Gateway와 Model Assignment
 
-상태: **설계 확정** (2026-11-10). 구현 전이다.
+상태: **구현됨** (2026-11-11), 실제 API 검증 전이다. 코드는 `src/gateway/`에 있다.
 
 [CONCEPT.md](CONCEPT.md)를 구현하기 위한 첫 단계다. 여러 Provider의 API를 하나의 계약으로 묶고, 역할과 작업 난이도에 따라 모델을 배정하며, 사용량을 Vault별로 기록한다. 2단계(격리 작업 공간)와 3단계(AI Office)는 이 계층 위에 올라간다.
 
@@ -49,7 +49,7 @@ Worker가 스스로 더 높은 모델로 올라가지 않는다. 더 높은 모�
 ```ts
 type ContentBlock =
   | { type: 'text'; text: string }
-  | { type: 'tool_call'; id: string; name: string; input: unknown }
+  | { type: 'tool_call'; id: string; name: string; input: unknown; inputError?: string }
   | { type: 'tool_result'; callId: string; content: string; isError: boolean }
   | { type: 'provider_state'; provider: ProviderId; data: unknown };
 
@@ -76,9 +76,10 @@ interface ModelResponse {
 ```
 
 - `provider_state`는 Provider가 다음 요청에 그대로 돌려받아야 하는 불투명 데이터(추론 블록, 서명 등)를 담는다. 같은 Provider로 이어갈 때만 되돌려 보내고, 모델이 다른 Provider로 바뀌면 버린다. 이 규칙이 있어야 한 대화 안에서 모델을 바꿀 수 있다.
-- `tool_call.input`은 어댑터가 `inputSchema`로 검증한 뒤 반환한다. 검증에 실패한 호출은 오류로 돌려준다.
+- `tool_call.input`은 어댑터가 `inputSchema`로 검증한다. 모르는 도구이거나 입력이 스키마에 맞지 않으면 응답을 버리지 않고 그 블록에 `inputError`를 붙여 반환한다. 이미 토큰을 쓴 응답이므로, 호출자는 실행하지 않고 오류 `tool_result`로 답해 모델이 고치게 한다.
 - 도구 결과는 신뢰하지 않는 입력이다. Gateway는 결과를 모델에 전달만 하고 해석하지 않는다.
-- 스트리밍은 `text_delta`, `tool_call`, `done` 세 이벤트로 통일한다. 스트리밍을 구현하지 않은 어댑터는 응답 전체를 `done` 하나로 내보낸다.
+- 스트리밍은 `text_delta`, `tool_call`, `done` 세 이벤트로 통일한다. 현재는 네 형식 모두 응답을 한 번에 받아 이 이벤트로 내보낸다. 토큰 단위 스트리밍은 아직 구현하지 않았다.
+- `toolChoice: 'required'`는 Anthropic에서 `auto`로 보낸다. 최신 Claude 모델이 강제 도구 호출을 거부하기 때문이다. 반드시 호출해야 하면 프롬프트에 적는다.
 
 ## 어댑터
 
@@ -91,7 +92,9 @@ interface ModelResponse {
 | Gemini generateContent | Gemini |
 | Chat Completions 호환 | DeepSeek, Groq, Mistral, NVIDIA, Cloudflare |
 
-어떤 모델이 도구 호출을 지원하는지는 모델 ID 목록을 코드에 적지 않는다. Models API가 알려 주는 값과 실제 왕복 검사 결과를 모델 캐시에 기록해 판단한다.
+어떤 모델이 도구 호출을 지원하는지는 모델 ID 목록을 코드에 적지 않는다. Models API가 알려 주는 값과 실제 왕복 검사(`nidus gateway verify`) 결과로 판단한다. 검사에 성공한 모델은 `.nidus/local/models/verified.json`에 기록한다.
+
+Models API가 지원 여부를 알려 주지 않고 검사도 하지 않은 모델은 배정에서 제외하지 않는다. 선택 이유에 `tools unverified`로 표시한다. Models API가 미지원이라고 명시한 모델만 제외한다.
 
 ## Model Assignment
 
@@ -138,7 +141,7 @@ Agent의 Home에는 모델을 기록하지 않는다(CONCEPT의 Home 항목). �
 ├─ .gitignore           local/ 을 제외
 └─ local/               Git 제외
    ├─ usage.sqlite      사용량 기록
-   └─ models/           Provider별 모델 캐시
+   └─ models/           Provider별 모델 캐시, 도구 호출 검사 결과
 ```
 
 - Git은 AI가 잘못한 작업을 되돌리기 위한 수단이다. 설정 파일은 추적해서 되돌릴 수 있게 하고, 바이너리 DB와 캐시는 `local/`에 모아 제외한다.
@@ -188,3 +191,24 @@ Agent의 Home에는 모델을 기록하지 않는다(CONCEPT의 Home 항목). �
 
 - **예산을 넘으면 경고만 한다.** 호출을 막지 않는다. 경고는 호출 결과와 사용량 집계에 함께 표시한다.
 - **과금 동의·무료 플랜 승인 절차는 1단계에 넣지 않는다.** 기존 엔진의 Provider별 과금 유형 확인과 무료 모델 승인은 가져오지 않는다. 필요해지면 Security Office 정책으로 다시 설계한다.
+
+## 명령
+
+```sh
+nidus gateway init                                   # .nidus/ 생성
+nidus gateway connect <provider>                     # 키 등록, 모델 목록 조회
+nidus gateway models <provider> [--refresh]
+nidus gateway assign --role worker --difficulty simple --tools
+nidus gateway ask --role manager                     # 배정된 모델에 한 번 질의 (과금 가능)
+nidus gateway verify <provider> <model-id>           # 도구 호출 왕복 검사 (과금 가능)
+nidus gateway usage [--month YYYY-MM]
+```
+
+모든 명령은 `--vault <dir>`를 받는다. 생략하면 현재 디렉터리를 Vault로 본다.
+
+## 알려진 제한
+
+- 토큰 단위 스트리밍이 없다.
+- 배정된 모델 호출이 실패해도 다음 후보로 자동 전환하지 않는다. 후보 전환은 키, 모델 목록, 기능 지원 여부로만 정한다.
+- 가격표(`src/pricing.ts`)에 없는 모델은 비용을 모른다. 이 호출은 예산 집계에서 빠지고 `cost_unknown` 경고가 붙는다.
+- 텍스트와 도구 호출만 다룬다. 이미지 입력은 계약에 없다.
