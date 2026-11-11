@@ -5,17 +5,23 @@ if not ID or any(c not in '0123456789abcdef-' for c in ID):raise ValueError('ses
 SECONDS=int(SECONDS)
 ROOT=pathlib.Path('/sessions')/ID;CG=pathlib.Path('/sys/fs/cgroup')/ID
 profile=sys.argv[4] if len(sys.argv)>4 else 'shell'
-if profile not in ['shell','browser','interactive']:raise ValueError('profile')
+if profile not in ['shell','browser','interactive','resident']:raise ValueError('profile')
 interactive=profile=='interactive'
-if not 1<=SECONDS<=(900 if interactive else 120):raise ValueError('deadline')
+# The resident browser runs beside Shell sessions: it holds /run/browser, not /run/busy.
+resident=profile=='resident'
+LOCK=pathlib.Path('/run/browser' if resident else '/run/busy')
+if not 1<=SECONDS<=(86400 if resident else 900 if interactive else 120):raise ValueError('deadline')
 if interactive:
  profile='browser'
  ENCODED=base64.b64encode(b'exec /usr/bin/node /usr/lib/nidus/browser-live.mjs').decode()
+if resident:
+ ENCODED=base64.b64encode(b'exec /usr/bin/node /usr/lib/nidus/browser-bridge.mjs').decode()
+browserish=profile in ['browser','resident']
 CG.mkdir();ROOT.mkdir()
-if profile=='browser':pathlib.Path('/proc/sys/user/max_user_namespaces').write_text('128')
-(CG/'memory.max').write_text(str((1024 if profile=='browser' else 512)*1024*1024))
-(CG/'pids.max').write_text('256' if profile=='browser' else '64')
-(CG/'cpu.max').write_text('100000 100000')
+if browserish:pathlib.Path('/proc/sys/user/max_user_namespaces').write_text('128')
+(CG/'memory.max').write_text(str((1536 if resident else 1024 if profile=='browser' else 512)*1024*1024))
+(CG/'pids.max').write_text('512' if resident else '256' if profile=='browser' else '64')
+(CG/'cpu.max').write_text('200000 100000' if resident else '100000 100000')
 for name in ['bin','lib','usr','etc','dev','dev/shm','proc','work','snapshot','tmp','home']:(ROOT/name).mkdir(parents=True,exist_ok=True)
 for name in ['work','tmp','home','dev/shm']:os.chown(ROOT/name,1000,1000)
 (ROOT/'etc/passwd').write_text('root:x:0:0:root:/:/bin/sh\nnidus:x:1000:1000:Session:/home:/bin/sh\n')
@@ -98,7 +104,8 @@ for thread in threads:thread.join(timeout=2)
 if any(thread.is_alive() for thread in threads):clean=False
 peak=int((CG/'memory.peak').read_text())
 if clean:
- if profile=='browser':pathlib.Path('/proc/sys/user/max_user_namespaces').write_text('0')
+ # Chromium needs user namespaces for its sandbox; close them again when no browser is left.
+ if resident or (profile=='browser' and not pathlib.Path('/run/browser').exists()):pathlib.Path('/proc/sys/user/max_user_namespaces').write_text('0')
  if snapshot is not None and profile=='shell':
   try:
    result=json.dumps(workspace.export(ROOT,snapshot),ensure_ascii=False).encode('utf8')
@@ -108,7 +115,7 @@ if clean:
   except Exception:
    print('NIDUS_WORKSPACE_INVALID',ID,flush=True)
  CG.rmdir();shutil.rmtree(ROOT)
- pathlib.Path('/run/busy').unlink(missing_ok=True)
+ LOCK.unlink(missing_ok=True)
 pathlib.Path('/run/'+ID+'.cancel').unlink(missing_ok=True)
 if interactive:pathlib.Path('/run/'+ID+'.input').unlink(missing_ok=True)
 encoded=[base64.b64encode(data).decode() if data else '-' for data in outputs]

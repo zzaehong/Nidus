@@ -19,7 +19,7 @@ with tempfile.TemporaryDirectory(prefix='nidus-m4-build-') as tmp:
     if cache_package:
         spec=importlib.util.spec_from_file_location('cache_modules',pathlib.Path(__file__).with_name('cache-modules.py'));module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
         module.install(cache_package,root,pins['vmlinuz-virt'])
-    (assets/'features.json').write_text(json.dumps({'cacheDiskVersion':1 if cache_package else 0,'browserSnapshotVersion':1 if os.environ.get('NIDUS_VM_DEVELOPMENT_ROOT') else 0,'egressVersion':1 if os.environ.get('NIDUS_VM_DEVELOPMENT_ROOT') else 0,'browserInteractiveVersion':1 if os.environ.get('NIDUS_VM_DEVELOPMENT_ROOT') else 0}))
+    (assets/'features.json').write_text(json.dumps({'cacheDiskVersion':1 if cache_package else 0,'browserSnapshotVersion':1 if os.environ.get('NIDUS_VM_DEVELOPMENT_ROOT') else 0,'egressVersion':1 if os.environ.get('NIDUS_VM_DEVELOPMENT_ROOT') else 0,'browserWorkspaceVersion':1 if os.environ.get('NIDUS_VM_DEVELOPMENT_ROOT') else 0,'browserInteractiveVersion':1 if os.environ.get('NIDUS_VM_DEVELOPMENT_ROOT') else 0}))
     boot=assets/'boot-layer.gz';write_initramfs(root,boot)
     layers=[boot]
     development=os.environ.get('NIDUS_VM_DEVELOPMENT_ROOT')
@@ -41,6 +41,11 @@ with tempfile.TemporaryDirectory(prefix='nidus-m4-build-') as tmp:
             shutil.copyfile(pathlib.Path(__file__).with_name('browser.mjs'),browser/'browser.mjs')
             shutil.copyfile(pathlib.Path(__file__).with_name('browser-live.mjs'),browser/'browser-live.mjs')
             shutil.copyfile(pathlib.Path(__file__).with_name('browser-dom.mjs'),browser/'browser-dom.mjs')
+            shutil.copyfile(pathlib.Path(__file__).with_name('browser-bridge.mjs'),browser/'browser-bridge.mjs')
+            # CJK fonts for the workspace browser: pinned inputs from fetch-fonts.py (NIDUS_VM_FONTS).
+            spec=importlib.util.spec_from_file_location('fetch_fonts',pathlib.Path(__file__).with_name('fetch-fonts.py'));fonts=importlib.util.module_from_spec(spec);spec.loader.exec_module(fonts)
+            cjk=helpers.parent/'usr/share/fonts/noto-cjk';cjk.mkdir(parents=True)
+            for font in fonts.verified(os.environ['NIDUS_VM_FONTS']):shutil.copyfile(font,cjk/font.name)
             # APK post-install hooks are intentionally not executed on the Host.
             # Install only the BusyBox applets required by the managed development profile.
             binaries=helpers.parent/'usr/bin';binaries.mkdir(parents=True)

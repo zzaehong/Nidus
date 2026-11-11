@@ -7,7 +7,7 @@ import {createHash,randomUUID} from 'node:crypto';
 import {once} from 'node:events';
 import {join} from 'node:path';
 import type {Duplex} from 'node:stream';
-import {EgressChannel} from '../workspace/egress-channel.js';
+import {EgressChannel,type Service} from '../workspace/egress-channel.js';
 import type {CacheAttachment} from './cache-disk.js';
 import {VaultError} from './types.js';
 export interface ExecutionOptions {workspace?:string;profile?:'shell'|'browser'}
@@ -17,16 +17,23 @@ export interface SharedBackend {onFailure?(handler:()=>void):void;start(disk?:Ca
 export class AppleOfflineBackend implements SharedBackend {
  cacheClean=false;
  private child:ChildProcessWithoutNullStreams|null=null;
- private development=false;
+ private development=false;private browserWorkspace=false;
  private executing:string|null=null;
  private liveListener:((event:any)=>void)|undefined;private liveClosed:Promise<any>|undefined;private liveId:string|undefined;private liveWrites=Promise.resolve();
  private failureHandler:(()=>void)|undefined;
  onFailure(handler:()=>void){this.failureHandler=handler;}
  private listeners=new Set<(event:any)=>void>();private closed=false;private stopped=false;
  private egressLink:EgressChannel|undefined;
- /** With egress, guests built with egressVersion 1 reach the network only through this proxy. */
+ private browserId:string|undefined;private browserWaiter:((link:Duplex)=>void)|undefined;private browserEnded:Promise<any>|undefined;
+ /** With egress, guests built with egressVersion 1 reach the network only through this proxy.
+  * Without it the link still carries the browser, and guest connections to the proxy are refused. */
  constructor(private readonly assets=fileURLToPath(new URL('../vm-assets',import.meta.url)),private readonly egress?:{accept(stream:Duplex):void}){}
- get egressConnected(){return this.egressLink!==undefined;}
+ get egressConnected(){return this.egressLink!==undefined&&this.egress!==undefined;}
+ get browserRunning(){return this.browserId!==undefined;}
+ private route(stream:Duplex,service:Service){
+  if(service==='browser'){const take=this.browserWaiter;this.browserWaiter=undefined;if(take)take(stream);else stream.destroy();return;}
+  if(this.egress)this.egress.accept(stream);else stream.destroy();
+ }
  private event(e:any){if(e.event==='lost')this.failureHandler?.();for(const listener of this.listeners)listener(e);}
  private wait(predicate:(e:any)=>boolean,ms:number):Promise<any>{
   return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{this.listeners.delete(listener);reject(new VaultError('vm_response_timeout'));},ms);
@@ -37,13 +44,13 @@ export class AppleOfflineBackend implements SharedBackend {
   if(this.child)throw new VaultError('vm_duplicate_start');
   const manifest=JSON.parse(await readFile(join(this.assets,'manifest.json'),'utf8'));
   if(manifest.profile!==undefined&&!['offline','development'].includes(manifest.profile))throw new VaultError('vm_asset_profile');
-  this.development=manifest.profile==='development';
+  this.development=manifest.profile==='development';this.browserWorkspace=manifest.browserWorkspaceVersion===1;
   for(const name of ['Image','initrd']){const path=join(this.assets,name),s=await lstat(path);if(!s.isFile()||s.isSymbolicLink()||s.nlink!==1||s.size>(this.development&&name==='initrd'?768:64)*1024*1024)throw new VaultError('vm_asset_invalid');const hash=createHash('sha256');for await(const chunk of createReadStream(path))hash.update(chunk);if(hash.digest('hex')!==manifest[name])throw new VaultError('vm_asset_hash');}
   if(disk&&!this.development)throw new VaultError('cache_development_required');
   const ready=this.wait(e=>e.event==='ready',35000);
-  const egress=this.egress&&manifest.egressVersion===1?this.egress:undefined;
+  const egress=manifest.egressVersion===1;
   const child=this.child=spawn(fileURLToPath(new URL('../nidus-vault-vm',import.meta.url)),[join(this.assets,'Image'),join(this.assets,'initrd'),...(this.development?['development']:[]),...(disk?[disk.path,disk.fresh?'new':'existing',disk.diskId]:[])],{stdio:['pipe','pipe','pipe',...(egress?['pipe' as const]:[])],env:{PATH:'/usr/bin:/bin',...(egress?{NIDUS_EGRESS_FD:'3'}:{})}}) as ChildProcessWithoutNullStreams;
-  if(egress)this.egressLink=new EgressChannel(child.stdio[3] as unknown as Duplex,stream=>egress.accept(stream));
+  if(egress)this.egressLink=new EgressChannel(child.stdio[3] as unknown as Duplex,(stream,service)=>this.route(stream,service));
   child.stdin.on('error',()=>{});child.stderr.resume();
   const lines=createInterface({input:child.stdout});let size=0,frames=0,windowBytes=0;
   const budgetTimer=setInterval(()=>{windowBytes=0;},1000);budgetTimer.unref();child.once('close',()=>clearInterval(budgetTimer));
@@ -117,8 +124,36 @@ export class AppleOfflineBackend implements SharedBackend {
   if(e.line.split(' ')[3]!=='1')throw new VaultError('browser_cleanup_unconfirmed');
   if(this.liveListener)this.listeners.delete(this.liveListener);this.liveListener=undefined;this.liveClosed=undefined;this.liveId=undefined;this.executing=null;
  }
+ /** Starts the VM's resident browser and returns its DevTools link (see src/workspace/browser.ts).
+  * It runs beside Shell sessions and keeps running until closeBrowser() or VM stop. */
+ async openBrowser(seconds=86400):Promise<Duplex>{
+  if(!this.child||this.closed||this.stopped||!this.development)throw new VaultError('vm_not_running');
+  if(!this.egressLink||!this.browserWorkspace)throw new VaultError('browser_workspace_unsupported');
+  if(this.browserId)throw new VaultError('browser_already_running');
+  if(!Number.isSafeInteger(seconds)||seconds<60||seconds>86400)throw new VaultError('browser_deadline_invalid');
+  const id=randomUUID();this.browserId=id;
+  const result=(e:any)=>e.event==='guest'&&typeof e.line==='string'&&e.line.startsWith(`NIDUS_RESULT ${id} `);
+  this.browserEnded=this.wait(e=>result(e)||(e.event==='guest'&&e.line===`NIDUS_REJECT browser ${id}`),seconds*1000+15000);
+  const ended=this.browserEnded.then(e=>{throw new VaultError(result(e)?'browser_exited':'browser_rejected');});
+  ended.catch(()=>{});
+  const link=new Promise<Duplex>((resolve,reject)=>{const timer=setTimeout(()=>{this.browserWaiter=undefined;reject(new VaultError('browser_start_timeout'));},45000);this.browserWaiter=stream=>{clearTimeout(timer);resolve(stream);};});
+  this.child.stdin.write(`browser-start ${id} - ${seconds}\n`);
+  try{return await Promise.race([link,ended]);}
+  catch(error){this.browserWaiter=undefined;await this.closeBrowser().catch(()=>{});throw error;}
+ }
+ /** Ends the resident browser and confirms its processes are gone. A browser closed through
+  * its link exits by itself (and writes its profile); it is cancelled only after graceMs. */
+ async closeBrowser(graceMs=3000){
+  const id=this.browserId;if(!id)return;
+  const within=(ms:number)=>Promise.race([this.browserEnded!,new Promise<never>((_,reject)=>{const timer=setTimeout(()=>reject(new VaultError('browser_cleanup_unconfirmed')),ms);timer.unref();})]);
+  try{
+   const e=await within(graceMs).catch(()=>{this.cancel(id);return within(15000);});
+   if(e.line.startsWith('NIDUS_RESULT')&&e.line.split(' ')[3]!=='1')throw new VaultError('browser_cleanup_unconfirmed');
+  }finally{this.browserId=undefined;this.browserEnded=undefined;}
+ }
  async stop(){
   if(!this.child)return;if(this.closed){if(!this.stopped)throw new VaultError('STOP_UNCONFIRMED');return;}
+  if(this.browserId)await this.closeBrowser();
   const closed=this.wait(e=>e.event==='closed',12000);this.child.stdin.write('stop\n');await closed;
   if(!this.stopped)throw new VaultError('STOP_UNCONFIRMED');
  }

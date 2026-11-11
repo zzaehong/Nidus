@@ -107,6 +107,12 @@ if test -n "$cache_mode"; then
  fi
  if ! test "$(cat /persistent/owner-id)" = "$disk_id" || ! test -d /persistent/packages || test -L /persistent/packages; then echo NIDUS_BLOCKED cache-owner; exec sleep 86400; fi
  mount --bind /persistent/packages /opt/development/cache || { echo NIDUS_BLOCKED cache-view; exec sleep 86400; }
+ # The workspace browser's profile (cookies, sign-ins) survives VM restarts on the same disk.
+ if ! test -e /persistent/browser; then mkdir /persistent/browser && chown 1000:1000 /persistent/browser && chmod 700 /persistent/browser; fi
+ if test -d /persistent/browser && ! test -L /persistent/browser; then
+  mkdir -p /opt/development/browser-profile
+  mount --bind /persistent/browser /opt/development/browser-profile || { echo NIDUS_BLOCKED browser-profile; exec sleep 86400; }
+ fi
  echo NIDUS_CACHE_READY
 fi
 # The only way out: a virtio console port to the host's Egress Proxy. Restarted if it dies.
@@ -133,6 +139,14 @@ while read -r action id payload seconds snapshot; do
     case "$id" in ''|*[!a-f0-9-]*) continue;; esac
     if test -p "/run/$id.input"; then printf '%s\n' "$payload" > "/run/$id.input"; fi
     ;;
+  browser-start)
+    # The resident workspace browser: beside Shell sessions, one at a time, needs the link.
+    case "$id" in ''|*[!a-f0-9-]*) echo 'NIDUS_REJECT id'; continue;; esac
+    case "$seconds" in ''|*[!0-9]*) echo "NIDUS_REJECT browser $id"; continue;; esac
+    if test -e /run/browser || ! test -d /opt/development || ! test -e /run/egress; then echo "NIDUS_REJECT browser $id"; continue; fi
+    touch /run/browser
+    unshare -m -f /bin/sh -c 'mount --make-rprivate / && cd /opt/development && mkdir -p .old-root && pivot_root . .old-root && /bin/busybox umount -l /.old-root && exec /usr/bin/python3 /nidus/session.py "$@"' sh "$id" - "$seconds" resident &
+    ;;
   execute-dev|execute-browser|browser-open)
     case "$id" in ''|*[!a-f0-9-]*) echo 'NIDUS_REJECT id'; continue;; esac
     if test -e /run/busy || ! test -d /opt/development; then echo 'NIDUS_REJECT busy'; continue; fi
@@ -157,9 +171,10 @@ while read -r action id payload seconds snapshot; do
   cancel) case "$id" in ''|*[!a-zA-Z0-9-]*) continue;; esac
     touch "/run/$id.cancel"; if test -d "$CG/$id"; then echo 1 > "$CG/$id/cgroup.kill"; fi ;;
   stop)
-    if test -e /run/busy; then echo NIDUS_REJECT busy; continue; fi
+    if test -e /run/busy || test -e /run/browser; then echo NIDUS_REJECT busy; continue; fi
     if test -n "$cache_mode"; then
      sync
+     if mountpoint -q /opt/development/browser-profile; then umount /opt/development/browser-profile || { echo NIDUS_BLOCKED cache-unmount; continue; }; fi
      umount /opt/development/cache && umount /persistent || { echo NIDUS_BLOCKED cache-unmount; continue; }
      echo NIDUS_CACHE_CLEAN
     fi
