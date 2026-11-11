@@ -21,6 +21,8 @@ import { CacheDiskStore } from '../dist/vault/cache-disk.js';
 import { EgressProxy, EgressRules } from '../dist/workspace/egress.js';
 import { CDPClient } from '../dist/workspace/cdp.js';
 import { WorkspaceBrowser } from '../dist/workspace/browser.js';
+import { snapshot, receive, approve, discard } from '../dist/workspace/sync.js';
+import { homedir } from 'node:os';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const state = join(root, 'dist/playground');
@@ -55,7 +57,8 @@ const proxy = new EgressProxy({
 const disks = new CacheDiskStore(join(await realpath(state), 'disks'));
 // Fixed ids: the same disk (and browser profile) is used on every run.
 const vaultId = '00000000-0000-4000-8000-00000000a11c', environmentId = '00000000-0000-4000-8000-0000000b0a7d';
-let backend, disk, browser, ready = false;
+let backend, disk, browser, ready = false, workspace;
+const workspaceFile = join(state, 'workspace.json');
 const runFile = join(state, 'run.json');
 const diskDir = join(await realpath(state), 'disks', `${vaultId}-${environmentId}`);
 
@@ -86,6 +89,12 @@ async function start() {
   });
   backend = new AppleOfflineBackend(join(root, 'dist/vm-assets'), proxy);
   await backend.start(disk);
+  try {
+    workspace = JSON.parse(await readFile(workspaceFile, 'utf8'));
+    if (await backend.selectWorkspace(workspace.task)) log(`작업 공간 ${workspace.task}을(를) 다시 연결했습니다 (${workspace.vault})`);
+    else { log('지난 작업 공간이 디스크에 없어 연결하지 않았습니다.'); workspace = undefined; await rm(workspaceFile, { force: true }); }
+  } catch { workspace = undefined; }
+  send('workspace', workspace ?? null);
   log('VM 준비. 브라우저를 엽니다…');
   await openBrowser();
 }
@@ -142,6 +151,38 @@ const routes = {
     log(`Shell: ${m.command}`);
     return backend.execute(randomUUID(), m.command, Math.min(120, Math.max(1, Number(m.seconds) || 60)), { profile: 'shell' });
   },
+  // --- workspace (2d) ---
+  async workspaceImport(m) {
+    const vault = String(m.vault ?? '').trim().replace(/^~(?=$|\/)/, homedir());
+    if (!vault.startsWith('/')) throw new Error('Vault 경로는 절대 경로로 입력해 주세요');
+    const snap = await snapshot(vault);
+    const now = new Date(), pad = n => String(n).padStart(2, '0');
+    const task = `task-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    await backend.importWorkspace(task, snap.bundle);
+    workspace = { vault, task, base: snap.base };
+    await writeFile(workspaceFile, JSON.stringify(workspace));
+    log(`Vault를 VM으로 가져왔습니다: ${task} (기준 커밋 ${snap.base.slice(0, 8)}, ${snap.bundle.length} bytes)`);
+    send('workspace', workspace);
+    return workspace;
+  },
+  async workspaceExport() {
+    if (!workspace) throw new Error('가져온 작업 공간이 없습니다');
+    const out = await backend.exportWorkspace(workspace.task, workspace.base);
+    if (!out.bundle) return { empty: true };
+    const review = await receive(workspace.vault, workspace.task, workspace.base, out.bundle);
+    log(`결과를 가져왔습니다: 커밋 ${review.commits.length}개, 파일 ${review.files.length}개 (아직 브랜치 아님)`);
+    return review;
+  },
+  async workspaceApprove(m) {
+    const branch = await approve(workspace.vault, workspace.task, String(m.head));
+    log(`승인: Vault에 브랜치 ${branch}을(를) 만들었습니다. 병합은 직접 하시면 됩니다.`);
+    return { branch };
+  },
+  async workspaceDiscard() {
+    await discard(workspace.vault, workspace.task);
+    log('가져온 결과를 버렸습니다 (VM 안의 작업 공간은 그대로).');
+    return {};
+  },
   async restartBrowser() { await browser.close(); await backend.closeBrowser(); await openBrowser(); return {}; },
 };
 
@@ -154,6 +195,7 @@ const server = createServer(async (req, res) => {
     clients.add(res);
     req.on('close', () => clients.delete(res));
     res.write(`event: status\ndata: ${JSON.stringify({ ready, text: ready ? '실행 중' : '시작 중…' })}\n\n`);
+    res.write(`event: workspace\ndata: ${JSON.stringify(workspace ?? null)}\n\n`);
     if (browser && ready) { res.write(`event: tabs\ndata: ${JSON.stringify(browser.listTabs())}\n\n`); res.write(`event: control\ndata: ${JSON.stringify({ control: browser.control, reason: browser.reason })}\n\n`); }
     return;
   }

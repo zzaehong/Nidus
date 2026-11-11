@@ -93,6 +93,19 @@ pre { margin:8px 0 0; max-height:200px; overflow:auto; font:11px/1.4 ui-monospac
       <pre id="actResult" hidden></pre>
     </section>
     <section class="panel">
+      <h2>작업 공간 (Git)</h2>
+      <div class="row"><input id="vault" type="text" style="flex:1" placeholder="Vault 경로 (예: ~/Developer/my-project)"><button id="wsImport">Vault 가져오기</button></div>
+      <p class="hint" id="wsState">커밋된 상태만 VM의 /workspace로 갑니다. 커밋하지 않은 변경과 무시된 파일은 가지 않습니다.</p>
+      <div class="row"><button id="wsExport" disabled>결과 가져오기</button></div>
+      <div id="review" hidden>
+        <p id="sensitive" class="approval" hidden></p>
+        <div id="commits" class="hint"></div>
+        <div id="files" class="hint"></div>
+        <pre id="diff"></pre>
+        <div class="row" style="margin-top:6px"><button id="wsApprove" class="primary">승인 (브랜치 만들기)</button><button id="wsDiscard">버리기</button></div>
+      </div>
+    </section>
+    <section class="panel">
       <h2>VM Shell</h2>
       <div class="row"><input id="cmd" type="text" style="flex:1" value="python3 -m http.server 8000 --bind 127.0.0.1 & sleep 90"><button id="run">실행</button></div>
       <p class="hint">명령마다 새 세션(최대 120초)입니다. 위 예시를 실행한 뒤 주소창에 http://localhost:8000 을 열어 보세요.</p>
@@ -234,6 +247,38 @@ for (const b of document.querySelectorAll('[data-act]')) b.onclick = () => act({
 $('aiGo').onclick = () => { const url = prompt('AI가 열 주소', 'https://example.com/'); if (url) act({ op: 'navigate', url: normalize(url.trim()) }); };
 $('askUser').onclick = () => act({ op: 'askUser', reason: '로그인이 필요합니다 (테스트)' });
 $('sendAct').onclick = () => { try { act(JSON.parse($('actJson').value)); } catch { $('actResult').hidden = false; $('actResult').textContent = 'JSON 형식이 아닙니다'; } };
+
+// --- workspace ----------------------------------------------------------------
+let review = null;
+events.addEventListener('workspace', e => {
+  const w = JSON.parse(e.data);
+  $('wsExport').disabled = !w;
+  if (w) { $('vault').value = w.vault; $('wsState').textContent = `작업 ${w.task} · 기준 커밋 ${w.base.slice(0, 8)} · VM 안 /workspace (브랜치 nidus/${w.task})`; }
+});
+$('wsImport').onclick = async () => {
+  $('wsImport').disabled = true; $('wsState').textContent = '가져오는 중…';
+  try { await post('/workspaceImport', { vault: $('vault').value }); $('cmd').value = 'git status -sb && git log --oneline | head -5 && ls'; }
+  catch (error) { $('wsState').textContent = `실패: ${error.message}`; }
+  finally { $('wsImport').disabled = false; }
+};
+$('wsExport').onclick = async () => {
+  $('review').hidden = true;
+  try {
+    review = await post('/workspaceExport');
+    if (review.empty) { $('wsState').textContent = '바뀐 내용이 없습니다.'; return; }
+    $('review').hidden = false;
+    $('sensitive').hidden = !review.sensitive.length;
+    $('sensitive').textContent = `주의: Nidus 설정을 바꿉니다 (${review.sensitive.join(', ')}). 네트워크 허용 목록 같은 설정이 들어 있을 수 있습니다.`;
+    $('commits').textContent = `커밋 ${review.commits.length}개: ` + review.commits.map(c => `${c.hash.slice(0, 7)} ${c.subject} (${c.author})`).join(' · ');
+    $('files').textContent = `파일 ${review.files.length}개: ` + review.files.map(f => `${f.path} +${f.added ?? '?'} -${f.removed ?? '?'}`).join(' · ');
+    $('diff').textContent = review.diff + (review.diffTruncated ? '\n… (일부만 표시)' : '');
+  } catch (error) { $('wsState').textContent = `실패: ${error.message}`; }
+};
+$('wsApprove').onclick = async () => {
+  try { const r = await post('/workspaceApprove', { head: review.head }); $('review').hidden = true; $('wsState').textContent = `브랜치 ${r.branch}을(를) 만들었습니다. 사용자의 현재 브랜치와 작업 디렉터리는 그대로입니다.`; }
+  catch (error) { $('wsState').textContent = `실패: ${error.message}`; }
+};
+$('wsDiscard').onclick = async () => { await post('/workspaceDiscard'); $('review').hidden = true; $('wsState').textContent = '버렸습니다.'; };
 
 // --- Shell ------------------------------------------------------------------
 $('run').onclick = async () => {
