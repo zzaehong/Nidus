@@ -18,7 +18,8 @@
     "test:live": "npm run build && node --test tests/live/*.test.mjs",
     "test:keychain": "npm run build && npm run build:keychain && node --test tests/keychain/*.test.mjs",
     "start": "node bin/nidus.mjs",
-    "build:vm": "node scripts/build-vm-helper.mjs"
+    "build:vm": "node scripts/build-vm-helper.mjs",
+    "workspace:playground": "npm run build && node scripts/workspace-playground.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
