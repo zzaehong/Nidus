@@ -95,6 +95,26 @@ VM 안의 Chromium을 쓴다. VM 안에서 띄운 개발 서버(`localhost`)를 
 
 개입 범위는 브라우저다. Shell은 실시간 출력 보기와 작업 중지로 다룬다.
 
+### 구현 (2c)
+
+```text
+호스트                                          VM
+WorkspaceBrowser ── CDP ── EgressChannel ═══ 콘솔 포트 ═══ 중계기 :3129 ── browser-bridge ── Chromium
+ (src/workspace/browser.ts)  "browser" 서비스                                 (디버깅 파이프)
+                                                                                    │ 웹 요청
+Egress Proxy ◄═════════════ EgressChannel ═══ 콘솔 포트 ═══ 중계기 :3128 ◄──────────┘
+```
+
+- **조작은 호스트가 한다.** VM 안에는 Chromium과, 그 디버깅 파이프를 채널에 잇는 다리(`scripts/vault-vm/browser-bridge.mjs`)만 둔다. 2b의 다중화 채널에 서비스 이름을 붙여(OPEN 프레임 내용, 비면 egress) 브라우저 연결을 구분한다. VM에서 오는 CDP 메시지는 신뢰하지 않는다: 크기 상한 16MiB, 형식이 틀리면 연결을 끊는다.
+- **상주한다.** 브라우저는 Shell 세션과 동시에 돈다(`/run/busy` 대신 `/run/browser`). 세션 한도는 최대 24시간, 메모리 1.5GiB, CPU 2개다.
+- **화면**: `Page.startScreencast`(JPEG, 1280×800). 프레임 확인 응답을 늦춰 초당 프레임을 제한한다(기본 15).
+- **AI 조작**: 관찰, 읽기, 열기, 뒤로/앞으로/새로고침, 스크롤, 대기, 클릭, 입력, 키, 선택, 체크, 새 탭/탭 전환/탭 닫기, 사용자에게 요청. 요소는 기존과 같이 관찰 시점의 스냅샷 ID로 지정한다. 열 수 있는 주소는 `http`, `https`, `file`, `about:blank`다.
+- **사용자 개입**: `takeOver()`로 사용자 조작 상태가 되면 AI 조작은 대기하고, 사용자의 마우스·휠·키·텍스트(한글 등 조합 입력)·주소 이동·탭 전환이 그대로 전달된다. `handBack()`으로 돌려준다. AI 조작 중에는 사용자 입력을 받지 않는다.
+- **CAPTCHA**: 관찰에서 CAPTCHA가 보이면 실패 대신 사용자 조작 상태로 바꾸고(`reason: captcha`), 돌려받으면 다시 관찰한다. AI는 `askUser`로 직접 요청할 수도 있다(로그인 등).
+- **프로필**: Vault의 캐시 디스크가 있으면 그 안(`/persistent/browser`)에 둔다. 브라우저는 `Browser.close`로 정상 종료해 쿠키를 디스크에 쓴 뒤 끝난다.
+- **Chromium 자체 통신 차단**: 업데이트 확인, 맞춤법 사전, 기본 검색엔진 미리 연결 같은 Chromium의 배경 통신은 사용자가 열지 않은 사이트의 승인 요청으로 나타난다. 실행 옵션, 관리 정책(`/etc/chromium/policies/managed`), 프록시 우회 목록(우회하면 VM 안에서 바로 실패)으로 막았다. 승인 요청에는 페이지가 실제로 연 주소만 남는다.
+- **글꼴**: 게스트에 Open Sans만 있어 한글·일본어·중국어가 빈칸으로 그려졌다. Noto Sans CJK(Regular, Bold, OFL)를 넣었다. 고정 주소와 해시는 `scripts/vault-vm/fonts.lock.json`, 내려받기는 `fetch-fonts.py`다.
+
 ## 작업 공간
 
 AI는 Vault 원본이 아니라 VM 안의 복사본에서 작업한다.
@@ -146,7 +166,7 @@ Worker 한 명이 Task 하나를 수행하는 루프다. Manager와 Main, Task B
 |---|---|---|
 | 2a | Egress Proxy: 도메인 규칙, 승인, Mac localhost 포트 승인, 사설 주소 차단 | 구현, 단위 테스트 |
 | 2b | VM과 프록시를 콘솔 포트로 연결, 온라인 Shell. VM 안 루프백은 프록시 제외 | 구현, 실제 VM 검증 (아래) |
-| 2c | 브라우저 자유 조작, 화면 스트리밍, 사용자 개입 | 예정 |
+| 2c | 브라우저 자유 조작, 화면 스트리밍, 사용자 개입 | 구현, 실제 VM 검증 (아래). 앱 화면은 2f |
 | 2d | 작업 공간 Git 동기화 | 예정 |
 | 2e | Gateway 기반 Worker 루프와 Workspace Service | 예정 |
 | 2f | 앱의 작업 탭 | 예정 |
@@ -167,13 +187,38 @@ Worker 한 명이 Task 하나를 수행하는 루프다. Manager와 Main, Task B
 | 20MB 다운로드 (약 7MB/s) | PASS |
 | VM 종료 확인 | STOP_CONFIRMED |
 
-원본 빌드 재료(고정 Alpine 이미지와 패키지)가 남아 있지 않아, 기존 `dist/vm-assets`에 `scripts/vault-vm/egress-layer.py`로 층을 덧붙여 만들었다. 재료가 있으면 `prepare.py`가 같은 파일을 넣어 처음부터 만든다. 처음부터 다시 만드는 경로는 NOT RUN이다.
+원본 빌드 재료(고정 Alpine 이미지와 패키지)가 남아 있지 않아, 기존 `dist/vm-assets`에 층을 덧붙여 만들었다(당시 `egress-layer.py`, 지금은 `scripts/vault-vm/workspace-layer.py`). 재료가 있으면 `prepare.py`가 같은 파일을 넣어 처음부터 만든다. 처음부터 다시 만드는 경로는 NOT RUN이다.
 
 **아직 제품에 연결하지 않았다.** 앱과 VM 서비스는 Egress Proxy 없이 VM을 띄우므로 지금도 오프라인으로 동작한다. 승인 요청을 앱에 띄우는 일은 2e·2f에서 한다.
+
+### 2c 검증 (2026-11-11)
+
+`node scripts/vault-vm/workspace-browser-verify.mjs dist/vm-assets docs/evidence/stage2-browser`로 실제 VM과 게스트 Chromium을 띄워 확인했다. 네트워크 승인은 고정 시험 정책이, 사용자 입력은 스크립트가 앱과 같은 방식으로 보냈다. 결과: [browser-vm.json](../evidence/stage2-browser/browser-vm.json), 화면 [example.jpg](../evidence/stage2-browser/example.jpg), [user-input.jpg](../evidence/stage2-browser/user-input.jpg).
+
+| 항목 | 결과 |
+|---|---|
+| 브라우저가 Shell과 별도로 뜨고 채널로 연결됨 (약 1.3초) | PASS |
+| Mac 페이지(`host.nidus`)를 포트 승인 후 열기 | PASS |
+| AI가 폼에 입력하고 Enter로 제출 | PASS |
+| 새 탭으로 열리는 링크는 앞으로 오고, 닫으면 돌아옴 | PASS |
+| 공개 사이트를 프록시 승인 후 열기 | PASS |
+| 거부한 사이트는 오류 페이지로 관찰됨 (중단 없음) | PASS |
+| VM 안 개발 서버(`localhost:8765`)는 프록시 없이 열림 (Shell 세션과 동시 실행) | PASS |
+| 움직이는 페이지의 화면 스트림: 약 15fps(상한), 프레임당 약 7KB, 1280×800 | PASS |
+| 사용자 개입: AI 조작 중 입력 거부, 개입 중 AI 대기, 클릭·키 입력·한글 입력 반영, 돌려준 뒤 AI 계속 | PASS |
+| 프로필(쿠키)이 브라우저 재시작 후 유지 | PASS |
+| 프로필이 같은 디스크로 VM을 다시 띄운 뒤 유지 | PASS |
+| 승인 요청은 실제로 연 주소 셋뿐 (Chromium 배경 통신 없음) | PASS |
+| VM 종료 확인 | STOP_CONFIRMED |
+
+2b 검증(`egress-verify.mjs`)도 바뀐 게스트에서 다시 돌려 10개 모두 PASS였다.
 
 ## 확인이 필요한 위험
 
 - 처리량은 연결 하나에 약 7MB/s다. 게스트 중계기가 Python이고 콘솔 포트를 거치기 때문이다. 패키지 설치와 웹 탐색에는 충분하지만 큰 파일 내려받기는 느리다.
 - Shell은 아직 기존 구조(명령마다 새 격리 세션, 최대 120초, 메모리 512MiB)다. 오래 도는 개발 서버와 공유 작업 공간은 2d·2e에서 바꾼다.
-- 화면 스트림을 VM 채널로 보낼 때의 실제 프레임 속도는 2c에서 측정한다.
+- 화면 스트림은 간단한 페이지에서 15fps(상한)를 냈다. 이미지가 많은 페이지는 프레임이 커서(예시 페이지 정지 화면 약 37KB) egress와 채널 대역폭(약 7MB/s)을 나눠 쓴다.
+- 상주 브라우저가 도는 동안에는 Chromium 샌드박스를 위해 VM 안의 사용자 네임스페이스가 열려 있다. Shell 세션도 그동안 네임스페이스를 만들 수 있다. "VM 안은 자유" 원칙 안의 일이지만, 이전 설계의 제한이 풀린 것이다.
+- Chromium 배경 통신은 확인된 것만 막았다. 버전이 바뀌면 새 통신이 생길 수 있고, 그때는 승인 요청으로 드러난다.
+- 브라우저 조작 API는 호스트 코드로만 있다. 앱 화면(보기, 개입 버튼, 입력 전달)은 2e의 Workspace Service와 2f의 작업 탭에서 붙인다.
 - UDP 기반 프로토콜(QUIC 등)은 프록시를 지나지 못한다. 브라우저는 TCP로 내려가도록 설정한다.
