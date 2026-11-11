@@ -21,8 +21,9 @@ async function setup(t, options = {}) {
   const connected = [];
   const proxy = new EgressProxy({
     rules: options.rules ?? EgressRules.empty(),
-    approve: async (request, signal) => { asked.push(request.host); return options.answer ? options.answer(request, signal) : 'once'; },
+    approve: async (request, signal) => { asked.push(request.target === 'mac' ? `mac:${request.port}` : request.host); return options.answer ? options.answer(request, signal) : 'once'; },
     approvalTimeoutMs: options.approvalTimeoutMs,
+    reservedMacPorts: options.reservedMacPorts,
     onEvent: event => events.push(`${event.host} ${event.outcome} ${event.reason}`),
     lookup: async host => options.lookup ? options.lookup(host) : [{ address: '93.184.216.34', family: 4 }],
     connect: (address, port) => { connected.push(`${address}:${port}`); return connect({ host: '127.0.0.1', port: port === 80 ? web.address().port : echo.address().port }); },
@@ -93,9 +94,12 @@ test('"always" is saved to network.json and honoured by the next proxy without a
   const first = await setup(t, { rules: await EgressRules.load(path), answer: async () => 'always' });
   assert.equal((await tunnel(first.port, 'registry.npmjs.org:443')).status, 200);
   assert.deepEqual(JSON.parse(await readFile(path, 'utf8')), { version: 1, allow: ['registry.npmjs.org'], deny: [] });
+  assert.equal((await tunnel(first.port, 'localhost:5432')).status, 200);
+  assert.deepEqual(JSON.parse(await readFile(path, 'utf8')), { version: 1, allow: ['registry.npmjs.org'], deny: [], macPorts: [5432] });
 
   const second = await setup(t, { rules: await EgressRules.load(path), answer: async () => 'deny' });
   assert.equal((await tunnel(second.port, 'registry.npmjs.org:443')).status, 200);
+  assert.equal((await tunnel(second.port, '127.0.0.1:5432')).status, 200);
   assert.deepEqual(second.asked, []);
   assert.ok(second.events.includes('registry.npmjs.org allowed allow rule'));
 });
@@ -121,7 +125,7 @@ test('denials: user refusal is remembered for the task, deny rules beat allow ru
   await tunnel(port, 'other.org:443');
   assert.deepEqual(asked, ['other.org', 'other.org'], 'a new task asks again');
 
-  for (const bad of ['{"version":2}', '{"version":1,"allow":["Bad Host"]}', '{"version":1,"allow":"x"}', 'nope']) {
+  for (const bad of ['{"version":2}', '{"version":1,"allow":["Bad Host"]}', '{"version":1,"allow":"x"}', '{"version":1,"macPorts":[0]}', '{"version":1,"macPorts":["80"]}', 'nope']) {
     await writeFile(path, bad);
     await assert.rejects(EgressRules.load(path), { code: 'invalid_request' }, bad);
   }
@@ -133,7 +137,7 @@ test('local names and non-public addresses are blocked without asking, even with
     : host === 'v6only.example.com' ? [{ address: '2001:db8::1', family: 6 }] : [{ address: '93.184.216.34', family: 4 }] });
   proxy.setAllowAll(true);
 
-  for (const target of ['localhost:80', 'mac.local:22', 'db.internal:5432', '127.0.0.1:8080', '192.168.1.1:443', '10.0.0.5:443', '169.254.169.254:80'])
+  for (const target of ['mac.local:22', 'db.internal:5432', '192.168.1.1:443', '10.0.0.5:443', '169.254.169.254:80', '0.0.0.0:80'])
     assert.equal((await tunnel(port, target)).status, 403, target);
   assert.equal((await tunnel(port, 'rebind.example.com:443')).status, 502, 'a name that also resolves to a private address');
   assert.equal((await tunnel(port, 'v6only.example.com:443')).status, 502);
@@ -142,9 +146,29 @@ test('local names and non-public addresses are blocked without asking, even with
 
   assert.equal((await tunnel(port, 'anything.example.org:443')).status, 200, 'all-domains mode still reaches public sites');
   assert.deepEqual(asked, []);
-  assert.ok(events.includes('localhost blocked local name'));
+  assert.ok(events.includes('mac.local blocked local name'));
   assert.ok(events.includes('192.168.1.1 blocked private address'));
   assert.ok(events.includes('rebind.example.com blocked name did not resolve to a public address'));
+});
+
+test('the Mac localhost is asked per port, connects to loopback, and is not covered by allow-all', async t => {
+  const { proxy, port, asked, events, connected } = await setup(t, { reservedMacPorts: [7777],
+    answer: async request => request.port === 3000 ? 'once' : 'deny' });
+  proxy.setAllowAll(true);
+
+  assert.equal((await tunnel(port, 'localhost:3000')).status, 200);
+  assert.equal((await tunnel(port, '127.0.0.1:3000')).status, 200, 'same port, any loopback spelling');
+  assert.equal((await tunnel(port, 'app.localhost:3000')).status, 200);
+  assert.equal((await tunnel(port, 'localhost:5432')).status, 403);
+  assert.equal((await tunnel(port, '127.0.0.1:5432')).status, 403, 'refusal remembered for the port');
+  assert.deepEqual(asked, ['mac:3000', 'mac:5432'], 'one question per port; allow-all does not skip it');
+  assert.ok(connected.filter(target => target.endsWith(':3000')).every(target => target === '127.0.0.1:3000'), 'never resolved through DNS');
+
+  assert.equal((await tunnel(port, `localhost:${port}`)).status, 403, 'the proxy itself');
+  assert.equal((await tunnel(port, 'localhost:7777')).status, 403);
+  assert.deepEqual(asked, ['mac:3000', 'mac:5432'], 'reserved ports are never asked');
+  assert.ok(events.includes('localhost blocked reserved Nidus port'));
+  assert.ok(events.includes('127.0.0.1 allowed Mac port allowed for this task'));
 });
 
 test('an unanswered approval times out as a refusal but is asked again next time', async t => {
@@ -164,9 +188,12 @@ test('plain HTTP is forwarded with the original Host and without proxy headers; 
   assert.equal(ok.headers['x-seen-host'], 'example.com');
   assert.deepEqual(asked, ['example.com']);
 
-  const local = await get(port, 'http://localhost/admin');
+  const local = await get(port, 'http://printer.local/admin');
   assert.equal(local.status, 403);
   assert.match(local.headers['x-nidus-egress'], /local name/);
+  const mac = await get(port, 'http://localhost/health');
+  assert.equal(mac.status, 200, 'plain HTTP to the Mac goes through the same per-port approval');
+  assert.deepEqual(asked, ['example.com', 'mac:80']);
   const relative = await new Promise(resolve => { const req = httpRequest({ host: '127.0.0.1', port, path: '/relative' }, res => { res.resume(); resolve(res.statusCode); }); req.end(); });
   assert.equal(relative, 400);
 });

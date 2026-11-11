@@ -2,7 +2,9 @@
 // See docs/architecture/STAGE2_AGENT_WORKSPACE.md ("네트워크").
 //
 // Decisions are made per domain, on the host. HTTPS is tunnelled (CONNECT) and never
-// opened. Local names and non-public addresses are refused whatever the rules say.
+// opened. "localhost" reaching the proxy means the user's Mac (the VM's own localhost
+// never comes here); it needs approval per port. Other local names and non-public
+// addresses are refused whatever the rules say.
 import { lookup as dnsLookup } from 'node:dns/promises';
 import { randomUUID } from 'node:crypto';
 import { readFile, rename, writeFile } from 'node:fs/promises';
@@ -16,6 +18,8 @@ import { publicIPv4 } from '../vault/network-policy.js';
 export type EgressAnswer = 'once' | 'always' | 'deny';
 
 export interface EgressRequest {
+  /** internet: a public domain. mac: a service listening on the user's Mac (localhost). */
+  target: 'internet' | 'mac';
   host: string;
   port: number;
 }
@@ -30,7 +34,12 @@ export interface EgressEvent {
 }
 
 const hostPattern = /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/;
-const localNames = /(^|\.)(localhost|local|internal|lan|home\.arpa|localdomain)$/;
+const localNames = /(^|\.)(local|internal|lan|home\.arpa|localdomain)$/;
+
+/** localhost or 127.0.0.0/8: from the proxy's side this is the user's Mac. */
+export function isMacLoopback(host: string): boolean {
+  return host === 'localhost' || host.endsWith('.localhost') || (isIP(host) === 4 && host.startsWith('127.'));
+}
 
 /** Lower-cased host without a trailing dot, or null when it is not a plain DNS name or IPv4 address. */
 export function normalizeHost(value: string): string | null {
@@ -44,16 +53,20 @@ export function ruleMatches(rule: string, host: string): boolean {
   return rule.startsWith('*.') ? host.endsWith(rule.slice(1)) && host.length > rule.length - 1 : rule === host;
 }
 
+function validPort(port: unknown): port is number {
+  return Number.isInteger(port) && (port as number) >= 1 && (port as number) <= 65535;
+}
+
 function validRule(rule: unknown): rule is string {
   return typeof rule === 'string' && normalizeHost(rule.startsWith('*.') ? rule.slice(2) : rule) !== null && rule === rule.toLowerCase();
 }
 
 /** Allow and deny lists kept in the vault's .nidus/network.json. */
 export class EgressRules {
-  private constructor(private readonly path: string | null, readonly allow: string[], readonly deny: string[]) {}
+  private constructor(private readonly path: string | null, readonly allow: string[], readonly deny: string[], readonly macPorts: number[]) {}
 
   static empty(): EgressRules {
-    return new EgressRules(null, [], []);
+    return new EgressRules(null, [], [], []);
   }
 
   static async load(path: string): Promise<EgressRules> {
@@ -61,17 +74,19 @@ export class EgressRules {
     try {
       text = await readFile(path, 'utf8');
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return new EgressRules(path, [], []);
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return new EgressRules(path, [], [], []);
       throw new NidusError('storage', 'Could not read .nidus/network.json.');
     }
     try {
-      const raw = JSON.parse(text) as { version?: unknown; allow?: unknown; deny?: unknown };
+      const raw = JSON.parse(text) as { version?: unknown; allow?: unknown; deny?: unknown; macPorts?: unknown };
       const allow = raw.allow ?? [];
       const deny = raw.deny ?? [];
+      const macPorts = raw.macPorts ?? [];
       if (raw.version !== 1 || !Array.isArray(allow) || !Array.isArray(deny) || ![...allow, ...deny].every(validRule)) throw new Error();
-      return new EgressRules(path, [...allow], [...deny]);
+      if (!Array.isArray(macPorts) || !macPorts.every(validPort)) throw new Error();
+      return new EgressRules(path, [...allow], [...deny], [...macPorts]);
     } catch {
-      throw new NidusError('invalid_request', 'Invalid .nidus/network.json: expected { "version": 1, "allow": [domains], "deny": [domains] }.');
+      throw new NidusError('invalid_request', 'Invalid .nidus/network.json: expected { "version": 1, "allow": [domains], "deny": [domains], "macPorts": [ports] }.');
     }
   }
 
@@ -81,13 +96,28 @@ export class EgressRules {
     return this.allow.some(rule => ruleMatches(rule, host)) ? 'allow' : 'unknown';
   }
 
+  macPortAllowed(port: number): boolean {
+    return this.macPorts.includes(port);
+  }
+
   async addAllow(host: string): Promise<void> {
     if (this.allow.includes(host)) return;
     this.allow.push(host);
+    await this.save();
+  }
+
+  async addMacPort(port: number): Promise<void> {
+    if (this.macPorts.includes(port)) return;
+    this.macPorts.push(port);
+    await this.save();
+  }
+
+  private async save(): Promise<void> {
     if (!this.path) return;
     const temporary = `${this.path}.${randomUUID()}.tmp`;
     try {
-      await writeFile(temporary, `${JSON.stringify({ version: 1, allow: this.allow, deny: this.deny }, null, 2)}\n`);
+      const body = { version: 1, allow: this.allow, deny: this.deny, ...(this.macPorts.length ? { macPorts: this.macPorts } : {}) };
+      await writeFile(temporary, `${JSON.stringify(body, null, 2)}\n`);
       await rename(temporary, this.path);
     } catch {
       throw new NidusError('storage', 'Could not save .nidus/network.json.');
@@ -100,6 +130,8 @@ export interface EgressOptions {
   /** Asks the user. Rejecting or timing out counts as "deny". */
   approve: (request: EgressRequest, signal: AbortSignal) => Promise<EgressAnswer>;
   approvalTimeoutMs?: number;
+  /** Mac ports the workspace may never reach, such as Nidus's own services. The proxy's port is always included. */
+  reservedMacPorts?: number[];
   onEvent?: (event: EgressEvent) => void;
   /** Test seams. */
   lookup?: typeof dnsLookup;
@@ -117,6 +149,7 @@ export class EgressProxy {
   private readonly pending = new Map<string, Promise<EgressAnswer>>();
   private readonly closing = new AbortController();
   private allowAll = false;
+  private ownPort = 0;
 
   constructor(private readonly options: EgressOptions) {
     this.server = createServer((request, response) => { void this.forwardHttp(request, response); });
@@ -133,7 +166,8 @@ export class EgressProxy {
       this.server.once('error', reject);
       const ready = () => {
         const address = this.server.address();
-        resolve(address && typeof address === 'object' ? address.port : 0);
+        this.ownPort = address && typeof address === 'object' ? address.port : 0;
+        resolve(this.ownPort);
       };
       if (typeof target === 'number') this.server.listen(target, '127.0.0.1', ready);
       else this.server.listen(target, ready);
@@ -164,6 +198,7 @@ export class EgressProxy {
 
   /** Rule and approval check for a host. Does not touch the network. */
   async authorize(host: string, port: number): Promise<Verdict> {
+    if (isMacLoopback(host)) return this.authorizeMac(port);
     if (localNames.test(host)) return { allowed: false, outcome: 'blocked', reason: 'local name' };
     if (isIP(host) === 4 && !publicIPv4(host)) return { allowed: false, outcome: 'blocked', reason: 'private address' };
 
@@ -173,19 +208,35 @@ export class EgressProxy {
     if (this.sessionAllowed.has(host)) return { allowed: true, reason: 'allowed for this task' };
     if (this.allowAll) return { allowed: true, reason: 'all domains allowed for this task' };
     if (this.sessionDenied.has(host)) return { allowed: false, outcome: 'denied', reason: 'denied for this task' };
+    return this.decide(host, { target: 'internet', host, port });
+  }
 
+  /**
+   * The user's Mac, one port at a time: its services are unrelated to each other
+   * (a dev server, a database, another app's local API). "All domains" does not cover it.
+   */
+  private async authorizeMac(port: number): Promise<Verdict> {
+    if (port === this.ownPort || this.options.reservedMacPorts?.includes(port)) return { allowed: false, outcome: 'blocked', reason: 'reserved Nidus port' };
+    const key = `mac:${port}`;
+    if (this.options.rules.macPortAllowed(port)) return { allowed: true, reason: 'Mac port allow rule' };
+    if (this.sessionAllowed.has(key)) return { allowed: true, reason: 'Mac port allowed for this task' };
+    if (this.sessionDenied.has(key)) return { allowed: false, outcome: 'denied', reason: 'Mac port denied for this task' };
+    return this.decide(key, { target: 'mac', host: 'localhost', port });
+  }
+
+  private async decide(key: string, request: EgressRequest): Promise<Verdict> {
     // Many connections to a new site arrive at once; they share one question.
-    let question = this.pending.get(host);
+    let question = this.pending.get(key);
     if (!question) {
-      question = this.ask({ host, port }).finally(() => this.pending.delete(host));
-      this.pending.set(host, question);
+      question = this.ask(key, request).finally(() => this.pending.delete(key));
+      this.pending.set(key, question);
     }
     const answer = await question;
     if (answer === 'deny') return { allowed: false, outcome: 'denied', reason: 'user denied' };
     return { allowed: true, reason: answer === 'always' ? 'user allowed for this vault' : 'user allowed for this task' };
   }
 
-  private async ask(request: EgressRequest): Promise<EgressAnswer> {
+  private async ask(key: string, request: EgressRequest): Promise<EgressAnswer> {
     const timeout = AbortSignal.timeout(this.options.approvalTimeoutMs ?? 120_000);
     const signal = AbortSignal.any([timeout, this.closing.signal]);
     let answer: EgressAnswer = 'deny';
@@ -199,20 +250,23 @@ export class EgressProxy {
     }
     if (answer === 'always') {
       // If the rule cannot be saved the answer still holds for this task.
-      await this.options.rules.addAllow(request.host).catch(() => {});
-      this.sessionAllowed.add(request.host);
+      const save = request.target === 'mac' ? this.options.rules.addMacPort(request.port) : this.options.rules.addAllow(request.host);
+      await save.catch(() => {});
+      this.sessionAllowed.add(key);
     } else if (answer === 'once') {
-      this.sessionAllowed.add(request.host);
+      this.sessionAllowed.add(key);
     } else {
       answer = 'deny';
       // A timeout is not a decision: ask again next time instead of remembering a refusal.
-      if (!signal.aborted) this.sessionDenied.add(request.host);
+      if (!signal.aborted) this.sessionDenied.add(key);
     }
     return answer;
   }
 
   /** Resolves on the host and returns one public IPv4 address; refuses if any answer is not public. */
   private async resolve(host: string): Promise<string | null> {
+    // The Mac's own services; never looked up, so a name cannot be pointed elsewhere.
+    if (isMacLoopback(host)) return '127.0.0.1';
     if (isIP(host) === 4) return host;
     try {
       const addresses = (await (this.options.lookup ?? dnsLookup)(host, { all: true, verbatim: true })).filter(entry => entry.family === 4);
