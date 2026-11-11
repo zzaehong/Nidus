@@ -36,9 +36,12 @@ export interface EgressEvent {
 const hostPattern = /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/;
 const localNames = /(^|\.)(local|internal|lan|home\.arpa|localdomain)$/;
 
-/** localhost or 127.0.0.0/8: from the proxy's side this is the user's Mac. */
+/** Name the workspace uses for the user's Mac. Inside the VM, "localhost" is the VM itself. */
+export const MAC_HOST = 'host.nidus';
+
+/** host.nidus, localhost or 127.0.0.0/8: from the proxy's side this is the user's Mac. */
 export function isMacLoopback(host: string): boolean {
-  return host === 'localhost' || host.endsWith('.localhost') || (isIP(host) === 4 && host.startsWith('127.'));
+  return host === MAC_HOST || host === 'localhost' || host.endsWith('.localhost') || (isIP(host) === 4 && host.startsWith('127.'));
 }
 
 /** Lower-cased host without a trailing dot, or null when it is not a plain DNS name or IPv4 address. */
@@ -172,6 +175,11 @@ export class EgressProxy {
       if (typeof target === 'number') this.server.listen(target, '127.0.0.1', ready);
       else this.server.listen(target, ready);
     });
+  }
+
+  /** Serves one already-connected stream, such as a connection relayed from the VM. */
+  accept(stream: Duplex): void {
+    this.server.emit('connection', stream);
   }
 
   async close(): Promise<void> {

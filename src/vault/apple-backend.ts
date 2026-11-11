@@ -6,6 +6,8 @@ import {createReadStream} from 'node:fs';
 import {createHash,randomUUID} from 'node:crypto';
 import {once} from 'node:events';
 import {join} from 'node:path';
+import type {Duplex} from 'node:stream';
+import {EgressChannel} from '../workspace/egress-channel.js';
 import type {CacheAttachment} from './cache-disk.js';
 import {VaultError} from './types.js';
 export interface ExecutionOptions {workspace?:string;profile?:'shell'|'browser'}
@@ -21,7 +23,10 @@ export class AppleOfflineBackend implements SharedBackend {
  private failureHandler:(()=>void)|undefined;
  onFailure(handler:()=>void){this.failureHandler=handler;}
  private listeners=new Set<(event:any)=>void>();private closed=false;private stopped=false;
- constructor(private readonly assets=fileURLToPath(new URL('../vm-assets',import.meta.url))){}
+ private egressLink:EgressChannel|undefined;
+ /** With egress, guests built with egressVersion 1 reach the network only through this proxy. */
+ constructor(private readonly assets=fileURLToPath(new URL('../vm-assets',import.meta.url)),private readonly egress?:{accept(stream:Duplex):void}){}
+ get egressConnected(){return this.egressLink!==undefined;}
  private event(e:any){if(e.event==='lost')this.failureHandler?.();for(const listener of this.listeners)listener(e);}
  private wait(predicate:(e:any)=>boolean,ms:number):Promise<any>{
   return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{this.listeners.delete(listener);reject(new VaultError('vm_response_timeout'));},ms);
@@ -36,7 +41,9 @@ export class AppleOfflineBackend implements SharedBackend {
   for(const name of ['Image','initrd']){const path=join(this.assets,name),s=await lstat(path);if(!s.isFile()||s.isSymbolicLink()||s.nlink!==1||s.size>(this.development&&name==='initrd'?768:64)*1024*1024)throw new VaultError('vm_asset_invalid');const hash=createHash('sha256');for await(const chunk of createReadStream(path))hash.update(chunk);if(hash.digest('hex')!==manifest[name])throw new VaultError('vm_asset_hash');}
   if(disk&&!this.development)throw new VaultError('cache_development_required');
   const ready=this.wait(e=>e.event==='ready',35000);
-  const child=this.child=spawn(fileURLToPath(new URL('../nidus-vault-vm',import.meta.url)),[join(this.assets,'Image'),join(this.assets,'initrd'),...(this.development?['development']:[]),...(disk?[disk.path,disk.fresh?'new':'existing',disk.diskId]:[])],{stdio:['pipe','pipe','pipe'],env:{PATH:'/usr/bin:/bin'}});
+  const egress=this.egress&&manifest.egressVersion===1?this.egress:undefined;
+  const child=this.child=spawn(fileURLToPath(new URL('../nidus-vault-vm',import.meta.url)),[join(this.assets,'Image'),join(this.assets,'initrd'),...(this.development?['development']:[]),...(disk?[disk.path,disk.fresh?'new':'existing',disk.diskId]:[])],{stdio:['pipe','pipe','pipe',...(egress?['pipe' as const]:[])],env:{PATH:'/usr/bin:/bin',...(egress?{NIDUS_EGRESS_FD:'3'}:{})}}) as ChildProcessWithoutNullStreams;
+  if(egress)this.egressLink=new EgressChannel(child.stdio[3] as unknown as Duplex,stream=>egress.accept(stream));
   child.stdin.on('error',()=>{});child.stderr.resume();
   const lines=createInterface({input:child.stdout});let size=0,frames=0,windowBytes=0;
   const budgetTimer=setInterval(()=>{windowBytes=0;},1000);budgetTimer.unref();child.once('close',()=>clearInterval(budgetTimer));
