@@ -1,0 +1,160 @@
+{
+  "at": "2026-11-11T13:18:25.605Z",
+  "scope": "real Apple Virtualization VM; approvals answered by a fixed test policy",
+  "checks": [
+    {
+      "name": "proxy settings in the shell",
+      "command": "echo \"$HTTPS_PROXY|$NO_PROXY\"",
+      "stdout": "http://127.0.0.1:3128|localhost,127.0.0.1,::1,.localhost",
+      "stderr": "",
+      "exitCode": 0,
+      "cleanup": true,
+      "asked": [],
+      "proxy": [],
+      "ms": 83,
+      "pass": true
+    },
+    {
+      "name": "public HTTPS after approval",
+      "command": "curl -sS -o /dev/null -w '%{http_code}' https://example.com/",
+      "stdout": "200",
+      "stderr": "",
+      "exitCode": 0,
+      "cleanup": true,
+      "asked": [
+        "example.com"
+      ],
+      "proxy": [
+        "allowed example.com:443 (user allowed for this task)"
+      ],
+      "ms": 245,
+      "pass": true
+    },
+    {
+      "name": "same domain again is not asked",
+      "command": "curl -sS -o /dev/null -w '%{http_code}' https://example.com/",
+      "stdout": "200",
+      "stderr": "",
+      "exitCode": 0,
+      "cleanup": true,
+      "asked": [],
+      "proxy": [
+        "allowed example.com:443 (allowed for this task)"
+      ],
+      "ms": 229,
+      "pass": true
+    },
+    {
+      "name": "refused domain",
+      "command": "curl -sS -o /dev/null https://www.wikipedia.org/; echo \"exit=$?\"",
+      "stdout": "exit=7",
+      "stderr": "curl: (7) CONNECT tunnel failed, response 403",
+      "exitCode": 0,
+      "cleanup": true,
+      "asked": [
+        "www.wikipedia.org"
+      ],
+      "proxy": [
+        "denied www.wikipedia.org:443 (user denied)"
+      ],
+      "ms": 82,
+      "pass": true
+    },
+    {
+      "name": "private address is blocked without asking",
+      "command": "curl -sS -m 10 -o /dev/null https://192.168.1.1/; echo \"exit=$?\"",
+      "stdout": "exit=7",
+      "stderr": "curl: (7) CONNECT tunnel failed, response 403",
+      "exitCode": 0,
+      "cleanup": true,
+      "asked": [],
+      "proxy": [
+        "blocked 192.168.1.1:443 (private address)"
+      ],
+      "ms": 46,
+      "pass": true
+    },
+    {
+      "name": "VM localhost stays inside the VM",
+      "command": "python3 -m http.server 8765 --bind 127.0.0.1 >/dev/null 2>&1 & for ((i=0; i<50; i++)); do curl -s -o /dev/null http://localhost:8765/ && break; sleep 0.2; done; curl -sS http://localhost:8765/ | head -c 400; kill %1",
+      "stdout": "<!DOCTYPE HTML>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<style type=\"text/css\">\n:root {\ncolor-scheme: light dark;\n}\n</style>\n<title>Directory listing for /</title>\n</head>\n<body>\n<h1>Directory listing for /</h1>\n<hr>\n<ul>\n</ul>\n<hr>\n</body>\n</html>",
+      "stderr": "",
+      "exitCode": 0,
+      "cleanup": true,
+      "asked": [],
+      "proxy": [],
+      "ms": 261,
+      "pass": true
+    },
+    {
+      "name": "Mac service through host.nidus after approval",
+      "command": "curl -sS http://host.nidus:54516/",
+      "stdout": "hello from the mac",
+      "stderr": "",
+      "exitCode": 0,
+      "cleanup": true,
+      "asked": [
+        "mac:54516"
+      ],
+      "proxy": [
+        "allowed host.nidus:54516 (user allowed for this task)"
+      ],
+      "ms": 72,
+      "pass": true
+    },
+    {
+      "name": "pip download from PyPI",
+      "command": "pip download --no-deps -q -d /tmp/p six==1.16.0 && ls /tmp/p",
+      "stdout": "six-1.16.0-py2.py3-none-any.whl",
+      "stderr": "",
+      "exitCode": 0,
+      "cleanup": true,
+      "asked": [
+        "pypi.org",
+        "files.pythonhosted.org"
+      ],
+      "proxy": [
+        "allowed pypi.org:443 (user allowed for this task)",
+        "allowed files.pythonhosted.org:443 (user allowed for this task)"
+      ],
+      "ms": 862,
+      "pass": true
+    },
+    {
+      "name": "npm registry",
+      "command": "npm view left-pad version",
+      "stdout": "1.3.0",
+      "stderr": "",
+      "exitCode": 0,
+      "cleanup": true,
+      "asked": [
+        "registry.npmjs.org"
+      ],
+      "proxy": [
+        "allowed registry.npmjs.org:443 (user allowed for this task)"
+      ],
+      "ms": 312,
+      "pass": true
+    },
+    {
+      "name": "large download, 20 MB",
+      "command": "curl -sS -o /dev/null -w '%{size_download} %{speed_download}' 'https://speed.cloudflare.com/__down?bytes=20000000'",
+      "stdout": "20000000 6919143",
+      "stderr": "",
+      "exitCode": 0,
+      "cleanup": true,
+      "asked": [
+        "speed.cloudflare.com"
+      ],
+      "proxy": [
+        "allowed speed.cloudflare.com:443 (user allowed for this task)"
+      ],
+      "ms": 2954,
+      "mbPerSecond": 6.9,
+      "pass": true
+    }
+  ],
+  "egressConnected": true,
+  "stopped": "STOP_CONFIRMED",
+  "pass": true
+}
