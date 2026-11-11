@@ -126,6 +126,16 @@ AI는 Vault 원본이 아니라 VM 안의 복사본에서 작업한다.
 
 Vault에 Git이 필수인 이유(CONCEPT의 Security Office)가 여기서 쓰인다. AI의 변경은 항상 브랜치 단위로 구분되고 되돌릴 수 있다.
 
+### 구현 (2d)
+
+- **형식**: git bundle. 들어갈 때는 Vault `HEAD`와 그 이력, 나올 때는 시작 커밋 이후의 커밋만 담는다(`src/workspace/sync.ts`).
+- **통로**: 채널의 `workspace` 서비스(게스트 `127.0.0.1:3130`). 전송마다 호스트가 일회용 토큰을 만들어 제어 콘솔로 보내고, 게스트의 root 관리자(`scripts/vault-vm/workspace-sync.py`)가 그 토큰으로 연결한다. 세션 안의 프로그램은 제어 콘솔을 읽을 수 없다.
+- **VM 안**: `/workspaces/<작업>`은 Vault의 캐시 디스크에 있어 VM을 다시 켜도 남는다(디스크가 없으면 메모리). 현재 작업의 작업 공간이 모든 Shell 세션의 `/workspace`이고 시작 디렉터리다. 브라우저는 읽기 전용으로 본다(`file:///workspace/...`). 작업 브랜치는 `nidus/<작업>`, 커밋 작성자는 `Nidus Worker`다. VM을 다시 켜면 `workspace-select`로 다시 연결한다.
+- **권한**: 작업 공간 안의 git은 root가 아니라 세션 사용자(uid 1000)로, hook과 fsmonitor를 끄고 실행한다. 저장소 설정은 AI가 바꿀 수 있으므로 root가 그 코드를 실행하지 않게 한다.
+- **나올 때**: 커밋하지 않은 변경은 마지막 커밋("작업 중 남은 변경")으로 묶는다. 호스트는 객체 검사(fsck)를 켜고 숨은 ref `refs/nidus/incoming/<작업>`로 받는다. 시작 커밋에서 이어지지 않는 이력은 거부한다. 사용자에게 커밋, 파일별 증감, diff(200KB까지)를 보여 주고, `.nidus/` 아래를 바꾸면 따로 경고한다(네트워크 허용 목록 등).
+- **승인**: 사용자가 본 그 커밋일 때만 `nidus/<작업>` 브랜치를 만든다. 같은 이름의 브랜치가 있으면 덮어쓰지 않는다. 버리면 숨은 ref만 지운다. 모든 호스트 git 호출은 hook을 끈다.
+- **한도**: 들어가는 bundle 256MiB, 나오는 bundle 128MiB. 캐시 디스크는 패키지 캐시, 브라우저 프로필과 함께 512MiB다.
+
 ## Agent 실행
 
 Worker 한 명이 Task 하나를 수행하는 루프다. Manager와 Main, Task Board는 3단계에서 다룬다. 2단계에서는 사용자가 직접 지시하고 난이도를 고른다.
@@ -168,7 +178,7 @@ Worker 한 명이 Task 하나를 수행하는 루프다. Manager와 Main, Task B
 | 2a | Egress Proxy: 도메인 규칙, 승인, Mac localhost 포트 승인, 사설 주소 차단 | 구현, 단위 테스트 |
 | 2b | VM과 프록시를 콘솔 포트로 연결, 온라인 Shell. VM 안 루프백은 프록시 제외 | 구현, 실제 VM 검증 (아래) |
 | 2c | 브라우저 자유 조작, 화면 스트리밍, 사용자 개입 | 구현, 실제 VM 검증 (아래). 앱 화면은 2f |
-| 2d | 작업 공간 Git 동기화 | 예정 |
+| 2d | 작업 공간 Git 동기화 | 구현, 실제 VM 검증 (아래) |
 | 2e | Gateway 기반 Worker 루프와 Workspace Service | 예정 |
 | 2f | 앱의 작업 탭 | 예정 |
 
@@ -216,10 +226,30 @@ Worker 한 명이 Task 하나를 수행하는 루프다. Manager와 Main, Task B
 
 **직접 써 보기**: 앱 작업 탭(2f) 전까지는 `npm run workspace:playground`로 확인한다. 실제 VM을 띄우고 이 Mac의 `127.0.0.1`에 테스트 페이지를 연다(주소의 토큰 필요). 화면 보기, 개입과 돌려주기, 마우스·키보드·한글 입력, 네트워크 승인, AI 조작 흉내, VM Shell 명령을 쓸 수 있다. 페이지 포트는 프록시 예약 포트라 VM 안에서 닿지 않는다. "항상 허용"한 사이트와 브라우저 프로필 디스크는 `dist/playground`에 남는다.
 
+### 2d 검증 (2026-11-12)
+
+`node scripts/vault-vm/workspace-sync-verify.mjs dist/vm-assets docs/evidence/stage2-workspace/sync-vm.json`. Vault는 스크립트가 만든 임시 저장소이고, AI의 작업은 스크립트가 보낸 Shell 명령이다. 결과: [sync-vm.json](../evidence/stage2-workspace/sync-vm.json).
+
+| 항목 | 결과 |
+|---|---|
+| Vault의 커밋된 상태가 VM으로 감 | PASS |
+| Shell이 `/workspace`에서 작업 브랜치로 시작, 커밋 안 한 변경과 무시된 파일(`.nidus/local`)은 없음, uid 1000 | PASS |
+| AI가 고치고 커밋하고, 작업 공간의 스크립트를 실행하고, 일부는 커밋하지 않고 둠 | PASS |
+| 브라우저가 작업 공간 파일을 읽기 전용으로 엶 | PASS |
+| VM을 다시 켜도 작업 공간이 남고 다시 연결됨 | PASS |
+| 결과가 숨은 ref로 돌아오고(커밋 안 한 변경 포함), 아직 브랜치가 아님 | PASS |
+| 승인하면 `nidus/<작업>` 브랜치가 생기고, 사용자의 현재 브랜치와 작업 디렉터리는 그대로 | PASS |
+| 바뀐 것이 없는 작업은 가져올 것이 없음 | PASS |
+| 같은 작업 이름으로 다시 가져오기는 거부(작업을 덮어쓰지 않음) | PASS |
+| VM 종료 확인 | STOP_CONFIRMED |
+
+이 저장소(Nidus, `HEAD` 이력 1.7MB)를 가져오는 데 0.26초가 걸렸다. 2b·2c 검증도 바뀐 게스트에서 다시 모두 PASS였다. 테스트 페이지(`npm run workspace:playground`)에 작업 공간 패널을 붙였다.
+
 ## 확인이 필요한 위험
 
 - 처리량은 연결 하나에 약 7MB/s다. 게스트 중계기가 Python이고 콘솔 포트를 거치기 때문이다. 패키지 설치와 웹 탐색에는 충분하지만 큰 파일 내려받기는 느리다.
-- Shell은 아직 기존 구조(명령마다 새 격리 세션, 최대 120초, 메모리 512MiB)다. 오래 도는 개발 서버와 공유 작업 공간은 2d·2e에서 바꾼다.
+- Shell은 아직 명령마다 새 격리 세션(최대 120초, 메모리 512MiB)이다. 작업 공간은 2d에서 세션 사이에 공유되지만, 오래 도는 개발 서버는 아직 띄워 둘 수 없다. 2e에서 바꾼다.
+- 작업 공간이 들어 있는 캐시 디스크가 512MiB라 큰 저장소나 `node_modules`가 많은 작업은 모자랄 수 있다.
 - 화면 스트림은 간단한 페이지에서 15fps(상한)를 냈다. 이미지가 많은 페이지는 프레임이 커서(예시 페이지 정지 화면 약 37KB) egress와 채널 대역폭(약 7MB/s)을 나눠 쓴다.
 - 상주 브라우저가 도는 동안에는 Chromium 샌드박스를 위해 VM 안의 사용자 네임스페이스가 열려 있다. Shell 세션도 그동안 네임스페이스를 만들 수 있다. "VM 안은 자유" 원칙 안의 일이지만, 이전 설계의 제한이 풀린 것이다.
 - **CAPTCHA**: 같은 VM 브라우저로 검색했을 때 네이버, Bing, DuckDuckGo는 CAPTCHA 없이 결과가 나왔고 Google 검색만 CAPTCHA가 떴다(2026-11-11). Google은 headless Chromium의 자동화 표시를 보는 것으로 보인다. 자동화 표시를 감추는 변경은 탐지 우회에 해당해 하지 않았다. 대신 Worker의 검색 도구(2e)는 CAPTCHA가 덜 뜨는 검색엔진을 기본으로 쓰고, Google이 필요하면 사용자가 CAPTCHA를 푼다. 프로필이 유지되므로 사용자가 개입 중 Google에 로그인해 두면 덜 뜰 수 있다(미확인).
