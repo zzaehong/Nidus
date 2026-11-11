@@ -41,31 +41,39 @@ struct ProvidersView: View {
     private var selectedProvider: ProviderInfo? { overview.providers.first { $0.id == storedProvider } }
 
     var body: some View {
-        HSplitView {
-            List(overview.providers, selection: Binding<String?>(get: { storedProvider.isEmpty ? nil : storedProvider }, set: { storedProvider = $0 ?? "" })) { provider in
-                HStack {
-                    Image(systemName: provider.connected ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(provider.connected ? .green : .secondary)
-                    VStack(alignment: .leading) {
-                        Text(provider.name)
-                        Text(provider.connected ? "모델 \(provider.models)개" : "키 없음").font(.caption).foregroundStyle(.secondary)
+        FixedPage {
+            PageHeader(title: "Provider", subtitle: "API 키는 이 Mac의 Keychain에 저장되고 모든 Vault가 함께 씁니다. 모델 검사 결과는 Vault마다 따로 기록됩니다.")
+
+            HStack(alignment: .top, spacing: Layout.spacing) {
+                List(overview.providers, selection: Binding<String?>(get: { storedProvider.isEmpty ? nil : storedProvider }, set: { storedProvider = $0 ?? "" })) { provider in
+                    HStack {
+                        Image(systemName: provider.connected ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(provider.connected ? .green : .secondary)
+                        VStack(alignment: .leading) {
+                            Text(provider.name).lineLimit(1)
+                            Text(provider.connected ? "모델 \(provider.models)개" : "키 없음").font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    .tag(provider.id)
+                }
+                .scrollContentBackground(.hidden)
+                .frame(width: 210)
+                .frame(maxHeight: .infinity)
+                .panel()
+
+                Group {
+                    if let provider = selectedProvider {
+                        ProviderDetail(provider: provider, onConnect: { connecting = provider }, onDisconnect: { disconnecting = provider })
+                            .id(provider.id)
+                    } else {
+                        Text("왼쪽에서 Provider를 선택하세요.")
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
                 }
-                .tag(provider.id)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .panel()
             }
-            .frame(minWidth: 200, idealWidth: 220, maxWidth: 280)
-
-            Group {
-                if let provider = selectedProvider {
-                    ProviderDetail(provider: provider, onConnect: { connecting = provider }, onDisconnect: { disconnecting = provider })
-                        .id(provider.id)
-                } else {
-                    Text("Provider를 선택하세요.\nAPI 키는 이 Mac의 Keychain에 저장되고 모든 Vault가 함께 씁니다.")
-                        .multilineTextAlignment(.center).foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-            }
-            .frame(minWidth: 420)
         }
         .sheet(item: $connecting) { ConnectSheet(provider: $0) }
         .confirmationDialog("\(disconnecting?.name ?? "") 연결을 해제할까요?", isPresented: Binding(get: { disconnecting != nil }, set: { if !$0 { disconnecting = nil } }), presenting: disconnecting) { provider in
@@ -109,25 +117,33 @@ private struct ProviderDetail: View {
     private var batch: BatchProgress? { store.batch?.provider == provider.id ? store.batch : nil }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(provider.name).font(.title2.bold()).lineLimit(1)
-            HStack {
-                if provider.connected {
-                    Button("일괄 검사…") { askingBatch = true }.disabled(models.isEmpty)
-                    Button("모델 새로고침") { Task { await store.refresh(provider); models = await store.models(provider.id) } }
-                    Button("키 변경…", action: onConnect)
-                    Button("연결 해제…", role: .destructive, action: onDisconnect)
-                } else {
-                    Button("API 키 등록…", action: onConnect).keyboardShortcut(.defaultAction)
+        VStack(alignment: .leading, spacing: 0) {
+            // Header: name, actions and batch progress.
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text(provider.name).font(.headline).lineLimit(1)
+                    Spacer()
+                    if provider.connected {
+                        Text("검사하지 않은 모델 \(untested.count)개").font(.caption).foregroundStyle(.secondary)
+                    }
                 }
-                Spacer()
-            }
-            .fixedSize(horizontal: false, vertical: true)
-            .disabled(store.busy)
+                HStack {
+                    if provider.connected {
+                        Button("일괄 검사…") { askingBatch = true }.disabled(models.isEmpty)
+                        Button("모델 새로고침") { Task { await store.refresh(provider); models = await store.models(provider.id) } }
+                        Spacer()
+                        Button("키 변경…", action: onConnect)
+                        Button("연결 해제…", role: .destructive, action: onDisconnect)
+                    } else {
+                        Button("API 키 등록…", action: onConnect).keyboardShortcut(.defaultAction)
+                        if let url = URL(string: provider.keyURL) { Link("키 발급 페이지 열기", destination: url) }
+                        Spacer()
+                    }
+                }
+                .disabled(store.busy)
 
-            if let batch {
-                GroupBox {
-                    VStack(alignment: .leading, spacing: 6) {
+                if let batch {
+                    VStack(alignment: .leading, spacing: 4) {
                         HStack {
                             ProgressView(value: Double(batch.done), total: Double(batch.total))
                             Text("\(batch.done)/\(batch.total)").monospacedDigit()
@@ -137,16 +153,17 @@ private struct ProviderDetail: View {
                                 Button("닫기") { store.dismissBatch() }
                             }
                         }
-                        Text(batch.running ? "검사 중: \(batch.current)" : "일괄 검사가 끝났습니다.").font(.caption).foregroundStyle(.secondary)
+                        Text(batch.running ? "검사 중: \(batch.current)" : "일괄 검사가 끝났습니다.").font(.caption).foregroundStyle(.secondary).lineLimit(1)
                         Text(batch.summary).font(.caption)
                     }
-                    .padding(4)
                 }
+                if provider.connected { TextField("모델 검색", text: $search) }
             }
+            .padding(Layout.inset)
+
+            Divider()
 
             if provider.connected {
-                Text("모델 목록 조회: \(provider.fetchedAt ?? "없음") · 검사하지 않은 모델 \(untested.count)개").font(.caption).foregroundStyle(.secondary)
-                TextField("모델 검색", text: $search)
                 List(visible) { model in
                     HStack {
                         VStack(alignment: .leading) {
@@ -157,20 +174,23 @@ private struct ProviderDetail: View {
                         CheckBadge(label: "텍스트", state: model.text)
                         CheckBadge(label: "도구", state: model.tools)
                         Button(model.untested ? "검사" : "다시 검사") { checking = model }
+                            .frame(width: 76, alignment: .trailing)
                             .disabled(store.busy)
                             .help("실제 API를 호출해 텍스트 응답과 도구 호출을 확인합니다. 요금이 발생할 수 있습니다.")
                     }
                 }
+                .scrollContentBackground(.hidden)
+
+                Divider()
                 Text("텍스트 모델만 표시합니다. 텍스트 검사를 통과하면 Main·Manager 후보로, 도구 검사까지 통과하면 Worker 후보로 넣을 수 있습니다.")
                     .font(.caption).foregroundStyle(.secondary)
+                    .padding(.horizontal, Layout.inset).padding(.vertical, 8)
             } else {
                 Text("API 키를 등록하면 모델 목록을 조회해 확인한 뒤 Keychain에 저장합니다.")
                     .foregroundStyle(.secondary)
-                if let url = URL(string: provider.keyURL) { Link("\(provider.name) 키 발급 페이지 열기", destination: url) }
-                Spacer()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .padding(20)
         // Reload when the provider changes and after every recorded check.
         .task(id: "\(provider.id)/\(provider.connected)/\(store.checksRevision)") {
             models = provider.connected ? await store.models(provider.id) : []
@@ -221,7 +241,7 @@ private struct ConnectSheet: View {
                 .disabled(key.trimmingCharacters(in: .whitespaces).isEmpty || store.busy)
             }
         }
-        .padding(20)
+        .padding(Layout.margin)
         .frame(width: 440)
     }
 }

@@ -7,16 +7,11 @@ struct AssignmentView: View {
     @State private var adding: Slot?
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("역할과 Worker 작업 난이도마다 사용할 모델을 우선순위 순서로 정합니다. 위에서부터 쓸 수 있는 첫 모델이 선택되고, 쓸 수 있는 후보가 없으면 다른 칸의 모델로 대신하지 않고 실패합니다.\nMain과 Manager는 계획·지시·검토를 맡으므로 텍스트 검사를 통과한 모델을, Worker는 실제 작업을 하므로 도구 호출 검사까지 통과한 모델을 후보로 넣을 수 있습니다.")
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                ForEach(overview.slots) { slot in
-                    SlotCard(slot: slot, onAdd: { adding = slot })
-                }
+        ScrollingPage {
+            PageHeader(title: "모델 배정", subtitle: "역할과 Worker 작업 난이도마다 사용할 모델을 우선순위 순서로 정합니다. 위에서부터 쓸 수 있는 첫 모델이 선택되고, 쓸 수 있는 후보가 없으면 다른 칸의 모델로 대신하지 않고 실패합니다. Main과 Manager 칸에는 텍스트 검사를 통과한 모델을, Worker 칸에는 도구 호출 검사까지 통과한 모델을 넣을 수 있습니다.")
+            ForEach(overview.slots) { slot in
+                SlotCard(slot: slot, onAdd: { adding = slot })
             }
-            .padding(20)
         }
         .sheet(item: $adding) { slot in
             CandidatePicker(slot: slot, providers: overview.providers.filter(\.connected))
@@ -40,11 +35,10 @@ private struct SlotCard: View {
     }
 
     var body: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .firstTextBaseline) {
                     Text(slot.title).font(.headline)
-                    Text(slot.summary).font(.callout).foregroundStyle(.secondary)
+                    Text(slot.summary).font(.callout).foregroundStyle(.secondary).lineLimit(1)
                     Spacer()
                     Button("후보 추가…", action: onAdd).disabled(store.busy)
                 }
@@ -75,12 +69,15 @@ private struct SlotCard: View {
                     .buttonStyle(.borderless)
                 }
 
-                if let detail = slot.resolved == nil ? slot.problem : slot.reason, !slot.candidates.isEmpty {
+                // The first choice needs no explanation; a fallback or a failure does.
+                if let detail = slot.resolved == nil ? slot.problem : slot.reason, !slot.candidates.isEmpty,
+                   slot.resolved == nil || detail.contains("fallback") {
                     Text(detail).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
                 }
-            }
-            .padding(6)
         }
+        .padding(Layout.inset)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .panel()
     }
 }
 
@@ -132,7 +129,9 @@ private struct CandidatePicker: View {
                         }
                     }
                 }
+                .scrollContentBackground(.hidden)
                 .frame(minHeight: 280)
+                .panel()
                 .overlay {
                     if eligible.isEmpty {
                         Text("이 Provider에는 \(requirement)를 통과한 모델이 없습니다.\nProvider 탭에서 모델 검사를 먼저 실행하세요.")
@@ -157,7 +156,7 @@ private struct CandidatePicker: View {
                 .disabled(chosen.isEmpty || store.busy)
             }
         }
-        .padding(20)
+        .padding(Layout.margin)
         .frame(width: 560)
         .task(id: provider) {
             if provider.isEmpty { provider = providers.first?.id ?? "" }
