@@ -16,6 +16,8 @@ struct Slot: Decodable, Identifiable, Equatable {
     let reason: String?
     let problem: String?
 
+    var needsTools: Bool { role == "worker" }
+
     var title: String {
         switch id {
         case "roles.main": return "Main"
@@ -88,27 +90,51 @@ struct Overview: Decodable, Equatable {
 struct ModelChoice: Decodable, Identifiable, Equatable {
     let id: String
     let name: String
-    /// supported, unsupported, unknown, or verified (a real tool round trip succeeded).
+    /// Result of the last real check: passed, failed or untested.
+    let text: String
     let tools: String
+    let detail: String?
+    let checkedAt: String?
 
-    var toolsLabel: String {
-        switch tools {
-        case "verified": return "도구 확인됨"
-        case "supported": return "도구 지원"
-        case "unsupported": return "도구 미지원"
-        default: return "도구 미확인"
-        }
+    var untested: Bool { text == "untested" && tools == "untested" }
+
+    /// Sort order for lists: most usable first.
+    var rank: Int {
+        if tools == "passed" { return 0 }
+        if text == "passed" { return 1 }
+        if untested { return 2 }
+        return 3
     }
+
+    /// Why the last check did not fully pass, in the app's language.
+    var note: String? {
+        guard let detail, tools != "passed" else { return nil }
+        if detail.contains("not_found") { return "이 키로는 호출할 수 없는 모델입니다 (404)." }
+        if detail.contains("did not call the tool") { return "도구를 호출하지 않고 텍스트로만 답했습니다." }
+        if detail.contains("invalid tool input") { return "도구 입력을 형식에 맞지 않게 보냈습니다." }
+        if detail.contains("did not use the tool result") { return "도구 결과를 답에 반영하지 않았습니다." }
+        if detail.contains("invalid_request") { return "도구 호출 요청을 받아들이지 않습니다." }
+        if detail.contains("permission") { return "이 키에 호출 권한이 없습니다." }
+        if detail.contains("provider_error") { return "도구 호출에서 서버 오류가 났습니다. 다시 검사해 볼 수 있습니다." }
+        return detail
+    }
+
+    /// Main and managers plan and review in text; workers must be able to call tools.
+    func qualifies(for slot: Slot) -> Bool {
+        slot.needsTools ? tools == "passed" : text == "passed"
+    }
+}
+
+/// Outcome of checking one model. Each field is passed, failed or inconclusive.
+struct CheckResult: Decodable, Equatable {
+    let text: String
+    let tools: String
+    let detail: String
 }
 
 struct ConnectResult: Decodable {
     let provider: String
     let models: Int
-}
-
-struct VerifyResult: Decodable {
-    let supported: Bool
-    let detail: String
 }
 
 struct AskResult: Decodable, Equatable {

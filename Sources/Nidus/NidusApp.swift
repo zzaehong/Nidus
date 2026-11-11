@@ -109,17 +109,18 @@ enum VaultSection: String, CaseIterable, Identifiable {
 
 struct VaultView: View {
     @EnvironmentObject private var store: VaultStore
-    @State private var section: VaultSection? = .assignment
+    /// The last opened section is remembered between launches.
+    @AppStorage("section") private var storedSection = VaultSection.assignment.rawValue
 
     var body: some View {
         NavigationSplitView {
-            List(VaultSection.allCases, selection: $section) { item in
+            List(VaultSection.allCases, selection: Binding(get: { VaultSection(rawValue: storedSection) }, set: { storedSection = ($0 ?? .assignment).rawValue })) { item in
                 Label(item.rawValue, systemImage: item.icon).tag(item)
             }
             .navigationSplitViewColumnWidth(min: 160, ideal: 180)
         } detail: {
             if let overview = store.overview {
-                switch section ?? .assignment {
+                switch VaultSection(rawValue: storedSection) ?? .assignment {
                 case .assignment: AssignmentView(overview: overview)
                 case .providers: ProvidersView(overview: overview)
                 case .usage: UsageView(overview: overview)

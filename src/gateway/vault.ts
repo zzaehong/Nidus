@@ -17,7 +17,7 @@ export interface VaultPaths {
   gitignore: string;
   usageDb: string;
   modelCache: string;
-  verifiedFile: string;
+  checksFile: string;
 }
 
 export function vaultPaths(root: string): VaultPaths {
@@ -33,7 +33,7 @@ export function vaultPaths(root: string): VaultPaths {
     gitignore: join(nidus, '.gitignore'),
     usageDb: join(local, 'usage.sqlite'),
     modelCache: join(local, 'models'),
-    verifiedFile: join(local, 'models', 'verified.json'),
+    checksFile: join(local, 'models', 'checks.json'),
   };
 }
 

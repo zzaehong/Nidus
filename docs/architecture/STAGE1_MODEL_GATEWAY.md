@@ -92,9 +92,16 @@ interface ModelResponse {
 | Gemini generateContent | Gemini |
 | Chat Completions 호환 | DeepSeek, Groq, Mistral, NVIDIA, Cloudflare |
 
-어떤 모델이 도구 호출을 지원하는지는 모델 ID 목록을 코드에 적지 않는다. Models API가 알려 주는 값과 실제 왕복 검사(`nidus gateway verify`) 결과로 판단한다. 검사에 성공한 모델은 `.nidus/local/models/verified.json`에 기록한다.
+어떤 모델이 무엇을 할 수 있는지는 모델 ID 목록을 코드에 적지 않고 실제 호출로 검사한다(`nidus gateway verify`, 앱의 모델 검사). 검사는 두 가지를 따로 판정한다.
 
-Models API가 지원 여부를 알려 주지 않고 검사도 하지 않은 모델은 배정에서 제외하지 않는다. 선택 이유에 `tools unverified`로 표시한다. Models API가 미지원이라고 명시한 모델만 제외한다.
+- **텍스트**: 일반 메시지에 텍스트로 답하는가.
+- **도구**: 도구 호출 → 결과 전달 → 최종 답의 왕복이 되는가. 통과하면 텍스트도 통과로 본다.
+
+통과와 실패는 `.nidus/local/models/checks.json`에 기록한다. 속도 제한, 시간 초과, 서버 오류처럼 모델 탓이라고 단정할 수 없는 결과는 기록하지 않고 미검사로 둔다.
+
+역할에 따라 필요한 능력이 다르다. Main, Lead Manager, Manager는 계획·지시·검토를 텍스트로 하므로 텍스트 검사를 통과하면 된다. Worker는 실제 작업을 하므로 도구 검사까지 통과해야 한다. 앱의 후보 추가 화면은 이 기준을 통과한 모델만 보여 준다.
+
+배정 자체는 검사 기록을 강제하지 않는다. `models.json`을 직접 고쳐 넣은 미검사 모델도 선택되며, 도구가 필요한 호출이면 선택 이유에 `tools unverified`로 표시한다. Models API가 미지원이라고 명시한 모델만 제외한다.
 
 ## Model Assignment
 
@@ -200,7 +207,7 @@ nidus gateway connect <provider>                     # 키 등록, 모델 목록
 nidus gateway models <provider> [--refresh]
 nidus gateway assign --role worker --difficulty simple --tools
 nidus gateway ask --role manager                     # 배정된 모델에 한 번 질의 (과금 가능)
-nidus gateway verify <provider> <model-id>           # 도구 호출 왕복 검사 (과금 가능)
+nidus gateway verify <provider> <model-id>           # 텍스트·도구 호출 검사 (과금 가능)
 nidus gateway usage [--month YYYY-MM]
 ```
 

@@ -25,7 +25,7 @@ init: creates .nidus/models.json, .nidus/budget.json and .nidus/.gitignore.
 connect: hidden key entry, model discovery, macOS Keychain storage. --env uses NIDUS_<PROVIDER>_API_KEY and stores no key.
 assign: shows which model a role (and worker difficulty) resolves to, without calling it.
 ask: sends one message (stdin or interactive prompt) to the assigned model. May incur provider charges.
-verify: runs one real tool-call round trip against a model and records the result. May incur provider charges.
+verify: checks a model with real calls (tool round trip, then plain text) and records the result. May incur provider charges.
 `;
 
 export interface GatewayCliDependencies {
@@ -125,7 +125,7 @@ export async function gatewayMain(argv: string[], dependencies: GatewayCliDepend
       });
     } else if (command === 'verify') {
       const provider = providerId(rest[0]!);
-      print({ provider, model: rest[1], ...await gateway.verifyTools(provider, rest[1]!, options) });
+      print({ provider, model: rest[1], ...await gateway.checkModel(provider, rest[1]!, options) });
     } else {
       if (values.month !== undefined && !/^\d{4}-\d{2}$/.test(values.month)) fail('--month must be YYYY-MM.');
       print(gateway.usageSummary(values.month));

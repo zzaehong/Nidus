@@ -9,7 +9,7 @@ struct AssignmentView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                Text("역할과 Worker 작업 난이도마다 사용할 모델을 우선순위 순서로 정합니다. 위에서부터 쓸 수 있는 첫 모델이 선택되고, 쓸 수 있는 후보가 없으면 다른 칸의 모델로 대신하지 않고 실패합니다.")
+                Text("역할과 Worker 작업 난이도마다 사용할 모델을 우선순위 순서로 정합니다. 위에서부터 쓸 수 있는 첫 모델이 선택되고, 쓸 수 있는 후보가 없으면 다른 칸의 모델로 대신하지 않고 실패합니다.\nMain과 Manager는 계획·지시·검토를 맡으므로 텍스트 검사를 통과한 모델을, Worker는 실제 작업을 하므로 도구 호출 검사까지 통과한 모델을 후보로 넣을 수 있습니다.")
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 ForEach(overview.slots) { slot in
@@ -84,7 +84,7 @@ private struct SlotCard: View {
     }
 }
 
-/// Picks a model from a connected provider's cached list and appends it to the slot.
+/// Adds models to a slot. Only models that passed the check this slot needs are offered.
 private struct CandidatePicker: View {
     @EnvironmentObject private var store: VaultStore
     @Environment(\.dismiss) private var dismiss
@@ -93,12 +93,21 @@ private struct CandidatePicker: View {
     @State private var provider = ""
     @State private var models: [ModelChoice] = []
     @State private var search = ""
+    /// "provider:model" references, kept while switching between providers.
+    @State private var chosen: [String] = []
+
+    private func ref(_ model: ModelChoice) -> String { "\(provider):\(model.id)" }
+
+    private var eligible: [ModelChoice] {
+        models.filter { $0.qualifies(for: slot) && !slot.candidates.contains(ref($0)) }
+    }
 
     private var visible: [ModelChoice] {
-        let listed = models.filter { !slot.candidates.contains("\(provider):\($0.id)") }
-        guard !search.isEmpty else { return listed }
-        return listed.filter { $0.id.localizedCaseInsensitiveContains(search) || $0.name.localizedCaseInsensitiveContains(search) }
+        guard !search.isEmpty else { return eligible }
+        return eligible.filter { $0.id.localizedCaseInsensitiveContains(search) || $0.name.localizedCaseInsensitiveContains(search) }
     }
+
+    private var requirement: String { slot.needsTools ? "도구 호출 검사" : "텍스트 검사" }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -111,30 +120,41 @@ private struct CandidatePicker: View {
                 }
                 TextField("모델 검색", text: $search)
                 List(visible) { model in
-                    HStack {
+                    Toggle(isOn: Binding(
+                        get: { chosen.contains(ref(model)) },
+                        set: { on in
+                            if on { chosen.append(ref(model)) } else { chosen.removeAll { $0 == ref(model) } }
+                        }
+                    )) {
                         VStack(alignment: .leading) {
                             Text(model.id).font(.system(.body, design: .monospaced))
                             if model.name != model.id { Text(model.name).font(.caption).foregroundStyle(.secondary) }
                         }
-                        Spacer()
-                        Text(model.toolsLabel).font(.caption)
-                            .foregroundStyle(model.tools == "unsupported" ? .red : model.tools == "unknown" ? .secondary : .green)
-                        Button("추가") {
-                            Task {
-                                await store.setCandidates(slot, slot.candidates + ["\(provider):\(model.id)"])
-                                dismiss()
-                            }
-                        }
-                        .disabled(store.busy)
                     }
                 }
                 .frame(minHeight: 280)
-                Text("텍스트 모델만 표시합니다. '도구 미확인' 모델은 Provider 탭에서 도구 검사를 하면 확인됨으로 바뀝니다.")
+                .overlay {
+                    if eligible.isEmpty {
+                        Text("이 Provider에는 \(requirement)를 통과한 모델이 없습니다.\nProvider 탭에서 모델 검사를 먼저 실행하세요.")
+                            .multilineTextAlignment(.center).foregroundStyle(.secondary)
+                    }
+                }
+                let hidden = models.filter(\.untested).count
+                Text("\(requirement)를 통과한 모델만 표시합니다." + (hidden > 0 ? " 아직 검사하지 않은 모델이 \(hidden)개 있습니다." : ""))
                     .font(.caption).foregroundStyle(.secondary)
             }
             HStack {
+                if !chosen.isEmpty { Text("\(chosen.count)개 선택됨 · 선택한 순서대로 뒤에 추가됩니다").font(.caption).foregroundStyle(.secondary) }
                 Spacer()
                 Button("닫기") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("선택한 모델 추가") {
+                    Task {
+                        await store.setCandidates(slot, slot.candidates + chosen)
+                        dismiss()
+                    }
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(chosen.isEmpty || store.busy)
             }
         }
         .padding(20)

@@ -25,8 +25,8 @@ open dist/Nidus.app
 
 폴더 하나를 Agent Vault로 열고, 그 Vault의 모델 배정·Provider 연결·사용량을 관리합니다. 개발 중에는 `npm run build && npm run build:keychain && swift run Nidus`로도 실행할 수 있습니다.
 
-- **모델 배정**: Main, Lead Manager, Manager와 Worker 난이도(단순·보통·복잡)마다 모델 후보를 우선순위 순서로 정합니다. 설정은 Vault의 `.nidus/models.json`에 저장됩니다.
-- **Provider**: API 키를 등록하고 모델 목록을 조회합니다. 키는 이 Mac의 Keychain에 저장되며 모든 Vault가 함께 씁니다. 모델별 **도구 검사**는 실제 API를 호출하므로 요금이 발생할 수 있습니다.
+- **모델 배정**: Main, Lead Manager, Manager와 Worker 난이도(단순·보통·복잡)마다 모델 후보를 우선순위 순서로 정합니다. 설정은 Vault의 `.nidus/models.json`에 저장됩니다. 후보로는 검사를 통과한 모델만 고를 수 있습니다. Main과 Manager 칸은 텍스트 검사, Worker 칸은 도구 호출 검사까지 통과한 모델이 대상입니다.
+- **Provider**: API 키를 등록하고 모델 목록을 조회합니다. 키는 이 Mac의 Keychain에 저장되며 모든 Vault가 함께 씁니다. **검사**와 **일괄 검사**는 모델마다 실제 API를 호출해 텍스트 응답과 도구 호출을 확인하므로 요금이 발생할 수 있습니다.
 - **사용량**: 이번 달 호출을 역할·난이도·모델별로 집계합니다. 기록은 `.nidus/local/usage.sqlite`에 있고 Git에서 제외됩니다. 월 예산을 넘어도 호출을 막지 않고 경고만 합니다.
 - **시험 호출**: 역할을 골라 메시지를 한 번 보내 배정된 모델이 응답하는지 확인합니다. 요금이 발생할 수 있습니다.
 

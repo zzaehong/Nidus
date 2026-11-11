@@ -1,6 +1,32 @@
 import Foundation
 import SwiftUI
 
+/// Progress of a batch model check.
+struct BatchProgress: Equatable {
+    let provider: String
+    let total: Int
+    var done = 0
+    var current = ""
+    var running = true
+    var toolsPassed = 0
+    var textOnly = 0
+    var failed = 0
+    var inconclusive = 0
+
+    mutating func record(_ result: CheckResult?) {
+        done += 1
+        guard let result else { inconclusive += 1; return }
+        if result.tools == "passed" { toolsPassed += 1 }
+        else if result.text == "passed" { textOnly += 1 }
+        else if result.text == "failed" { failed += 1 }
+        else { inconclusive += 1 }
+    }
+
+    var summary: String {
+        "도구까지 통과 \(toolsPassed) · 텍스트만 통과 \(textOnly) · 실패 \(failed) · 판정 보류 \(inconclusive)"
+    }
+}
+
 /// State of the open vault. Every change goes through the engine and comes back as a fresh overview.
 @MainActor
 final class VaultStore: ObservableObject {
@@ -10,6 +36,16 @@ final class VaultStore: ObservableObject {
     @Published var error: String?
     /// A chosen folder that has no .nidus yet; the user confirms before it is created.
     @Published var pendingInit: String?
+    @Published private(set) var batch: BatchProgress?
+    /// Bumped whenever a model check is recorded, so model lists know to reload.
+    @Published private(set) var checksRevision = 0
+    private var batchTask: Task<Void, Never>?
+    private var pending = 0
+
+    /// Busy while any request is in flight or a batch is running.
+    private func updateBusy() {
+        busy = pending > 0 || batch?.running == true
+    }
 
     private let bridge: Bridge
     private let defaults: UserDefaults
@@ -29,8 +65,12 @@ final class VaultStore: ObservableObject {
     /// Runs one engine action, tracking the busy state and surfacing failures.
     @discardableResult
     private func run<T>(_ action: () async throws -> T) async -> T? {
-        busy = true
-        defer { busy = false }
+        pending += 1
+        updateBusy()
+        defer {
+            pending -= 1
+            updateBusy()
+        }
         do {
             return try await action()
         } catch {
@@ -114,10 +154,43 @@ final class VaultStore: ObservableObject {
         await run { try await bridge.call("models", arguments(["provider": provider])) } ?? []
     }
 
-    func verify(provider: String, model: String) async -> VerifyResult? {
-        let result: VerifyResult? = await run { try await bridge.call("verify", arguments(["provider": provider, "model": model])) }
-        if result != nil { await reload() }
+    /// Checks one model with real calls and refreshes the lists that depend on the result.
+    func check(provider: String, model: String) async -> CheckResult? {
+        let result: CheckResult? = await run { try await bridge.call("check", arguments(["provider": provider, "model": model])) }
+        if result != nil {
+            checksRevision += 1
+            await reload()
+        }
         return result
+    }
+
+    /// Checks the given models one after another. Only one batch runs at a time.
+    func startBatch(provider: String, models: [String]) {
+        guard batch?.running != true, !models.isEmpty else { return }
+        batch = BatchProgress(provider: provider, total: models.count)
+        updateBusy()
+        batchTask = Task {
+            for model in models {
+                if Task.isCancelled { break }
+                batch?.current = model
+                let result: CheckResult? = try? await bridge.call("check", arguments(["provider": provider, "model": model]))
+                batch?.record(result)
+                checksRevision += 1
+                // A short gap keeps a long run under per-minute request limits.
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+            }
+            batch?.running = false
+            updateBusy()
+            await reload()
+        }
+    }
+
+    func stopBatch() {
+        batchTask?.cancel()
+    }
+
+    func dismissBatch() {
+        if batch?.running == false { batch = nil }
     }
 
     func ask(slot: Slot, prompt: String, system: String) async -> AskResult? {

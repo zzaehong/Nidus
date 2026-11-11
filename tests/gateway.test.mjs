@@ -171,26 +171,40 @@ test('failed calls are recorded and rethrown; an exceeded budget warns but does 
   await assert.rejects(gateway.send({ role: 'worker', difficulty: 'normal' }, hello), { code: 'invalid_request' });
 });
 
-test('verifyTools runs a real round trip and assignment then reports tools as confirmed', async t => {
+test('checkModel separates text and tool ability, remembers definite results and leaves transient failures open', async t => {
   const paths = await vault(t, table);
   const credentials = new MemoryCredentials({ deepseek: 'kd' });
-  const { providers, calls } = fakeProviders({ deepseek: ['deepseek-flash', 'deepseek-mute'] }, (_, body) => {
-    if (body.model === 'deepseek-mute') return completionText('I cannot use tools.');
+  const toolCallReply = { choices: [{ finish_reason: 'tool_calls', message: { content: null, tool_calls: [{ id: 'call_1', function: { name: 'add', arguments: '{"a":17,"b":25}' } }] } }], usage: { prompt_tokens: 5, completion_tokens: 5 } };
+  const { providers, calls } = fakeProviders({ deepseek: ['deepseek-flash', 'deepseek-text', 'deepseek-notools', 'deepseek-gone', 'deepseek-busy'] }, (_, body) => {
     const answered = body.messages.some(message => message.role === 'tool');
-    return answered ? completionText('The sum is 42.')
-      : { choices: [{ finish_reason: 'tool_calls', message: { content: null, tool_calls: [{ id: 'call_1', function: { name: 'add', arguments: '{"a":17,"b":25}' } }] } }], usage: { prompt_tokens: 5, completion_tokens: 5 } };
+    switch (body.model) {
+      case 'deepseek-text': return completionText('I cannot use tools.');
+      case 'deepseek-notools': return body.tools ? { httpStatus: 400 } : completionText('OK');
+      case 'deepseek-gone': return { httpStatus: 404 };
+      case 'deepseek-busy': return { httpStatus: 429 };
+      default: return answered ? completionText('The sum is 42.') : toolCallReply;
+    }
   });
   const gateway = new ModelGateway(paths, { credentials, providers });
   t.after(() => gateway.close());
   await gateway.refreshModels('deepseek');
 
-  assert.deepEqual(await gateway.verifyTools('deepseek', 'deepseek-mute'), { supported: false, detail: 'The model did not call the tool.' });
-  assert.equal(await gateway.toolsVerified('deepseek', 'deepseek-mute'), false);
-
-  assert.equal((await gateway.verifyTools('deepseek', 'deepseek-flash')).supported, true);
+  assert.deepEqual(await gateway.checkModel('deepseek', 'deepseek-flash'), { text: 'passed', tools: 'passed', detail: 'Tool call round trip succeeded.' });
   assert.equal(calls.at(-1).body.messages.at(-1).role, 'tool');
+  assert.deepEqual(await gateway.checkModel('deepseek', 'deepseek-text'), { text: 'passed', tools: 'failed', detail: 'The model did not call the tool.' });
+  assert.deepEqual(await gateway.checkModel('deepseek', 'deepseek-notools'), { text: 'passed', tools: 'failed', detail: 'Tool call failed (invalid_request).' });
+  assert.deepEqual(await gateway.checkModel('deepseek', 'deepseek-gone'), { text: 'failed', tools: 'failed', detail: 'Tool call failed (not_found).' });
+  assert.deepEqual(await gateway.checkModel('deepseek', 'deepseek-busy'), { text: 'inconclusive', tools: 'inconclusive', detail: 'Tool call failed (rate_limit).' });
+
+  const choices = Object.fromEntries((await gateway.modelChoices('deepseek')).map(choice => [choice.id, [choice.text, choice.tools]]));
+  assert.deepEqual(choices, { 'deepseek-flash': ['passed', 'passed'], 'deepseek-text': ['passed', 'failed'], 'deepseek-notools': ['passed', 'failed'], 'deepseek-gone': ['failed', 'failed'], 'deepseek-busy': ['untested', 'untested'] });
+  assert.equal(await gateway.toolsVerified('deepseek', 'deepseek-text'), false);
   assert.match((await gateway.assign({ role: 'worker', difficulty: 'normal', needs: { tools: true } })).reason, /tools confirmed/);
-  assert.deepEqual(gateway.usageSummary().groups.map(g => [g.role, g.model, g.calls]), [['probe', 'deepseek-flash', 2], ['probe', 'deepseek-mute', 1]]);
+  assert.equal((await stat(paths.checksFile)).mode & 0o777, 0o600);
+
+  // Every probe call is in the usage log, including the failed ones.
+  assert.deepEqual(gateway.usageSummary().groups.map(g => [g.model, g.calls, g.failed]),
+    [['deepseek-busy', 1, 1], ['deepseek-flash', 2, 0], ['deepseek-gone', 1, 1], ['deepseek-notools', 2, 1], ['deepseek-text', 1, 0]]);
 });
 
 test('CLI: init, connect, models, assign, ask and usage against one vault', async t => {
@@ -240,7 +254,8 @@ test('app bridge: vault status, init, overview, candidate and budget edits, ask'
   assert.equal((await call('vault-status')).initialized, true);
 
   assert.deepEqual(await call('connect', { provider: 'deepseek', key: 'kd' }), { provider: 'deepseek', models: 1 });
-  assert.deepEqual(await call('models', { provider: 'deepseek' }), [{ id: 'deepseek-flash', name: 'deepseek-flash', tools: 'unknown' }]);
+  assert.deepEqual(await call('models', { provider: 'deepseek' }), [{ id: 'deepseek-flash', name: 'deepseek-flash', text: 'untested', tools: 'untested', detail: null, checkedAt: null }]);
+  assert.deepEqual(await call('check', { provider: 'deepseek', model: 'deepseek-flash' }), { text: 'passed', tools: 'failed', detail: 'The model did not call the tool.' });
 
   let overview = await call('overview');
   assert.deepEqual(overview.slots.map(slot => slot.id), ['roles.main', 'roles.lead-manager', 'roles.manager', 'worker.simple', 'worker.normal', 'worker.complex']);
@@ -263,7 +278,7 @@ test('app bridge: vault status, init, overview, candidate and budget edits, ask'
   const answer = await call('ask', { role: 'worker', difficulty: 'normal', prompt: 'ping' });
   assert.equal(answer.text, 'pong');
   assert.equal(answer.model, 'deepseek:deepseek-flash');
-  assert.equal((await call('overview')).usage.calls, 1);
+  assert.equal((await call('overview')).usage.calls, 2);
 
   await call('disconnect', { provider: 'deepseek' });
   assert.equal((await call('overview')).providers.some(p => p.connected), false);

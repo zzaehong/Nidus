@@ -26,8 +26,27 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(formatUSD("7"), "$7")
     }
 
-    func testToolLabels() throws {
-        let choices = try JSONDecoder().decode([ModelChoice].self, from: Data(#"[{"id":"a","name":"a","tools":"verified"},{"id":"b","name":"b","tools":"unknown"}]"#.utf8))
-        XCTAssertEqual(choices.map(\.toolsLabel), ["도구 확인됨", "도구 미확인"])
+    func testCandidatesMustPassTheCheckTheirSlotNeeds() throws {
+        let choices = try JSONDecoder().decode([ModelChoice].self, from: Data(#"""
+        [{"id":"both","name":"both","text":"passed","tools":"passed","detail":"ok","checkedAt":"2026-11-11T00:00:00Z"},
+         {"id":"text","name":"text","text":"passed","tools":"failed","detail":"no tool call","checkedAt":"2026-11-11T00:00:00Z"},
+         {"id":"new","name":"new","text":"untested","tools":"untested","detail":null,"checkedAt":null}]
+        """#.utf8))
+        let slots = try JSONDecoder().decode([Slot].self, from: Data(#"""
+        [{"id":"roles.manager","role":"manager","difficulty":null,"candidates":[],"resolved":null,"reason":null,"problem":null},
+         {"id":"worker.simple","role":"worker","difficulty":"simple","candidates":[],"resolved":null,"reason":null,"problem":null}]
+        """#.utf8))
+        XCTAssertEqual(choices.filter { $0.qualifies(for: slots[0]) }.map(\.id), ["both", "text"])
+        XCTAssertEqual(choices.filter { $0.qualifies(for: slots[1]) }.map(\.id), ["both"])
+        XCTAssertEqual(choices.filter(\.untested).map(\.id), ["new"])
+    }
+
+    func testBatchProgressCountsOutcomes() {
+        var batch = BatchProgress(provider: "gemini", total: 4)
+        batch.record(CheckResult(text: "passed", tools: "passed", detail: ""))
+        batch.record(CheckResult(text: "passed", tools: "failed", detail: ""))
+        batch.record(CheckResult(text: "failed", tools: "failed", detail: ""))
+        batch.record(nil)
+        XCTAssertEqual([batch.done, batch.toolsPassed, batch.textOnly, batch.failed, batch.inconclusive], [4, 1, 1, 1, 1])
     }
 }

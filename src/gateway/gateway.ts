@@ -61,10 +61,32 @@ export interface VaultOverview {
   budgetWarning: string | null;
 }
 
+export type CheckOutcome = 'passed' | 'failed' | 'inconclusive';
+
+export interface ModelCheck {
+  text: CheckOutcome;
+  tools: CheckOutcome;
+  detail: string;
+}
+
+interface StoredCheck {
+  text?: 'passed' | 'failed';
+  tools?: 'passed' | 'failed';
+  detail: string;
+  checkedAt: string;
+}
+
+/** Errors that say the model itself cannot do this, as opposed to a passing condition of the service. */
+const definiteFailures = ['not_found', 'invalid_request', 'permission', 'unsupported'];
+
 export interface ModelChoice {
   id: string;
   name: string;
-  tools: 'supported' | 'unsupported' | 'unknown' | 'verified';
+  /** Result of the last real check: plain text replies, and a tool call round trip. */
+  text: 'passed' | 'failed' | 'untested';
+  tools: 'passed' | 'failed' | 'untested';
+  detail: string | null;
+  checkedAt: string | null;
 }
 
 const probeTool: ToolSpec = {
@@ -109,17 +131,17 @@ export class ModelGateway implements Availability {
     return (await this.models.load(provider))?.models.find(candidate => candidate.id === model) ?? null;
   }
 
-  private async verified(): Promise<Record<string, { tools: 'supported'; checkedAt: string }>> {
+  private async checks(): Promise<Record<string, StoredCheck>> {
     try {
-      return JSON.parse(await readFile(this.paths.verifiedFile, 'utf8'));
+      return JSON.parse(await readFile(this.paths.checksFile, 'utf8'));
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {};
-      throw new NidusError('storage', 'Could not read verified model capabilities.');
+      throw new NidusError('storage', 'Could not read model check results.');
     }
   }
 
   async toolsVerified(provider: ProviderId, model: string): Promise<boolean> {
-    return (await this.verified())[refName({ provider, model })]?.tools === 'supported';
+    return (await this.checks())[refName({ provider, model })]?.tools === 'passed';
   }
 
   // --- Credentials and model discovery -------------------------------------
@@ -205,34 +227,87 @@ export class ModelGateway implements Availability {
   }
 
   /**
-   * Runs one real tool round trip against a specific model and remembers a success,
-   * so assignment can treat the model's tool support as confirmed.
+   * Checks a specific model with real calls: a tool round trip, and a plain text
+   * reply when the tool exchange does not prove text output. Definite results are
+   * remembered; rate limits, timeouts and server errors are reported as
+   * inconclusive and leave any earlier result in place.
    */
-  async verifyTools(provider: ProviderId, model: string, options: RequestOptions = {}): Promise<{ supported: boolean; detail: string }> {
+  async checkModel(provider: ProviderId, model: string, options: RequestOptions = {}): Promise<ModelCheck> {
     const cached = await this.cachedModel(provider, model);
-    const assignment: Assignment = { provider, model, role: 'probe', difficulty: null, candidateIndex: 0, reason: 'tool support check', skipped: [], outputTokenLimit: cached?.limits.outputTokens ?? null };
+    const assignment: Assignment = { provider, model, role: 'probe', difficulty: null, candidateIndex: 0, reason: 'model check', skipped: [], outputTokenLimit: cached?.limits.outputTokens ?? null };
     const target: CallTarget = { role: 'probe' };
-    const messages: Message[] = [userText('Call the add tool with a=17 and b=25, then tell me the sum.')];
-    const request = { system: 'You have one tool. Use it when asked.', tools: [probeTool], maxOutputTokens: 2048 };
+    const check: ModelCheck = { text: 'inconclusive', tools: 'inconclusive', detail: '' };
+    let tryText = true;
 
-    const first = await this.call(assignment, target, { ...request, messages }, options);
-    const calls = toolCallsOf(first.response.content);
-    const call = calls[0];
-    if (!call || call.name !== 'add') return { supported: false, detail: 'The model did not call the tool.' };
-    if (call.inputError) return { supported: false, detail: `The model sent invalid tool input (${call.inputError}).` };
+    try {
+      const messages: Message[] = [userText('Call the add tool with a=17 and b=25, then tell me the sum.')];
+      const request = { system: 'You have one tool. Use it when asked.', tools: [probeTool], maxOutputTokens: 2048 };
+      const first = await this.call(assignment, target, { ...request, messages }, options);
+      const calls = toolCallsOf(first.response.content);
+      const call = calls[0];
+      if (!call || call.name !== 'add' || call.inputError) {
+        check.tools = 'failed';
+        check.detail = !call || call.name !== 'add' ? 'The model did not call the tool.' : `The model sent invalid tool input (${call.inputError}).`;
+        // Any text it produced still shows that plain text output works.
+        if (textOf(first.response.content).trim()) { check.text = 'passed'; tryText = false; }
+      } else {
+        messages.push({ role: 'assistant', content: first.response.content });
+        messages.push({ role: 'user', content: calls.map(item => ({ type: 'tool_result' as const, callId: item.id, content: '42', isError: false })) });
+        const second = await this.call(assignment, target, { ...request, messages }, options);
+        if (textOf(second.response.content).includes('42')) {
+          check.tools = 'passed';
+          check.text = 'passed';
+          check.detail = 'Tool call round trip succeeded.';
+          tryText = false;
+        } else {
+          check.tools = 'failed';
+          check.detail = 'The model did not use the tool result in its answer.';
+        }
+      }
+    } catch (error) {
+      const code = error instanceof NidusError ? error.code : 'provider_error';
+      check.detail = `Tool call failed (${code}).`;
+      if (code === 'not_found') {
+        // The model cannot be called at all with this key.
+        check.tools = 'failed';
+        check.text = 'failed';
+        tryText = false;
+      } else if (definiteFailures.includes(code)) {
+        check.tools = 'failed';
+      } else if (code === 'rate_limit' || code === 'timeout' || code === 'cancelled') {
+        tryText = false;
+      }
+    }
 
-    messages.push({ role: 'assistant', content: first.response.content });
-    messages.push({ role: 'user', content: calls.map(item => ({ type: 'tool_result' as const, callId: item.id, content: '42', isError: false })) });
-    const second = await this.call(assignment, target, { ...request, messages }, options);
-    if (!textOf(second.response.content).includes('42')) return { supported: false, detail: 'The model did not use the tool result in its answer.' };
+    if (tryText) {
+      try {
+        const reply = await this.call(assignment, target, { messages: [userText('Reply with the single word OK.')], maxOutputTokens: 1024 }, options);
+        check.text = textOf(reply.response.content).trim() ? 'passed' : 'failed';
+        if (check.text === 'failed') check.detail += ` Text reply was empty (${reply.response.stopReason}).`;
+      } catch (error) {
+        const code = error instanceof NidusError ? error.code : 'provider_error';
+        if (definiteFailures.includes(code)) check.text = 'failed';
+        check.detail += ` Text call failed (${code}).`;
+      }
+    }
 
-    const verified = await this.verified();
-    verified[refName({ provider, model })] = { tools: 'supported', checkedAt: this.now().toISOString() };
-    await mkdir(dirname(this.paths.verifiedFile), { recursive: true, mode: 0o700 });
-    const temporary = `${this.paths.verifiedFile}.${randomUUID()}.tmp`;
-    await writeFile(temporary, `${JSON.stringify(verified, null, 2)}\n`, { mode: 0o600 });
-    await rename(temporary, this.paths.verifiedFile);
-    return { supported: true, detail: 'Tool call round trip succeeded.' };
+    if (check.text !== 'inconclusive' || check.tools !== 'inconclusive') {
+      const all = await this.checks();
+      const key = refName({ provider, model });
+      all[key] = {
+        ...all[key],
+        ...(check.text !== 'inconclusive' ? { text: check.text } : {}),
+        ...(check.tools !== 'inconclusive' ? { tools: check.tools } : {}),
+        detail: check.detail.trim(),
+        checkedAt: this.now().toISOString(),
+      };
+      await mkdir(dirname(this.paths.checksFile), { recursive: true, mode: 0o700 });
+      const temporary = `${this.paths.checksFile}.${randomUUID()}.tmp`;
+      await writeFile(temporary, `${JSON.stringify(all, null, 2)}\n`, { mode: 0o600 });
+      await rename(temporary, this.paths.checksFile);
+    }
+    check.detail = check.detail.trim();
+    return check;
   }
 
   async disconnect(provider: ProviderId): Promise<void> {
@@ -254,8 +329,8 @@ export class ModelGateway implements Availability {
     for (const { id, target, candidates } of targets) {
       const view: SlotView = { id, role: target.role, difficulty: target.difficulty ?? null, candidates, resolved: null, reason: null, problem: null };
       try {
-        // Agents call tools, so slots are resolved the way an agent would use them.
-        const chosen = await assign(table, { ...target, needs: { tools: true } }, this);
+        // Workers do the tool work; main and managers plan and review in text.
+        const chosen = await assign(table, { ...target, needs: { tools: target.role === 'worker' } }, this);
         view.resolved = refName(chosen);
         view.reason = chosen.reason;
       } catch (error) {
@@ -278,13 +353,12 @@ export class ModelGateway implements Availability {
 
   /** Text models of a provider with their tool support, for choosing candidates. */
   async modelChoices(provider: ProviderId): Promise<ModelChoice[]> {
-    const verified = await this.verified();
+    const checks = await this.checks();
     const { models } = await this.cachedModels(provider);
-    return models.filter(model => classifyModel(model).kind === 'text' && model.capabilities.chat !== 'unsupported').map(model => ({
-      id: model.id,
-      name: model.name,
-      tools: verified[refName({ provider, model: model.id })] ? 'verified' : model.capabilities.tools,
-    }));
+    return models.filter(model => classifyModel(model).kind === 'text' && model.capabilities.chat !== 'unsupported').map(model => {
+      const check = checks[refName({ provider, model: model.id })];
+      return { id: model.id, name: model.name, text: check?.text ?? 'untested', tools: check?.tools ?? 'untested', detail: check?.detail ?? null, checkedAt: check?.checkedAt ?? null };
+    });
   }
 
   /** Replaces the ordered candidates of one slot ("roles.<role>" or "worker.<difficulty>"). */

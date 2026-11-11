@@ -72,9 +72,9 @@ export async function dispatch(input: unknown, dependencies: BridgeDependencies 
       case 'set-budget':
         await gateway.setBudget(request.monthlyUSD === null || request.monthlyUSD === '' ? null : text(request.monthlyUSD, 'monthlyUSD'));
         return await gateway.overview();
-      case 'verify': {
+      case 'check': {
         const provider = providerId(text(request.provider, 'provider'));
-        return await gateway.verifyTools(provider, text(request.model, 'model'));
+        return await gateway.checkModel(provider, text(request.model, 'model'));
       }
       case 'ask': {
         const difficulty = request.difficulty === undefined || request.difficulty === null ? undefined : request.difficulty as Difficulty;
