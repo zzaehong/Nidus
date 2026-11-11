@@ -151,6 +151,9 @@ struct VaultView: View {
         }
         .navigationTitle(vaultURL.lastPathComponent)
         .toolbarTitleHidden()
+        // The system draws the toolbar's own background a few points past the sidebar
+        // edge. Without it the toolbar shares the page background and nothing overlaps.
+        .toolbarBackground(.hidden, for: .windowToolbar)
         .toolbar {
             // Flexible space keeps the actions on the trailing side, so they stay put
             // when the sidebar opens and closes.

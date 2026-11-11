@@ -67,6 +67,9 @@ struct ScrollingPage<Content: View>: View {
                 .padding(Layout.margin)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
         }
+        // One point clear of the toolbar: a scroll view that touches it extends underneath,
+        // and with no toolbar background the scrolled content would show behind the buttons.
+        .padding(.top, 1)
     }
 }
 
