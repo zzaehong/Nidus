@@ -2,6 +2,7 @@
 //
 //   .nidus/models.json   assignment table        (tracked by Git)
 //   .nidus/budget.json   vault budget            (tracked by Git)
+//   .nidus/network.json  domains the workspace may reach (tracked by Git, created on first approval)
 //   .nidus/.gitignore    excludes local/
 //   .nidus/local/        usage database and model cache (not tracked)
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
@@ -14,6 +15,8 @@ export interface VaultPaths {
   local: string;
   modelsFile: string;
   budgetFile: string;
+  /** Domains the workspace VM may reach (stage 2). */
+  networkFile: string;
   gitignore: string;
   usageDb: string;
   modelCache: string;
@@ -30,6 +33,7 @@ export function vaultPaths(root: string): VaultPaths {
     local,
     modelsFile: join(nidus, 'models.json'),
     budgetFile: join(nidus, 'budget.json'),
+    networkFile: join(nidus, 'network.json'),
     gitignore: join(nidus, '.gitignore'),
     usageDb: join(local, 'usage.sqlite'),
     modelCache: join(local, 'models'),
