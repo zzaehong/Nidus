@@ -3,7 +3,7 @@ import {createInterface} from 'node:readline';
 import {fileURLToPath} from 'node:url';
 import {readFile,lstat} from 'node:fs/promises';
 import {createReadStream} from 'node:fs';
-import {createHash,randomUUID} from 'node:crypto';
+import {createHash,randomUUID,randomBytes} from 'node:crypto';
 import {once} from 'node:events';
 import {join} from 'node:path';
 import type {Duplex} from 'node:stream';
@@ -30,8 +30,10 @@ export class AppleOfflineBackend implements SharedBackend {
  constructor(private readonly assets=fileURLToPath(new URL('../vm-assets',import.meta.url)),private readonly egress?:{accept(stream:Duplex):void}){}
  get egressConnected(){return this.egressLink!==undefined&&this.egress!==undefined;}
  get browserRunning(){return this.browserId!==undefined;}
+ private transfers=new Map<string,(stream:Duplex)=>void>();
  private route(stream:Duplex,service:Service){
   if(service==='browser'){const take=this.browserWaiter;this.browserWaiter=undefined;if(take)take(stream);else stream.destroy();return;}
+  if(service==='workspace'){this.routeTransfer(stream);return;}
   if(this.egress)this.egress.accept(stream);else stream.destroy();
  }
  private event(e:any){if(e.event==='lost')this.failureHandler?.();for(const listener of this.listeners)listener(e);}
@@ -150,6 +152,74 @@ export class AppleOfflineBackend implements SharedBackend {
    const e=await within(graceMs).catch(()=>{this.cancel(id);return within(15000);});
    if(e.line.startsWith('NIDUS_RESULT')&&e.line.split(' ')[3]!=='1')throw new VaultError('browser_cleanup_unconfirmed');
   }finally{this.browserId=undefined;this.browserEnded=undefined;}
+ }
+ /** A workspace transfer stream starts with its one-time token line; anything else is dropped. */
+ private routeTransfer(stream:Duplex){
+  let head=Buffer.alloc(0);
+  const timer=setTimeout(()=>stream.destroy(),10000);
+  const onData=(chunk:Buffer)=>{
+   head=Buffer.concat([head,chunk]);const end=head.indexOf(10);
+   if(end<0){if(head.length>64){clearTimeout(timer);stream.destroy();}return;}
+   clearTimeout(timer);stream.off('data',onData);stream.pause();
+   const take=this.transfers.get(head.subarray(0,end).toString());
+   if(!take){stream.destroy();return;}
+   this.transfers.delete(head.subarray(0,end).toString());
+   const rest=head.subarray(end+1);if(rest.length)stream.unshift(rest);
+   take(stream);
+  };
+  stream.on('data',onData);stream.on('error',()=>{});
+ }
+ private workspaceLine(task:string,kind:string,ms:number){
+  const prefix=(e:any)=>e.event==='guest'&&typeof e.line==='string';
+  return this.wait(e=>prefix(e)&&(e.line.startsWith(`NIDUS_WORKSPACE_${kind} ${task} `)||e.line===`NIDUS_WORKSPACE_${kind} ${task}`||e.line.startsWith(`NIDUS_WORKSPACE_FAILED ${task} `)||e.line===`NIDUS_WORKSPACE_FAILED ${task} unavailable`),ms).then(e=>{
+   if(e.line.startsWith('NIDUS_WORKSPACE_FAILED')){const error=new VaultError('workspace_transfer_failed');error.message+=` (${e.line.split(' ').slice(2).join(' ')})`;throw error;}
+   return e.line.split(' ').slice(2) as string[];
+  });
+ }
+ /** Copies a Vault bundle into the VM as /workspaces/<task> and makes it the current workspace. */
+ async importWorkspace(task:string,bundle:Buffer):Promise<string>{
+  if(!this.child||this.closed||!this.egressLink||!this.development)throw new VaultError('vm_not_running');
+  if(!/^[a-z0-9][a-z0-9-]{0,62}$/.test(task))throw new VaultError('workspace_task_invalid');
+  if(!bundle.length||bundle.length>256*1024*1024)throw new VaultError('workspace_too_large');
+  const token=randomBytes(16).toString('hex');
+  this.transfers.set(token,stream=>{stream.on('error',()=>{});stream.end(bundle);});
+  try{
+   const done=this.workspaceLine(task,'IMPORTED',60000+bundle.length/1000);
+   this.child.stdin.write(`workspace-import ${task} ${token} ${bundle.length} ${createHash('sha256').update(bundle).digest('hex')}\n`);
+   const [commit]=await done;
+   if(!/^[0-9a-f]{40}$/.test(commit??''))throw new VaultError('vm_protocol_invalid');
+   return commit!;
+  }finally{this.transfers.delete(token);}
+ }
+ /** Makes an existing workspace current again (after a VM restart). False when the VM does not have it. */
+ async selectWorkspace(task:string):Promise<boolean>{
+  if(!this.child||this.closed||!this.development)throw new VaultError('vm_not_running');
+  if(!/^[a-z0-9][a-z0-9-]{0,62}$/.test(task))throw new VaultError('workspace_task_invalid');
+  const done=this.workspaceLine(task,'SELECTED',10000).then(()=>true,()=>false);
+  this.child.stdin.write(`workspace-select ${task}\n`);
+  return done;
+ }
+ /** The task's work as a bundle of commits after base (uncommitted changes are committed first); null when nothing changed. */
+ async exportWorkspace(task:string,base:string):Promise<{head:string;bundle:Buffer|null}>{
+  if(!this.child||this.closed||!this.egressLink||!this.development)throw new VaultError('vm_not_running');
+  if(!/^[a-z0-9][a-z0-9-]{0,62}$/.test(task)||!/^[0-9a-f]{40}$/.test(base))throw new VaultError('workspace_task_invalid');
+  const limit=128*1024*1024,token=randomBytes(16).toString('hex');
+  const received=new Promise<Buffer>((resolve,reject)=>{
+   this.transfers.set(token,stream=>{const chunks:Buffer[]=[];let size=0;
+    stream.on('data',(c:Buffer)=>{size+=c.length;if(size>limit){stream.destroy();reject(new VaultError('workspace_too_large'));}else chunks.push(c);});
+    stream.on('end',()=>resolve(Buffer.concat(chunks)));stream.on('error',()=>reject(new VaultError('workspace_transfer_failed')));stream.resume();});
+  });
+  received.catch(()=>{});
+  try{
+   const done=this.workspaceLine(task,'EXPORTED',600000);
+   this.child.stdin.write(`workspace-export ${task} ${token} - ${base}\n`);
+   const [size,digest,head]=await done;
+   if(!/^\d+$/.test(size??'')||!/^[0-9a-f]{40}$/.test(head??''))throw new VaultError('vm_protocol_invalid');
+   if(size==='0')return {head:head!,bundle:null};
+   const bundle=await Promise.race([received,new Promise<never>((_,reject)=>setTimeout(()=>reject(new VaultError('workspace_transfer_failed')),30000).unref())]);
+   if(bundle.length!==Number(size)||createHash('sha256').update(bundle).digest('hex')!==digest)throw new VaultError('workspace_transfer_failed');
+   return {head:head!,bundle};
+  }finally{this.transfers.delete(token);}
  }
  async stop(){
   if(!this.child)return;if(this.closed){if(!this.stopped)throw new VaultError('STOP_UNCONFIRMED');return;}

@@ -57,7 +57,7 @@ with tempfile.TemporaryDirectory(prefix='nidus-workspace-layer-') as staging:
     (root / 'init').chmod(0o755)
     helpers = root / 'opt/development/nidus'
     helpers.mkdir(parents=True)
-    for name in ['session.py', 'child.py', 'egress-relay.py']:
+    for name in ['session.py', 'child.py', 'egress-relay.py', 'workspace-sync.py']:
         shutil.copyfile(here / name, helpers / name)
         (helpers / name).chmod(0o644)
     browser = root / 'opt/development/usr/lib/nidus'

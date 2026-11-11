@@ -5,8 +5,9 @@ virtio console port to the host's Egress Proxy. The VM has no network device; th
 port is its only way out, and the host decides what may pass.
 
 127.0.0.1:3129 is the browser's DevTools link: the browser bridge connects there and the
-host drives Chromium and receives its screen through that stream. The OPEN frame names
-the service ("browser"); an empty name means the Egress Proxy.
+host drives Chromium and receives its screen through that stream. 127.0.0.1:3130 carries
+workspace transfers (workspace-sync.py). The OPEN frame names the service ("browser",
+"workspace"); an empty name means the Egress Proxy.
 """
 import asyncio, os, pathlib, queue, struct, sys, threading, time
 
@@ -181,8 +182,9 @@ class Relay:
         self.send(HELLO, 0, bytes([VERSION]))
         egress = await asyncio.start_server(self.serve, '127.0.0.1', 3128, limit=MAX_PAYLOAD)
         browser = await asyncio.start_server(lambda r, w: self.serve(r, w, b'browser'), '127.0.0.1', 3129, limit=MAX_PAYLOAD)
-        async with egress, browser:
-            await asyncio.gather(egress.serve_forever(), browser.serve_forever())
+        workspace = await asyncio.start_server(lambda r, w: self.serve(r, w, b'workspace'), '127.0.0.1', 3130, limit=MAX_PAYLOAD)
+        async with egress, browser, workspace:
+            await asyncio.gather(egress.serve_forever(), browser.serve_forever(), workspace.serve_forever())
 
 
 if __name__ == '__main__':

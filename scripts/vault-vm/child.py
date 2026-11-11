@@ -19,6 +19,16 @@ if pathlib.Path('/etc/fonts').is_dir():
 if profile=='shell' and pathlib.Path('/cache').is_mount():
  (root/'cache').mkdir()
  mount('--bind','/cache',str(root/'cache'));mount('-o','remount,bind,nosuid,nodev,noexec',str(root/'cache'))
+# The current task's workspace: the Shell works in it, the browser can open its files read-only.
+current=pathlib.Path('/run/workspace-current')
+if profile in ['shell','resident'] and current.is_file():
+ task=current.read_text().strip()
+ source=pathlib.Path('/workspaces')/task
+ if task and all(c in 'abcdefghijklmnopqrstuvwxyz0123456789-' for c in task) and source.is_dir() and not source.is_symlink():
+  (root/'workspace').mkdir(exist_ok=True)
+  mount('--bind',str(source),str(root/'workspace'))
+  # BusyBox merges remount options with the current ones: say "exec" or the disk's noexec stays.
+  mount('-o','remount,bind,nosuid,nodev'+(',ro,noexec' if profile=='resident' else ',exec'),str(root/'workspace'))
 # Expose only guest CPU topology, never cgroup controls or Host resources.
 (root/'sys/devices/system/cpu').mkdir(parents=True)
 mount('--bind','/sys/devices/system/cpu',str(root/'sys/devices/system/cpu'))
@@ -62,6 +72,6 @@ if browserish:
  os.chroot('.');os.chdir('/')
  subprocess.run(['/bin/busybox','umount','-l','/.old-root'],check=True);os.rmdir('/.old-root')
 else:os.chroot(root)
-os.chdir('/work');os.setgroups([]);os.setgid(1000);os.setuid(1000)
+os.chdir('/workspace' if os.path.isdir('/workspace/.git') else '/work');os.setgroups([]);os.setgid(1000);os.setuid(1000)
 if ctypes.CDLL(None).prctl(38,1,0,0,0)!=0:raise OSError('no_new_privs')
 os.execve('/bin/bash',['bash','--noprofile','--norc','/task.sh'],{'PATH':'/usr/bin:/bin','HOME':'/home','TMPDIR':'/tmp','LANG':'C.UTF-8','PYTHONDONTWRITEBYTECODE':'1','PIP_DISABLE_PIP_VERSION_CHECK':'1',**({'HTTP_PROXY':PROXY,'HTTPS_PROXY':PROXY,'http_proxy':PROXY,'https_proxy':PROXY,'NO_PROXY':NO_PROXY,'no_proxy':NO_PROXY} if EGRESS else {'PIP_NO_INDEX':'1','npm_config_offline':'true'}),'PIP_CACHE_DIR':'/cache/pip' if pathlib.Path('/cache').exists() else '/tmp/pip','npm_config_cache':'/cache/npm' if pathlib.Path('/cache').exists() else '/tmp/npm','GIT_CONFIG_NOSYSTEM':'1'})

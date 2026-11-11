@@ -113,8 +113,17 @@ if test -n "$cache_mode"; then
   mkdir -p /opt/development/browser-profile
   mount --bind /persistent/browser /opt/development/browser-profile || { echo NIDUS_BLOCKED browser-profile; exec sleep 86400; }
  fi
+ # Task workspaces (Git repositories the AI works in) survive VM restarts on the same disk.
+ # Executable, unlike the package cache: build tools run scripts from the workspace.
+ if ! test -e /persistent/workspaces; then mkdir -m 755 /persistent/workspaces; fi
+ if test -d /persistent/workspaces && ! test -L /persistent/workspaces; then
+  mkdir -p /opt/development/workspaces
+  mount --bind /persistent/workspaces /opt/development/workspaces && mount -o remount,bind,nosuid,nodev,exec /opt/development/workspaces || { echo NIDUS_BLOCKED workspaces; exec sleep 86400; }
+ fi
  echo NIDUS_CACHE_READY
 fi
+# Without a cache disk, workspaces live in memory until the VM stops.
+test -d /opt/development && mkdir -p -m 755 /opt/development/workspaces
 # The only way out: a virtio console port to the host's Egress Proxy. Restarted if it dies.
 if test -d /opt/development && grep -qx nidus.egress /sys/class/virtio-ports/*/name 2>/dev/null; then
  ( while :; do
@@ -138,6 +147,21 @@ while read -r action id payload seconds snapshot; do
   browser-input)
     case "$id" in ''|*[!a-f0-9-]*) continue;; esac
     if test -p "/run/$id.input"; then printf '%s\n' "$payload" > "/run/$id.input"; fi
+    ;;
+  workspace-import|workspace-export)
+    # id: task name, payload: one-time transfer token, seconds: size, snapshot: sha256 or base commit.
+    case "$id" in ''|*[!a-z0-9-]*) echo 'NIDUS_REJECT id'; continue;; esac
+    if ! test -d /opt/development || ! test -e /run/egress; then echo "NIDUS_WORKSPACE_FAILED $id unavailable"; continue; fi
+    if test "$action" = workspace-import; then
+     chroot /opt/development /usr/bin/python3 /nidus/workspace-sync.py import "$id" "$payload" "$seconds" "$snapshot" &
+    else
+     chroot /opt/development /usr/bin/python3 /nidus/workspace-sync.py export "$id" "$payload" "$snapshot" &
+    fi
+    ;;
+  workspace-select)
+    # After a VM restart: the task's workspace is still on the disk; make it current again.
+    case "$id" in ''|*[!a-z0-9-]*) echo 'NIDUS_REJECT id'; continue;; esac
+    if test -d "/opt/development/workspaces/$id/.git" && ! test -L "/opt/development/workspaces/$id"; then printf '%s' "$id" > /run/workspace-current; echo "NIDUS_WORKSPACE_SELECTED $id"; else echo "NIDUS_WORKSPACE_FAILED $id missing"; fi
     ;;
   browser-start)
     # The resident workspace browser: beside Shell sessions, one at a time, needs the link.
@@ -175,6 +199,7 @@ while read -r action id payload seconds snapshot; do
     if test -n "$cache_mode"; then
      sync
      if mountpoint -q /opt/development/browser-profile; then umount /opt/development/browser-profile || { echo NIDUS_BLOCKED cache-unmount; continue; }; fi
+     if mountpoint -q /opt/development/workspaces; then umount /opt/development/workspaces || { echo NIDUS_BLOCKED cache-unmount; continue; }; fi
      umount /opt/development/cache && umount /persistent || { echo NIDUS_BLOCKED cache-unmount; continue; }
      echo NIDUS_CACHE_CLEAN
     fi

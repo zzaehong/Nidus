@@ -36,7 +36,7 @@ with tempfile.TemporaryDirectory(prefix='nidus-m4-build-') as tmp:
         layers.append(layer)
         with tempfile.TemporaryDirectory(prefix='nidus-guest-overlay-') as staging:
             helpers=pathlib.Path(staging)/'opt/development/nidus';helpers.mkdir(parents=True)
-            for name in ['session.py','child.py','workspace.py','egress-relay.py']:shutil.copyfile(pathlib.Path(__file__).with_name(name),helpers/name)
+            for name in ['session.py','child.py','workspace.py','egress-relay.py','workspace-sync.py']:shutil.copyfile(pathlib.Path(__file__).with_name(name),helpers/name)
             browser=helpers.parent/'usr/lib/nidus';browser.mkdir(parents=True)
             shutil.copyfile(pathlib.Path(__file__).with_name('browser.mjs'),browser/'browser.mjs')
             shutil.copyfile(pathlib.Path(__file__).with_name('browser-live.mjs'),browser/'browser-live.mjs')

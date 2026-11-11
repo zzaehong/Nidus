@@ -4,7 +4,8 @@
 //
 // Frame: type u8 | stream u32 BE | length u32 BE | payload
 // OPEN carries the service the guest connected to: empty for the Egress Proxy
-// (guest 127.0.0.1:3128), "browser" for the browser's DevTools link (guest 127.0.0.1:3129).
+// (guest 127.0.0.1:3128), "browser" for the browser's DevTools link (guest 127.0.0.1:3129),
+// "workspace" for workspace transfers (guest 127.0.0.1:3130).
 // Flow control: each side may have WINDOW bytes in flight per stream and direction;
 // the receiver returns credit (WINDOW frames) as its local socket consumes data.
 import { Duplex } from 'node:stream';
@@ -14,7 +15,7 @@ export const PROTOCOL_VERSION = 1;
 export const WINDOW = 256 * 1024;
 export const MAX_PAYLOAD = 64 * 1024;
 export const MAX_STREAMS = 256;
-export const SERVICES = ['egress', 'browser'] as const;
+export const SERVICES = ['egress', 'browser', 'workspace'] as const;
 export type Service = typeof SERVICES[number];
 const HEADER = 9;
 
