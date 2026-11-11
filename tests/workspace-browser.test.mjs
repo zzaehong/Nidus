@@ -16,7 +16,9 @@ function pair() {
 function fakeChromium(link) {
   const calls = [];
   const page = { url: 'https://example.com/', title: 'Example', text: 'Hello', challengeVisible: false };
-  const fake = { calls, page, targets: [{ targetId: 'T1', type: 'page', url: 'about:blank', title: '' }], nextSession: 1 };
+  // One button on the page; tests move, replace or cover it.
+  const element = { tag: 'BUTTON', type: 'submit', role: 'button', name: '찾기', href: '', target: '', formAction: '', frameUrl: 'https://example.com/', editable: false, disabled: false, value: '', x: 100, y: 50, visible: true, hit: true };
+  const fake = { calls, page, element, revision: 1, elements: [], targets: [{ targetId: 'T1', type: 'page', url: 'about:blank', title: '' }], nextSession: 1 };
   let buffer = '';
   const send = message => link.write(JSON.stringify(message) + '\0');
   fake.event = (method, params, sessionId) => send({ method, params, ...(sessionId ? { sessionId } : {}) });
@@ -35,13 +37,15 @@ function fakeChromium(link) {
         case 'Page.getFrameTree': reply({ frameTree: { frame: { id: 'F', loaderId: 'L' } } }); break;
         case 'Page.createIsolatedWorld': reply({ executionContextId: 1 }); break;
         case 'Runtime.evaluate': reply({ result: { objectId: 'reader' } }); break;
-        case 'Runtime.getProperties': reply({ result: [] }); break;
+        case 'Runtime.getProperties': reply({ result: fake.elements.map((_, i) => ({ name: String(i), value: { objectId: 'el' + i } })) }); break;
         case 'Page.navigate': fake.page.url = m.params.url; reply({ frameId: 'F' }); break;
         // Like Chromium: answer, then exit, which ends the link.
         case 'Browser.close': reply({}); setImmediate(() => link.end()); break;
         case 'Runtime.callFunctionOn': {
           const method = m.params.functionDeclaration.match(/this\["(\w+)"\]/)[1];
-          if (method === 'state') reply({ result: { value: { revision: 1, url: fake.page.url, ready: true, busy: false } } });
+          if (method === 'state') reply({ result: { value: { revision: fake.revision, url: fake.page.url, ready: true, busy: false } } });
+          else if (method === 'metadata') reply({ result: { value: { ...fake.element } } });
+          else if (method === 'fingerprint') reply({ result: { value: JSON.stringify(fake.element) } });
           else if (method === 'scan') reply({ result: { objectId: 'list' } });
           else if (method === 'page') reply({ result: { value: { ...fake.page, frames: [], language: 'ko-KR', languages: [] } } });
           else reply({ result: { value: null } });
@@ -236,4 +240,28 @@ test('URLs: web, VM files and blank only', () => {
   assert.equal(allowedUrl('about:blank'), 'about:blank');
   assert.equal(allowedUrl('file:///workspace/index.html'), 'file:///workspace/index.html');
   for (const bad of ['chrome://settings', 'javascript:alert(1)', 'devtools://x', 'not a url', 42]) assert.throws(() => allowedUrl(bad), /browser_url_invalid/);
+});
+
+test('clicks work on a page that keeps changing, follow an element that moved, and refuse a replaced or covered one', async () => {
+  const { browser, fake } = await setup();
+  fake.elements = [fake.element];
+  let page = await browser.act({ op: 'observe' });
+  assert.equal(page.elements[0].name, '찾기');
+  // Ads and tickers change the page between observing and clicking.
+  fake.revision += 7;
+  fake.element.x = 140; fake.element.y = 90;
+  page = await browser.act({ op: 'click', snapshotId: page.snapshotId, targetId: '1' });
+  const press = fake.calls.findLast(c => c.method === 'Input.dispatchMouseEvent' && c.params.type === 'mousePressed');
+  assert.deepEqual([press.params.x, press.params.y], [140, 90], 'clicked where the button is now');
+
+  fake.element.name = '다른 버튼';
+  await assert.rejects(browser.act({ op: 'click', snapshotId: page.snapshotId, targetId: '1' }), /browser_element_gone/);
+  page = await browser.act({ op: 'observe' });
+  fake.element.hit = false;
+  await assert.rejects(browser.act({ op: 'click', snapshotId: page.snapshotId, targetId: '1' }), /browser_element_hidden/);
+  // A new document makes the whole observation stale.
+  page = await browser.act({ op: 'observe' });
+  await browser.act({ op: 'navigate', url: 'https://example.com/other' }).catch(() => {});
+  await assert.rejects(browser.act({ op: 'click', snapshotId: page.snapshotId, targetId: '1' }), /browser_stale_observation/);
+  await browser.close();
 });

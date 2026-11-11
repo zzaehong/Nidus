@@ -60,6 +60,8 @@ const KEYS: Record<string, number> = {
 };
 const AI_KEYS = ['Enter', 'Tab', 'Escape', 'Backspace', 'Delete', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'PageUp', 'PageDown', 'Home', 'End'];
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+/** What makes an element the same element, apart from where it is and what it currently holds. */
+const identity = (e: any) => JSON.stringify([e.tag, e.type, e.role, e.name, e.href, e.target, e.formAction, e.frameUrl, e.editable]);
 const fail = (code: string): never => { throw new CDPError(code); };
 
 /** Schemes a page may be opened with. The VM's own files and servers are the AI's to use. */
@@ -104,7 +106,6 @@ export class WorkspaceBrowser extends EventEmitter {
   private reader: string | undefined;
   private loader: string | undefined;
   private snapshot = '';
-  private observedRevision: unknown;
   private observedLoader: string | undefined;
   private elements: any[] = [];
   private cachedPage: any;
@@ -303,7 +304,14 @@ export class WorkspaceBrowser extends EventEmitter {
     await this.current();
     const e = this.elements.find(x => x.id === a.targetId);
     if (!e) fail('browser_element_missing');
-    if (e.disabled || !await this.dom('valid', [{ objectId: e.objectId }, { value: e.fingerprint }])) fail('browser_stale_observation');
+    // Live pages (ads, tickers) change all the time; what matters is that this element is still
+    // the one observed, still in place to receive the input. It may have moved: use where it is now.
+    let fresh: any;
+    try { fresh = await this.dom('metadata', [{ objectId: e.objectId }]); } catch { fresh = undefined; }
+    if (!fresh || identity(fresh) !== identity(e)) fail('browser_element_gone');
+    if (!fresh.visible || !fresh.hit) fail('browser_element_hidden');
+    if (e.disabled || fresh.disabled) fail('browser_element_disabled');
+    e.x = fresh.x; e.y = fresh.y;
     if (['type', 'select', 'check'].includes(a.op) && e.readonly) fail('browser_readonly');
     const session = this.session();
     this.snapshot = '';
@@ -410,7 +418,6 @@ export class WorkspaceBrowser extends EventEmitter {
       await this.settle();
       return this.observe(signal, attempt + 1, askedUser);
     }
-    this.observedRevision = after.revision;
     this.observedLoader = this.loader;
     this.snapshot = snapshot;
     const state = pageState(page);
@@ -435,10 +442,10 @@ export class WorkspaceBrowser extends EventEmitter {
     };
   }
 
+  /** The observation still belongs to the document on screen. Changes within it are checked per element. */
   private async current(): Promise<void> {
     await this.evaluateReader();
-    const state = await this.dom('state');
-    if (!this.snapshot || this.loader !== this.observedLoader || state.revision !== this.observedRevision || state.url !== this.cachedPage?.url) fail('browser_stale_observation');
+    if (!this.snapshot || this.loader !== this.observedLoader) fail('browser_stale_observation');
   }
 
   // --- tabs and screencast -------------------------------------------------
