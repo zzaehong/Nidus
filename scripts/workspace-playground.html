@@ -151,9 +151,10 @@ events.addEventListener('tabs', e => {
 events.addEventListener('approval', e => {
   const a = JSON.parse(e.data), box = $('approvals'); box.querySelector('.empty')?.remove();
   const card = document.createElement('div'); card.className = 'approval'; card.id = `ap-${a.id}`;
-  const label = a.target === 'mac' ? `Mac의 포트 ${a.port} (host.nidus)` : `${a.host}:${a.port}`;
-  card.innerHTML = `<div>VM이 <b></b> 에 연결하려 합니다.</div><div class="row" style="margin-top:6px"><button data-a="once">이번 작업만</button><button data-a="always">항상 허용</button><button data-a="deny">거부</button></div>`;
+  const label = a.target === 'mac' ? `Mac의 포트 ${a.port} (host.nidus)` : a.site;
+  card.innerHTML = `<div>VM이 <b></b> 에 연결하려 합니다.</div><div class="hint"></div><div class="row" style="margin-top:6px"><button data-a="once">이번 작업만</button><button data-a="always">항상 허용</button><button data-a="deny">거부</button></div>`;
   card.querySelector('b').textContent = label;
+  card.querySelector('.hint').textContent = a.target === 'mac' ? '' : `요청한 주소: ${a.host} · 승인하면 ${a.site}의 모든 하위 주소에 적용됩니다`;
   card.querySelectorAll('button').forEach(b => b.onclick = () => post('/answer', { id: a.id, answer: b.dataset.a }));
   box.append(card);
 });

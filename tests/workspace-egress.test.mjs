@@ -93,12 +93,14 @@ test('"always" is saved to network.json and honoured by the next proxy without a
 
   const first = await setup(t, { rules: await EgressRules.load(path), answer: async () => 'always' });
   assert.equal((await tunnel(first.port, 'registry.npmjs.org:443')).status, 200);
-  assert.deepEqual(JSON.parse(await readFile(path, 'utf8')), { version: 1, allow: ['registry.npmjs.org'], deny: [] });
+  // The answer covers the site: npmjs.org and every host under it.
+  assert.deepEqual(JSON.parse(await readFile(path, 'utf8')), { version: 1, allow: ['npmjs.org', '*.npmjs.org'], deny: [] });
   assert.equal((await tunnel(first.port, 'localhost:5432')).status, 200);
-  assert.deepEqual(JSON.parse(await readFile(path, 'utf8')), { version: 1, allow: ['registry.npmjs.org'], deny: [], macPorts: [5432] });
+  assert.deepEqual(JSON.parse(await readFile(path, 'utf8')), { version: 1, allow: ['npmjs.org', '*.npmjs.org'], deny: [], macPorts: [5432] });
 
   const second = await setup(t, { rules: await EgressRules.load(path), answer: async () => 'deny' });
   assert.equal((await tunnel(second.port, 'registry.npmjs.org:443')).status, 200);
+  assert.equal((await tunnel(second.port, 'www.npmjs.org:443')).status, 200);
   assert.equal((await tunnel(second.port, '127.0.0.1:5432')).status, 200);
   assert.deepEqual(second.asked, []);
   assert.ok(second.events.includes('registry.npmjs.org allowed allow rule'));
@@ -196,4 +198,14 @@ test('plain HTTP is forwarded with the original Host and without proxy headers; 
   assert.deepEqual(asked, ['example.com', 'mac:80']);
   const relative = await new Promise(resolve => { const req = httpRequest({ host: '127.0.0.1', port, path: '/relative' }, res => { res.resume(); resolve(res.statusCode); }); req.end(); });
   assert.equal(relative, 400);
+});
+
+test('approvals are per site: one question for all hosts of a site, a refusal covers the site', async t => {
+  const { port, asked } = await setup(t, { answer: async request => (request.site === 'naver.com' ? 'once' : 'deny') });
+  const results = await Promise.all(['www.naver.com:443', 'ssl.naver.com:443', 'nlog.naver.com:443'].map(target => tunnel(port, target)));
+  assert.deepEqual(results.map(r => r.status), [200, 200, 200]);
+  assert.equal((await tunnel(port, 'search.naver.com:443')).status, 200);
+  assert.equal((await tunnel(port, 'ssl.pstatic.net:443')).status, 403);
+  assert.equal((await tunnel(port, 's.pstatic.net:443')).status, 403);
+  assert.equal(asked.length, 2, 'naver.com and pstatic.net, once each');
 });

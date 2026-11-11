@@ -46,7 +46,7 @@ const proxy = new EgressProxy({
     approvals.set(id, resolve);
     signal.addEventListener('abort', () => { approvals.delete(id); send('approval-done', { id }); resolve('deny'); }, { once: true });
     send('approval', { id, ...request });
-    log(`승인 요청: ${request.target === 'mac' ? `Mac 포트 ${request.port}` : request.host}`);
+    log(`승인 요청: ${request.target === 'mac' ? `Mac 포트 ${request.port}` : `${request.site} (${request.host})`}`);
   }),
   onEvent: e => send('network', e),
 });

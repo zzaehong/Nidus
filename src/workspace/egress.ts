@@ -13,6 +13,7 @@ import { connect as netConnect, isIP, type Socket } from 'node:net';
 import type { Duplex } from 'node:stream';
 import { NidusError } from '../errors.js';
 import { publicIPv4 } from '../vault/network-policy.js';
+import { isPublicSuffix, siteOf } from './site.js';
 
 /** The user's answer to "may the workspace reach this domain?" */
 export type EgressAnswer = 'once' | 'always' | 'deny';
@@ -20,7 +21,10 @@ export type EgressAnswer = 'once' | 'always' | 'deny';
 export interface EgressRequest {
   /** internet: a public domain. mac: a service listening on the user's Mac (localhost). */
   target: 'internet' | 'mac';
+  /** The host that asked first. */
   host: string;
+  /** What the answer covers: the registrable domain ("naver.com" for search.naver.com), or "localhost" for the Mac. */
+  site: string;
   port: number;
 }
 
@@ -213,10 +217,12 @@ export class EgressProxy {
     const rule = this.options.rules.verdict(host);
     if (rule === 'deny') return { allowed: false, outcome: 'denied', reason: 'deny rule' };
     if (rule === 'allow') return { allowed: true, reason: 'allow rule' };
-    if (this.sessionAllowed.has(host)) return { allowed: true, reason: 'allowed for this task' };
+    // A page reaches many hosts of one site (www, static, api); the user answers once per site.
+    const site = siteOf(host);
+    if (this.sessionAllowed.has(site)) return { allowed: true, reason: 'allowed for this task' };
     if (this.allowAll) return { allowed: true, reason: 'all domains allowed for this task' };
-    if (this.sessionDenied.has(host)) return { allowed: false, outcome: 'denied', reason: 'denied for this task' };
-    return this.decide(host, { target: 'internet', host, port });
+    if (this.sessionDenied.has(site)) return { allowed: false, outcome: 'denied', reason: 'denied for this task' };
+    return this.decide(site, { target: 'internet', host, site, port });
   }
 
   /**
@@ -229,7 +235,7 @@ export class EgressProxy {
     if (this.options.rules.macPortAllowed(port)) return { allowed: true, reason: 'Mac port allow rule' };
     if (this.sessionAllowed.has(key)) return { allowed: true, reason: 'Mac port allowed for this task' };
     if (this.sessionDenied.has(key)) return { allowed: false, outcome: 'denied', reason: 'Mac port denied for this task' };
-    return this.decide(key, { target: 'mac', host: 'localhost', port });
+    return this.decide(key, { target: 'mac', host: 'localhost', site: 'localhost', port });
   }
 
   private async decide(key: string, request: EgressRequest): Promise<Verdict> {
@@ -258,7 +264,9 @@ export class EgressProxy {
     }
     if (answer === 'always') {
       // If the rule cannot be saved the answer still holds for this task.
-      const save = request.target === 'mac' ? this.options.rules.addMacPort(request.port) : this.options.rules.addAllow(request.host);
+      // The site and its subdomains. A public suffix or an address stands only for itself.
+      const save = request.target === 'mac' ? this.options.rules.addMacPort(request.port)
+        : this.options.rules.addAllow(request.site).then(() => isIP(request.site) || isPublicSuffix(request.site) ? undefined : this.options.rules.addAllow(`*.${request.site}`));
       await save.catch(() => {});
       this.sessionAllowed.add(key);
     } else if (answer === 'once') {
