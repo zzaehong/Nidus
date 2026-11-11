@@ -1,8 +1,10 @@
 // Host end of the egress link: many guest TCP connections multiplexed over one
 // virtio console port ("nidus.egress"). Each guest connection becomes a Duplex
-// handed to the Egress Proxy. The guest end is scripts/vault-vm/egress-relay.py.
+// handed to the host. The guest end is scripts/vault-vm/egress-relay.py.
 //
 // Frame: type u8 | stream u32 BE | length u32 BE | payload
+// OPEN carries the service the guest connected to: empty for the Egress Proxy
+// (guest 127.0.0.1:3128), "browser" for the browser's DevTools link (guest 127.0.0.1:3129).
 // Flow control: each side may have WINDOW bytes in flight per stream and direction;
 // the receiver returns credit (WINDOW frames) as its local socket consumes data.
 import { Duplex } from 'node:stream';
@@ -12,6 +14,8 @@ export const PROTOCOL_VERSION = 1;
 export const WINDOW = 256 * 1024;
 export const MAX_PAYLOAD = 64 * 1024;
 export const MAX_STREAMS = 256;
+export const SERVICES = ['egress', 'browser'] as const;
+export type Service = typeof SERVICES[number];
 const HEADER = 9;
 
 export function encodeFrame(type: number, stream: number, payload: Buffer = Buffer.alloc(0)): Buffer {
@@ -133,7 +137,7 @@ export class EgressChannel {
   private readonly parser = new FrameParser();
   private closed = false;
 
-  constructor(private readonly link: Duplex, private readonly accept: (stream: Duplex) => void, private readonly events: EgressChannelEvents = {}) {
+  constructor(private readonly link: Duplex, private readonly accept: (stream: Duplex, service: Service) => void, private readonly events: EgressChannelEvents = {}) {
     link.on('data', (chunk: Buffer) => {
       try {
         this.parser.push(chunk, (type, stream, payload) => this.handle(type, stream, payload));
@@ -174,11 +178,12 @@ export class EgressChannel {
     }
     const stream = this.streams.get(id);
     if (type === FRAME.OPEN) {
-      if (stream || this.streams.size >= MAX_STREAMS) { this.send(FRAME.RESET, id); return; }
+      const service = (payload.length ? payload.toString('latin1') : 'egress') as Service;
+      if (stream || this.streams.size >= MAX_STREAMS || !SERVICES.includes(service)) { this.send(FRAME.RESET, id); return; }
       const created = new MuxStream(id, this);
       created.on('error', () => {});
       this.streams.set(id, created);
-      this.accept(created);
+      this.accept(created, service);
       return;
     }
     if (!stream) {

@@ -116,3 +116,13 @@ test('relayed streams go through the Egress Proxy like direct connections', asyn
   await until(() => dataTo(frames, 2).includes('403'));
   assert.deepEqual(asked, ['example.com', 'other.org']);
 });
+
+test('OPEN names the service: empty is the Egress Proxy, "browser" the browser link, others are refused', async t => {
+  const accepted = [];
+  const { frames, until, send } = await link(t, (stream, service) => accepted.push(service));
+  send(FRAME.OPEN, 1);
+  send(FRAME.OPEN, 2, Buffer.from('browser'));
+  send(FRAME.OPEN, 3, Buffer.from('ssh'));
+  await until(() => frames.some(f => f.type === FRAME.RESET && f.stream === 3));
+  assert.deepEqual(accepted, ['egress', 'browser']);
+});

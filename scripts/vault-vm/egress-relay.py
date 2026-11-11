@@ -3,6 +3,10 @@
 Listens on 127.0.0.1:3128 and carries each TCP connection over the "nidus.egress"
 virtio console port to the host's Egress Proxy. The VM has no network device; this
 port is its only way out, and the host decides what may pass.
+
+127.0.0.1:3129 is the browser's DevTools link: the browser bridge connects there and the
+host drives Chromium and receives its screen through that stream. The OPEN frame names
+the service ("browser"); an empty name means the Egress Proxy.
 """
 import asyncio, os, pathlib, queue, struct, sys, threading, time
 
@@ -135,14 +139,14 @@ class Relay:
                 return sid
         return None
 
-    async def serve(self, reader, writer):
+    async def serve(self, reader, writer, service=b''):
         sid = self.allocate() if len(self.streams) < MAX_STREAMS else None
         if sid is None:
             writer.close()
             return
         stream = Stream(sid, writer)
         self.streams[sid] = stream
-        self.send(OPEN, sid)
+        self.send(OPEN, sid, service)
         try:
             while not stream.reset:
                 data = await reader.read(MAX_PAYLOAD)
@@ -175,9 +179,10 @@ class Relay:
         threading.Thread(target=self.writer_thread, daemon=True).start()
         threading.Thread(target=self.reader_thread, daemon=True).start()
         self.send(HELLO, 0, bytes([VERSION]))
-        server = await asyncio.start_server(self.serve, '127.0.0.1', 3128, limit=MAX_PAYLOAD)
-        async with server:
-            await server.serve_forever()
+        egress = await asyncio.start_server(self.serve, '127.0.0.1', 3128, limit=MAX_PAYLOAD)
+        browser = await asyncio.start_server(lambda r, w: self.serve(r, w, b'browser'), '127.0.0.1', 3129, limit=MAX_PAYLOAD)
+        async with egress, browser:
+            await asyncio.gather(egress.serve_forever(), browser.serve_forever())
 
 
 if __name__ == '__main__':
