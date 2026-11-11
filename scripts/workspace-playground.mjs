@@ -11,7 +11,9 @@
 // State kept between runs (dist/playground): approved sites ("always") and the browser profile disk.
 import { createServer } from 'node:http';
 import { randomUUID, randomBytes } from 'node:crypto';
-import { readFile, mkdir, realpath, chmod } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, realpath, chmod, rm, rmdir } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { AppleOfflineBackend } from '../dist/vault/apple-backend.js';
@@ -54,13 +56,30 @@ const disks = new CacheDiskStore(join(await realpath(state), 'disks'));
 // Fixed ids: the same disk (and browser profile) is used on every run.
 const vaultId = '00000000-0000-4000-8000-00000000a11c', environmentId = '00000000-0000-4000-8000-0000000b0a7d';
 let backend, disk, browser, ready = false;
+const runFile = join(state, 'run.json');
+const diskDir = join(await realpath(state), 'disks', `${vaultId}-${environmentId}`);
+
+const alive = pid => { try { process.kill(pid, 0); return true; } catch (error) { return error.code === 'EPERM'; } };
+/** A previous run that died (terminal closed, crash) leaves the disk marked as owned.
+ *  Reclaim it only when that run's process is gone and no VM is using the disk file. */
+async function reclaimStaleDisk() {
+  let previous;
+  try { previous = JSON.parse(await readFile(runFile, 'utf8')); } catch { previous = undefined; }
+  if (previous?.pid && previous.pid !== process.pid && alive(previous.pid)) throw new Error(`다른 테스트 페이지가 실행 중입니다 (PID ${previous.pid}). 그 터미널에서 Ctrl+C로 끝내 주세요.`);
+  const { stdout } = await promisify(execFile)('ps', ['-axo', 'command=']);
+  if (stdout.split('\n').some(line => line.includes('nidus-vault-vm') && line.includes(diskDir))) throw new Error('이전 VM이 아직 이 디스크를 쓰고 있습니다. 잠시 뒤 다시 실행해 주세요.');
+  try { await rmdir(join(diskDir, 'owner')); log('지난 실행이 디스크를 반납하지 못하고 끝났습니다. 소유 표시를 정리했습니다.'); } catch {}
+}
 
 async function start() {
   log('VM을 시작합니다…');
+  await reclaimStaleDisk();
+  await writeFile(runFile, JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() }));
   disk = await disks.acquire(vaultId, environmentId).catch(async error => {
     if (/cache_dirty/.test(error.message)) {
-      log('지난 실행이 정상 종료되지 않아 디스크가 dirty 상태입니다. 새 디스크로 시작합니다(브라우저 프로필 초기화).');
-      await disks.clear(vaultId, environmentId).catch(() => {});
+      // Not cleanly unmounted: the file system may be inconsistent, so start over.
+      log('지난 실행이 정상 종료되지 않아 디스크를 새로 만듭니다(브라우저 로그인 상태 초기화).');
+      await disks.clear(vaultId, environmentId);
       return disks.acquire(vaultId, environmentId);
     }
     throw error;
@@ -87,17 +106,18 @@ async function openBrowser() {
 
 let stopping = false;
 async function stop() {
-  if (stopping) return;
+  if (stopping) { console.log('정리 중입니다. 잠시 기다려 주세요(VM 종료 확인 중).'); return; }
   stopping = true;
   log('정리하는 중…');
   try { await browser?.close(); await backend?.closeBrowser(); } catch (error) { console.error('browser cleanup:', error.message); }
   try { await backend?.stop(); if (disk) await disks.release(disk.diskId, backend.cacheClean); console.log('VM 종료 확인 (STOP_CONFIRMED)'); }
   catch (error) { console.error('VM 종료 확인 실패:', error.message); }
   await proxy.close();
+  try { if (JSON.parse(await readFile(runFile, 'utf8')).pid === process.pid) await rm(runFile, { force: true }); } catch {}
   process.exit(0);
 }
-process.on('SIGINT', stop);
-process.on('SIGTERM', stop);
+// Closing the terminal window (SIGHUP) also stops the VM and returns the disk.
+for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, stop);
 
 // --- control page ---------------------------------------------------------------
 const body = req => new Promise((resolve, reject) => {
@@ -149,4 +169,7 @@ const server = createServer(async (req, res) => {
 });
 server.listen(port, '127.0.0.1', () => console.log(`\n테스트 페이지: http://127.0.0.1:${port}/?token=${token}\n(종료: Ctrl+C)\n`));
 
-start().catch(error => { log(`시작 실패: ${error.message}`); console.error(error); });
+start().catch(async error => {
+  log(`시작 실패: ${error.message}`);
+  await stop();
+});

@@ -162,6 +162,20 @@ test('a CAPTCHA hands control to the user instead of failing, then the AI contin
   await browser.close();
 });
 
+test('a CAPTCHA still there after the hand back is returned to the AI, not asked again', async () => {
+  const { browser, fake } = await setup();
+  fake.page.challengeVisible = true;
+  const changes = [];
+  browser.on('control', change => changes.push(change.control));
+  const action = browser.act({ op: 'observe' });
+  await until(() => browser.control === 'user');
+  browser.handBack();
+  const page = await action;
+  assert.equal(page.pageState, 'captcha_required');
+  assert.deepEqual(changes, ['user', 'ai']);
+  await browser.close();
+});
+
 test('the AI can ask the user for help and gets the page back after', async () => {
   const { browser } = await setup();
   const changes = [];

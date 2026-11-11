@@ -385,7 +385,7 @@ export class WorkspaceBrowser extends EventEmitter {
     }
   }
 
-  private async observe(signal?: AbortSignal, attempt = 0): Promise<any> {
+  private async observe(signal?: AbortSignal, attempt = 0, askedUser = false): Promise<any> {
     if (signal?.aborted) fail('browser_action_cancelled');
     await this.evaluateReader();
     await this.cdp.call('Runtime.releaseObjectGroup', { objectGroup: 'observation' }, this.session());
@@ -408,19 +408,20 @@ export class WorkspaceBrowser extends EventEmitter {
       // stop (animations, tickers) are returned as they are, marked as changing.
       this.snapshot = '';
       await this.settle();
-      return this.observe(signal, attempt + 1);
+      return this.observe(signal, attempt + 1, askedUser);
     }
     this.observedRevision = after.revision;
     this.observedLoader = this.loader;
     this.snapshot = snapshot;
     const state = pageState(page);
     this.cachedPage = { ...page, snapshotId: snapshot, settled: this.settled, ready: after.ready, textLength: page.text.length, elementsOmitted: Math.max(0, nodes.length - ELEMENTS), pageState: state, changing: before.revision !== after.revision };
-    if (state === 'captcha_required' && this.controlState === 'ai') {
-      // Not a failure: the user solves it and hands the browser back.
+    if (state === 'captcha_required' && this.controlState === 'ai' && !askedUser) {
+      // Not a failure: the user solves it and hands the browser back. If it is still there
+      // after that, the user chose not to: the AI gets the page as it is and finds another way.
       this.setControl('user', 'page', 'captcha');
       await this.turn(signal);
       await this.settle();
-      return this.observe(signal);
+      return this.observe(signal, 0, true);
     }
     return this.slice(0, true);
   }
