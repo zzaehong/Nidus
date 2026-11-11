@@ -12,6 +12,16 @@ struct TrialView: View {
     private var slot: Slot? { overview.slots.first { $0.id == slotID } }
 
     var body: some View {
+        // The outer scroll view keeps the form below the toolbar; a bare text editor
+        // here would be treated as the window's main scroll view and slide under it.
+        ScrollView {
+            form
+                .padding(20)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+    }
+
+    private var form: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("역할을 골라 메시지를 한 번 보내 봅니다. 배정표가 고른 모델이 실제로 응답하는지 확인하는 용도이며, 요금이 발생할 수 있습니다.")
                 .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
@@ -28,7 +38,7 @@ struct TrialView: View {
             TextField("시스템 프롬프트 (선택)", text: $system)
             TextEditor(text: $prompt)
                 .font(.body)
-                .frame(minHeight: 80, maxHeight: 140)
+                .frame(height: 120)
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
 
             HStack {
@@ -44,11 +54,9 @@ struct TrialView: View {
             if let result {
                 GroupBox {
                     VStack(alignment: .leading, spacing: 8) {
-                        ScrollView {
-                            Text(result.text.isEmpty ? "(텍스트 없음, 종료 사유: \(result.stopReason))" : result.text)
-                                .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
+                        Text(result.text.isEmpty ? "(텍스트 없음, 종료 사유: \(result.stopReason))" : result.text)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         Divider()
                         Text("\(result.model) · 입력 \(result.inputTokens.map(String.init) ?? "?") / 출력 \(result.outputTokens.map(String.init) ?? "?") 토큰 · 비용 \(result.costUSD.map(formatUSD) ?? "미확인")")
                             .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
@@ -57,8 +65,6 @@ struct TrialView: View {
                     .padding(6)
                 }
             }
-            Spacer(minLength: 0)
         }
-        .padding(20)
     }
 }
