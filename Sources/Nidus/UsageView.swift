@@ -40,8 +40,8 @@ struct UsageView: View {
                 } else {
                     Table(usage.groups) {
                         TableColumn("역할 · 난이도") { Text($0.roleLabel) }.width(min: 80, ideal: 96)
-                        TableColumn("모델") { Text("\($0.provider):\($0.model)").font(.system(.body, design: .monospaced)).help("\($0.provider):\($0.model)") }.width(min: 120, ideal: 170)
-                        TableColumn("호출") { Text($0.failed > 0 ? "\($0.calls) (실패 \($0.failed))" : "\($0.calls)").monospacedDigit() }.width(76)
+                        TableColumn("모델") { Text("\($0.provider):\($0.model)").font(.system(.body, design: .monospaced)).help("\($0.provider):\($0.model)") }.width(min: 120, ideal: 150)
+                        TableColumn("호출") { Text($0.failed > 0 ? "\($0.calls) (실패 \($0.failed))" : "\($0.calls)").monospacedDigit() }.width(70)
                         TableColumn("입력 토큰") { Text("\($0.inputTokens)").monospacedDigit() }.width(70)
                         TableColumn("출력 토큰") { Text("\($0.outputTokens)").monospacedDigit() }.width(70)
                         TableColumn("비용") { Text($0.unknownCostCalls == $0.calls - $0.failed && $0.unknownCostCalls > 0 ? "미확인" : formatUSD($0.costUSD)).monospacedDigit() }.width(84)

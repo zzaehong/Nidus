@@ -25,13 +25,29 @@ extension View {
     func panel() -> some View { modifier(Panel()) }
 }
 
-/// Title and one-line explanation at the top of each page.
+extension View {
+    /// Keeps the window title for the Window menu and Mission Control but leaves it out of the toolbar.
+    @ViewBuilder
+    func toolbarTitleHidden() -> some View {
+        if #available(macOS 15.0, *) {
+            toolbar(removing: .title)
+        } else {
+            self
+        }
+    }
+}
+
+/// Vault name, page title and one-line explanation at the top of each page.
 struct PageHeader: View {
+    @EnvironmentObject private var store: VaultStore
     let title: String
     let subtitle: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
+            Text(URL(fileURLWithPath: store.vault ?? "").lastPathComponent)
+                .font(.caption.weight(.semibold)).foregroundStyle(.secondary).lineLimit(1)
+                .help(store.vault ?? "")
             Text(title).font(.title2.bold())
             Text(subtitle).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }

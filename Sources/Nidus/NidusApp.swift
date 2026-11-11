@@ -111,13 +111,32 @@ struct VaultView: View {
     @EnvironmentObject private var store: VaultStore
     /// The last opened section is remembered between launches.
     @AppStorage("section") private var storedSection = VaultSection.assignment.rawValue
+    /// Whether the sidebar was closed is remembered too.
+    @AppStorage("sidebarHidden") private var sidebarHidden = false
+
+    private var vaultURL: URL { URL(fileURLWithPath: store.vault ?? "") }
 
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: Binding(
+            get: { sidebarHidden ? .detailOnly : .all },
+            set: { sidebarHidden = $0 == .detailOnly }
+        )) {
             List(VaultSection.allCases, selection: Binding(get: { VaultSection(rawValue: storedSection) }, set: { storedSection = ($0 ?? .assignment).rawValue })) { item in
                 Label(item.rawValue, systemImage: item.icon).tag(item)
             }
-            .navigationSplitViewColumnWidth(min: 160, ideal: 180)
+            // The open vault is named here and in each page header, not in the toolbar:
+            // a toolbar title sits after the sidebar button and never lines up with the page.
+            .safeAreaInset(edge: .top, spacing: 0) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(vaultURL.lastPathComponent).font(.headline).lineLimit(1)
+                    Text(vaultURL.deletingLastPathComponent().path).font(.caption).foregroundStyle(.secondary)
+                        .lineLimit(1).truncationMode(.head)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16).padding(.bottom, 10)
+                .help(store.vault ?? "")
+            }
+            .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 260)
         } detail: {
             if let overview = store.overview {
                 switch VaultSection(rawValue: storedSection) ?? .assignment {
@@ -130,10 +149,13 @@ struct VaultView: View {
                 ProgressView("Vault를 읽는 중…").frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .navigationTitle(URL(fileURLWithPath: store.vault ?? "").lastPathComponent)
-        .navigationSubtitle(store.vault ?? "")
+        .navigationTitle(vaultURL.lastPathComponent)
+        .toolbarTitleHidden()
         .toolbar {
-            ToolbarItemGroup {
+            // Flexible space keeps the actions on the trailing side, so they stay put
+            // when the sidebar opens and closes.
+            ToolbarItem { Spacer() }
+            ToolbarItemGroup(placement: .primaryAction) {
                 if store.busy { ProgressView().controlSize(.small) }
                 Button { Task { await store.reload() } } label: { Label("새로고침", systemImage: "arrow.clockwise") }
                     .disabled(store.busy)
