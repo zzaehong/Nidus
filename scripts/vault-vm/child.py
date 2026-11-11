@@ -6,6 +6,11 @@ mount('--make-rprivate','/')
 if profile=='browser':mount('--bind',str(root),str(root))
 for path in ['bin','lib','usr']:
  mount('--bind','/'+path,str(root/path));mount('-o','remount,bind,ro,nosuid,nodev',str(root/path))
+# TLS trust store and name of the loopback, read-only: online tools verify certificates themselves.
+if pathlib.Path('/etc/ssl').is_dir():
+ (root/'etc/ssl').mkdir(parents=True,exist_ok=True)
+ mount('--bind','/etc/ssl',str(root/'etc/ssl'));mount('-o','remount,bind,ro,nosuid,nodev,noexec',str(root/'etc/ssl'))
+(root/'etc/hosts').write_text('127.0.0.1 localhost\n::1 localhost\n')
 if profile=='shell' and pathlib.Path('/cache').is_mount():
  (root/'cache').mkdir()
  mount('--bind','/cache',str(root/'cache'));mount('-o','remount,bind,nosuid,nodev,noexec',str(root/'cache'))
@@ -19,6 +24,9 @@ for name,major,minor in [('null',1,3),('zero',1,5),('urandom',1,9)]:
  os.mknod(root/'dev'/name,0o20666,os.makedev(major,minor));os.chmod(root/'dev'/name,0o666)
 resource.setrlimit(resource.RLIMIT_CORE,(0,0));resource.setrlimit(resource.RLIMIT_NOFILE,(256,256));resource.setrlimit(resource.RLIMIT_FSIZE,(16*1024*1024,16*1024*1024))
 if pathlib.Path('/run/'+identity+'.cancel').exists():sys.exit(130)
+# Online through the host's Egress Proxy when the relay runs; the VM's own loopback stays direct.
+EGRESS=profile=='shell' and pathlib.Path('/run/egress').exists()
+PROXY='http://127.0.0.1:3128';NO_PROXY='localhost,127.0.0.1,::1,.localhost'
 if profile=='browser':
  (root/'.old-root').mkdir();os.chdir(root)
  libc=ctypes.CDLL(None,use_errno=True)
@@ -28,4 +36,4 @@ if profile=='browser':
 else:os.chroot(root)
 os.chdir('/work');os.setgroups([]);os.setgid(1000);os.setuid(1000)
 if ctypes.CDLL(None).prctl(38,1,0,0,0)!=0:raise OSError('no_new_privs')
-os.execve('/bin/bash',['bash','--noprofile','--norc','/task.sh'],{'PATH':'/usr/bin:/bin','HOME':'/home','TMPDIR':'/tmp','LANG':'C.UTF-8','PYTHONDONTWRITEBYTECODE':'1','PIP_DISABLE_PIP_VERSION_CHECK':'1','PIP_NO_INDEX':'1','npm_config_offline':'true','PIP_CACHE_DIR':'/cache/pip' if pathlib.Path('/cache').exists() else '/tmp/pip','npm_config_cache':'/cache/npm' if pathlib.Path('/cache').exists() else '/tmp/npm','GIT_CONFIG_NOSYSTEM':'1'})
+os.execve('/bin/bash',['bash','--noprofile','--norc','/task.sh'],{'PATH':'/usr/bin:/bin','HOME':'/home','TMPDIR':'/tmp','LANG':'C.UTF-8','PYTHONDONTWRITEBYTECODE':'1','PIP_DISABLE_PIP_VERSION_CHECK':'1',**({'HTTP_PROXY':PROXY,'HTTPS_PROXY':PROXY,'http_proxy':PROXY,'https_proxy':PROXY,'NO_PROXY':NO_PROXY,'no_proxy':NO_PROXY} if EGRESS else {'PIP_NO_INDEX':'1','npm_config_offline':'true'}),'PIP_CACHE_DIR':'/cache/pip' if pathlib.Path('/cache').exists() else '/tmp/pip','npm_config_cache':'/cache/npm' if pathlib.Path('/cache').exists() else '/tmp/npm','GIT_CONFIG_NOSYSTEM':'1'})

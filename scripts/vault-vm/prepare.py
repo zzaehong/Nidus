@@ -19,7 +19,7 @@ with tempfile.TemporaryDirectory(prefix='nidus-m4-build-') as tmp:
     if cache_package:
         spec=importlib.util.spec_from_file_location('cache_modules',pathlib.Path(__file__).with_name('cache-modules.py'));module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
         module.install(cache_package,root,pins['vmlinuz-virt'])
-    (assets/'features.json').write_text(json.dumps({'cacheDiskVersion':1 if cache_package else 0,'browserSnapshotVersion':1 if os.environ.get('NIDUS_VM_DEVELOPMENT_ROOT') else 0,'browserInteractiveVersion':1 if os.environ.get('NIDUS_VM_DEVELOPMENT_ROOT') else 0}))
+    (assets/'features.json').write_text(json.dumps({'cacheDiskVersion':1 if cache_package else 0,'browserSnapshotVersion':1 if os.environ.get('NIDUS_VM_DEVELOPMENT_ROOT') else 0,'egressVersion':1 if os.environ.get('NIDUS_VM_DEVELOPMENT_ROOT') else 0,'browserInteractiveVersion':1 if os.environ.get('NIDUS_VM_DEVELOPMENT_ROOT') else 0}))
     boot=assets/'boot-layer.gz';write_initramfs(root,boot)
     layers=[boot]
     development=os.environ.get('NIDUS_VM_DEVELOPMENT_ROOT')
@@ -36,7 +36,7 @@ with tempfile.TemporaryDirectory(prefix='nidus-m4-build-') as tmp:
         layers.append(layer)
         with tempfile.TemporaryDirectory(prefix='nidus-guest-overlay-') as staging:
             helpers=pathlib.Path(staging)/'opt/development/nidus';helpers.mkdir(parents=True)
-            for name in ['session.py','child.py','workspace.py']:shutil.copyfile(pathlib.Path(__file__).with_name(name),helpers/name)
+            for name in ['session.py','child.py','workspace.py','egress-relay.py']:shutil.copyfile(pathlib.Path(__file__).with_name(name),helpers/name)
             browser=helpers.parent/'usr/lib/nidus';browser.mkdir(parents=True)
             shutil.copyfile(pathlib.Path(__file__).with_name('browser.mjs'),browser/'browser.mjs')
             shutil.copyfile(pathlib.Path(__file__).with_name('browser-live.mjs'),browser/'browser-live.mjs')

@@ -17,6 +17,8 @@ mkdir -p /proc /sys /dev /run /sessions
 mount -t proc proc /proc
 mount -t sysfs sysfs /sys
 mount -t devtmpfs devtmpfs /dev
+# Loopback only: there is no network device. The egress relay listens here.
+ip link set lo up 2>/dev/null || ifconfig lo 127.0.0.1 up
 stty -F /dev/hvc0 raw -echo || { echo NIDUS_BLOCKED terminal; exec sleep 86400; }
 # No unprivileged user namespaces; only the root supervisor creates isolation boundaries.
 echo 0 > /proc/sys/user/max_user_namespaces || { echo NIDUS_BLOCKED userns; exec sleep 86400; }
@@ -106,6 +108,18 @@ if test -n "$cache_mode"; then
  if ! test "$(cat /persistent/owner-id)" = "$disk_id" || ! test -d /persistent/packages || test -L /persistent/packages; then echo NIDUS_BLOCKED cache-owner; exec sleep 86400; fi
  mount --bind /persistent/packages /opt/development/cache || { echo NIDUS_BLOCKED cache-view; exec sleep 86400; }
  echo NIDUS_CACHE_READY
+fi
+# The only way out: a virtio console port to the host's Egress Proxy. Restarted if it dies.
+if test -d /opt/development && grep -qx nidus.egress /sys/class/virtio-ports/*/name 2>/dev/null; then
+ ( while :; do
+    chroot /opt/development /usr/bin/python3 /nidus/egress-relay.py >/run/egress.log 2>&1
+    echo "NIDUS_EGRESS exited $? $(tail -c 400 /run/egress.log | tr '\n' ' ')"
+    sleep 1
+   done ) &
+ # Report ready only once the relay accepts connections (3128 = 0x0C38 in /proc/net/tcp).
+ n=0; while ! grep -q ':0C38 00000000:0000 0A' /proc/net/tcp && test "$n" -lt 200; do sleep 0.05; n=$((n+1)); done
+ touch /run/egress
+ echo NIDUS_EGRESS relay
 fi
 echo 'NIDUS_READY cgroup2'
 while read -r action id payload seconds snapshot; do
