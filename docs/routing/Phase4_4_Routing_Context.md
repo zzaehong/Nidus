@@ -1,6 +1,6 @@
 # Routing Decision Context v2 · Soft Budget
 
-`ConnectivityEngine.buildRoutingDecisionContext(task: TaskContext)`는 모델 캐시·SQLite·로컬 자격 증명 존재 여부를 읽어 JSON을 생성합니다. JEV·Provider API를 호출하지 않으며 기존 Rule-based Router를 변경하지 않습니다. 타입과 Builder는 `src/routing-context.ts`, 계약은 [JSON Schema](../schemas/routing-decision-context.schema.json)에 있습니다.
+`ConnectivityEngine.buildRoutingDecisionContext(task: TaskContext)`는 모델 캐시·SQLite·로컬 자격 증명 존재 여부를 읽어 JSON을 생성합니다. JEV·Provider API를 호출하지 않으며 기존 Rule-based Router를 변경하지 않습니다. 타입과 Builder는 `src/routing-context.ts`, 계약은 [JSON Schema](../../schemas/routing-decision-context.schema.json)에 있습니다.
 
 ```sh
 nidus routing-context --difficulty normal
@@ -60,4 +60,4 @@ Provider별 목표는 SQLite schema 8의 `soft_budgets`에 정수 nano-USD로 �
 
 0원 목표에 양수 지출은 exceeded이지만 비율은 null입니다. 알려진 무료 0원 기록과 양수 목표는 within·사용률 0%입니다.
 
-v1의 엄격한 소비자는 추가 필드·상태를 위해 v2 스키마로 갱신해야 합니다. Swift는 costCoverage를 선택 필드로 읽어 이전 응답도 지원합니다. 검증 이력은 [VALIDATION](VALIDATION.md)에 통합했습니다.
+v1의 엄격한 소비자는 추가 필드·상태를 위해 v2 스키마로 갱신해야 합니다. Swift는 costCoverage를 선택 필드로 읽어 이전 응답도 지원합니다. 검증 이력은 [VALIDATION](../validation/VALIDATION.md)에 통합했습니다.
