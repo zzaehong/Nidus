@@ -1,0 +1,80 @@
+{
+  "scope": "Real offline Apple VM + separate Node manager + OS clients. Synthetic approval fixtures, NOT actual user approval. No paid API.",
+  "checks": [
+    {
+      "name": "boot-and-reuse",
+      "status": "PASS",
+      "instance": "6bfb5332-6dcc-41a1-b15b-74ad1173afae",
+      "generation": 1
+    },
+    {
+      "name": "two-OS-clients-shared-VM-FIFO",
+      "status": "PASS",
+      "results": [
+        {
+          "sessionId": "2dca4ad1-31a1-409a-8f08-1013fb9cb58c",
+          "vmInstanceId": "6bfb5332-6dcc-41a1-b15b-74ad1173afae",
+          "generation": 1,
+          "exitCode": 0,
+          "cleanupConfirmed": true,
+          "reason": "completed",
+          "memoryPeakBytes": 8728576,
+          "stdout": "first\n",
+          "stderr": ""
+        },
+        {
+          "sessionId": "3b82bdcd-7537-4816-a79c-38dabfda244e",
+          "vmInstanceId": "6bfb5332-6dcc-41a1-b15b-74ad1173afae",
+          "generation": 1,
+          "exitCode": 0,
+          "cleanupConfirmed": true,
+          "reason": "completed",
+          "memoryPeakBytes": 7639040,
+          "stdout": "second\n",
+          "stderr": ""
+        }
+      ]
+    },
+    {
+      "name": "active-cancel-cleanup",
+      "status": "PASS",
+      "result": {
+        "sessionId": "e95fb3bd-ec93-4906-bb57-452b7f0a8cab",
+        "vmInstanceId": "6bfb5332-6dcc-41a1-b15b-74ad1173afae",
+        "generation": 1,
+        "exitCode": 137,
+        "cleanupConfirmed": true,
+        "reason": "cancelled",
+        "memoryPeakBytes": 7548928,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "Agent-Host-read-to-real-VM-Shell",
+      "status": "PASS",
+      "model": "Mock; no Ledger usage",
+      "approval": "synthetic Host fixture; not actual UI consent",
+      "sameInstance": true
+    },
+    {
+      "name": "other-Vault-global-limit",
+      "status": "PASS"
+    },
+    {
+      "name": "framework-stop",
+      "status": "PASS"
+    },
+    {
+      "name": "confirmed-stop-global-slot-handoff",
+      "status": "PASS"
+    },
+    {
+      "name": "manager-SIGKILL-blocks-reentry",
+      "status": "PASS",
+      "actualVMStop": "UNCONFIRMED; never inferred from PID or EOF"
+    }
+  ],
+  "startedAt": "2026-11-03T13:09:06.889Z",
+  "retainedTemporaryJournal": "/private/tmp/nidus-m4-live-qd12VC"
+}

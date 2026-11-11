@@ -1,3 +1,7 @@
+import { responsesToolBody, parseResponsesTools } from './openai-tools.js';
+import type { ToolModelRequest } from '../agent/model.js';
+import { bounded, keyValue } from '../http.js';
+import type { RequestOptions } from '../types.js';
 import { BaseAdapter, baseModel, object, array, string, response, textBlocks, usage } from "./base.js";
 import { optionalObject, HttpClient } from "../http.js";
 import type { ChatRequest } from "../types.js";
@@ -5,6 +9,10 @@ import type { ChatRequest } from "../types.js";
 export class OpenAIAdapter extends BaseAdapter {
   readonly id = "openai" as const;
   constructor(endpoint = "https://api.openai.com/v1", http?: HttpClient) { super(endpoint, http); }
+  async toolChat(key: string, request: ToolModelRequest, options: RequestOptions = {}) {
+    const body = responsesToolBody(request);
+    return bounded(options, async signal => parseResponsesTools(await this.http.json(`${this.endpoint}/responses`, this.headers(keyValue(key)), signal, body, options.onHeaders)));
+  }
   protected headers(key: string) { return { authorization: `Bearer ${key}` }; }
   protected normalizeModel(raw: Record<string, unknown>) {
     const model = baseModel(this.id, string(raw.id));

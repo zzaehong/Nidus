@@ -1,0 +1,14 @@
+{
+  "nodePass": 359,
+  "swiftPass": 55,
+  "appBuild": "PASS",
+  "actualRuntimeStartStop": "PASS",
+  "bundledNodeSurvivedRebuild": "PASS",
+  "manualRecoveryButtonClick": "NOT RUN",
+  "diagnostic": {
+    "process": "Nidus.app/Contents/Resources/bin/node",
+    "observedSignal": "SIGKILL (Code Signature Invalid)",
+    "captureTime": "2026-11-05 08:55:32 +0900",
+    "inPlaceOverwriteCause": "supported hypothesis, not independently reproduced"
+  }
+}

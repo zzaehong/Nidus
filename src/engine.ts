@@ -1,3 +1,5 @@
+import {textToolRequest,parseTextTools} from './agent/text-tools.js';
+import { toolCallingSupport, validateToolRequest, type ToolModelRequest } from './agent/model.js';
 import { buildContext, taskContext, softBudgets, type TaskContext } from './routing-context.js';
 import { providerMetadata } from './providers.js';
 import { cloudflareCredential } from './adapters/cloudflare.js';
@@ -266,11 +268,68 @@ export class ConnectivityEngine {
     return { ...result, billingMode: reservation.billingMode, estimatedUSD: cost === null ? null : dollars(cost), requestId: reservation.id, budget: { ...ledger.snapshot().total, level: "disabled", remainingUSD: null } };
   }
 
+  /** Uses the existing ranking/account policy; tool support is an additional filter. No cross-provider continuation fallback. */
+  async toolRoutePlan(request: ChatRequest, task: unknown = 'normal') {
+    const plan = await this.routePlan(request, task);
+    return { ...plan, candidates: plan.candidates.filter(c => c.model.capabilities.tools !== 'unsupported' && toolCallingSupport(c.model.provider, c.model.id) && this.registry[c.model.provider].toolChat) };
+  }
+  async agentModels(only?:ProviderId) {
+    const rows=await Promise.all(providerIds.filter(p=>!only||p===only).map(async provider=>{
+      if(!await this.credentials.get(provider))return [];
+      const saved=await this.store.load(provider);
+      return (saved?.models??[]).map(model=>{
+        const classification=classifyModel(model);
+        const available=model.capabilities.chat!=='unsupported'&&classification.kind==='text'&&classification.textProbe!=='unsupported'&&!model.id.toLowerCase().includes('computer-use');
+        const native=available&&model.capabilities.tools!=='unsupported'&&toolCallingSupport(provider,model.id)&&!!this.registry[provider]?.toolChat;
+        return {id:provider+':'+model.id,provider,model:model.id,name:model.name,available,mode:native?'native-tools':'nidus-text',reason:available?'':'텍스트 Agent 실행을 지원하지 않는 모델'};
+      });
+    }));return rows.flat();
+  }
+  async agentChat(provider:ProviderId,request:ToolModelRequest,options:RequestOptions={}) {
+    request=structuredClone(request);validateToolRequest(request);
+    if(options.signal?.aborted)throw new NidusError('cancelled','Cancelled before dispatch.');
+    const choice=(await this.agentModels(provider)).find(m=>m.provider===provider&&m.model===request.model);
+    if(!choice?.available)throw new NidusError('unsupported','Select a connected text model from the current catalog.');
+    if(choice.mode==='native-tools')return this.toolChat(provider,request,options);
+    const response=await this.chat(provider,textToolRequest(request),options);
+    options.signal?.throwIfAborted();return parseTextTools(response,request);
+  }
+  async toolChat(provider: ProviderId, request: ToolModelRequest, options: RequestOptions = {}) {
+    request = structuredClone(request);
+    validateToolRequest(request);
+    const known = (await this.store.load(provider))?.models.find(m => m.id === request.model);
+    const adapter = this.registry[provider];
+    if (!known || known.capabilities.tools === 'unsupported' || !toolCallingSupport(provider, request.model) || !adapter.toolChat)
+      throw new NidusError('unsupported', 'This discovered model has no reviewed tool-calling implementation.');
+    if (options.signal?.aborted) throw new NidusError('cancelled', 'Cancelled before dispatch.');
+    const key = await this.key(provider), ledger = this.usageLedger();
+    const accountingRequest: ChatRequest = { model: request.model, messages: [{role:'user',content:JSON.stringify(request)}], maxOutputTokens:request.maxOutputTokens };
+    const reservation = ledger.recordRequest(provider, accountingRequest, 'chat', undefined, createHash('sha256').update(key).digest('hex'), options.consentToken);
+    let headers: Record<string,string> = {}, turn;
+    try { turn = await adapter.toolChat(key, request, {...options,onHeaders:value=>{headers=value;}}); }
+    catch (error) {
+      ledger.settle(reservation, error instanceof NidusError && error.code === 'cancelled' ? 'cancelled' : 'failed', error instanceof NidusError ? error.usage : null, headers);
+      throw error;
+    }
+    ledger.settle(reservation, 'succeeded', turn.usage, headers);
+    return { ...turn, requestId:reservation.id };
+  }
+
   async disconnect(provider: ProviderId) { await this.credentials.delete(provider); await this.store.remove(provider); this.usageLedger().invalidateFreeUse(provider); this.usageLedger().invalidateAccount(provider); return { provider, disconnected: true }; }
-  async probe(provider: ProviderId, model: string, allowInferred = false, consentToken?: string) {
+  async probe(provider: ProviderId, model: string, allowInferred = false, consentToken?: string, probeRiskAccepted = false) {
     const saved = await this.store.load(provider);
     const known = saved?.models.find(m => m.id === model);
     if (!known) throw new NidusError("invalid_request", "Refresh models before testing a discovered model.");
-    return probeModel(known, allowInferred, async (request, options) => this.execute(provider, request, "probe", {...options,consentToken}));
+    return probeModel(known, allowInferred, async (request, options) => {
+      let token=consentToken;
+      // Explicit Host probe consent is scoped to this one bounded request; never upgrades the account.
+      if(!token && probeRiskAccepted===true){
+        const fingerprint=createHash('sha256').update(await this.key(provider)).digest('hex');
+        const permission=this.usageLedger().executionPermission(provider,model,fingerprint);
+        if(['account_unknown','free_model_unverified'].includes(permission.reason??''))
+          token=this.usageLedger().issueConsent(provider,model,'probe',fingerprint,true).token;
+      }
+      return this.execute(provider, request, "probe", {...options,consentToken:token});
+    });
   }
 }

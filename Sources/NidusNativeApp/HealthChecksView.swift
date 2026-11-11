@@ -100,6 +100,6 @@ struct HealthChecksView: View {
                 let selected = providers, inferred = allowInferred, maximum = limit, untested = onlyUntested
                 Task { await dashboard.runHealthChecks(providers: selected, allowInferred: inferred, limit: maximum, confirmed: true, onlyUntested: untested) }
             }
-        } message: { Text("모든 요청은 ‘Reply with OK.’를 전송합니다. 이미지·영상·라이브 생성은 실행하지 않습니다. 가격 미확인 모델도 비용이 발생할 수 있습니다.") }
+        } message: { Text("모든 요청은 ‘Reply with OK.’를 전송합니다. 이미지·영상·라이브 생성은 실행하지 않습니다. 무료 지원 미확인·유료 전용 모델도 Free Only 설정과 별개로 이번 검사 1회에 한해 비용 발생 가능성을 승인합니다. 계정 설정과 일반 채팅 권한은 변경되지 않습니다. 가격 미확인 모델도 비용이 발생할 수 있습니다.") }
     }
 }

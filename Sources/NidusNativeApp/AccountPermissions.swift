@@ -113,25 +113,25 @@ struct AccountPermissionEditor: View {
 }
 
 extension Dashboard {
-    // Only explicit manual operations may ask for one-shot consent. Batch and auto use transport directly.
+    // Manual requests may prompt here. Batch probes carry their own explicit cost confirmation; automatic execution never prompts.
     @MainActor func manualCall(_ request: [String: Any], confirm: ((String, String) -> Bool)? = nil) async throws -> Data {
         do {
             let data = try await transport(request)
             if request["method"] as? String == "probe",
                let result = try? JSONDecoder().decode(ProbeResponse.self, from: data),
-               result.error?.code == "execution_permission", result.error?.message.contains("account_unknown") == true {
+               result.error?.code == "execution_permission", (result.error?.message.contains("account_unknown") == true || result.error?.message.contains("free_model_unverified") == true) {
                 throw DashboardError(message: result.error!.message)
             }
             return data
         }
         catch {
             guard ["chat","probe"].contains(request["method"] as? String ?? ""),
-                  error.localizedDescription.contains("account_unknown"),
+                  (error.localizedDescription.contains("account_unknown") || request["method"] as? String == "probe" && error.localizedDescription.contains("free_model_unverified")),
                   let provider = request["provider"] as? String else { throw error }
             let task = request["method"] as? String ?? "chat"
             let model = request["model"] as? String ?? (request["request"] as? [String:Any])?["model"] as? String ?? ""
             let alert = NSAlert()
-            alert.messageText = "과금 상태 미확인 · 이번 요청만 승인"
+            alert.messageText = "과금·무료 여부 미확인 · 이번 요청만 승인"
             alert.informativeText = "\(provider) / \(model)\n실제 비용이 발생할 수 있습니다. 금액 제한은 없습니다. 승인은 이번 요청에만 적용하며 자동 Fallback은 실행하지 않습니다."
             alert.addButton(withTitle: "취소")
             alert.addButton(withTitle: "과금 위험을 이해하고 1회 실행")

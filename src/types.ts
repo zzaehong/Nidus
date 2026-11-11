@@ -1,3 +1,4 @@
+import type { ToolModelRequest, ModelTurn } from './agent/model.js';
 export const providerIds = ["openai", "anthropic", "gemini", "deepseek", "nvidia", "groq", "mistral", "cloudflare"] as const;
 export type ProviderId = typeof providerIds[number];
 export type Support = "supported" | "unsupported" | "unknown";
@@ -35,6 +36,7 @@ export interface ChatResponse {
 export interface RequestOptions { consentToken?: string; onHeaders?: (headers: Record<string, string>) => void; signal?: AbortSignal; timeoutMs?: number }
 export interface ProviderAdapter {
   readonly id: ProviderId;
+  toolChat?(key: string, request: ToolModelRequest, options?: RequestOptions): Promise<ModelTurn>;
   listModels(key: string, options?: RequestOptions): Promise<Model[]>;
   getModel(key: string, model: string, options?: RequestOptions): Promise<Model>;
   chat(key: string, request: ChatRequest, options?: RequestOptions): Promise<ChatResponse>;

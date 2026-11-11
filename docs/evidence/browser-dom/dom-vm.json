@@ -1,0 +1,13 @@
+{
+  "scope": "isolated real VM, synthetic HTTPS responses",
+  "checks": [
+    "labels and same-origin iframe",
+    "unicode search and stale snapshot",
+    "select checkbox contenteditable",
+    "press and dynamic page",
+    "paged text"
+  ],
+  "status": "PASS",
+  "cleanup": "CONFIRMED",
+  "stop": "STOP_CONFIRMED"
+}

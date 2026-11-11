@@ -25,6 +25,7 @@ export const help = `Nidus API Connectivity MVP
   nidus balance <provider>
   nidus account <openai|anthropic>  # separate session ADMIN_API_KEY
   nidus disconnect <provider>
+  nidus gateway --help   # role and difficulty based Model Gateway (per-vault .nidus)
 
 connect: hidden key entry, model discovery, macOS Keychain storage.
 --env: explicit NIDUS_<PROVIDER>_API_KEY session credential; never writes the key.
@@ -41,6 +42,7 @@ export interface CliDependencies {
 }
 export async function main(argv = process.argv.slice(2), dependencies: CliDependencies = {}): Promise<void> {
   const write = dependencies.write ?? (text => { process.stdout.write(text); });
+  if (argv[0] === 'gateway') { const { gatewayMain } = await import('./gateway/cli.js'); return gatewayMain(argv.slice(1), dependencies); }
   const print = (value: unknown) => write(`${JSON.stringify(value, null, 2)}\n`);
   let values, positionals;
   try {

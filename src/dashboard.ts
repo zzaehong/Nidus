@@ -7,9 +7,30 @@ import { providerId } from "./adapters/index.js";
 import { NidusError, publicError } from "./errors.js";
 import type { ChatRequest } from "./types.js";
 
+import {VaultRegistry} from './vault/registry.js';
+import {VaultError} from './vault/types.js';
+import {archiveStoppedRuntime} from './vault/vm-recovery.js';
+import {VMClient} from './vault/vm-client.js';
+import {readFile} from 'node:fs/promises';
 export async function dispatch(input: unknown, engine: ConnectivityEngine): Promise<unknown> {
   if (!input || typeof input !== "object") throw new NidusError("invalid_request", "Invalid dashboard request.");
   const r = input as Record<string, unknown>;
+  if(r.method==='agent-models')return engine.agentModels();
+  if(typeof r.method==='string'&&r.method.startsWith('vault-')){
+    const registry=new VaultRegistry(process.env.NIDUS_VAULT_REGISTRY),client=new VMClient(registry);
+    switch(r.method){
+      case 'vault-browser-capabilities':{try{const m=JSON.parse(await readFile(new URL('./vm-assets/manifest.json',import.meta.url),'utf8'));return {available:m.profile==='development'&&m.browserSnapshotVersion===1,interactive:m.profile==='development'&&m.browserInteractiveVersion===1,mode:m.browserInteractiveVersion===1?'interactive-browser':'read-only-snapshot'};}catch{return {available:false};}}
+      case 'vault-list':return registry.listVaults();
+      case 'vault-register':if(typeof r.path!=='string')throw new NidusError('invalid_request','Select a directory.');return registry.registerVault(r.path);
+      case 'vault-vm-recover':return archiveStoppedRuntime(client.directory);
+      case 'vault-vm-status':return client.status(true);
+      case 'vault-vm-start':if(typeof r.vaultId!=='string')throw new NidusError('invalid_request','Select a Vault.');await registry.resolveVault(r.vaultId);return client.request('start',{vaultId:r.vaultId},true);
+      case 'vault-vm-service-restart':{const state=await client.status(true);if(state.statusSource!=='live-service'||!['STOPPED','STOP_CONFIRMED'].includes(state.state)||state.activeSession||state.queued)throw new NidusError('invalid_request','VM must be confirmed stopped before restarting its service.');await client.request('shutdown');return {restarted:false,stopped:true};}
+      case 'vault-cache-status':case 'vault-cache-clear':if(typeof r.vaultId!=='string')throw new NidusError('invalid_request','Select a Vault.');await registry.resolveVault(r.vaultId);return client.request(r.method==='vault-cache-status'?'cache-status':'cache-clear',{vaultId:r.vaultId},true);
+      case 'vault-vm-stop':return client.request('stop');
+      default:throw new NidusError('invalid_request','Unknown Vault action.');
+    }
+  }
   if (r.method === 'account-permission') return engine.accountPermission(providerId(String(r.provider ?? '')));
   if (r.method === 'account-permission-set') return engine.setAccountPermission(providerId(String(r.provider ?? '')),r.state,r.paidAllowed,r.confirmed,r.riskAccepted,r.accountId ?? '',r.expectedRevision);
   if (r.method === 'request-consent') return engine.issueConsent(providerId(String(r.provider ?? '')),r.model,r.task,r.riskAccepted);
@@ -47,7 +68,7 @@ export async function dispatch(input: unknown, engine: ConnectivityEngine): Prom
     case "probe":
       if (typeof r.model !== "string" || r.confirmed !== true || (r.allowInferred !== undefined && typeof r.allowInferred !== "boolean"))
         throw new NidusError("invalid_request", "Confirm probe cost and select a discovered model.");
-      return engine.probe(provider, r.model, r.allowInferred === true, typeof r.consentToken==='string'?r.consentToken:undefined);
+      return engine.probe(provider, r.model, r.allowInferred === true, typeof r.consentToken==='string'?r.consentToken:undefined, r.probeRiskAccepted===true);
     case "chat":
       if (!r.request || typeof r.request !== "object") throw new NidusError("invalid_request", "Invalid chat request.");
       return engine.chat(provider, r.request as ChatRequest, { timeoutMs: 120_000, consentToken: typeof r.consentToken==='string'?r.consentToken:undefined });
@@ -70,7 +91,7 @@ async function main() {
     catch { throw new NidusError("invalid_request", "Invalid request JSON."); }
     const result = await dispatch(input, new ConnectivityEngine(new KeychainStore(), new FileModelStore()));
     process.stdout.write(JSON.stringify({ result }));
-  } catch (error) { process.stdout.write(JSON.stringify({ error: publicError(error).toJSON() })); }
+  } catch (error) { process.stdout.write(JSON.stringify({ error: publicError(error instanceof VaultError?new NidusError('storage',`Vault runtime blocked: ${error.code}`):error).toJSON() })); }
   finally { clearTimeout(timer); }
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) void main();

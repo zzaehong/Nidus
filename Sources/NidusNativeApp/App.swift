@@ -6,7 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
     }
-    func applicationWillTerminate(_ notification: Notification) { Runtime.shared.shutdown() }
+    func applicationWillTerminate(_ notification: Notification) { VaultRuntimeModel.active?.shutdown(); Runtime.shared.shutdown() }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 }
 
@@ -57,8 +57,7 @@ struct DashboardView: View {
     @State private var showRouting = false
     @State private var showModelTier = false
     @State private var showChat = false
-    @State private var showVMRecovery = false
-    @StateObject private var vmRecovery = VMRecoveryModel()
+    @State private var showVault = false
     var body: some View {
         NavigationSplitView {
             VStack(alignment: .leading, spacing: 20) {
@@ -88,22 +87,8 @@ struct DashboardView: View {
                 }
             }
         }
-        .task {
-            while !Task.isCancelled {
-                await vmRecovery.refresh()
-                do { try await Task.sleep(nanoseconds:3_000_000_000) } catch { break }
-            }
-        }
-        .safeAreaInset(edge:.bottom) {
-            if vmRecovery.needsAttention {
-                HStack {
-                    Label("VM 상태 확인 필요 · 실행 및 파일 반영 차단",systemImage:"exclamationmark.shield")
-                    Spacer();Button("복구 화면") { showVMRecovery=true }
-                }.padding().background(.regularMaterial)
-            }
-        }
         .toolbar {
-            Button("VM 복구",systemImage:"exclamationmark.shield") { showVMRecovery=true }
+            Button("Vault Runtime", systemImage: "externaldrive") { showVault = true }.disabled(!dashboard.ready)
             Button("Model Tier", systemImage: "square.stack.3d.up") { showModelTier = true }.disabled(!dashboard.ready)
             Button("Routing Policy", systemImage: "arrow.triangle.branch") { showRouting = true }.disabled(!dashboard.ready)
             Button("사용량 및 비용", systemImage: "chart.bar") { showUsage = true }.disabled(!dashboard.ready)
@@ -111,11 +96,11 @@ struct DashboardView: View {
                 .help("선택한 범위의 텍스트 모델을 순차 검사합니다. 실패해도 다음 모델로 진행하며 실제 API 비용이 발생할 수 있습니다. 실행 전 대상과 요청 한도를 확인합니다.")
             Button("채팅방", systemImage: "bubble.left.and.bubble.right") { showChat = true }.disabled(!dashboard.ready)
         }
-        .sheet(isPresented: $showVMRecovery) { VMRecoveryView(model:vmRecovery) }
         .sheet(isPresented: $showModelTier) { RoutingSettingsView() }
         .sheet(isPresented: $showRouting) { RoutingSettingsView(policyOnly: true) }
         .sheet(isPresented: $showUsage) { UsageBudgetView() }
         .sheet(isPresented: $showHealth) { HealthChecksView(initialProvider: selected ?? .openai).environmentObject(dashboard) }
+        .sheet(isPresented: $showVault) { VaultRuntimeView() }
         .sheet(isPresented: $showChat) { ChatRoomsView().environmentObject(dashboard) }
         .overlay {
             if let error = dashboard.runtimeError {

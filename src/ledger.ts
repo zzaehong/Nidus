@@ -170,7 +170,8 @@ export class UsageLedger {
   issueConsent(provider: ProviderId, model: string, task: TaskKind, fingerprint: string, riskAccepted: unknown) {
     return this.transaction(() => {
       const account=this.accountPermission(provider,fingerprint);
-      if (riskAccepted !== true || account.state !== 'unknown' || !model || !['chat','probe'].includes(task)) throw new NidusError('invalid_request','Request-specific consent is only for Unknown accounts and requires explicit charge-risk acceptance.');
+      const probeException=task==='probe' && account.state==='free_only' && this.executionPermission(provider,model,fingerprint).reason==='free_model_unverified';
+      if (riskAccepted !== true || (account.state !== 'unknown' && !probeException) || !model || !['chat','probe'].includes(task)) throw new NidusError('invalid_request','Request-specific consent requires explicit charge-risk acceptance and an Unknown account or unverified free-model probe.');
       const token=randomUUID(), expiresAt=new Date(this.now().getTime()+300_000).toISOString();
       this.db.prepare('INSERT INTO execution_consents VALUES(?,?,?,?,?,?,?,0)').run(token,provider,model,task,fingerprint,account.revision,expiresAt);
       return {token,expiresAt,provider,model,task};
@@ -332,12 +333,12 @@ export class UsageLedger {
       const permission=this.executionPermission(provider,request.model,credentialHash ?? '');
       let reason=automatic && (automatic.accountRevision!==permission.account.revision || automatic.billingMode!==permission.billingMode) ? 'account_changed' : permission.reason;
       let consentUsed=false;
-      if (reason==='account_unknown' && !automatic && consentToken) {
+      if ((reason==='account_unknown' || task==='probe' && reason==='free_model_unverified') && !automatic && consentToken) {
         const used=this.db.prepare(`UPDATE execution_consents SET consumed=1 WHERE token=? AND provider=? AND model=? AND task=? AND fingerprint=? AND revision=? AND expires_at>? AND consumed=0`)
           .run(consentToken,provider,request.model,task,credentialHash ?? '',permission.account.revision,at);
         if(used.changes===1){reason=null;consentUsed=true;}
       }
-      const billingMode=permission.billingMode;
+      const billingMode=consentUsed?'paid' as const:permission.billingMode;
       if(reason){
         this.db.prepare(`INSERT INTO requests(id,at,month,provider,model,task,status,settlement,cost_status,reserved,bound,price_version,price_json,exception,block_reason,updated_at) VALUES(?,?,?,?,?,?,'blocked','not_sent','unknown',0,NULL,?,?,0,?,?)`)
           .run(id,at,at.slice(0,7),provider,request.model,task,priceVersion(price),JSON.stringify(price),reason,at);

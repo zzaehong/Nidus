@@ -1,0 +1,6 @@
+import {test} from 'node:test'; import assert from 'node:assert/strict';
+import {ToolRegistry} from '../dist/tools/registry.js';
+test('Gate A: unknown and duplicate trusted tool definitions rejected',()=>{const r=new ToolRegistry(); assert.throws(()=>r.get('evil')); assert.throws(()=>r.register(r.get('read_file')));});
+test('Gate A: arguments cannot forge approval or target and invalid shapes are rejected',()=>{const r=new ToolRegistry(); for(const a of [{path:'a',approved:true},{path:'a',target:'vm'},{path:2},{},null]) assert.throws(()=>r.validate('read_file',a)); assert.equal(r.validate('read_file',{path:'a'}).target,'host');});
+test('Gate A: only implemented read tools advertised by default and registry copies are isolated',()=>{const r=new ToolRegistry(); assert.deepEqual(r.available().map(d=>d.name),['list_files','read_file','search_files']); const d=r.get('read_file');d.target='vm';assert.equal(r.get('read_file').target,'host'); assert.deepEqual(r.available(true).map(d=>d.name),['list_files','read_file','search_files','write_file']);});
+test('Gate A: unsupported schema is rejected without lossy conversion',()=>{const r=new ToolRegistry(),d=r.get('read_file');d.name='new_tool';d.inputSchema.anyOf=[];assert.throws(()=>r.register(d));});

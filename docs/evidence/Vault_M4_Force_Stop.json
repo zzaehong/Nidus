@@ -1,0 +1,49 @@
+{
+  "scope": "Actual VZ stop callback + stopped state; no guest shutdown requested",
+  "status": "PASS",
+  "events": [
+    {
+      "event": "starting",
+      "frameworkState": 0,
+      "time": "2026-11-03T01:13:05Z"
+    },
+    {
+      "event": "running",
+      "frameworkState": 1,
+      "time": "2026-11-03T01:13:05Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_READY cgroup2",
+      "time": "2026-11-03T01:13:05Z"
+    },
+    {
+      "event": "ready",
+      "frameworkState": 1,
+      "time": "2026-11-03T01:13:05Z"
+    },
+    {
+      "event": "stop_requested",
+      "frameworkState": 1,
+      "reason": "user_force",
+      "time": "2026-11-03T01:13:05Z"
+    },
+    {
+      "event": "force_stop_requested",
+      "frameworkState": 1,
+      "time": "2026-11-03T01:13:05Z"
+    },
+    {
+      "event": "force_stop_completed",
+      "frameworkState": 0,
+      "time": "2026-11-03T01:13:05Z"
+    },
+    {
+      "event": "STOP_CONFIRMED",
+      "frameworkState": 0,
+      "time": "2026-11-03T01:13:05Z"
+    }
+  ],
+  "exit": 0
+}

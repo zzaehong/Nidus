@@ -102,7 +102,7 @@ extension Dashboard {
             let started = Date()
             do {
                 sent = true
-                let data = try await transport(["method": "probe", "provider": row.provider.rawValue, "model": row.model, "allowInferred": allowInferred, "confirmed": true])
+                let data = try await transport(["method": "probe", "provider": row.provider.rawValue, "model": row.model, "allowInferred": allowInferred, "confirmed": true, "probeRiskAccepted": true])
                 let result = try JSONDecoder().decode(ProbeResponse.self, from: data)
                 guard result.model == row.model, [.passed, .failed, .skipped].contains(result.status) else { throw DashboardError(message: "검사 응답 형식이 올바르지 않습니다.") }
                 healthRows[index].status = result.status

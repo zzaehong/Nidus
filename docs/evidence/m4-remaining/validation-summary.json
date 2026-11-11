@@ -1,0 +1,34 @@
+{
+  "date": "2026-11-04",
+  "commit": "ac14292613e0c0ac75e9fe320c73ee357db56b83",
+  "node": {
+    "passed": 324,
+    "failed": 0
+  },
+  "swift": {
+    "passed": 51,
+    "failed": 0
+  },
+  "post_binding_targeted_node": {
+    "passed": 23,
+    "failed": 0
+  },
+  "bundle": "/Users/parkjaehong/Developer/Nidus/dist/Nidus.app",
+  "manifest": {
+    "profile": "development",
+    "Image": "256d5fff4bb892edcb9218c1e6353e388bc3646e65f76c2bc9d958b635d1b00e",
+    "initrd": "7850bf20946c94f2b43ed8f53c2dee2e3cd2ff0be1d474a6d80f753474e5c0ec"
+  },
+  "bundleChecks": {
+    "Image": true,
+    "initrd": true,
+    "nidus-vault-vm": true,
+    "nidus-vault-files": true,
+    "agent-channel.js": true
+  },
+  "paidProvider": "NOT_RUN",
+  "actualUIApprovalClick": "NOT_RUN",
+  "browserSandbox": "FAIL",
+  "publicBrowserNetwork": "NOT_RUN_DISABLED",
+  "persistentCache": "NOT_IMPLEMENTED"
+}

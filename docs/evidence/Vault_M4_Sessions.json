@@ -1,0 +1,410 @@
+{
+  "assets": {
+    "Image": "256d5fff4bb892edcb9218c1e6353e388bc3646e65f76c2bc9d958b635d1b00e",
+    "initrd": "1674819c7d69e71f25d343790645446eca09aebf805054eff59b9d1394964418"
+  },
+  "host": "macOS-27.0.1-arm64-arm-64bit",
+  "scope": "Real Apple Virtualization offline guest. No user data. Diagnostic only.",
+  "events": [
+    {
+      "event": "starting",
+      "frameworkState": 0,
+      "time": "2026-11-03T01:18:24Z"
+    },
+    {
+      "event": "running",
+      "frameworkState": 1,
+      "time": "2026-11-03T01:18:24Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_READY cgroup2",
+      "time": "2026-11-03T01:18:25Z"
+    },
+    {
+      "event": "ready",
+      "frameworkState": 1,
+      "time": "2026-11-03T01:18:25Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_SESSION simple started",
+      "time": "2026-11-03T01:18:25Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT simple 0 1 completed 872448 [base64 payload omitted; decoded output/hash in cases]",
+      "time": "2026-11-03T01:18:25Z",
+      "lineSHA256": "7849770cdcbf17524cee63a2908e6358822ca00dbe38cce9ca64ecee1456dbec"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_SESSION setsid started",
+      "time": "2026-11-03T01:18:25Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT setsid 0 1 completed 1159168 [base64 payload omitted; decoded output/hash in cases]",
+      "time": "2026-11-03T01:18:25Z",
+      "lineSHA256": "fdcd1331252d22619ed6665ef80b3f72ead1c5a1c8379371fe8826d4c7d0caa2"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_SESSION double-fork started",
+      "time": "2026-11-03T01:18:25Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT double-fork 0 1 completed 1024000 [base64 payload omitted; decoded output/hash in cases]",
+      "time": "2026-11-03T01:18:25Z",
+      "lineSHA256": "40874f95990ea2c871f43d48a0c2922359fe38f91fb0f1eaae1121ee9fdd9afc"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_SESSION infinite started",
+      "time": "2026-11-03T01:18:25Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT infinite 137 1 timeout 872448 [base64 payload omitted; decoded output/hash in cases]",
+      "time": "2026-11-03T01:18:26Z",
+      "lineSHA256": "29da3be238aac363091f07022cb4032ae43dc5854b33192ea43d55fc127415a2"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_SESSION ignore-term started",
+      "time": "2026-11-03T01:18:26Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT ignore-term 137 1 timeout 770048 [base64 payload omitted; decoded output/hash in cases]",
+      "time": "2026-11-03T01:18:27Z",
+      "lineSHA256": "30340edd5f2661ee2f9b26aa1fa68c8a892ac34e79d5f00e88b577bd81f067ac"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_SESSION background started",
+      "time": "2026-11-03T01:18:27Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT background 0 1 completed 757760 [base64 payload omitted; decoded output/hash in cases]",
+      "time": "2026-11-03T01:18:27Z",
+      "lineSHA256": "743c5e3ba55d3632bd170494bf902593bfc18ef073557c314aaf5fcaa80ce6d2"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_SESSION state-write started",
+      "time": "2026-11-03T01:18:27Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT state-write 0 1 completed 815104 [base64 payload omitted; decoded output/hash in cases]",
+      "time": "2026-11-03T01:18:27Z",
+      "lineSHA256": "521b7427a7d183a934beb17fb569d49da4ac1425054aa8db68f90749acc8a66f"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_SESSION state-clean started",
+      "time": "2026-11-03T01:18:27Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT state-clean 0 1 completed 552960 [base64 payload omitted; decoded output/hash in cases]",
+      "time": "2026-11-03T01:18:27Z",
+      "lineSHA256": "533c8efe7f04e6a609b6a5465c5e22b66806a0a4ca90be25721f78f3d78ebf9a"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_SESSION no-host-network started",
+      "time": "2026-11-03T01:18:27Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT no-host-network 0 1 completed 548864 [base64 payload omitted; decoded output/hash in cases]",
+      "time": "2026-11-03T01:18:27Z",
+      "lineSHA256": "c88341d6bd4308ef25b83fc2bde505a3557ef40dc1ad6c171d23dee4df55679d"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_SESSION privilege started",
+      "time": "2026-11-03T01:18:27Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT privilege 1 1 completed 1011712 [base64 payload omitted; decoded output/hash in cases]",
+      "time": "2026-11-03T01:18:27Z",
+      "lineSHA256": "4b6f32fba1a594da0ebb49af8f81bb50bf19cfa38b4dc0fa92b94543e3e03f8f"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_SESSION output-limit started",
+      "time": "2026-11-03T01:18:27Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT output-limit 153 1 completed 823296 [base64 payload omitted; decoded output/hash in cases]",
+      "time": "2026-11-03T01:18:27Z",
+      "lineSHA256": "dc25df473ed727f7bef33285b2a657f9e84648a75a4120e04c39defcee885ee1"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_SESSION fd-boundary started",
+      "time": "2026-11-03T01:18:27Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT fd-boundary 0 1 completed 3305472 [base64 payload omitted; decoded output/hash in cases]",
+      "time": "2026-11-03T01:18:27Z",
+      "lineSHA256": "8e0cdb8a3b5d672249ac758343ac0dcff7650bb6e303955419e2d3eef1731fd7"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_SESSION long-command started",
+      "time": "2026-11-03T01:18:27Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT long-command 0 1 completed 557056 [base64 payload omitted; decoded output/hash in cases]",
+      "time": "2026-11-03T01:18:27Z",
+      "lineSHA256": "80451950f398596b64870cd99b28adbf2a38a510e448a905a268470ca6888b3d"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_SESSION network-block started",
+      "time": "2026-11-03T01:18:27Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT network-block 1 1 completed 1146880 [base64 payload omitted; decoded output/hash in cases]",
+      "time": "2026-11-03T01:18:27Z",
+      "lineSHA256": "0f292062dda2fbf41c91585c48c62620c35499ddd80fafcb7d26e9c729629a40"
+    },
+    {
+      "event": "stop_requested",
+      "frameworkState": 1,
+      "reason": "user",
+      "time": "2026-11-03T01:18:27Z"
+    },
+    {
+      "event": "STOP_CONFIRMED",
+      "frameworkState": 0,
+      "time": "2026-11-03T01:18:27Z"
+    }
+  ],
+  "cases": [
+    {
+      "name": "simple",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": "872448",
+      "stdout": "hello\n/work\nuid=1000(nidus) gid=1000(nidus) groups=1000(nidus)\n",
+      "stderr": "",
+      "stdoutBytes": 63,
+      "stdoutSHA256": "b4c7c33a983dcda776ae7b27cb7407f2b0447d052a2847b252c1cbcb547cc016",
+      "stderrBytes": 0,
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "setsid",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": "1159168",
+      "stdout": "detached\n",
+      "stderr": "",
+      "stdoutBytes": 9,
+      "stdoutSHA256": "0ae8c7a3736beb576d4667f7b3bd08d66232d936fdd2c7386f66e2695af5a211",
+      "stderrBytes": 0,
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "double-fork",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": "1024000",
+      "stdout": "parent-exit\n",
+      "stderr": "",
+      "stdoutBytes": 12,
+      "stdoutSHA256": "0784354ab63f62b4879943726b31f205a72e41427e3f9f0bcad289a7391c0732",
+      "stderrBytes": 0,
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "infinite",
+      "exitCode": 137,
+      "cleanupConfirmed": true,
+      "reason": "timeout",
+      "memoryPeakBytes": "872448",
+      "stdout": "",
+      "stderr": "",
+      "stdoutBytes": 0,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrBytes": 0,
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "ignore-term",
+      "exitCode": 137,
+      "cleanupConfirmed": true,
+      "reason": "timeout",
+      "memoryPeakBytes": "770048",
+      "stdout": "",
+      "stderr": "",
+      "stdoutBytes": 0,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrBytes": 0,
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "background",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": "757760",
+      "stdout": "background\n",
+      "stderr": "",
+      "stdoutBytes": 11,
+      "stdoutSHA256": "901641f13621d90fd52767470516b2b71c94797c4e1e7a044ceae27ea3c24863",
+      "stderrBytes": 0,
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "state-write",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": "815104",
+      "stdout": "done\n",
+      "stderr": "",
+      "stdoutBytes": 5,
+      "stdoutSHA256": "d117fa006ba9208500b2930ce69cbde436c647afa917cb7396a9bc9111a46dd2",
+      "stderrBytes": 0,
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "state-clean",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": "552960",
+      "stdout": "clean\n",
+      "stderr": "",
+      "stdoutBytes": 6,
+      "stdoutSHA256": "2e22da2ab13713309ac75219e525b8e06ed02f3f1963b8feef203fa25827f93d",
+      "stderrBytes": 0,
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "no-host-network",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": "548864",
+      "stdout": "isolated\n",
+      "stderr": "",
+      "stdoutBytes": 9,
+      "stdoutSHA256": "9b8d77949b6e468746790cc1ada9432ca9984c51533a086544c8d0c01f18cc66",
+      "stderrBytes": 0,
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "privilege",
+      "exitCode": 1,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": "1011712",
+      "stdout": "uid=1000(nidus) gid=1000(nidus) groups=1000(nidus)\n",
+      "stderr": "unshare: unshare(0x10000000): No space left on device\n/task.sh: line 1: can't create /bin/busybox: Permission denied\n",
+      "stdoutBytes": 51,
+      "stdoutSHA256": "70a204fae8022b2162dbe735e7c72b225dbe97cc6508185da4d3b8124f51ffde",
+      "stderrBytes": 117,
+      "stderrSHA256": "c3e010c97993fbdfd28e6ac26517ce7bc3341f0a77370a672cfe5f0353c13892"
+    },
+    {
+      "name": "output-limit",
+      "exitCode": 153,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": "823296",
+      "stdout": "bounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\nbounded\n [truncated; length/hash above]",
+      "stderr": "File size limit exceeded\n",
+      "stdoutBytes": 32768,
+      "stdoutSHA256": "4f8fbf9f70ea331d5015266d45651db214326edda6c8a50f69a009ca0bca3b5b",
+      "stderrBytes": 25,
+      "stderrSHA256": "912456ad93f80e531567561305bf88e56c769ddeb2dbcde00410659837121374"
+    },
+    {
+      "name": "fd-boundary",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": "3305472",
+      "stdout": "fd-checked\n",
+      "stderr": "",
+      "stdoutBytes": 11,
+      "stdoutSHA256": "650ce7010b542834c1d78a217d2fb86af97e00d275278e46ac5f48d524c72f1e",
+      "stderrBytes": 0,
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "long-command",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": "557056",
+      "stdout": "long-command\n",
+      "stderr": "",
+      "stdoutBytes": 13,
+      "stdoutSHA256": "afd3db63626e0037e23f32ca952baceac9440ef391ff957981abb9dda0c15ad7",
+      "stderrBytes": 0,
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "network-block",
+      "exitCode": 1,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": "1146880",
+      "stdout": "",
+      "stderr": "Connecting to 169.254.169.254 (169.254.169.254:80)\nwget: can't connect to remote host (169.254.169.254): Network unreachable\nConnecting to 127.0.0.1 (127.0.0.1:80)\nwget: can't connect to remote host (127.0.0.1): Network unreachable\n",
+      "stdoutBytes": 0,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrBytes": 232,
+      "stderrSHA256": "2cd6b045721633406eb9cecad46b601e254f81b95353dd0bb7a4dae0a87de495"
+    }
+  ],
+  "managerExit": 0,
+  "stderr": ""
+}

@@ -1,0 +1,46 @@
+{
+  "recordedAt": "2026-11-03T01:27:31.761863+00:00",
+  "host": {
+    "os": "macOS 27.0.1",
+    "build": "26A434",
+    "architecture": "arm64"
+  },
+  "node": {
+    "passed": 289,
+    "failed": 0,
+    "skipped": 0
+  },
+  "swift": {
+    "passed": 45,
+    "failed": 0
+  },
+  "appBundle": "PASS local development build; Node, signed VZ helper and images executed by channel test",
+  "actualHumanUI": "NOT_RUN; native automation pipe failed",
+  "livePaidProvider": "NOT_RUN",
+  "browser": "NOT_RUN; not implemented or advertised",
+  "hostMutation": "disabled",
+  "sourceSHA256": {
+    "native/vault-vm.swift": "7419bcbd807f064a619a2ac5cedec59c1421d02d444b6986c8c2125a05d45277",
+    "scripts/vault-vm/init.sh": "568156b4a066fe5db2872d8b37b9c1ab164c249a1fa7a531e5b7e5a3f83a7b75",
+    "src/vault/shared-vm.ts": "8ef9277228243376ca51aa0efae62f58bd08552023ca3ba5b567976cab26fb35",
+    "src/vault/vm-journal.ts": "ee0f6264a1cdcbc0dbbc438a5db2f1aa8e1c4598979a5bec95508295ea32e386",
+    "src/vault/apple-backend.ts": "09051edd0139d0526348ed2c650fff857d8b572dad5d68d22b8d089c9452d7fa",
+    "src/vault/vm-service.ts": "ffb53c2065bff962ce50ad761c1419358c39fc6728397fb122b51e240769650d",
+    "src/tools/vm.ts": "d4f1a9811078a45901a67e0005e5e51a39bf035529eabf8257fef24f98387a58",
+    "src/tools/dispatcher.ts": "1862686c74f7236de3f3b4184df66366fa0840df7660e846b180e242e41ec6f4",
+    "src/agent-channel.ts": "e604925da617b07450406ee4e64cd231f7e064320be14a887d424ee34099bbb7",
+    "Sources/NidusNativeApp/VaultRuntimeView.swift": "1f4ccdb295f52cf2af4aaa7822cb9f1adbc557d416611d802e6a2aecd92b77a5"
+  },
+  "bundleAssets": {
+    "Image": "256d5fff4bb892edcb9218c1e6353e388bc3646e65f76c2bc9d958b635d1b00e",
+    "initrd": "1674819c7d69e71f25d343790645446eca09aebf805054eff59b9d1394964418"
+  },
+  "scope": "Offline development VM only. Mock unit tests and programmatic approval fixtures are not real user consent. M4 overall incomplete.",
+  "implementationCommits": [
+    "7e3a15b",
+    "d92bf11",
+    "8371087"
+  ],
+  "evidenceSourceAndImageDigestCheck": "PASS",
+  "testProcessCleanup": "No matching test app/helper/service process remained. This is NOT VM stop proof for Manager death."
+}

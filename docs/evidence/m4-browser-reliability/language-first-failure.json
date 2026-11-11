@@ -1,0 +1,7 @@
+{
+  "scope": "Real VM/Chromium with synthetic HTTPS responses; no live search engine or Provider",
+  "languages": [],
+  "status": "FAIL",
+  "error": "AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:\n\n  assert.ok(p.languages.includes('ja'))\n",
+  "cleanup": "confirmed"
+}

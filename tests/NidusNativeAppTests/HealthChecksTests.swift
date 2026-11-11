@@ -28,6 +28,7 @@ import XCTest
         let dashboard = Dashboard { request in
             calls.append(request["model"] as! String)
             XCTAssertEqual(request["confirmed"] as? Bool, true)
+            XCTAssertEqual(request["probeRiskAccepted"] as? Bool, true)
             return try self.response(request)
         }
         dashboard.ready = true

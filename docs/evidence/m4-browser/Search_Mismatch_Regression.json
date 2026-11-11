@@ -1,0 +1,22 @@
+{
+  "scope": "Replayed public search HTML in real VM; no Provider request",
+  "query": "Mac mini M6 specs",
+  "url": "https://www.bing.com/search?q=Mac%20mini%20M6%20specs&setlang=en&cc=US",
+  "responseSHA256": "6ff5b1ffe77d0cd9daa5cbf2bc15c9c943f7f886414e47bc5d9ec5f314dd62e7",
+  "title": "Mac mini M6 specs - Search",
+  "resultHeadings": [
+    "Group Policy Management Console in Windows | Microsoft Learn",
+    "PowerShell: Mapping GPOs to their Linked Organizational Units",
+    "Group Policy scope in Windows | Microsoft Learn",
+    "How to Link a GPO to an OU: Step-by-Step Guide | Zecurit",
+    "Quickly locate what OU a gpo is being applied? - Software ...",
+    "Finding out where a Group Policy Object is located (OU Path)",
+    "PowerShell GPO Management with Group Policy Module",
+    "Finding GPO's attatched to OU's - Spiceworks Community",
+    "Group Policy Management (PowerShell) | PowerShell Reference",
+    "How to Verify Applied GPOs with the GPResult Tool"
+  ],
+  "mismatchBlocked": true,
+  "status": "PASS",
+  "stop": "STOP_CONFIRMED"
+}

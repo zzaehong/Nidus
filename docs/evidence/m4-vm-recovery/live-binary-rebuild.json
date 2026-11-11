@@ -1,0 +1,5 @@
+{
+  "scope": "Synthetic bundled Node remains alive during app rebuild; no user task",
+  "status": "PASS",
+  "bundledNodeSurvived": true
+}

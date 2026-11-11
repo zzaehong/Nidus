@@ -1,0 +1,145 @@
+{
+  "scope": "Synthetic cache corruption and deliberately killed test Manager; no recovery",
+  "directory": "/private/tmp/nidus-cache-failure-aTfZuy",
+  "events": [
+    {
+      "event": "starting",
+      "frameworkState": 0,
+      "time": "2026-11-04T05:23:22Z"
+    },
+    {
+      "event": "running",
+      "frameworkState": 1,
+      "time": "2026-11-04T05:23:22Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_DEVELOPMENT ready",
+      "time": "2026-11-04T05:23:25Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_CACHE_READY",
+      "time": "2026-11-04T05:23:30Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_READY cgroup2",
+      "time": "2026-11-04T05:23:30Z"
+    },
+    {
+      "event": "ready",
+      "frameworkState": 1,
+      "time": "2026-11-04T05:23:30Z"
+    },
+    {
+      "event": "stop_requested",
+      "frameworkState": 1,
+      "reason": "user",
+      "time": "2026-11-04T05:23:30Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_CACHE_CLEAN",
+      "time": "2026-11-04T05:23:30Z"
+    },
+    {
+      "event": "STOP_CONFIRMED",
+      "frameworkState": 0,
+      "time": "2026-11-04T05:23:30Z"
+    },
+    {
+      "event": "closed"
+    },
+    {
+      "event": "starting",
+      "frameworkState": 0,
+      "time": "2026-11-04T05:23:30Z"
+    },
+    {
+      "event": "running",
+      "frameworkState": 1,
+      "time": "2026-11-04T05:23:30Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_DEVELOPMENT ready",
+      "time": "2026-11-04T05:23:33Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_BLOCKED cache-filesystem",
+      "time": "2026-11-04T05:23:33Z"
+    },
+    {
+      "event": "stop_requested",
+      "frameworkState": 1,
+      "reason": "boot_timeout",
+      "time": "2026-11-04T05:24:01Z"
+    },
+    {
+      "event": "force_stop_requested",
+      "frameworkState": 1,
+      "time": "2026-11-04T05:24:03Z"
+    },
+    {
+      "event": "force_stop_completed",
+      "frameworkState": 0,
+      "time": "2026-11-04T05:24:03Z"
+    },
+    {
+      "event": "STOP_CONFIRMED",
+      "frameworkState": 0,
+      "time": "2026-11-04T05:24:03Z"
+    },
+    {
+      "event": "closed"
+    },
+    {
+      "event": "starting",
+      "frameworkState": 0,
+      "time": "2026-11-04T05:24:05Z"
+    },
+    {
+      "event": "running",
+      "frameworkState": 1,
+      "time": "2026-11-04T05:24:05Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_DEVELOPMENT ready",
+      "time": "2026-11-04T05:24:09Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_CACHE_READY",
+      "time": "2026-11-04T05:24:13Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_READY cgroup2",
+      "time": "2026-11-04T05:24:13Z"
+    },
+    {
+      "event": "ready",
+      "frameworkState": 1,
+      "time": "2026-11-04T05:24:13Z"
+    },
+    {
+      "event": "lost"
+    }
+  ],
+  "corruptionBlockedWithoutRepair": true,
+  "managerDeathBlocked": true,
+  "status": "PASS",
+  "stop": "STOP_UNCONFIRMED (expected; retained owner and disk)"
+}

@@ -1,0 +1,226 @@
+{
+  "scope": "Real VM, local service/gateway and public Google; no Provider",
+  "approvals": [
+    "session",
+    "interaction",
+    "network-sensitive"
+  ],
+  "page": {
+    "url": "https://www.google.com/",
+    "title": "Google",
+    "text": "Google 정보\n스토어\nGmail이미지\n로그인\n \n대한민국\n광고\n비즈니스\nGoogle 검색의 작동 방식\n개인정보처리방침\n약관\n설정",
+    "snapshotId": "3197ddc5-f153-41e4-8269-5839aff158c9",
+    "elements": [
+      {
+        "tag": "A",
+        "role": "",
+        "type": "",
+        "name": "Google 정보",
+        "value": "",
+        "href": "https://about.google/?fg=1&utm_source=google-KR&utm_medium=referral&utm_campaign=hp-header",
+        "x": 59,
+        "y": 30,
+        "id": "1"
+      },
+      {
+        "tag": "A",
+        "role": "",
+        "type": "",
+        "name": "스토어",
+        "value": "",
+        "href": "https://store.google.com/KR?utm_source=hp_header&utm_medium=google_ooo&utm_campaign=GS100042&hl=ko-KR",
+        "x": 124,
+        "y": 30,
+        "id": "2"
+      },
+      {
+        "tag": "A",
+        "role": "",
+        "type": "",
+        "name": "Gmail ",
+        "value": "",
+        "href": "https://mail.google.com/mail/&ogbl",
+        "x": 1066,
+        "y": 28,
+        "id": "3"
+      },
+      {
+        "tag": "A",
+        "role": "",
+        "type": "",
+        "name": "이미지 검색 ",
+        "value": "",
+        "href": "https://www.google.com/imghp?hl=ko&ogbl",
+        "x": 1110,
+        "y": 28,
+        "id": "4"
+      },
+      {
+        "tag": "A",
+        "role": "button",
+        "type": "",
+        "name": "Google 앱",
+        "value": "",
+        "href": "https://www.google.co.kr/intl/ko/about/products",
+        "x": 1157,
+        "y": 28,
+        "id": "5"
+      },
+      {
+        "tag": "A",
+        "role": "",
+        "type": "",
+        "name": "로그인",
+        "value": "",
+        "href": "https://accounts.google.com/ServiceLogin?hl=ko&passive=true&continue=https://www.google.com/&ec=futura_exp_og_so_72776762_e",
+        "x": 1228,
+        "y": 28,
+        "id": "6"
+      },
+      {
+        "tag": "TEXTAREA",
+        "role": "combobox",
+        "type": "textarea",
+        "name": "검색",
+        "value": "",
+        "href": "",
+        "x": 600,
+        "y": 402,
+        "id": "7"
+      },
+      {
+        "tag": "DIV",
+        "role": "button",
+        "type": "",
+        "name": "입력 도구",
+        "value": "",
+        "href": "",
+        "x": 823,
+        "y": 402,
+        "id": "8"
+      },
+      {
+        "tag": "DIV",
+        "role": "button",
+        "type": "",
+        "name": "음성 검색",
+        "value": "",
+        "href": "",
+        "x": 863,
+        "y": 402,
+        "id": "9"
+      },
+      {
+        "tag": "DIV",
+        "role": "button",
+        "type": "",
+        "name": "이미지로 검색",
+        "value": "",
+        "href": "",
+        "x": 903,
+        "y": 402,
+        "id": "10"
+      },
+      {
+        "tag": "INPUT",
+        "role": "button",
+        "type": "submit",
+        "name": "Google 검색",
+        "value": "Google 검색",
+        "href": "",
+        "x": 561,
+        "y": 475,
+        "id": "11"
+      },
+      {
+        "tag": "INPUT",
+        "role": "",
+        "type": "submit",
+        "name": "I’m Feeling Lucky",
+        "value": "I’m Feeling Lucky",
+        "href": "",
+        "x": 696,
+        "y": 475,
+        "id": "12"
+      },
+      {
+        "tag": "A",
+        "role": "",
+        "type": "",
+        "name": "광고",
+        "value": "",
+        "href": "https://www.google.com/intl/ko_kr/ads/?subid=ww-ww-et-g-awa-a-g_hpafoot1_1!o2&utm_source=google.com&utm_medium=referral&utm_campaign=google_hpafooter&fg=1",
+        "x": 43,
+        "y": 876,
+        "id": "13"
+      },
+      {
+        "tag": "A",
+        "role": "",
+        "type": "",
+        "name": "비즈니스",
+        "value": "",
+        "href": "https://www.google.com/services/?subid=ww-ww-et-g-awa-a-g_hpbfoot1_1!o2&utm_source=google.com&utm_medium=referral&utm_campaign=google_hpbfooter&fg=1",
+        "x": 97,
+        "y": 876,
+        "id": "14"
+      },
+      {
+        "tag": "A",
+        "role": "",
+        "type": "",
+        "name": "Google 검색의 작동 방식",
+        "value": "",
+        "href": "https://google.com/search/howsearchworks/?fg=1",
+        "x": 200,
+        "y": 876,
+        "id": "15"
+      },
+      {
+        "tag": "A",
+        "role": "",
+        "type": "",
+        "name": "개인정보처리방침",
+        "value": "",
+        "href": "https://policies.google.com/privacy?hl=ko&fg=1",
+        "x": 1121,
+        "y": 876,
+        "id": "16"
+      },
+      {
+        "tag": "A",
+        "role": "",
+        "type": "",
+        "name": "약관",
+        "value": "",
+        "href": "https://policies.google.com/terms?hl=ko&fg=1",
+        "x": 1191,
+        "y": 876,
+        "id": "17"
+      },
+      {
+        "tag": "DIV",
+        "role": "button",
+        "type": "",
+        "name": "설정",
+        "value": "",
+        "href": "",
+        "x": 1237,
+        "y": 876,
+        "id": "18"
+      }
+    ],
+    "sandboxVerified": true,
+    "untrusted": true,
+    "retrievedAt": "2026-11-04T23:54:27.732Z",
+    "networkResponses": 7,
+    "networkBlocked": 5,
+    "mode": "interactive-browser"
+  },
+  "frameBytes": 7204,
+  "typed": true,
+  "frameChanged": true,
+  "status": "PASS",
+  "frameAfterClose": null,
+  "cleanup": "confirmed"
+}

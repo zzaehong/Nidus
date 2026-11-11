@@ -1,0 +1,24 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';
+import {mkdtemp,realpath,rm,readFile,writeFile,link,unlink} from 'node:fs/promises';import {join} from 'node:path';import {randomUUID} from 'node:crypto';import {spawn} from 'node:child_process';
+import {CacheDiskStore} from '../dist/vault/cache-disk.js';
+async function fixture(t){const base=await realpath(await mkdtemp('/private/tmp/nidus-cache-test-'));t.after(()=>rm(base,{recursive:true,force:true}));return {base,store:new CacheDiskStore(join(base,'cache')),v:randomUUID(),e:randomUUID()};}
+test('cache: exclusive sparse disk, clean release and restart reuse same identity',async t=>{const f=await fixture(t),a=await f.store.acquire(f.v,f.e);assert.equal(a.fresh,true);assert.equal((await f.store.status(f.v,f.e)).capacityBytes,536870912);await assert.rejects(new CacheDiskStore(f.store.directory).acquire(f.v,f.e),/owned/);await f.store.release(a.diskId,true);const b=await new CacheDiskStore(f.store.directory).acquire(f.v,f.e);assert.equal(b.diskId,a.diskId);assert.equal(b.fresh,false);});
+test('cache: dirty disk is never automatically formatted or reused; explicit clear preserves Vault',async t=>{const f=await fixture(t);await writeFile(join(f.base,'original'),'untouched');const a=await f.store.acquire(f.v,f.e);await f.store.release(a.diskId,false);await assert.rejects(f.store.acquire(f.v,f.e),/cache_dirty/);await f.store.clear(f.v,f.e);const b=await f.store.acquire(f.v,f.e);assert.notEqual(a.diskId,b.diskId);assert.equal(await readFile(join(f.base,'original'),'utf8'),'untouched');});
+test('cache: lost owner cannot be reclaimed by another OS process or clear',async t=>{const f=await fixture(t);await f.store.acquire(f.v,f.e);const code=`import {CacheDiskStore} from './dist/vault/cache-disk.js';try{await new CacheDiskStore(process.argv[1]).acquire(process.argv[2],process.argv[3]);process.exitCode=1;}catch(e){if(e.code!=='cache_owned_or_unconfirmed')process.exitCode=2;}`;const c=spawn(process.execPath,['--input-type=module','-e',code,f.store.directory,f.v,f.e]);assert.equal(await new Promise(r=>c.once('exit',r)),0);await assert.rejects(f.store.clear(f.v,f.e),/owned/);});
+test('cache: wrong environment metadata and hardlinked disks are rejected',async t=>{const f=await fixture(t),a=await f.store.acquire(f.v,f.e);await f.store.release(a.diskId,true);await link(a.path,join(f.base,'alias'));await assert.rejects(f.store.acquire(f.v,f.e),/disk_changed/);await unlink(join(f.base,'alias'));const p=join(f.store.directory,f.v+'-'+f.e,'metadata.json'),m=JSON.parse(await readFile(p));m.environmentId=randomUUID();await writeFile(p,JSON.stringify(m));await assert.rejects(f.store.acquire(f.v,f.e),/metadata_invalid/);});
+test('cache: partial metadata and partial creation block automatic overwrite',async t=>{const f=await fixture(t),a=await f.store.acquire(f.v,f.e);await f.store.release(a.diskId,true);const p=join(f.store.directory,f.v+'-'+f.e);await writeFile(join(p,'pending-test'),'partial');await assert.rejects(f.store.acquire(f.v,f.e),/write_interrupted/);await unlink(join(p,'pending-test'));await unlink(join(p,'metadata.json'));await assert.rejects(f.store.acquire(f.v,f.e),/partial_creation/);});
+const volumeA='11111111-1111-4111-8111-111111111111',volumeB='22222222-2222-4222-8222-222222222222';
+test('cache: stable UUID allows device renumbering but rejects changed volumes',async t=>{
+ const f=await fixture(t),store=new CacheDiskStore(f.store.directory,async()=>volumeA),a=await store.acquire(f.v,f.e);await store.release(a.diskId,true);
+ const p=join(f.store.directory,f.v+'-'+f.e,'metadata.json'),m=JSON.parse(await readFile(p));m.device='999999';await writeFile(p,JSON.stringify(m));
+ const wrong=new CacheDiskStore(f.store.directory,async()=>volumeB);await assert.rejects(wrong.acquire(f.v,f.e),/cache_disk_changed/);await assert.rejects(wrong.rebindDevice(f.v,f.e),/cache_disk_changed/);
+ const b=await store.acquire(f.v,f.e);assert.equal(b.diskId,a.diskId);assert.equal(b.fresh,false);await store.release(b.diskId,true);
+});
+test('cache: legacy repair preserves disk and rejects dirty or replaced disks',async t=>{
+ const f=await fixture(t),store=new CacheDiskStore(f.store.directory,async()=>volumeA),a=await store.acquire(f.v,f.e);await store.release(a.diskId,true);
+ const p=join(f.store.directory,f.v+'-'+f.e,'metadata.json'),m=JSON.parse(await readFile(p));delete m.volumeUuid;m.device='999999';await writeFile(p,JSON.stringify(m));
+ await assert.rejects(store.acquire(f.v,f.e),/cache_disk_changed/);
+ await store.rebindDevice(f.v,f.e);assert.equal((await store.status(f.v,f.e)).diskId,a.diskId);
+ m.state='dirty';await writeFile(p,JSON.stringify(m));await assert.rejects(store.rebindDevice(f.v,f.e),/cache_dirty/);
+ m.state='clean';m.inode='999999';await writeFile(p,JSON.stringify(m));await assert.rejects(store.rebindDevice(f.v,f.e),/cache_disk_changed/);
+});

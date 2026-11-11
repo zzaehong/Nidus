@@ -5,7 +5,7 @@ import type { ChatRequest } from "../types.js";
 export class AnthropicAdapter extends BaseAdapter {
   readonly id = "anthropic" as const;
   constructor(endpoint = "https://api.anthropic.com/v1", http?: HttpClient) { super(endpoint, http); }
-  protected headers(key: string) { return { authorization: `Bearer ${key}`, "anthropic-version": "2026-10-21" }; }
+  protected headers(key: string): Record<string, string> { return { authorization: `Bearer ${key}`, "anthropic-version": "2026-10-21" }; }
   protected page(raw: Record<string, unknown>) {
     return { items: array(raw.data), next: raw.has_more === true ? string(raw.last_id) : null, parameter: "after_id" };
   }

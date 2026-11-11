@@ -1,0 +1,22 @@
+{
+  "date": "2026-11-04",
+  "node": {
+    "passed": 343,
+    "failed": 0
+  },
+  "swift": {
+    "passed": 53,
+    "failed": 0
+  },
+  "appBuild": "PASS: local unsigned development bundle",
+  "realVM": "Search_Mismatch_Regression.json",
+  "nimAgentTimeoutMs": 120000,
+  "otherAgentTimeoutMs": 30000,
+  "automaticRetry": false,
+  "liveNIM": "NOT RUN",
+  "upstreamMismatchRootCause": "unresolved; mismatch reproduced in response HTML before VM",
+  "relevanceCheck": "lexical only, not semantic or factual validation",
+  "developUnchanged": "d5972bacbb1a41207ce5d15b25d09bcf82c942df",
+  "mainUnchanged": "723c03b59dcecaae27d9fe0a9f97b464c785d706",
+  "remotePush": false
+}
