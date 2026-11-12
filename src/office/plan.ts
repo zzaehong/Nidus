@@ -1,7 +1,7 @@
 // What Main and Managers are asked, and how their JSON answers are read and checked.
 // They work in text only (no tools): Main plans and reports, Managers brief and review.
 import { difficulties, type Difficulty } from '../gateway/assignment.js';
-import type { BoardTask, CompletionContract, Project, Team } from './board.js';
+import { placeOf, type BoardTask, type CompletionContract, type Project, type Team } from './board.js';
 
 export class PlanError extends Error {}
 
@@ -47,7 +47,8 @@ export function parsePlan(answer: string): Plan {
     if (!contract.acceptance.length) throw new PlanError(`task ${t?.id}: at least one acceptance criterion`);
     const team = id(t?.team, 'task team');
     if (!teamIds.has(team)) throw new PlanError(`task ${t?.id}: unknown team ${team}`);
-    return { id: id(t?.id, 'task id'), team, title: text(t?.title, 'task title', 200), contract, dependsOn: list(t?.dependsOn ?? [], 'dependsOn', 12).map(d => id(d, 'dependency')) };
+    if (t?.where !== undefined && t.where !== 'desk' && t.where !== 'vm') throw new PlanError(`task ${t?.id}: where must be "desk" or "vm"`);
+    return { id: id(t?.id, 'task id'), team, title: text(t?.title, 'task title', 200), where: t?.where === 'desk' ? 'desk' as const : 'vm' as const, contract, dependsOn: list(t?.dependsOn ?? [], 'dependsOn', 12).map(d => id(d, 'dependency')) };
   });
   if (!tasks.length) throw new PlanError('at least one task');
   const ids = new Set<string>();
@@ -82,7 +83,12 @@ export function parseReview(answer: string): { verdict: 'accept' | 'revise' | 'b
 
 // --- prompts ---------------------------------------------------------------------
 
-const WORKERS = 'Workers do the actual work, one task at a time, in an isolated Linux VM: a copy of the user\'s Git repository at /workspace (committed state), a shell (Python, Node.js, git; long commands and background servers are possible), a real Chromium browser the user can watch and take over, web search, and internet access that the user approves per site. Every task\'s work goes into the same workspace; at the end the user reviews the combined changes before they become a branch in their repository.';
+const WORKERS = [
+  'Workers do the actual work, one task at a time, in one of two places:',
+  '- desk: no VM. The Worker reads the user\'s Git repository (the Vault, committed state: list, read, search files) and the results of earlier tasks, and produces a text deliverable: writing, analysis, summaries, translation, plans, designs, code written out as text. No shell, no internet, no browser, no changes to files. It starts at once and needs no approvals.',
+  '- vm: an isolated Linux VM with a copy of the repository at /workspace, a shell (Python, Node.js, git; long commands and background servers are possible), a real Chromium browser the user can watch and take over, web search, and internet access that the user approves per site. Every vm task works in the same workspace; at the end the user reviews the combined changes before they become a branch in their repository. The VM is started only when the first vm task begins.',
+  'Earlier tasks\' deliverables are handed to the tasks that depend on them, so a desk task can draft something that a later vm task writes into the repository.',
+].join('\n');
 
 export function mainPlanSystem(): string {
   return [
@@ -94,12 +100,13 @@ export function mainPlanSystem(): string {
     '- summary: what will be delivered, in the user\'s language.',
     '- roadmap: the main steps, in order (short phrases).',
     '- teams: 1-4 teams this request needs (id, name, focus). Prefer fewer teams.',
-    '- tasks: 1-12 tasks. Each is a unit a Worker can finish and a Manager can check: id, team, title, goal, scope, constraints, acceptance (observable criteria, a list), verification (how to check them), dependsOn (ids of tasks that must finish first).',
+    '- tasks: 1-12 tasks. Each is a unit a Worker can finish and a Manager can check: id, team, title, where ("desk" or "vm"), goal, scope, constraints, acceptance (observable criteria, a list), verification (how to check them), dependsOn (ids of tasks that must finish first).',
+    '- where: "desk" whenever the task only needs thinking and writing over the request, the user\'s answers, earlier results and the repository\'s files. "vm" only when it must run commands or code, create or change files in the repository, or use the internet or a browser. A request that needs no vm task never starts the VM. If the user wants a deliverable saved as a file in their repository, a vm task must write it.',
     '- questions: only what you truly need from the user before starting (preferences, missing facts, choices with real trade-offs). Ask none if the request is clear; never ask what the team can find out itself.',
     '',
     'Write titles, summary, roadmap, contracts and questions in the user\'s language. Ids are lowercase letters, digits and dashes.',
     'Answer with one JSON object only:',
-    '{"summary": "...", "roadmap": ["..."], "teams": [{"id": "research", "name": "...", "focus": "..."}], "tasks": [{"id": "t1", "team": "research", "title": "...", "goal": "...", "scope": "...", "constraints": "...", "acceptance": ["..."], "verification": "...", "dependsOn": []}], "questions": ["..."]}',
+    '{"summary": "...", "roadmap": ["..."], "teams": [{"id": "research", "name": "...", "focus": "..."}], "tasks": [{"id": "t1", "team": "research", "title": "...", "where": "desk", "goal": "...", "scope": "...", "constraints": "...", "acceptance": ["..."], "verification": "...", "dependsOn": []}], "questions": ["..."]}',
   ].join('\n');
 }
 
@@ -123,12 +130,28 @@ function projectContext(project: Project, task: BoardTask): string {
     `Other tasks:\n${others || '(none)'}`,
     '',
     `Task ${task.id}: ${task.title}`,
+    `Runs at: ${placeOf(task) === 'desk' ? 'desk (no VM: reads the repository, writes a text deliverable)' : 'vm (the shared workspace VM)'}`,
     `Goal: ${task.contract.goal}`,
     `Scope: ${task.contract.scope || '-'}`,
     `Constraints: ${task.contract.constraints || '-'}`,
     `Acceptance criteria:\n${task.contract.acceptance.map(a => `- ${a}`).join('\n')}`,
     `Verification: ${task.contract.verification || '-'}`,
+    inputsOf(project, task, 4000),
   ].filter(Boolean).join('\n');
+}
+
+/** The deliverables of the tasks this one depends on, for its Manager and its Worker. */
+export function inputsOf(project: Project, task: BoardTask, limit = 20000): string {
+  const inputs = task.dependsOn.map(d => project.tasks.find(t => t.id === d)).filter((t): t is BoardTask => !!t?.output);
+  if (!inputs.length) return '';
+  const each = Math.floor(limit / inputs.length);
+  return `Deliverables of earlier tasks this one builds on:\n${inputs.map(t => `--- ${t.id} ${t.title} ---\n${t.output!.length > each ? `${t.output!.slice(0, each)}\n… (${t.output!.length - each} more characters)` : t.output}`).join('\n\n')}`;
+}
+
+/** What the Worker is first told: the Manager's brief and the deliverables it builds on. */
+export function workerBrief(project: Project, task: BoardTask): string {
+  const inputs = inputsOf(project, task);
+  return `${task.brief ?? ''}${inputs ? `\n\n${inputs}` : ''}`;
 }
 
 export function managerSystem(): string {
@@ -141,7 +164,7 @@ export function managerSystem(): string {
 }
 
 export function briefRequest(project: Project, task: BoardTask): string {
-  return `${projectContext(project, task)}\n\nWrite the Worker's instructions: what to do, where (paths, sites), how to verify each acceptance criterion, what to commit, and what to report in its summary. Be concrete. Answer with one JSON object only:\n{"difficulty": "simple|normal|complex", "instructions": "..."}`;
+  return `${projectContext(project, task)}\n\nWrite the Worker's instructions: what to do, where (paths, sites), how to verify each acceptance criterion, and what to report in its summary. For a vm task say what to commit; for a desk task say what the deliverable must contain (the deliverables listed above are given to the Worker with your instructions). Be concrete. Answer with one JSON object only:\n{"difficulty": "simple|normal|complex", "instructions": "..."}`;
 }
 
 export function reviewRequest(project: Project, task: BoardTask, evidence: string, attempt: number, maxAttempts: number): string {
@@ -158,6 +181,12 @@ export function reviewRequest(project: Project, task: BoardTask, evidence: strin
 }
 
 export function finalRequest(project: Project): string {
-  const tasks = project.tasks.map(t => `- ${t.id} ${t.title} [${t.status}]\n  ${t.result ? `${t.result.summary}\n  Verified: ${t.result.verification}` : t.reviews.at(-1)?.feedback ?? ''}`).join('\n');
-  return `All tasks have ended. Request: ${project.instruction}\nPlan: ${project.summary}\n\nTasks:\n${tasks}\n\nWrite the final report for the user, in their language: what was delivered, how it was checked, what is unfinished or blocked and why, and what they should review or decide next. The combined changes will be shown to them for approval. Plain text, concise.`;
+  const tasks = project.tasks.map(t => {
+    const output = t.output ? `\n  Deliverable (${placeOf(t)}):\n${t.output.slice(0, 6000)}${t.output.length > 6000 ? '\n  …' : ''}` : '';
+    return `- ${t.id} ${t.title} [${t.status}, ${placeOf(t)}]\n  ${t.result ? `${t.result.summary}\n  Verified: ${t.result.verification}` : t.reviews.at(-1)?.feedback ?? ''}${output}`;
+  }).join('\n');
+  const changes = project.workspace
+    ? 'The combined changes in the repository will be shown to them for approval.'
+    : 'No task used the VM, so nothing in their repository changed; the user reads desk deliverables in the task list, so point to them rather than repeating them in full.';
+  return `All tasks have ended. Request: ${project.instruction}\nPlan: ${project.summary}\n\nTasks:\n${tasks}\n\nWrite the final report for the user, in their language: what was delivered, how it was checked, what is unfinished or blocked and why, and what they should review or decide next. ${changes} Plain text, concise.`;
 }

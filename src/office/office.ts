@@ -1,13 +1,14 @@
 // The instruction structure: the user instructs Main; Main plans (roadmap, teams, tasks with a
 // completion contract) and asks what it needs; after the user approves the plan, each task goes
 // to its team's Manager, who briefs a Worker and reviews the result; Main reports at the end.
-// Tasks run one at a time, in dependency order, in one shared workspace (the user's choice).
-// Main and Managers work in text only; Workers use the workspace tools.
+// Tasks run one at a time, in dependency order (the user's choice). A desk task runs without the
+// VM (text over the Vault's files); a vm task runs in the one shared workspace VM.
+// Main and Managers work in text only.
 import type { Message } from '../gateway/contract.js';
 import type { Difficulty } from '../gateway/assignment.js';
 import { sendWithRetry, type RetryPolicy, type WorkerGateway, type WorkerOutcome } from '../workspace/worker.js';
 import { BoardStore, projectId, readyTasks, unreachable, type BoardTask, type Project } from './board.js';
-import { PlanError, answersMessage, briefRequest, finalRequest, mainPlanSystem, managerSystem, parseBrief, parsePlan, parseReview, planRequest, reviewRequest } from './plan.js';
+import { PlanError, answersMessage, briefRequest, finalRequest, mainPlanSystem, managerSystem, parseBrief, parsePlan, parseReview, planRequest, reviewRequest, workerBrief } from './plan.js';
 
 export type OfficeEvent =
   | { type: 'project'; project: Project }
@@ -20,10 +21,11 @@ export interface OfficeDeps {
   /** A short description of the Vault's repository for Main (file list, README). */
   repository(): Promise<string>;
   /**
-   * Has a Worker do a task (or continue it after a review) in the shared workspace and returns
-   * what happened with evidence for the Manager: summary, tool trail, changes since the task began.
+   * Has a Worker do a task (or continue it after a review) where it runs (desk or the shared
+   * workspace VM) and returns what happened with evidence for the Manager: summary, tool trail,
+   * and the changes since the task began (vm) or the deliverable (desk, also as output).
    */
-  work(task: BoardTask, instruction: string, difficulty: Difficulty, signal: AbortSignal, revision: boolean): Promise<{ outcome: WorkerOutcome; evidence: string }>;
+  work(task: BoardTask, instruction: string, difficulty: Difficulty, signal: AbortSignal, revision: boolean): Promise<{ outcome: WorkerOutcome; evidence: string; output?: string }>;
   onEvent(event: OfficeEvent): void;
   retryWaits?: number[];
 }
@@ -152,13 +154,14 @@ export class Office {
     this.deps.onEvent({ type: 'message', from: 'manager', taskId: task.id, title: `${task.title} · Worker 지시 (난이도 ${brief.value.difficulty})`, text: brief.value.instructions, model: brief.model });
     await this.publish();
 
-    let instruction = brief.value.instructions;
+    let instruction = workerBrief(project, task);
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       task.attempts = attempt;
       task.status = 'in_progress';
       await this.publish();
-      const { outcome, evidence } = await this.deps.work(task, instruction, brief.value.difficulty, signal, attempt > 1);
+      const { outcome, evidence, output } = await this.deps.work(task, instruction, brief.value.difficulty, signal, attempt > 1);
       if (signal.aborted) throw new Error('stopped');
+      if (output !== undefined) task.output = output.slice(0, 60000);
       task.status = 'review';
       await this.publish();
       const history = task.reviews.length ? `\nEarlier reviews:\n${task.reviews.map((r, i) => `${i + 1}. ${r.verdict}: ${r.feedback}`).join('\n')}\n` : '';
@@ -177,7 +180,7 @@ export class Office {
         await this.publish();
         return;
       }
-      instruction = `Your Manager reviewed the work and asks for changes (attempt ${attempt + 1} of ${MAX_ATTEMPTS}):\n${review.value.feedback}\n\nFix this, verify the acceptance criteria again, commit, and finish with an updated summary.`;
+      instruction = `Your Manager reviewed the work and asks for changes (attempt ${attempt + 1} of ${MAX_ATTEMPTS}):\n${review.value.feedback}\n\n${task.where === 'desk' ? 'Fix this and finish again with the complete, updated deliverable and summary.' : 'Fix this, verify the acceptance criteria again, commit, and finish with an updated summary.'}`;
     }
   }
 

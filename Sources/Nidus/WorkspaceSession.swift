@@ -51,6 +51,11 @@ struct OfficeProject: Decodable {
     struct Task: Decodable, Identifiable {
         let id: String; let team: String; let title: String; let contract: Contract; let dependsOn: [String]
         let status: String; let difficulty: String?; let attempts: Int; let reviews: [Review]; let result: Result?
+        /// "desk" (no VM) or "vm"; older boards have none, which means vm.
+        let `where`: String?
+        /// A desk Worker's deliverable.
+        let output: String?
+        var onDesk: Bool { `where` == "desk" }
     }
     struct Question: Decodable, Identifiable { let id: String; let text: String; let answer: String? }
     let id: String
@@ -63,6 +68,8 @@ struct OfficeProject: Decodable {
     let questions: [Question]
     let report: String?
     let error: String?
+    let workspace: String?
+    var needsVm: Bool { tasks.contains { !$0.onDesk } }
 }
 
 /// The resident Workspace Service (dist/workspace/service.js) for the open Vault: the VM, its

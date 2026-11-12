@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Office, MAX_ATTEMPTS } from '../dist/office/office.js';
 import { BoardStore } from '../dist/office/board.js';
-import { parsePlan } from '../dist/office/plan.js';
+import { parsePlan, mainPlanSystem } from '../dist/office/plan.js';
 
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2, cachedInputTokens: null, cacheWriteTokens: null, reasoningTokens: null };
 const plan = (extra = {}) => JSON.stringify({
@@ -129,4 +129,54 @@ test('plans are checked: teams, ids, dependencies and cycles', () => {
   bad(p => { p.tasks[0].acceptance = []; return p; }, /acceptance/);
   bad(p => { p.teams = []; return p; }, /team/);
   assert.equal(parsePlan('Here you go:\n' + plan() + '\nThanks').tasks.length, 2, 'JSON inside prose is found');
+});
+
+test('where a task runs: desk or vm (vm when not said); anything else is refused', () => {
+  const tasks = [
+    { id: 't1', team: 'research', title: '정리', where: 'desk', goal: 'g', acceptance: ['a'] },
+    { id: 't2', team: 'research', title: '저장', goal: 'g', acceptance: ['a'], dependsOn: ['t1'] },
+  ];
+  const parsed = parsePlan(plan({ teams: [{ id: 'research', name: 'r', focus: 'f' }], tasks }));
+  assert.deepEqual(parsed.tasks.map(t => t.where), ['desk', 'vm']);
+  assert.throws(() => parsePlan(plan({ teams: [{ id: 'research', name: 'r', focus: 'f' }], tasks: [{ ...tasks[0], where: 'cloud' }] })), /where must be/);
+  assert.match(mainPlanSystem(), /"desk" whenever/);
+});
+
+test('a desk deliverable is kept on the task and handed to the Worker and Manager of tasks that depend on it', async t => {
+  const tasks = [
+    { id: 't1', team: 'research', title: '초안', where: 'desk', goal: 'g', acceptance: ['a'] },
+    { id: 't2', team: 'docs', title: '파일로 저장', where: 'vm', goal: 'g', acceptance: ['a'], dependsOn: ['t1'] },
+  ];
+  const { o, g, works } = await office(t, (role, last) => {
+    if (role === 'main') return last.includes('All tasks have ended') ? '보고' : plan({ tasks, questions: [] });
+    if (last.includes("Write the Worker's instructions")) return '{"difficulty": "simple", "instructions": "하라"}';
+    return '{"verdict":"accept","summary":"완료"}';
+  }, task => task.where === 'desk'
+    ? { outcome: { status: 'finished', summary: '초안 완료' }, evidence: 'deliverable', output: '# 초안 본문' }
+    : { outcome: { status: 'finished', summary: '저장' }, evidence: 'diff' });
+  await o.plan('초안을 쓰고 저장', new AbortController().signal);
+  const project = await o.execute(new AbortController().signal);
+  assert.equal(project.status, 'done');
+  assert.equal(project.tasks[0].output, '# 초안 본문');
+  assert.equal(project.tasks[1].output, undefined);
+  assert.doesNotMatch(works[0].instruction, /초안 본문/);
+  assert.match(works[1].instruction, /Deliverables of earlier tasks[\s\S]*t1 초안[\s\S]*# 초안 본문/, 'the Worker gets what it builds on');
+  const brief = g.calls.find(c => c.target.role === 'manager' && c.target.taskId === 't2').request.messages[0].content[0].text;
+  assert.match(brief, /Runs at: vm/);
+  assert.match(brief, /# 초안 본문/, 'so does its Manager');
+  const final = g.calls.at(-1).request.messages[0].content[0].text;
+  assert.match(final, /Deliverable \(desk\):\n# 초안 본문/);
+});
+
+test('a project with only desk tasks reports that nothing in the repository changed', async t => {
+  const tasks = [{ id: 't1', team: 'research', title: '요약', where: 'desk', goal: 'g', acceptance: ['a'] }];
+  const { o, g } = await office(t, (role, last) => {
+    if (role === 'main') return last.includes('All tasks have ended') ? '보고' : plan({ tasks, questions: [] });
+    if (last.includes("Write the Worker's instructions")) return '{"difficulty": "simple", "instructions": "하라"}';
+    return '{"verdict":"accept","summary":"완료"}';
+  }, () => ({ outcome: { status: 'finished', summary: 's' }, evidence: 'e', output: '요약문' }));
+  await o.plan('요약', new AbortController().signal);
+  const project = await o.execute(new AbortController().signal);
+  assert.equal(project.workspace, undefined);
+  assert.match(g.calls.at(-1).request.messages[0].content[0].text, /No task used the VM/);
 });

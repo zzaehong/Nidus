@@ -23,7 +23,9 @@ import { WorkspaceBrowser } from './browser.js';
 import { WorkerTools } from './tools.js';
 import { WorkerRun, type WorkerEvent, type WorkerOutcome } from './worker.js';
 import { Office, type OfficeEvent } from '../office/office.js';
-import { BoardStore, type BoardTask, type Project } from '../office/board.js';
+import { BoardStore, placeOf, type BoardTask, type Project } from '../office/board.js';
+import { DeskTools, deskSystemPrompt, gitSource } from '../office/desk.js';
+import { workerBrief } from '../office/plan.js';
 import { snapshot, receive, approve, discard, pending, type Review } from './sync.js';
 
 type VMState = 'stopped' | 'starting' | 'running' | 'stopping' | 'failed';
@@ -48,8 +50,9 @@ let worker: WorkerRun | undefined;
 let running: AbortController | undefined;
 let review: Review | null = null;
 let office: Office | undefined;
-/** Per board task: its Worker conversation, the commit it started from, and the last outcome. */
-const taskRuns = new Map<string, { run: WorkerRun; start: string; last?: WorkerOutcome; trail: string[] }>();
+/** Per board task: its Worker conversation, the commit it started from (vm), its desk tools (desk), the last outcome. */
+interface TaskRun { run: WorkerRun; start?: string; desk?: DeskTools; last?: WorkerOutcome; trail: string[] }
+const taskRuns = new Map<string, TaskRun>();
 /** "Allow every site" as the user set it; it holds for the task about to run or running. */
 let allowAll = false;
 const approvals = new Map<string, (answer: EgressAnswer) => void>();
@@ -374,64 +377,98 @@ async function inspect(command: string): Promise<string> {
   return result.stdout;
 }
 
-/** Office -> Worker: runs or continues a board task in the shared workspace, returns evidence. */
+/** Office -> Worker: runs or continues a board task where it runs, returns evidence. */
 async function work(task: BoardTask, instruction: string, difficulty: Difficulty, signal: AbortSignal, revision: boolean) {
-  if (!backend || vm !== 'running' || !saved?.task) throw new Error('VM과 작업 공간이 준비되지 않았습니다');
+  const desk = placeOf(task) === 'desk';
+  if (!desk) await ensureProjectWorkspace();
   let entry = taskRuns.get(task.id);
-  const fresh = () => new WorkerRun(gateway!, new WorkerTools(workerRuntime(backend!)), {
-    task: saved!.task!, difficulty,
-    onEvent: (e: WorkerEvent) => {
-      if (e.type === 'tool_call') entry?.trail.push(`${e.name} ${JSON.stringify(e.input).slice(0, 160)}`);
-      if (e.type === 'tool_result' && e.isError && entry?.trail.length) entry.trail[entry.trail.length - 1] += ' -> error';
-      event('worker', { task: saved?.task, boardTask: task.id, ...clipEvent(e) });
-    },
-  });
+  const fresh = (): TaskRun => {
+    const trail = entry?.trail ?? [];
+    const onEvent = (e: WorkerEvent) => {
+      if (e.type === 'tool_call') trail.push(`${e.name} ${JSON.stringify(e.input).slice(0, 160)}`);
+      if (e.type === 'tool_result' && e.isError && trail.length) trail[trail.length - 1] += ' -> error';
+      event('worker', { task: desk ? undefined : saved?.task, boardTask: task.id, where: placeOf(task), ...clipEvent(e) });
+    };
+    if (desk) {
+      const tools = new DeskTools(gitSource(paths!.root));
+      // A new conversation keeps what the last one wrote, so "continue" has something to build on.
+      tools.deliverable = entry?.desk?.deliverable;
+      return { run: new WorkerRun(gateway!, tools, { task: office!.project!.id, difficulty, system: deskSystemPrompt(), onEvent }), desk: tools, trail, start: entry?.start };
+    }
+    return { run: new WorkerRun(gateway!, new WorkerTools(workerRuntime(backend!)), { task: saved!.task!, difficulty, onEvent }), trail, start: entry?.start };
+  };
   if (!entry) {
-    const start = (await inspect('git rev-parse HEAD')).trim();
-    entry = { run: fresh(), start, trail: [] };
+    entry = fresh();
+    if (!desk) entry.start = (await inspect('git rev-parse HEAD')).trim();
     taskRuns.set(task.id, entry);
   } else if (!revision || entry.last?.status !== 'finished') {
     // The last attempt did not end cleanly: a new conversation, told what happened.
     const before = entry.last;
-    entry.run = fresh();
-    if (before && before.status !== 'finished') instruction = `${task.brief ?? ''}\n\nA previous attempt ended early (${before.status === 'stopped' ? before.detail : before.error}). Check the workspace for what was already done and continue.\n\n${instruction}`;
+    const next = fresh();
+    entry.run = next.run;
+    entry.desk = next.desk;
+    if (before && before.status !== 'finished') {
+      const draft = next.desk?.deliverable;
+      const where = desk
+        ? (draft ? `The deliverable written so far (kept; replace or append to it):\n${draft.slice(0, 20000)}` : 'Nothing was delivered yet')
+        : 'Check the workspace for what was already done and continue.';
+      instruction = `${workerBrief(office!.project!, task)}\n\nA previous attempt ended early (${before.status === 'stopped' ? before.detail : before.error}). ${where}\n\n${instruction}`;
+    }
   }
   entry.trail.push(`--- attempt ${task.attempts} ---`);
   const outcome = await entry.run.run(instruction, signal);
   entry.last = outcome;
   if (signal.aborted) return { outcome, evidence: '' };
-  const changes = await inspect(`git add -A >/dev/null 2>&1; echo "Commits since the task began:"; git log --oneline ${entry.start}..HEAD; echo; echo "Changed files:"; git diff --cached --stat ${entry.start}; echo; echo "Diff:"; git diff --cached ${entry.start} | head -c 15000`).catch(e => `(could not read changes: ${e.message})`);
   const trail = entry.trail.slice(-40).join('\n');
+  if (desk) {
+    const output = entry.desk!.deliverable ?? (outcome.status === 'finished' ? outcome.summary : '');
+    const shown = output.length > 15000 ? `${output.slice(0, 15000)}\n… (${output.length - 15000} more characters)` : output;
+    return { outcome, output, evidence: `This task ran at the desk (no VM): nothing in the repository changed; the deliverable is the result.\n\nTool calls (latest last):\n${trail || '(none)'}\n\nDeliverable:\n${shown || '(none)'}` };
+  }
+  const changes = await inspect(`git add -A >/dev/null 2>&1; echo "Commits since the task began:"; git log --oneline ${entry.start}..HEAD; echo; echo "Changed files:"; git diff --cached --stat ${entry.start}; echo; echo "Diff:"; git diff --cached ${entry.start} | head -c 15000`).catch(e => `(could not read changes: ${e.message})`);
   return { outcome, evidence: `Tool calls (latest last):\n${trail}\n\n${changes}` };
 }
 
-/** Prepares the project's workspace (once) and runs its tasks; the result goes to review at the end. */
+/**
+ * The project's workspace, made when its first vm task begins: the VM is started if it is off
+ * and the Vault's committed state is imported once; every vm task then works in it.
+ */
+async function ensureProjectWorkspace() {
+  const project = office!.project!;
+  if (vm !== 'running') {
+    log('VM이 필요한 Task라 VM을 켭니다');
+    await start();
+    if ((vm as VMState) !== 'running' || !backend) throw new Error('VM을 시작하지 못했습니다');
+  }
+  if (project.workspace && project.workspace === saved?.task) return;
+  if (saved?.task) await removeWorkspace();
+  const snap = await snapshot(paths!.root);
+  const task = taskName();
+  await backend!.importWorkspace(task, snap.bundle);
+  saved = { vaultId: saved!.vaultId, task, base: snap.base };
+  await save();
+  proxy!.resetSession();
+  proxy!.setAllowAll(allowAll);
+  project.workspace = task;
+  // VM conversations belonged to the old workspace; desk ones carry on.
+  for (const [id, run] of taskRuns) if (!run.desk) taskRuns.delete(id);
+  log(`프로젝트 작업 공간 ${task}: Vault의 커밋 ${snap.base.slice(0, 8)}을(를) VM으로 가져왔습니다`);
+}
+
+/** Runs the project's tasks; a workspace's changes go to review at the end. VM only if a task needs it. */
 async function executeProject() {
   if (!office?.project) throw new Error('계획이 없습니다');
   if (running) throw new Error('이미 작업이 진행 중입니다');
-  if (review) throw new Error('검토를 기다리는 결과가 있습니다. 승인하거나 버린 뒤 시작하세요');
-  if (vm !== 'running') await start();
   const project = office.project;
-  if (!project.workspace || project.workspace !== saved?.task) {
-    if (saved?.task) await removeWorkspace();
-    const snap = await snapshot(paths!.root);
-    const task = taskName();
-    await backend!.importWorkspace(task, snap.bundle);
-    saved = { vaultId: saved!.vaultId, task, base: snap.base };
-    await save();
-    proxy!.resetSession();
-    proxy!.setAllowAll(allowAll);
-    project.workspace = task;
-    taskRuns.clear();
-    log(`프로젝트 작업 공간 ${task}: Vault의 커밋 ${snap.base.slice(0, 8)}을(를) VM으로 가져왔습니다`);
-  }
+  const needsVm = project.tasks.some(t => placeOf(t) === 'vm' && !['done', 'blocked', 'skipped'].includes(t.status));
+  if (review && needsVm) throw new Error('검토를 기다리는 결과가 있습니다. 승인하거나 버린 뒤 시작하세요');
   running = new AbortController();
   status('프로젝트 진행 중');
   const controller = running;
   void office.execute(controller.signal).then(async () => {
     running = undefined;
     status(office!.project?.status === 'done' ? '프로젝트 완료' : '프로젝트 중지');
-    await collect().catch(error => log(`결과를 가져오지 못했습니다: ${error.message}`));
+    if (project.workspace && project.workspace === saved?.task) await collect().catch(error => log(`결과를 가져오지 못했습니다: ${error.message}`));
   });
   return {};
 }

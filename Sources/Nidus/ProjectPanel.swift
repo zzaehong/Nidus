@@ -31,7 +31,12 @@ struct ProjectPanel: View {
                             }
                         }
                     }
-                    if !project.tasks.isEmpty { tasks }
+                    if !project.tasks.isEmpty {
+                        Label(project.needsVm ? "VM이 필요한 Task가 있어, 그 Task를 시작할 때 VM을 켭니다" : "모든 Task를 VM 없이 처리합니다",
+                              systemImage: project.needsVm ? "shippingbox" : "text.page")
+                            .font(.caption).foregroundStyle(.secondary)
+                        tasks
+                    }
                     if let report = project.report, !report.isEmpty {
                         Divider()
                         Text("최종 보고").font(.subheadline.bold())
@@ -133,6 +138,10 @@ private struct TaskRow: View {
                 Image(systemName: icon).foregroundStyle(color).frame(width: 14)
                 Text(task.title).font(.callout).lineLimit(expanded ? nil : 1)
                 Spacer()
+                Text(task.onDesk ? "VM 없이" : "VM").font(.caption2).foregroundStyle(.secondary)
+                    .padding(.horizontal, 5).padding(.vertical, 1)
+                    .background(.quaternary, in: Capsule())
+                    .help(task.onDesk ? "VM 없이 Vault의 커밋된 파일을 읽고 글로 결과물을 냅니다" : "VM 작업 공간에서 셸·브라우저·인터넷을 써서 작업합니다")
                 if task.attempts > 1 { Text("\(task.attempts)차").font(.caption2).foregroundStyle(.secondary) }
                 Button { expanded.toggle() } label: { Image(systemName: expanded ? "chevron.up" : "chevron.down") }.buttonStyle(.plain).foregroundStyle(.secondary)
             }
@@ -146,6 +155,21 @@ private struct TaskRow: View {
                     if !task.contract.verification.isEmpty { Text("검증: \(task.contract.verification)") }
                     if let difficulty = task.difficulty { Text("Worker 난이도: \(difficulty)") }
                     if let result = task.result { Text("결과: \(result.summary)").foregroundStyle(.primary) }
+                    if let output = task.output, !output.isEmpty {
+                        HStack {
+                            Text("결과물").font(.caption.weight(.semibold))
+                            Spacer()
+                            Button("복사") {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(output, forType: .string)
+                            }.controlSize(.mini)
+                        }
+                        ScrollView {
+                            Text(output).font(.caption).foregroundStyle(.primary).frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .frame(maxHeight: 220)
+                        .padding(6).background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
+                    }
                     if let last = task.reviews.last, last.verdict != "accept", !last.feedback.isEmpty { Text("검토: \(last.feedback)").foregroundStyle(.orange) }
                 }
                 .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)

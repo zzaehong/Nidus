@@ -22,18 +22,27 @@ export interface CompletionContract {
 
 export interface TaskReview { verdict: 'accept' | 'revise' | 'blocked'; feedback: string; at: string }
 
+/**
+ * Where a Task runs. desk: a Worker without the VM (text work over the Vault's committed files,
+ * no shell, internet or file changes); vm: the shared workspace VM. Older boards lack it: vm.
+ */
+export type TaskPlace = 'desk' | 'vm';
+
 export interface BoardTask {
   id: string;
   team: string;
   title: string;
   contract: CompletionContract;
   dependsOn: string[];
+  where?: TaskPlace;
   status: TaskStatus;
   difficulty?: Difficulty;
   brief?: string;
   attempts: number;
   reviews: TaskReview[];
   result?: { summary: string; verification: string };
+  /** A desk Worker's deliverable (the text it produced), passed on to dependent Tasks. */
+  output?: string;
   startedAt?: string;
   finishedAt?: string;
 }
@@ -84,6 +93,8 @@ export class BoardStore {
     try { return JSON.parse(await readFile(join(this.directory, last), 'utf8')) as Project; } catch { return null; }
   }
 }
+
+export const placeOf = (task: BoardTask): TaskPlace => task.where === 'desk' ? 'desk' : 'vm';
 
 /** Tasks whose dependencies are done, in plan order. */
 export function readyTasks(project: Project): BoardTask[] {

@@ -14,7 +14,7 @@
    └── 답 · 덧붙임 ─┘  (Main이 계획을 고친다. 몇 번이든)
 사용자 ── 계획 승인 ──▶ 실행: Task를 의존성 순서로 하나씩
                          Manager ── Worker 지시서 · 난이도
-                         Worker  ── VM 작업 공간에서 수행
+                         Worker  ── 책상(VM 없이) 또는 VM 작업 공간에서 수행
                          Manager ── 완료 조건으로 검토: 통과 / 수정 요청 / 진행 불가
                        ──▶ Main 최종 보고 ──▶ 결과 검토(diff) ──▶ 승인하면 브랜치 nidus/<작업>
 ```
@@ -27,6 +27,7 @@
 | 실행 방식 | 한 번에 한 Worker. 모든 Task가 한 작업 공간과 한 브라우저를 순서대로 쓴다 |
 | 계획 승인 | 질문에 답하고 사용자가 계획을 승인해야 실행한다. 답하지 않은 질문은 Main이 판단한다 |
 | Lead Manager | 지금은 Main이 겸한다(Task 순서와 팀 간 넘겨주기는 계획의 의존성으로 표현). 병렬 실행을 붙일 때 분리한다 |
+| VM 없는 Task | VM이 필요 없는 일은 VM 밖(책상)에서 한다. VM은 VM Task가 처음 시작될 때만 켠다 (2026-11-12) |
 
 ### 역할과 모델
 
@@ -34,33 +35,54 @@
 |---|---|---|---|
 | Main | 계획(요약, 로드맵, 팀, Task, 질문), 계획 수정, 최종 보고 | 없음 (텍스트) | `roles.main` |
 | Manager | Task마다 Worker 지시서와 난이도 결정, 결과 검토 | 없음 (텍스트) | `roles.manager` |
-| Worker | 실제 수행 | 작업 공간 도구(2e) | `worker.<난이도>` — 난이도는 Manager가 정한다 |
+| Worker | 실제 수행 | 책상: 읽기 도구와 결과물 / VM: 작업 공간 도구(2e) | `worker.<난이도>` — 난이도는 Manager가 정한다 |
 
 Main과 Manager의 답은 JSON으로 받는다. 형식이 틀리면 이유를 알려 한 번 더 받는다.
 
 **Provider 오류**: 모든 역할의 모델 호출은 같은 규칙을 따른다. 일시적인 오류(속도 제한 429, 서버 오류, 네트워크, 시간 초과 5분)를 낸 모델은 90초 동안 쉬게 하고, 같은 슬롯의 다음 후보로 곧바로 바꾼다(역할 사이 공유: Main이 막힌 모델은 Manager도 피한다). 후보가 없으면 속도 제한은 15·30·60·90·120초, 그 밖의 오류는 5·15초 기다려 다시 시도한다. Gemini 무료 등급은 모델마다 할당량이 따로라, 같은 Provider의 다른 모델도 좋은 예비 후보다. 무료 등급 하나로 모든 역할을 맡기면 속도 제한에 자주 걸리므로, 슬롯마다 다른 Provider의 후보를 하나씩 두는 것이 좋다.
+
+### 실행 장소: 책상과 VM
+
+Main이 Task마다 `where`를 정한다. 빠지면 `vm`이다(이전 보드도 같다).
+
+| | 책상 (`desk`) | VM (`vm`) |
+|---|---|---|
+| 하는 일 | 글, 분석, 요약, 번역, 계획, 설계, 텍스트로 쓴 코드 | 명령·코드 실행, 저장소 파일 만들기·고치기, 인터넷·브라우저 |
+| 도구 | `list_files`, `read_file`, `search_files`(Vault의 커밋된 상태, Mac에서 git으로 읽기만), `write_deliverable`, `finish` | 2e의 작업 공간 도구 |
+| 결과 | 결과물(텍스트, 6만 자까지). Task Board와 앱의 Task 목록에 남는다 | 작업 공간의 커밋. 끝나면 결과 검토 |
+| 준비 | 없음. 곧바로 시작 | 첫 VM Task가 시작될 때 VM을 켜고 작업 공간을 만든다 |
+
+- 책상은 VM 작업 공간이 시작할 상태와 같은 것(커밋된 파일)만 본다. 경로는 저장소 안으로 제한하고 바이너리 파일은 읽지 않는다. 셸·인터넷·파일 쓰기는 없다.
+- Task의 결과물은 그 Task에 의존하는 Task의 Manager(4천 자까지)와 Worker(지시서 뒤에, 2만 자까지)에게 넘어간다. 그래서 책상에서 초안을 쓰고 VM Task가 파일로 저장하는 식으로 나눌 수 있다.
+- VM Task가 하나도 없는 요청은 VM을 켜지 않고, 끝나도 결과 검토가 없다. Main의 최종 보고는 결과물을 Task 목록에서 보라고 안내한다.
+- 이미 결과 검토를 기다리는 변경이 있어도 VM Task가 남지 않은 프로젝트는 시작할 수 있다.
 
 ### Task Board
 
 CONCEPT의 Task Board를 요청(Project) 단위로 둔다. `.nidus/local/board/<프로젝트>.json`.
 
 - Project: 지시, 상태(`planning`, `waiting_user`, `running`, `reviewing`, `done`, `stopped`, `failed`), 요약, 로드맵, 팀, Task, 질문과 답, Main의 계획 대화, 최종 보고, 작업 공간 이름.
-- Task: 팀, 제목, **Completion Contract**(Goal, Scope, Constraints, Acceptance Criteria, Verification), 의존 Task, 상태(`pending`, `in_progress`, `review`, `done`, `blocked`, `skipped`), 난이도, 지시서, 시도 수, 검토 기록, **Result**(요약, 검증 방법).
+- Task: 팀, 제목, 실행 장소, **Completion Contract**(Goal, Scope, Constraints, Acceptance Criteria, Verification), 의존 Task, 상태(`pending`, `in_progress`, `review`, `done`, `blocked`, `skipped`), 난이도, 지시서, 시도 수, 검토 기록, **Result**(요약, 검증 방법), 결과물(책상).
 - 계획은 검사한다: 팀이 있는지, id가 겹치지 않는지, 의존 Task가 있는지, 의존성에 순환이 없는지, 완료 조건이 하나 이상인지.
 
 ### 실행
 
-- 계획을 승인하면 VM을 켜고(꺼져 있으면) Vault의 커밋된 상태로 작업 공간을 하나 만든다. 모든 Task가 그 작업 공간에서 이어서 일한다.
+- 첫 VM Task가 시작될 때 VM을 켜고(꺼져 있으면) Vault의 커밋된 상태로 작업 공간을 하나 만든다. 모든 VM Task가 그 작업 공간에서 이어서 일한다.
 - 준비된 Task(의존 Task가 모두 완료)를 계획 순서대로 하나씩 실행한다.
-- Task마다 새 Worker 대화로 시작한다. Manager의 검토 근거는 Worker의 요약, 도구 호출 기록(최근 40개), Task 시작 커밋 이후의 커밋·파일 증감·diff(15KB까지)다.
+- Task마다 새 Worker 대화로 시작한다. Manager의 검토 근거는 Worker의 요약, 도구 호출 기록(최근 40개)과 함께, VM Task는 Task 시작 커밋 이후의 커밋·파일 증감·diff(15KB까지), 책상 Task는 결과물(1만 5천 자까지)이다.
 - 수정 요청은 같은 Worker 대화에 이어서 준다. Worker가 중간에 멈췄거나 실패했으면 새 대화로, 작업 공간에 남은 것을 확인하고 이어 가라고 준다.
 - 한 Task는 최대 3번 시도한다(처음 + 수정 2번). 그래도 통과하지 못하면 진행 불가(`blocked`)다. 진행 불가 Task에 의존하는 Task는 건너뛴다(`skipped`).
-- 모든 Task가 끝나면 Main이 최종 보고를 쓰고, 작업 공간의 변경이 결과 검토로 올라온다(2d와 같다).
+- 모든 Task가 끝나면 Main이 최종 보고를 쓰고, 작업 공간이 있으면 그 변경이 결과 검토로 올라온다(2d와 같다).
 - 중지하면 진행 중이던 Task는 처음부터 다시 하게 표시되고, "이어서 진행"으로 남은 Task부터 계속한다. 앱을 다시 켜도 이어 갈 수 있다.
 
 ### 앱
 
-작업 탭의 지시 칸에서 받는 쪽을 고른다: **Main에게**(기본) 또는 **Worker에게**(2e의 단일 Worker). Main에게 지시하면 프로젝트 패널이 나온다: 계획 요약, 로드맵, 팀별 Task(펼치면 Completion Contract, 결과, 검토 의견), Main의 질문과 답 칸, 덧붙일 말, "답변 보내기"·"계획 승인하고 시작"·"중지"·"이어서 진행"·"닫기". 진행 기록에는 Main과 Manager의 말(계획, Worker 지시, 검토, 최종 보고)이 Worker의 도구 호출과 함께 나온다.
+작업 탭의 지시 칸에서 받는 쪽을 고른다: **Main에게**(기본) 또는 **Worker에게**(2e의 단일 Worker). Main에게 지시하면 프로젝트 패널이 나온다: 계획 요약, 로드맵, VM이 필요한지, 팀별 Task(실행 장소 표시, 펼치면 Completion Contract, 결과, 검토 의견, 책상 결과물과 복사), Main의 질문과 답 칸, 덧붙일 말, "답변 보내기"·"계획 승인하고 시작"·"중지"·"이어서 진행"·"닫기". 진행 기록에는 Main과 Manager의 말(계획, Worker 지시, 검토, 최종 보고)이 Worker의 도구 호출과 함께 나온다.
+
+### 확인 (2026-11-12, 실제 모델)
+
+- 책상만: "README를 읽고 메모 정리 가이드 초안" → Main이 `desk` Task 하나로 계획. Worker는 `list_files`·`read_file` 뒤 결과물을 썼고 Manager가 통과시켰다. 67초 동안 VM은 꺼진 채였고 결과 검토는 없었다.
+- 섞임: "체크리스트를 만들어 checklist.md로 저장" → `desk` 초안 다음에 `vm` 저장. VM은 136초, VM Task가 시작될 때 켜졌다. Worker는 넘겨받은 초안을 `checklist.md`로 커밋했고, 결과 검토 → 브랜치까지 갔다.
 
 ## 다음
 

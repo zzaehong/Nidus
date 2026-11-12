@@ -2,11 +2,17 @@
 // the instructor chose), tools in the workspace VM, until the model calls finish, the user
 // stops it or a limit is reached. Every step is reported as an event for the app.
 // A follow-up instruction continues the same conversation and workspace.
-import type { ContentBlock, Message, ToolCallBlock } from '../gateway/contract.js';
+import type { ContentBlock, Message, ToolCallBlock, ToolSpec } from '../gateway/contract.js';
 import type { Difficulty } from '../gateway/assignment.js';
 import type { CallTarget, GatewayRequest, GatewayResult } from '../gateway/gateway.js';
 import type { RequestOptions } from '../types.js';
-import type { WorkerTools } from './tools.js';
+import type { ToolOutcome } from './tools.js';
+
+/** The tools a Worker gets: the workspace VM's (WorkerTools) or the desk's (DeskTools). */
+export interface WorkerToolSet {
+  readonly specs: ToolSpec[];
+  run(call: ToolCallBlock, signal?: AbortSignal): Promise<ToolOutcome>;
+}
 
 export interface WorkerGateway {
   send(target: CallTarget, request: GatewayRequest, options?: RequestOptions): Promise<GatewayResult>;
@@ -116,8 +122,8 @@ export class WorkerRun {
 
   constructor(
     private readonly gateway: WorkerGateway,
-    private readonly tools: WorkerTools,
-    private readonly options: { task: string; difficulty: Difficulty; limits?: Partial<WorkerLimits>; onEvent?: (event: WorkerEvent) => void; now?: () => number; retryWaits?: number[] },
+    private readonly tools: WorkerToolSet,
+    private readonly options: { task: string; difficulty: Difficulty; system?: string; limits?: Partial<WorkerLimits>; onEvent?: (event: WorkerEvent) => void; now?: () => number; retryWaits?: number[] },
   ) {}
 
   private emit(event: WorkerEvent): void { this.options.onEvent?.(event); }
@@ -125,7 +131,7 @@ export class WorkerRun {
   private call(signal: AbortSignal): Promise<GatewayResult> {
     return sendWithRetry(this.gateway,
       { role: 'worker', difficulty: this.options.difficulty, taskId: this.options.task },
-      { system: workerSystemPrompt(this.options.task), messages: this.messages, tools: this.tools.specs },
+      { system: this.options.system ?? workerSystemPrompt(this.options.task), messages: this.messages, tools: this.tools.specs },
       signal, this.options.retryWaits ? { waits: this.options.retryWaits, rateLimitWaits: this.options.retryWaits } : {},
       (attempt, error, waitMs) => this.emit({ type: 'retry', attempt, error, waitMs }));
   }
