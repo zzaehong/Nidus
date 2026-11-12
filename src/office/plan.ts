@@ -1,5 +1,6 @@
 // What Main and Managers are asked, and how their JSON answers are read and checked.
 // They work in text only (no tools): Main plans and reports, Managers brief and review.
+// Who they are (their system prompts) is in roles.ts; this file holds what each request asks.
 import { difficulties, type Difficulty } from '../gateway/assignment.js';
 import { placeOf, type BoardTask, type CompletionContract, type Project, type Team } from './board.js';
 
@@ -83,40 +84,26 @@ export function parseReview(answer: string): { verdict: 'accept' | 'revise' | 'b
 
 // --- prompts ---------------------------------------------------------------------
 
-const WORKERS = [
-  'Workers do the actual work, one task at a time, in one of two places:',
-  '- desk: no VM. The Worker reads the user\'s Git repository (the Vault, committed state: list, read, search files) and the results of earlier tasks, and produces a text deliverable: writing, analysis, summaries, translation, plans, designs, code written out as text. No shell, no internet, no browser, no changes to files. It starts at once and needs no approvals.',
-  '- vm: an isolated Linux VM with a copy of the repository at /workspace, a shell (Python, Node.js, git; long commands and background servers are possible), a real Chromium browser the user can watch and take over, web search, and internet access that the user approves per site. Every vm task works in the same workspace; at the end the user reviews the combined changes before they become a branch in their repository. The VM is started only when the first vm task begins.',
-  'Earlier tasks\' deliverables are handed to the tasks that depend on them, so a desk task can draft something that a later vm task writes into the repository.',
+/** How Main answers with a plan; part of the first planning message. */
+export const PLAN_FORMAT = [
+  'Make a plan for the request:',
+  '- summary: what will be delivered.',
+  '- roadmap: the main steps, in order (short phrases).',
+  '- teams: 1-4 teams this request needs (id, name, focus). Prefer fewer teams.',
+  '- tasks: 1-12 tasks. Each is a unit a Worker can finish and a Manager can check: id, team, title, where ("desk" or "vm"), goal, scope, constraints, acceptance (observable criteria, a list), verification (how to check them), dependsOn (ids of tasks that must finish first).',
+  '- where: "desk" whenever the task only needs thinking and writing over the request, the user\'s answers, earlier results and the repository\'s files. "vm" only when it must run commands or code, create or change files in the repository, or use the internet or a browser. A request that needs no vm task never starts the VM. If the user wants a deliverable saved as a file in their repository, a vm task must write it.',
+  '- questions: only what you truly need from the user before starting. Ask none if the request is clear.',
+  'Ids are lowercase letters, digits and dashes. Answer with one JSON object only:',
+  '{"summary": "...", "roadmap": ["..."], "teams": [{"id": "research", "name": "...", "focus": "..."}], "tasks": [{"id": "t1", "team": "research", "title": "...", "where": "desk", "goal": "...", "scope": "...", "constraints": "...", "acceptance": ["..."], "verification": "...", "dependsOn": []}], "questions": ["..."]}',
 ].join('\n');
 
-export function mainPlanSystem(): string {
-  return [
-    'You are Main, the lead of an AI team in Nidus. You talk with the user, turn their request into a plan, and later review the final result. You do not do the work yourself and have no tools.',
-    WORKERS,
-    'Teams are led by Managers. A Manager briefs a Worker for each task and reviews the result against the task\'s completion contract.',
-    '',
-    'Make a plan for the request:',
-    '- summary: what will be delivered, in the user\'s language.',
-    '- roadmap: the main steps, in order (short phrases).',
-    '- teams: 1-4 teams this request needs (id, name, focus). Prefer fewer teams.',
-    '- tasks: 1-12 tasks. Each is a unit a Worker can finish and a Manager can check: id, team, title, where ("desk" or "vm"), goal, scope, constraints, acceptance (observable criteria, a list), verification (how to check them), dependsOn (ids of tasks that must finish first).',
-    '- where: "desk" whenever the task only needs thinking and writing over the request, the user\'s answers, earlier results and the repository\'s files. "vm" only when it must run commands or code, create or change files in the repository, or use the internet or a browser. A request that needs no vm task never starts the VM. If the user wants a deliverable saved as a file in their repository, a vm task must write it.',
-    '- questions: only what you truly need from the user before starting (preferences, missing facts, choices with real trade-offs). Ask none if the request is clear; never ask what the team can find out itself.',
-    '',
-    'Write titles, summary, roadmap, contracts and questions in the user\'s language. Ids are lowercase letters, digits and dashes.',
-    'Answer with one JSON object only:',
-    '{"summary": "...", "roadmap": ["..."], "teams": [{"id": "research", "name": "...", "focus": "..."}], "tasks": [{"id": "t1", "team": "research", "title": "...", "where": "desk", "goal": "...", "scope": "...", "constraints": "...", "acceptance": ["..."], "verification": "...", "dependsOn": []}], "questions": ["..."]}',
-  ].join('\n');
-}
-
 export function planRequest(instruction: string, repository: string): string {
-  return `User request:\n${instruction}\n\nThe user's repository (the Vault), for context:\n${repository}`;
+  return `User request:\n${instruction}\n\nThe user's repository (the Vault), for context:\n${repository}\n\n${PLAN_FORMAT}`;
 }
 
 export function answersMessage(project: Project, note: string): string {
   const answered = project.questions.map(q => `Q: ${q.text}\nA: ${q.answer?.trim() || '(no answer; decide sensibly)'}`).join('\n\n');
-  return `The user answered your questions${note ? ' and added a note' : ''}.\n\n${answered}${note ? `\n\nNote from the user:\n${note}` : ''}\n\nRevise the plan accordingly and answer with the full JSON plan again. Ask further questions only if still necessary.`;
+  return `The user answered your questions${note ? ' and added a note' : ''}.\n\n${answered}${note ? `\n\nNote from the user:\n${note}` : ''}\n\nRevise the plan accordingly and answer with the full JSON plan again, in the same format. Ask further questions only if still necessary.`;
 }
 
 function projectContext(project: Project, task: BoardTask): string {
@@ -152,15 +139,6 @@ export function inputsOf(project: Project, task: BoardTask, limit = 20000): stri
 export function workerBrief(project: Project, task: BoardTask): string {
   const inputs = inputsOf(project, task);
   return `${task.brief ?? ''}${inputs ? `\n\n${inputs}` : ''}`;
-}
-
-export function managerSystem(): string {
-  return [
-    'You are a Manager in Nidus. You lead one team: for each task you brief a Worker and then review what it delivered against the task\'s completion contract. You do not do the work yourself and have no tools.',
-    WORKERS,
-    'Workers come in three difficulty levels that map to stronger or cheaper models: simple (routine, well-defined), normal (most tasks), complex (hard reasoning, large changes, many steps). Choose the cheapest level that can do the task well.',
-    'Be strict in reviews: accept only when the acceptance criteria are met and verified, not when the Worker merely says so.',
-  ].join('\n');
 }
 
 export function briefRequest(project: Project, task: BoardTask): string {

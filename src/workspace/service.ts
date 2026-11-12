@@ -24,7 +24,8 @@ import { WorkerTools } from './tools.js';
 import { WorkerRun, type WorkerEvent, type WorkerOutcome } from './worker.js';
 import { Office, type OfficeEvent } from '../office/office.js';
 import { BoardStore, placeOf, type BoardTask, type Project } from '../office/board.js';
-import { DeskTools, deskSystemPrompt, gitSource } from '../office/desk.js';
+import { DeskTools, gitSource } from '../office/desk.js';
+import { workerSystem } from '../office/roles.js';
 import { workerBrief } from '../office/plan.js';
 import { snapshot, receive, approve, discard, pending, type Review } from './sync.js';
 
@@ -393,7 +394,7 @@ async function work(task: BoardTask, instruction: string, difficulty: Difficulty
       const tools = new DeskTools(gitSource(paths!.root));
       // A new conversation keeps what the last one wrote, so "continue" has something to build on.
       tools.deliverable = entry?.desk?.deliverable;
-      return { run: new WorkerRun(gateway!, tools, { task: office!.project!.id, difficulty, system: deskSystemPrompt(), onEvent }), desk: tools, trail, start: entry?.start };
+      return { run: new WorkerRun(gateway!, tools, { task: office!.project!.id, difficulty, system: workerSystem('desk', office!.project!.id), onEvent }), desk: tools, trail, start: entry?.start };
     }
     return { run: new WorkerRun(gateway!, new WorkerTools(workerRuntime(backend!)), { task: saved!.task!, difficulty, onEvent }), trail, start: entry?.start };
   };

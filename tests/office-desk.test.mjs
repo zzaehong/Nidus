@@ -4,7 +4,8 @@ import { execFileSync } from 'node:child_process';
 import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DeskTools, gitSource, DESK_TOOLS, deskSystemPrompt } from '../dist/office/desk.js';
+import { DeskTools, gitSource, DESK_TOOLS } from '../dist/office/desk.js';
+import { workerSystem } from '../dist/office/roles.js';
 import { WorkerRun } from '../dist/workspace/worker.js';
 
 async function repo(t) {
@@ -72,11 +73,11 @@ test('a desk Worker runs with the desk prompt and tools', async () => {
     return { response: { provider: 'p', model: 'm', content, stopReason: 'tool_use', usage }, costUSD: null, warnings: [] };
   } };
   const tools = new DeskTools({ list: async () => [], read: async () => null, search: async () => '' });
-  const run = new WorkerRun(gateway, tools, { task: 'p-1', difficulty: 'simple', system: deskSystemPrompt() });
+  const run = new WorkerRun(gateway, tools, { task: 'p-1', difficulty: 'simple', system: workerSystem('desk', 'p-1') });
   const outcome = await run.run('정리하라', new AbortController().signal);
   assert.deepEqual(outcome, { status: 'finished', summary: '요약' });
   assert.equal(tools.deliverable, '결과물');
-  assert.match(requests[0].request.system, /working at a desk/);
+  assert.match(requests[0].request.system, /You work at the desk/);
   assert.deepEqual(requests[0].request.tools.map(t => t.name), DESK_TOOLS.map(t => t.name));
   assert.deepEqual(requests[0].target, { role: 'worker', difficulty: 'simple', taskId: 'p-1' });
 });

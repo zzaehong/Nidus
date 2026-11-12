@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Office, MAX_ATTEMPTS } from '../dist/office/office.js';
 import { BoardStore } from '../dist/office/board.js';
-import { parsePlan, mainPlanSystem } from '../dist/office/plan.js';
+import { mainSystem, managerSystem } from '../dist/office/roles.js';
+import { parsePlan, planRequest } from '../dist/office/plan.js';
 
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2, cachedInputTokens: null, cacheWriteTokens: null, reasoningTokens: null };
 const plan = (extra = {}) => JSON.stringify({
@@ -139,7 +140,7 @@ test('where a task runs: desk or vm (vm when not said); anything else is refused
   const parsed = parsePlan(plan({ teams: [{ id: 'research', name: 'r', focus: 'f' }], tasks }));
   assert.deepEqual(parsed.tasks.map(t => t.where), ['desk', 'vm']);
   assert.throws(() => parsePlan(plan({ teams: [{ id: 'research', name: 'r', focus: 'f' }], tasks: [{ ...tasks[0], where: 'cloud' }] })), /where must be/);
-  assert.match(mainPlanSystem(), /"desk" whenever/);
+  assert.match(planRequest('x', 'y'), /"desk" whenever/);
 });
 
 test('a desk deliverable is kept on the task and handed to the Worker and Manager of tasks that depend on it', async t => {
@@ -179,4 +180,19 @@ test('a project with only desk tasks reports that nothing in the repository chan
   const project = await o.execute(new AbortController().signal);
   assert.equal(project.workspace, undefined);
   assert.match(g.calls.at(-1).request.messages[0].content[0].text, /No task used the VM/);
+});
+
+test('every Main and Manager call carries its role\'s full system prompt, the final report too', async t => {
+  const { o, g } = await office(t, (role, last) => {
+    if (role === 'main') return last.includes('All tasks have ended') ? '보고' : plan({ questions: [] });
+    if (last.includes("Write the Worker's instructions")) return '{"difficulty": "simple", "instructions": "하라"}';
+    return '{"verdict":"accept","summary":"완료"}';
+  });
+  await o.plan('조사', new AbortController().signal);
+  await o.execute(new AbortController().signal);
+  for (const call of g.calls) {
+    if (call.target.role === 'main') assert.equal(call.request.system, mainSystem());
+    else assert.equal(call.request.system, managerSystem());
+  }
+  assert.match(g.calls[0].request.messages[0].content[0].text, /Answer with one JSON object only/, 'the plan format is part of the request');
 });

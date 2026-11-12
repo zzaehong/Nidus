@@ -8,7 +8,8 @@ import type { Message } from '../gateway/contract.js';
 import type { Difficulty } from '../gateway/assignment.js';
 import { sendWithRetry, type RetryPolicy, type WorkerGateway, type WorkerOutcome } from '../workspace/worker.js';
 import { BoardStore, projectId, readyTasks, unreachable, type BoardTask, type Project } from './board.js';
-import { PlanError, answersMessage, briefRequest, finalRequest, mainPlanSystem, managerSystem, parseBrief, parsePlan, parseReview, planRequest, reviewRequest, workerBrief } from './plan.js';
+import { PlanError, answersMessage, briefRequest, finalRequest, parseBrief, parsePlan, parseReview, planRequest, reviewRequest, workerBrief } from './plan.js';
+import { mainSystem, managerSystem } from './roles.js';
 
 export type OfficeEvent =
   | { type: 'project'; project: Project }
@@ -86,7 +87,7 @@ export class Office {
   private async revise(signal: AbortSignal): Promise<Project> {
     const project = this.project!;
     try {
-      const { value: plan, text, model } = await this.ask('main', mainPlanSystem(), project.conversation, parsePlan, signal);
+      const { value: plan, text, model } = await this.ask('main', mainSystem(), project.conversation, parsePlan, signal);
       project.conversation.push({ role: 'assistant', content: [{ type: 'text', text }] });
       Object.assign(project, { summary: plan.summary, roadmap: plan.roadmap, teams: plan.teams, status: 'waiting_user' as const });
       project.tasks = plan.tasks.map(t => ({ ...t, status: 'pending' as const, attempts: 0, reviews: [] }));
@@ -131,7 +132,7 @@ export class Office {
       }
       project.status = 'reviewing';
       await this.publish();
-      const result = await sendWithRetry(this.deps.gateway, { role: 'main', taskId: project.id }, { system: mainPlanSystem().split('\n')[0]!, messages: [{ role: 'user', content: [{ type: 'text', text: finalRequest(project) }] }] }, signal, this.retry);
+      const result = await sendWithRetry(this.deps.gateway, { role: 'main', taskId: project.id }, { system: mainSystem(), messages: [{ role: 'user', content: [{ type: 'text', text: finalRequest(project) }] }] }, signal, this.retry);
       project.report = result.response.content.filter(b => b.type === 'text').map(b => (b as { text: string }).text).join('\n').trim();
       this.deps.onEvent({ type: 'message', from: 'main', title: '최종 보고', text: project.report, model: result.response.model });
       project.status = 'done';
