@@ -146,6 +146,14 @@ Worker 한 명이 Task 하나를 수행하는 루프다. Manager와 Main, Task B
 - 사용자는 언제든 중지할 수 있다. 중지하면 VM 안의 실행을 정리한다.
 - 모델 호출 수, 도구 호출 수, 실행 시간에 상한을 둔다.
 
+### 구현 (2e)
+
+- **도구** (`src/workspace/tools.ts`): `shell`, `read_file`, `write_file`(30KB까지, 더 크면 이어 쓰기), `list_files`, `web_search`(한글 질의는 네이버, 그 밖은 Bing 기본; Google은 CAPTCHA가 잦아 지정할 때만), `browser_open`·`observe`·`read_more`·`click`·`type`·`press`·`select`·`scroll`·`back`·`switch_tab`·`ask_user`, `finish`. 브라우저 도구는 마지막 관찰의 스냅샷을 알아서 쓰므로 모델은 요소 번호만 준다. 요소가 바뀌었으면 오류와 함께 새 관찰을 돌려준다. 페이지 내용은 "신뢰할 수 없는 외부 데이터"로 표시하고, 시스템 프롬프트도 그 안의 지시를 따르지 말라고 한다.
+- **루프** (`src/workspace/worker.ts`): 모델 호출 60회, 도구 호출 150회, 30분 상한. 일시적인 Provider 오류(서버 오류, 속도 제한, 네트워크, 시간 초과)는 5초, 15초 뒤 두 번 다시 시도한다. 출력이 잘리면 이어서 하라고 한다. 이어서 지시하면 같은 대화와 작업 공간에서 계속한다.
+- **Workspace Service** (`src/workspace/service.ts`): Vault 하나에 상주하는 엔진 프로세스. 앱과 줄 단위 JSON으로 통신한다(명령: `open`, `gitInit`, `start`, `stop`, `run`, `cancel`, `collect`, `approve`, `discard`, `takeOver`, `handBack`, `input`, `answer`, `allowAll`; 사건: `status`, `frame`, `control`, `tabs`, `approval`, `network`, `worker`, `review`, `log`). 작업을 시작하면 Vault를 VM으로 가져오고, 끝나면 결과를 자동으로 가져와 검토로 띄운다. 승인하거나 버리면 VM 안의 작업 공간을 지운다. 현재 작업은 `.nidus/local/workspace.json`에 남겨 앱을 다시 켜도 이어진다. VM 디스크는 Vault 폴더가 아니라 `~/Library/Application Support/Nidus/workspaces/<Vault ID>`에 둔다. 앱이 끝나면(입력이 닫히면) VM을 정상 종료한 뒤 끝난다.
+- **상주에 맞춘 정리**: VM 출력의 수명 전체 상한(8MB)을 없앴다(초당 4MB와 줄 길이 상한은 유지). Shell 명령 길이를 48KB로 늘렸다(VM 헬퍼의 제어 줄 64KB 안). 게스트 개발 환경에 빠져 있던 BusyBox 명령(`base64`, `dirname`, `tail`, `seq`, `du` 등)을 부팅 때 모두 연결한다.
+- **Provider 특이점**: NVIDIA의 모델은 한 턴에 도구 호출이 둘 이상일 때 추론 내용(`reasoning_content`)을 되돌려 보내면 HTTP 500을 낸다(deepseek-v4.1-flash, 2026-11-12 확인). 그 경우에만 추론 내용을 보내지 않는다.
+
 ## 앱
 
 `Nidus.app`에 **작업** 탭을 추가한다.
@@ -157,6 +165,13 @@ Worker 한 명이 Task 하나를 수행하는 루프다. Manager와 Main, Task B
 - 결과 변경 내역과 Vault 반영 버튼
 
 앱과 엔진 사이에는 계속 연결된 통로가 필요하다. 1단계의 "요청마다 프로세스 하나" 브리지는 설정 화면에 계속 쓰고, 작업 탭은 상주하는 Workspace Service와 줄 단위 JSON으로 양방향 통신한다.
+
+### 구현 (2f)
+
+- `Sources/Nidus/WorkspaceSession.swift`: 서비스 프로세스를 띄우고 사건을 화면 상태로 바꾼다. 앱을 끝낼 때 서비스가 VM을 정상 종료할 때까지(최대 30초) 기다린다.
+- `Sources/Nidus/WorkView.swift`: 작업 탭. VM 시작·종료, 개입/돌려주기, 주소·탭(개입 중), 네트워크 승인 카드, 지시 입력과 난이도, "모든 사이트 허용", 진행 기록(모델의 말, 도구 호출과 결과, 비용), 결과 검토(커밋, 파일 증감, diff, `.nidus/` 경고, 승인/버리기). Vault가 Git 저장소가 아니거나 커밋이 없으면 만들 것인지 묻는다. 선택한 난이도에 Worker 모델이 없으면 알린다.
+- `Sources/Nidus/BrowserScreen.swift`: 화면 프레임을 그리고, 개입 중에는 마우스(클릭, 드래그, 오른쪽 클릭, 스크롤)와 키보드를 보낸다. 입력기(한글)로 조합한 글자는 완성된 텍스트로, 일반 키는 키 입력으로, ⌘ 단축키는 Ctrl로, ⌘V는 Mac 클립보드 텍스트로 보낸다.
+- `Nidus.app` 번들에 작업 공간 엔진, VM 이미지, VM 헬퍼, 볼륨 확인 헬퍼를 넣는다(약 630MB).
 
 ## 기존 코드
 
@@ -179,8 +194,8 @@ Worker 한 명이 Task 하나를 수행하는 루프다. Manager와 Main, Task B
 | 2b | VM과 프록시를 콘솔 포트로 연결, 온라인 Shell. VM 안 루프백은 프록시 제외 | 구현, 실제 VM 검증 (아래) |
 | 2c | 브라우저 자유 조작, 화면 스트리밍, 사용자 개입 | 구현, 실제 VM 검증 (아래). 앱 화면은 2f |
 | 2d | 작업 공간 Git 동기화 | 구현, 실제 VM 검증 (아래) |
-| 2e | Gateway 기반 Worker 루프와 Workspace Service | 예정 |
-| 2f | 앱의 작업 탭 | 예정 |
+| 2e | Gateway 기반 Worker 루프와 Workspace Service | 구현, 실제 모델·VM으로 확인 (아래) |
+| 2f | 앱의 작업 탭 | 구현, 앱에서 VM 실행·작업·승인 화면 확인 (아래). 사람의 직접 조작은 NOT RUN |
 
 ### 2b 검증 (2026-11-11)
 
@@ -245,10 +260,20 @@ Worker 한 명이 Task 하나를 수행하는 루프다. Manager와 Main, Task B
 
 이 저장소(Nidus, `HEAD` 이력 1.7MB)를 가져오는 데 0.26초가 걸렸다. 2b·2c 검증도 바뀐 게스트에서 다시 모두 PASS였다. 테스트 페이지(`npm run workspace:playground`)에 작업 공간 패널을 붙였다.
 
+### 2e·2f 확인 (2026-11-12)
+
+- **실제 모델로 끝까지**: 임시 Vault에서 서비스에 "웹에서 Python 최신 안정 버전을 찾아 파일에 적고 커밋" 지시. `gemini-3.6-flash`(배정은 `gemini-3.5-flash`)가 Bing 검색 → python.org 열기 → 파일 작성 → 커밋 → `finish`(한국어 요약)까지 약 63초. 무료 등급 속도 제한(429)은 재시도로 넘겼다. 결과가 검토로 돌아오고 승인으로 브랜치가 생겼다. 승인은 스크립트가 했다.
+- **NVIDIA**: `deepseek-v4.1-flash`는 첫 호출에 50~70초가 걸렸고, 두 번째 호출이 HTTP 500으로 실패했다. 원인(여러 도구 호출 + 추론 되돌려 보내기)을 따로 재현해 고쳤지만, 그 뒤에도 NVIDIA 무료 엔드포인트가 간헐적으로 500·시간 초과를 내서 끝까지 가는 확인은 하지 못했다.
+- **앱**: 실제 앱 바이너리를 테스트 Vault로 띄워 작업 탭에서 VM 시작, 작업 실행, 브라우저 화면, 승인 카드, 진행 기록이 나오는 것을 화면 캡처로 확인했다(자동 실행용 임시 코드로 진행, 커밋에서 제외). 앱을 끝내면 서비스가 VM을 정상 종료하고 디스크가 `clean`으로 반납됐다. 번들 안의 서비스로 VM 시작·종료도 확인했다.
+- **NOT RUN**: 사람이 앱에서 직접 개입·마우스·키보드·한글 입력하는 것. 같은 입력 경로는 테스트 페이지와 실제 VM 검증(2c)에서 확인했지만, 앱의 입력기 처리 코드는 사람이 써 봐야 한다.
+- 단위 테스트 443개, Swift 테스트 59개 PASS. 2b·2c·2d 실제 VM 검증을 바뀐 게스트에서 다시 돌려 모두 PASS.
+
 ## 확인이 필요한 위험
 
 - 처리량은 연결 하나에 약 7MB/s다. 게스트 중계기가 Python이고 콘솔 포트를 거치기 때문이다. 패키지 설치와 웹 탐색에는 충분하지만 큰 파일 내려받기는 느리다.
 - Shell은 아직 명령마다 새 격리 세션(최대 120초, 메모리 512MiB)이다. 작업 공간은 2d에서 세션 사이에 공유되지만, 오래 도는 개발 서버는 아직 띄워 둘 수 없다. 2e에서 바꾼다.
+- 승인을 기다리는 동안 Chromium이 먼저 포기할 수 있다(약 1분, "took too long to respond"). 승인 뒤 AI가 다시 열면 된다. 프록시의 승인 대기는 120초다.
+- Provider마다 도구 사용 품질과 속도가 크게 다르다. NVIDIA 무료 엔드포인트는 느리고 간헐적으로 실패하며, Gemini 무료 등급은 속도 제한이 잦다.
 - 작업 공간이 들어 있는 캐시 디스크가 512MiB라 큰 저장소나 `node_modules`가 많은 작업은 모자랄 수 있다.
 - 화면 스트림은 간단한 페이지에서 15fps(상한)를 냈다. 이미지가 많은 페이지는 프레임이 커서(예시 페이지 정지 화면 약 37KB) egress와 채널 대역폭(약 7MB/s)을 나눠 쓴다.
 - 상주 브라우저가 도는 동안에는 Chromium 샌드박스를 위해 VM 안의 사용자 네임스페이스가 열려 있다. Shell 세션도 그동안 네임스페이스를 만들 수 있다. "VM 안은 자유" 원칙 안의 일이지만, 이전 설계의 제한이 풀린 것이다.
