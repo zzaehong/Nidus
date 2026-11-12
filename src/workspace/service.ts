@@ -51,8 +51,8 @@ let worker: WorkerRun | undefined;
 let running: AbortController | undefined;
 let review: Review | null = null;
 let office: Office | undefined;
-/** Per board task: its Worker conversation, the commit it started from (vm), its desk tools (desk), the last outcome. */
-interface TaskRun { run: WorkerRun; start?: string; desk?: DeskTools; last?: WorkerOutcome; trail: string[] }
+/** Per board task: its Worker conversation, its commits (vm), its desk tools (desk), the last outcome. */
+interface TaskRun { run: WorkerRun; desk?: DeskTools; last?: WorkerOutcome; trail: string[]; /** vm: [before, after] commits of each attempt. */ ranges: [string, string][] }
 const taskRuns = new Map<string, TaskRun>();
 /** "Allow every site" as the user set it; it holds for the task about to run or running. */
 let allowAll = false;
@@ -380,54 +380,103 @@ async function inspect(command: string): Promise<string> {
 
 /** Office -> Worker: runs or continues a board task where it runs, returns evidence. */
 async function work(task: BoardTask, instruction: string, difficulty: Difficulty, signal: AbortSignal, revision: boolean) {
-  const desk = placeOf(task) === 'desk';
-  if (!desk) await ensureProjectWorkspace();
+  if (placeOf(task) === 'desk') return deskWork(task, instruction, difficulty, signal, revision);
+  // vm tasks take the shared workspace and browser in turn; Managers and desk tasks go on meanwhile.
+  if (vmHolder) log(`${task.id}: ${vmHolder}이(가) VM을 쓰는 중이라 차례를 기다립니다`);
+  return withVm(task.id, signal, () => vmWork(task, instruction, difficulty, signal, revision));
+}
+
+/** Who holds the VM now (a board task id), and the queue of those waiting. */
+let vmHolder: string | null = null;
+let vmQueue: Promise<unknown> = Promise.resolve();
+function withVm<T>(holder: string, signal: AbortSignal, action: () => Promise<T>): Promise<T> {
+  const turn = vmQueue.then(async () => {
+    if (signal.aborted) throw new Error('stopped');
+    vmHolder = holder;
+    try { return await action(); } finally { vmHolder = null; }
+  });
+  vmQueue = turn.catch(() => {});
+  return turn;
+}
+
+/** The task's Worker conversation: new, or the same one for a revision; restarted after a failure. */
+function taskConversation(task: BoardTask, instruction: string, revision: boolean, make: (previous: TaskRun | undefined) => TaskRun, earlyNote: (next: TaskRun) => string): { entry: TaskRun; instruction: string } {
   let entry = taskRuns.get(task.id);
-  const fresh = (): TaskRun => {
-    const trail = entry?.trail ?? [];
-    const onEvent = (e: WorkerEvent) => {
-      if (e.type === 'tool_call') trail.push(`${e.name} ${JSON.stringify(e.input).slice(0, 160)}`);
-      if (e.type === 'tool_result' && e.isError && trail.length) trail[trail.length - 1] += ' -> error';
-      event('worker', { task: desk ? undefined : saved?.task, boardTask: task.id, where: placeOf(task), ...clipEvent(e) });
-    };
-    if (desk) {
-      const tools = new DeskTools(gitSource(paths!.root));
-      // A new conversation keeps what the last one wrote, so "continue" has something to build on.
-      tools.deliverable = entry?.desk?.deliverable;
-      return { run: new WorkerRun(gateway!, tools, { task: office!.project!.id, difficulty, system: workerSystem('desk', office!.project!.id), onEvent }), desk: tools, trail, start: entry?.start };
-    }
-    return { run: new WorkerRun(gateway!, new WorkerTools(workerRuntime(backend!)), { task: saved!.task!, difficulty, onEvent }), trail, start: entry?.start };
-  };
   if (!entry) {
-    entry = fresh();
-    if (!desk) entry.start = (await inspect('git rev-parse HEAD')).trim();
+    entry = make(undefined);
     taskRuns.set(task.id, entry);
   } else if (!revision || entry.last?.status !== 'finished') {
     // The last attempt did not end cleanly: a new conversation, told what happened.
     const before = entry.last;
-    const next = fresh();
+    const next = make(entry);
     entry.run = next.run;
     entry.desk = next.desk;
     if (before && before.status !== 'finished') {
-      const draft = next.desk?.deliverable;
-      const where = desk
-        ? (draft ? `The deliverable written so far (kept; replace or append to it):\n${draft.slice(0, 20000)}` : 'Nothing was delivered yet')
-        : 'Check the workspace for what was already done and continue.';
-      instruction = `${workerBrief(office!.project!, task)}\n\nA previous attempt ended early (${before.status === 'stopped' ? before.detail : before.error}). ${where}\n\n${instruction}`;
+      instruction = `${workerBrief(office!.project!, task)}\n\nA previous attempt ended early (${before.status === 'stopped' ? before.detail : before.error}). ${earlyNote(next)}\n\n${instruction}`;
     }
   }
   entry.trail.push(`--- attempt ${task.attempts} ---`);
-  const outcome = await entry.run.run(instruction, signal);
+  return { entry, instruction };
+}
+
+function workerEvents(task: BoardTask, trail: string[]) {
+  return (e: WorkerEvent) => {
+    if (e.type === 'tool_call') trail.push(`${e.name} ${JSON.stringify(e.input).slice(0, 160)}`);
+    if (e.type === 'tool_result' && e.isError && trail.length) trail[trail.length - 1] += ' -> error';
+    event('worker', { task: placeOf(task) === 'desk' ? undefined : saved?.task, boardTask: task.id, where: placeOf(task), ...clipEvent(e) });
+  };
+}
+
+async function deskWork(task: BoardTask, instruction: string, difficulty: Difficulty, signal: AbortSignal, revision: boolean) {
+  const made = taskConversation(task, instruction, revision, previous => {
+    const trail = previous?.trail ?? [];
+    const tools = new DeskTools(gitSource(paths!.root));
+    // A new conversation keeps what the last one wrote, so "continue" has something to build on.
+    tools.deliverable = previous?.desk?.deliverable;
+    return { run: new WorkerRun(gateway!, tools, { task: office!.project!.id, difficulty, system: workerSystem('desk', office!.project!.id), onEvent: workerEvents(task, trail) }), desk: tools, trail, ranges: [] };
+  }, next => next.desk?.deliverable ? `The deliverable written so far (kept; replace or append to it):\n${next.desk.deliverable.slice(0, 20000)}` : 'Nothing was delivered yet.');
+  const { entry } = made;
+  const outcome = await entry.run.run(made.instruction, signal);
   entry.last = outcome;
   if (signal.aborted) return { outcome, evidence: '' };
+  const output = entry.desk!.deliverable ?? (outcome.status === 'finished' ? outcome.summary : '');
+  const shown = output.length > 15000 ? `${output.slice(0, 15000)}\n… (${output.length - 15000} more characters)` : output;
+  return { outcome, output, evidence: `This task ran at the desk (no VM): nothing in the repository changed; the deliverable is the result.\n\nTool calls (latest last):\n${entry.trail.slice(-40).join('\n') || '(none)'}\n\nDeliverable:\n${shown || '(none)'}` };
+}
+
+async function vmWork(task: BoardTask, instruction: string, difficulty: Difficulty, signal: AbortSignal, revision: boolean) {
+  await ensureProjectWorkspace();
+  const made = taskConversation(task, instruction, revision, previous => {
+    const trail = previous?.trail ?? [];
+    return { run: new WorkerRun(gateway!, new WorkerTools(workerRuntime(backend!)), { task: saved!.task!, difficulty, onEvent: workerEvents(task, trail) }), trail, ranges: previous?.ranges ?? [] };
+  }, () => 'Check the workspace for what was already done and continue.');
+  const { entry } = made;
+  const before = (await inspect('git rev-parse HEAD')).trim();
+  const outcome = await entry.run.run(made.instruction, signal);
+  entry.last = outcome;
+  // Changes left uncommitted belong to this task: commit them, so the next Worker starts clean
+  // and every task's changes are its own commits.
+  await inspect(`git add -A && (git diff --cached --quiet || git commit -q -m "nidus: ${task.id} 작업 저장")`).catch(() => '');
+  const after = (await inspect('git rev-parse HEAD')).trim();
+  if (after !== before) entry.ranges.push([before, after]);
+  if (signal.aborted) return { outcome, evidence: '' };
   const trail = entry.trail.slice(-40).join('\n');
-  if (desk) {
-    const output = entry.desk!.deliverable ?? (outcome.status === 'finished' ? outcome.summary : '');
-    const shown = output.length > 15000 ? `${output.slice(0, 15000)}\n… (${output.length - 15000} more characters)` : output;
-    return { outcome, output, evidence: `This task ran at the desk (no VM): nothing in the repository changed; the deliverable is the result.\n\nTool calls (latest last):\n${trail || '(none)'}\n\nDeliverable:\n${shown || '(none)'}` };
-  }
-  const changes = await inspect(`git add -A >/dev/null 2>&1; echo "Commits since the task began:"; git log --oneline ${entry.start}..HEAD; echo; echo "Changed files:"; git diff --cached --stat ${entry.start}; echo; echo "Diff:"; git diff --cached ${entry.start} | head -c 15000`).catch(e => `(could not read changes: ${e.message})`);
-  return { outcome, evidence: `Tool calls (latest last):\n${trail}\n\n${changes}` };
+  return { outcome, evidence: `Tool calls (latest last):\n${trail}\n\n${await taskChanges(entry.ranges)}` };
+}
+
+/** What a task changed: its own commits only (other tasks commit in the same workspace in between). */
+async function taskChanges(ranges: [string, string][]): Promise<string> {
+  if (!ranges.length) return 'Commits made for this task: none (nothing changed in /workspace).';
+  const latest = ranges.at(-1)!;
+  const lines = [
+    'echo "Commits made for this task (other tasks\' commits in between are not shown):"',
+    ...ranges.map(([a, b]) => `git log --oneline ${a}..${b}`),
+    'echo; echo "Changed files:"',
+    ...ranges.map(([a, b]) => `git diff --stat ${a} ${b}`),
+    `echo; echo "Diff of the latest attempt:"; git diff ${latest[0]} ${latest[1]} | head -c 12000`,
+    ...(ranges.length > 1 ? [`echo; echo "Diff of earlier attempts (start):"`, ...ranges.slice(0, -1).map(([a, b]) => `git diff ${a} ${b} | head -c 3000`)] : []),
+  ];
+  return inspect(lines.join('; ')).catch(e => `(could not read changes: ${e.message})`);
 }
 
 /**

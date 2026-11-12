@@ -262,16 +262,18 @@ final class WorkspaceSession: ObservableObject {
     }
 
     private func worker(_ m: [String: Any]) {
+        // Tasks run side by side: each line says whose it is.
+        let tag = (m["boardTask"] as? String).map { "[\($0)] " } ?? ""
         switch m["type"] as? String {
         case "instruction":
-            entries.append(RunEntry(kind: .instruction, title: m["text"] as? String ?? ""))
+            entries.append(RunEntry(kind: .instruction, title: tag + (m["text"] as? String ?? "")))
         case "model":
             if let cost = m["costUSD"] as? String, let value = Double(cost) { costUSD += value } else { costUnknown = true }
             let text = (m["text"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             let model = m["model"] as? String ?? ""
-            if !text.isEmpty { entries.append(RunEntry(kind: .model, title: text, detail: model)) }
+            if !text.isEmpty { entries.append(RunEntry(kind: .model, title: tag + text, detail: model)) }
         case "tool_call":
-            entries.append(RunEntry(kind: .tool, title: Self.describe(tool: m["name"] as? String ?? "", input: m["input"]), detail: "", callId: m["id"] as? String, pending: true))
+            entries.append(RunEntry(kind: .tool, title: tag + Self.describe(tool: m["name"] as? String ?? "", input: m["input"]), detail: "", callId: m["id"] as? String, pending: true))
         case "tool_result":
             if let index = entries.lastIndex(where: { $0.callId == m["id"] as? String }) {
                 entries[index].detail = m["content"] as? String ?? ""
@@ -279,17 +281,17 @@ final class WorkspaceSession: ObservableObject {
                 entries[index].pending = false
             }
         case "retry":
-            entries.append(RunEntry(kind: .retry, title: "모델 호출 실패, 다시 시도합니다 (\(m["attempt"] as? Int ?? 0)회째)", detail: m["error"] as? String ?? "", isError: true))
+            entries.append(RunEntry(kind: .retry, title: tag + "모델 호출 실패, 다시 시도합니다 (\(m["attempt"] as? Int ?? 0)회째)", detail: m["error"] as? String ?? "", isError: true))
         case "compacted":
             let before = (m["beforeChars"] as? Int ?? 0) / 1000, after = (m["afterChars"] as? Int ?? 0) / 1000
             let how = m["how"] as? String == "summarized" ? "앞부분을 요약" : "오래된 도구 결과를 비움"
-            entries.append(RunEntry(kind: .note, title: "대화 압축: \(how) (\(before)천 → \(after)천 자)", detail: m["model"] as? String ?? ""))
+            entries.append(RunEntry(kind: .note, title: tag + "대화 압축: \(how) (\(before)천 → \(after)천 자)", detail: m["model"] as? String ?? ""))
         case "finished":
-            entries.append(RunEntry(kind: .finished, title: m["summary"] as? String ?? ""))
+            entries.append(RunEntry(kind: .finished, title: tag + (m["summary"] as? String ?? "")))
         case "stopped":
-            entries.append(RunEntry(kind: .stopped, title: m["detail"] as? String ?? "중지됨", isError: true))
+            entries.append(RunEntry(kind: .stopped, title: tag + (m["detail"] as? String ?? "중지됨"), isError: true))
         case "failed":
-            entries.append(RunEntry(kind: .failed, title: m["error"] as? String ?? "실패", isError: true))
+            entries.append(RunEntry(kind: .failed, title: tag + (m["error"] as? String ?? "실패"), isError: true))
         default:
             break
         }

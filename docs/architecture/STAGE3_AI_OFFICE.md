@@ -12,7 +12,7 @@
 사용자 ── 지시 ──▶ Main ── 로드맵 · 팀 · Task(Completion Contract) · 질문
    ▲                │
    └── 답 · 덧붙임 ─┘  (Main이 계획을 고친다. 몇 번이든)
-사용자 ── 계획 승인 ──▶ 실행: Task를 의존성 순서로 하나씩
+사용자 ── 계획 승인 ──▶ 실행: 의존 Task가 끝난 Task들을 나란히(최대 3)
                          Manager ── Worker 지시서 · 난이도
                          Worker  ── 책상(VM 없이) 또는 VM 작업 공간에서 수행
                          Manager ── 완료 조건으로 검토: 통과 / 수정 요청 / 진행 불가
@@ -24,7 +24,7 @@
 | 항목 | 결정 |
 |---|---|
 | 팀 구성 | Main이 요청마다 필요한 팀(최대 4)을 정한다. CONCEPT의 상설 Group은 Library·Home과 함께 나중에 붙인다 |
-| 실행 방식 | 한 번에 한 Worker. 모든 Task가 한 작업 공간과 한 브라우저를 순서대로 쓴다 |
+| 실행 방식 | ~~한 번에 한 Worker~~ → **병렬** (2026-11-13): 서로 의존하지 않는 Task는 각자의 Manager·Worker가 동시에 진행한다(최대 3). Manager가 A를 검토하는 동안 다른 Worker가 B를 한다. VM은 한 작업 공간과 한 브라우저라 VM Task의 Worker는 차례로 쓴다 |
 | 계획 승인 | 질문에 답하고 사용자가 계획을 승인해야 실행한다. 답하지 않은 질문은 Main이 판단한다 |
 | Lead Manager | 지금은 Main이 겸한다(Task 순서와 팀 간 넘겨주기는 계획의 의존성으로 표현). 병렬 실행을 붙일 때 분리한다 |
 | VM 없는 Task | VM이 필요 없는 일은 VM 밖(책상)에서 한다. VM은 VM Task가 처음 시작될 때만 켠다 (2026-11-12) |
@@ -82,8 +82,11 @@ CONCEPT의 Task Board를 요청(Project) 단위로 둔다. `.nidus/local/board/<
 ### 실행
 
 - 첫 VM Task가 시작될 때 VM을 켜고(꺼져 있으면) Vault의 커밋된 상태로 작업 공간을 하나 만든다. 모든 VM Task가 그 작업 공간에서 이어서 일한다.
-- 준비된 Task(의존 Task가 모두 완료)를 계획 순서대로 하나씩 실행한다.
-- Task마다 새 Worker 대화로 시작한다. Manager의 검토 근거는 Worker의 요약, 도구 호출 기록(최근 40개)과 함께, VM Task는 Task 시작 커밋 이후의 커밋·파일 증감·diff(15KB까지), 책상 Task는 결과물(1만 5천 자까지)이다.
+- 준비된 Task(의존 Task가 모두 완료)를 계획 순서대로 최대 3개까지 함께 시작한다. Task마다 Manager 호출과 Worker 대화가 따로라 맥락이 섞이지 않는다. 하나가 끝나면 다음 준비된 Task를 바로 시작한다.
+- **VM 차례**: VM Task의 Worker는 VM(작업 공간·브라우저)을 하나씩 쓴다. 기다리는 동안 다른 Task의 Manager 지시·검토와 VM 없는 Task는 계속 진행된다. 차례를 기다리면 진행 기록에 나온다.
+- **Task별 변경**: 여러 Task가 같은 작업 공간에 커밋하므로, Worker가 VM을 놓을 때 남은 변경을 그 Task 이름으로 커밋하고 시도마다 [시작, 끝] 커밋을 기록한다. Manager는 그 Task의 커밋과 diff만 본다.
+- Manager의 답을 끝내 읽지 못하는 등 실행이 실패하면 다른 Task도 멈추고, 진행 중이던 Task는 처음부터 다시 하게 표시한다. Task Board 저장은 순서대로 해서 늦게 끝난 저장이 최신 상태를 덮지 않는다.
+- Task마다 새 Worker 대화로 시작한다. Manager의 검토 근거는 Worker의 요약, 도구 호출 기록(최근 40개)과 함께, VM Task는 그 Task가 만든 커밋·파일 증감·diff(마지막 시도 12KB, 이전 시도는 앞부분), 책상 Task는 결과물(1만 5천 자까지)이다.
 - 수정 요청은 같은 Worker 대화에 이어서 준다. Worker가 중간에 멈췄거나 실패했으면 새 대화로, 작업 공간에 남은 것을 확인하고 이어 가라고 준다.
 - 한 Task는 최대 3번 시도한다(처음 + 수정 2번). 그래도 통과하지 못하면 진행 불가(`blocked`)다. 진행 불가 Task에 의존하는 Task는 건너뛴다(`skipped`).
 - 모든 Task가 끝나면 Main이 최종 보고를 쓰고, 작업 공간이 있으면 그 변경이 결과 검토로 올라온다(2d와 같다).
@@ -98,9 +101,11 @@ CONCEPT의 Task Board를 요청(Project) 단위로 둔다. `.nidus/local/board/<
 - 책상만: "README를 읽고 메모 정리 가이드 초안" → Main이 `desk` Task 하나로 계획. Worker는 `list_files`·`read_file` 뒤 결과물을 썼고 Manager가 통과시켰다. 67초 동안 VM은 꺼진 채였고 결과 검토는 없었다.
 - 섞임: "체크리스트를 만들어 checklist.md로 저장" → `desk` 초안 다음에 `vm` 저장. VM은 136초, VM Task가 시작될 때 켜졌다. Worker는 넘겨받은 초안을 `checklist.md`로 커밋했고, 결과 검토 → 브랜치까지 갔다.
 
+- 병렬 (2026-11-13): "fib.py 작성·실행 / primes.py 작성·실행 / 메모 팁 초안(파일 없음)" → Main이 VM Task 둘과 VM 없는 Task 하나로 계획. 25초에 세 Task가 함께 시작해 Manager 셋이 동시에 지시했다. VM 없는 Task는 VM이 켜지는 동안 일했고, primes Task는 fib Task가 VM을 쓰는 동안 차례를 기다렸다. fib Task가 끝나자 Manager가 fib를 검토하는 사이 primes Worker가 VM에서 일했다(사용자가 제안한 방식). 세 Task 모두 통과, 계획부터 최종 보고·브랜치까지 3분 28초. 커밋은 Task별로 나뉘었다.
+
 ## 다음
 
 - Library·Home·Desk: 팀과 Agent의 지속 정체성, 작업 맥락 복구.
-- 병렬 실행과 Lead Manager 분리.
+- VM Task끼리도 동시에: Worker마다 작업 공간(git worktree)과 브라우저를 따로 두고, 끝나면 합친다. Lead Manager 분리.
 - Meeting Room: 실행 중 사용자 결정 요청(지금은 Worker의 브라우저 요청과 진행 불가 Task로만 드러난다).
 - Red Team 검토.

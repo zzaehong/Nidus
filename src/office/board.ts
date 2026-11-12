@@ -3,6 +3,7 @@
 // Kept in the Vault's .nidus/local/board/<project>.json.
 import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import type { Message } from '../gateway/contract.js';
 import type { Difficulty } from '../gateway/assignment.js';
 
@@ -79,7 +80,8 @@ export class BoardStore {
 
   async save(project: Project): Promise<void> {
     await mkdir(this.directory, { recursive: true });
-    const file = join(this.directory, `${project.id}.json`), pending = `${file}.pending`;
+    // Tasks running side by side save at the same time: each save writes its own file first.
+    const file = join(this.directory, `${project.id}.json`), pending = `${file}.${randomUUID()}.pending`;
     await writeFile(pending, JSON.stringify(project, null, 2) + '\n');
     await rename(pending, file);
   }
