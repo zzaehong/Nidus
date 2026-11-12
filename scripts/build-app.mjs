@@ -1,11 +1,11 @@
 // Builds a local, unsigned development app bundle with Node and the compiled engine inside.
 //   node scripts/build-app.mjs          -> dist/Nidus Base.app (earlier provider dashboard)
 //   node scripts/build-app.mjs nidus    -> dist/Nidus.app      (Vault-based app)
-import { mkdir, cp, readdir } from 'node:fs/promises';
+import { mkdir, cp, readdir, readFile, access } from 'node:fs/promises';
 import { atomicCopy as copyFile } from './atomic-copy.mjs';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { join } from 'node:path';
+import { join, dirname, resolve } from 'node:path';
 
 if (process.platform !== 'darwin') throw new Error('The app requires macOS.');
 
@@ -18,7 +18,7 @@ const variants = {
   // The Vault app with the Work tab: the workspace engine, the VM image and the VM helper.
   nidus: {
     app: 'Nidus.app', product: 'Nidus', plist: 'Nidus-Info.plist',
-    directories: ['adapters', 'vault', 'tools', 'agent', 'gateway', 'workspace', 'vm-assets'],
+    directories: ['adapters', 'vault', 'tools', 'agent', 'gateway', 'workspace', 'office', 'vm-assets'],
     helpers: ['nidus-keychain', 'nidus-vault-files', 'nidus-vault-vm'],
   },
 };
@@ -43,4 +43,19 @@ for (const entry of await readdir(join(root, 'dist'), { withFileTypes: true })) 
     await copyFile(join(root, 'dist', entry.name), join(resources, 'dist', entry.name));
   }
 }
+// Every relative import in the bundle must resolve inside it: a module directory left out of
+// the list above would otherwise surface only when the app starts that engine.
+const missing = [];
+async function checkImports(directory) {
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) { if (entry.name !== 'vm-assets') await checkImports(path); continue; }
+    if (!entry.name.endsWith('.js')) continue;
+    for (const [, specifier] of (await readFile(path, 'utf8')).matchAll(/(?:from|import)\s*\(?\s*['"](\.{1,2}\/[^'"]+)['"]/g)) {
+      await access(resolve(dirname(path), specifier)).catch(() => missing.push(`${path.slice(resources.length + 1)} -> ${specifier}`));
+    }
+  }
+}
+await checkImports(join(resources, 'dist'));
+if (missing.length) throw new Error(`Bundle is missing imported modules:\n${missing.join('\n')}`);
 console.log(`Built dist/${variant.app} (local unsigned development bundle; Node included).`);
