@@ -54,10 +54,12 @@ export class AppleOfflineBackend implements SharedBackend {
   const child=this.child=spawn(fileURLToPath(new URL('../nidus-vault-vm',import.meta.url)),[join(this.assets,'Image'),join(this.assets,'initrd'),...(this.development?['development']:[]),...(disk?[disk.path,disk.fresh?'new':'existing',disk.diskId]:[])],{stdio:['pipe','pipe','pipe',...(egress?['pipe' as const]:[])],env:{PATH:'/usr/bin:/bin',...(egress?{NIDUS_EGRESS_FD:'3'}:{})}}) as ChildProcessWithoutNullStreams;
   if(egress)this.egressLink=new EgressChannel(child.stdio[3] as unknown as Duplex,(stream,service)=>this.route(stream,service));
   child.stdin.on('error',()=>{});child.stderr.resume();
-  const lines=createInterface({input:child.stdout});let size=0,frames=0,windowBytes=0;
+  const lines=createInterface({input:child.stdout});let windowBytes=0;
   const budgetTimer=setInterval(()=>{windowBytes=0;},1000);budgetTimer.unref();child.once('close',()=>clearInterval(budgetTimer));
   child.stdout.on('data',(b:Buffer)=>{windowBytes+=b.length;if(windowBytes>4*1024*1024){void this.stop().catch(()=>{});this.event({event:'lost'});}});
-  lines.on('line',line=>{try{if(line.length>262144)throw Error();const e=JSON.parse(line);let frame=false;if(this.liveId&&e.event==='guest'&&typeof e.line==='string'&&e.line.startsWith(`NIDUS_LIVE ${this.liveId} `)){frame=JSON.parse(Buffer.from(e.line.split(' ')[2],'base64').toString()).event==='frame';}if(frame)frames+=line.length;else size+=line.length;if(size>8*1024*1024||frames>128*1024*1024){void this.stop().catch(()=>{});throw Error('output limit');}if(e.event==='guest'&&e.line==='NIDUS_CACHE_CLEAN')this.cacheClean=true;if(e.event==='STOP_CONFIRMED'&&e.frameworkState===0)this.stopped=true;this.event(e);}catch{this.event({event:'lost'});}});
+  lines.on('line',line=>{try{if(line.length>262144)throw Error();const e=JSON.parse(line);
+   // Output is bounded per second (above) and per line; a resident VM has no lifetime cap.
+   if(e.event==='guest'&&e.line==='NIDUS_CACHE_CLEAN')this.cacheClean=true;if(e.event==='STOP_CONFIRMED'&&e.frameworkState===0)this.stopped=true;this.event(e);}catch{this.event({event:'lost'});}});
   child.on('error',()=>this.event({event:'lost'}));child.on('close',()=>{this.closed=true;this.event({event:this.stopped?'closed':'lost'});});
   await ready;
  }
@@ -198,6 +200,14 @@ export class AppleOfflineBackend implements SharedBackend {
   const done=this.workspaceLine(task,'SELECTED',10000).then(()=>true,()=>false);
   this.child.stdin.write(`workspace-select ${task}\n`);
   return done;
+ }
+ /** Deletes a task's workspace in the VM (after its result was approved or discarded). */
+ async removeWorkspace(task:string):Promise<void>{
+  if(!this.child||this.closed||!this.development)throw new VaultError('vm_not_running');
+  if(!/^[a-z0-9][a-z0-9-]{0,62}$/.test(task))throw new VaultError('workspace_task_invalid');
+  const done=this.workspaceLine(task,'REMOVED',30000);
+  this.child.stdin.write(`workspace-remove ${task}\n`);
+  await done;
  }
  /** The task's work as a bundle of commits after base (uncommitted changes are committed first); null when nothing changed. */
  async exportWorkspace(task:string,base:string):Promise<{head:string;bundle:Buffer|null}>{

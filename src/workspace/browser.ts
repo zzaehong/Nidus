@@ -35,7 +35,7 @@ export type BrowserAction =
   | { op: 'askUser'; reason: string };
 
 export type UserInput =
-  | { type: 'mouse'; action: 'move' | 'down' | 'up'; x: number; y: number; button?: 'left' | 'right' | 'middle'; clickCount?: number; modifiers?: number }
+  | { type: 'mouse'; action: 'move' | 'down' | 'up'; x: number; y: number; button?: 'left' | 'right' | 'middle'; clickCount?: number; modifiers?: number; /** While moving: buttons held (1 left, 2 right, 4 middle), for dragging. */ buttons?: number }
   | { type: 'wheel'; x: number; y: number; deltaX: number; deltaY: number; modifiers?: number }
   | { type: 'key'; action: 'down' | 'up'; key: string; code?: string; text?: string; modifiers?: number }
   | { type: 'text'; text: string }
@@ -187,7 +187,10 @@ export class WorkspaceBrowser extends EventEmitter {
         const clickCount = event.clickCount ?? 1;
         if (!Number.isInteger(clickCount) || clickCount < 0 || clickCount > 3) fail('browser_input_invalid');
         const type = { move: 'mouseMoved', down: 'mousePressed', up: 'mouseReleased' }[event.action];
-        await this.cdp.call('Input.dispatchMouseEvent', { type, x: event.x, y: event.y, modifiers: modifiers(event.modifiers), ...(event.action === 'move' ? {} : { button, clickCount }) }, session);
+        const held = event.buttons ?? 0;
+        if (!Number.isInteger(held) || held < 0 || held > 7) fail('browser_input_invalid');
+        const dragging = event.action === 'move' && held ? { button: held & 1 ? 'left' : held & 2 ? 'right' : 'middle', buttons: held } : {};
+        await this.cdp.call('Input.dispatchMouseEvent', { type, x: event.x, y: event.y, modifiers: modifiers(event.modifiers), ...(event.action === 'move' ? dragging : { button, clickCount }) }, session);
         return;
       }
       case 'wheel':

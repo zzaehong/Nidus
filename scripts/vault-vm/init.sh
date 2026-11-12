@@ -77,6 +77,13 @@ run_session() {
  echo "NIDUS_RESULT $id $status $clean $reason $peak $out $err"
 }
 if test -d /opt/development; then
+ # Alpine's install hooks never ran (the image is built on the host), so most BusyBox command
+ # links are missing (base64, dirname, tail, seq, du, ...). Link every applet the root lacks.
+ for applet in $(chroot /opt/development /bin/busybox --list 2>/dev/null); do
+  case "$applet" in *[!a-z0-9_.-]*|'') continue;; esac
+  for dir in bin sbin usr/bin usr/sbin; do test -e "/opt/development/$dir/$applet" && continue 2; done
+  ln -s /bin/busybox "/opt/development/usr/bin/$applet"
+ done
  mount --bind /opt/development /opt/development || { echo NIDUS_BLOCKED development-root; exec sleep 86400; }
  for path in proc sys dev run sessions; do
   mkdir -p "/opt/development/$path"
@@ -157,6 +164,12 @@ while read -r action id payload seconds snapshot; do
     else
      chroot /opt/development /usr/bin/python3 /nidus/workspace-sync.py export "$id" "$payload" "$snapshot" &
     fi
+    ;;
+  workspace-remove)
+    case "$id" in ''|*[!a-z0-9-]*) echo 'NIDUS_REJECT id'; continue;; esac
+    rm -rf "/opt/development/workspaces/$id"
+    if test "$(cat /run/workspace-current 2>/dev/null)" = "$id"; then rm -f /run/workspace-current; fi
+    echo "NIDUS_WORKSPACE_REMOVED $id"
     ;;
   workspace-select)
     # After a VM restart: the task's workspace is still on the disk; make it current again.

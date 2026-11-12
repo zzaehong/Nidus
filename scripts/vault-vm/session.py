@@ -27,7 +27,8 @@ for name in ['work','tmp','home','dev/shm']:os.chown(ROOT/name,1000,1000)
 (ROOT/'etc/passwd').write_text('root:x:0:0:root:/:/bin/sh\nnidus:x:1000:1000:Session:/home:/bin/sh\n')
 (ROOT/'etc/group').write_text('root:x:0:\nnidus:x:1000:\n')
 command=base64.b64decode(ENCODED,validate=True).decode('utf8')
-if len(command.encode())>16384 or '\0' in command:raise ValueError('command')
+# The control line from the host is at most 64 KiB (base64 of this command): 48 KiB of command.
+if len(command.encode())>49152 or '\0' in command:raise ValueError('command')
 (ROOT/'task.sh').write_text(command);(ROOT/'task.sh').chmod(0o444)
 snapshot=None
 if len(sys.argv)>5 and sys.argv[5]:
