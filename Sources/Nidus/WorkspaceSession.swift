@@ -280,6 +280,10 @@ final class WorkspaceSession: ObservableObject {
             }
         case "retry":
             entries.append(RunEntry(kind: .retry, title: "모델 호출 실패, 다시 시도합니다 (\(m["attempt"] as? Int ?? 0)회째)", detail: m["error"] as? String ?? "", isError: true))
+        case "compacted":
+            let before = (m["beforeChars"] as? Int ?? 0) / 1000, after = (m["afterChars"] as? Int ?? 0) / 1000
+            let how = m["how"] as? String == "summarized" ? "앞부분을 요약" : "오래된 도구 결과를 비움"
+            entries.append(RunEntry(kind: .note, title: "대화 압축: \(how) (\(before)천 → \(after)천 자)", detail: m["model"] as? String ?? ""))
         case "finished":
             entries.append(RunEntry(kind: .finished, title: m["summary"] as? String ?? ""))
         case "stopped":

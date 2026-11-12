@@ -186,7 +186,8 @@ test('a conversation continues on another provider: foreign state is dropped, ca
 
   const gemini = fakeProviders({ candidates: [{ finishReason: 'STOP', content: { parts: [{ text: 'Sunny.' }] } }] });
   await gemini.client.send('gemini', 'k', followUp(first));
-  assert.deepEqual(gemini.requests[0].body.contents[1], { role: 'model', parts: [{ functionCall: { name: 'get_weather', args: { city: 'Seoul' } } }] });
+  // Gemini 3 needs a signature on calls it did not make: the documented stand-in.
+  assert.deepEqual(gemini.requests[0].body.contents[1], { role: 'model', parts: [{ functionCall: { name: 'get_weather', args: { city: 'Seoul' } }, thoughtSignature: 'skip_thought_signature_validator' }] });
 });
 
 test('invalid tool calls are returned with inputError instead of failing the response', async () => {
@@ -236,4 +237,21 @@ test('schemaError covers types, required, extras, enums, arrays and nesting', ()
   assert.equal(schemaError({ n: 1, mode: 'c' }, schema), 'input.mode: value is not one of the allowed options');
   assert.equal(schemaError({ n: 1, tags: ['toolong'] }, schema), 'input.tags[0]: too long');
   assert.equal(schemaError([], schema), 'input: expected object');
+});
+
+test('Gemini: tool calls another provider made get the documented stand-in signature; its own keep theirs', async () => {
+  const { geminiWire, FOREIGN_CALL_SIGNATURE } = await import('../dist/gateway/wire/gemini.js');
+  const built = geminiWire.build({ model: 'gemini-3.1-flash-lite', maxOutputTokens: 100, messages: [
+    { role: 'user', content: [{ type: 'text', text: 'go' }] },
+    // From an NVIDIA model: two calls, no Gemini state.
+    { role: 'assistant', content: [{ type: 'tool_call', id: 'x1', name: 'list_files', input: {} }, { type: 'tool_call', id: 'x2', name: 'read_file', input: { path: 'a' } }] },
+    { role: 'user', content: [{ type: 'tool_result', callId: 'x1', content: 'a', isError: false }, { type: 'tool_result', callId: 'x2', content: 'b', isError: false }] },
+    // From Gemini itself: its own signature.
+    { role: 'assistant', content: [{ type: 'provider_state', provider: 'gemini', data: { thoughtSignature: 'real' } }, { type: 'tool_call', id: 'g1', name: 'list_files', input: {} }] },
+    { role: 'user', content: [{ type: 'tool_result', callId: 'g1', content: 'c', isError: false }] },
+  ] });
+  const body = built.body ?? built;
+  const signatures = body.contents.filter(c => c.role === 'model').map(c => c.parts.map(p => p.thoughtSignature ?? null));
+  assert.deepEqual(signatures, [[FOREIGN_CALL_SIGNATURE, null], ['real']]);
+  assert.equal(FOREIGN_CALL_SIGNATURE, 'skip_thought_signature_validator');
 });

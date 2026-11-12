@@ -13,6 +13,8 @@ const stopReasons: Record<string, StopReason> = {
   PROHIBITED_CONTENT: 'refusal',
   SPII: 'refusal',
 };
+/** Gemini's documented thought signature for function calls it did not generate. */
+export const FOREIGN_CALL_SIGNATURE = 'skip_thought_signature_validator';
 const toolModes = { auto: 'AUTO', required: 'ANY', none: 'NONE' } as const;
 
 function contents(request: ModelRequest): unknown[] {
@@ -23,6 +25,10 @@ function contents(request: ModelRequest): unknown[] {
     const parts: Record<string, unknown>[] = [];
     // A thought signature belongs to the part that follows it.
     let signature: unknown;
+    // Gemini 3 refuses function calls without a signature. Calls another provider's model made
+    // (the Gateway switched models mid-conversation) have none: the first call of such a turn
+    // carries the value Gemini documents for calls it did not produce.
+    let foreign = message.role === 'assistant' && !message.content.some(b => b.type === 'provider_state' && b.provider === 'gemini');
     const push = (part: Record<string, unknown>) => {
       parts.push(signature === undefined ? part : { ...part, thoughtSignature: signature });
       signature = undefined;
@@ -34,6 +40,7 @@ function contents(request: ModelRequest): unknown[] {
           break;
         case 'tool_call':
           toolNames.set(block.id, block.name);
+          if (foreign && signature === undefined) { signature = FOREIGN_CALL_SIGNATURE; foreign = false; }
           push({ functionCall: { name: block.name, args: block.input ?? {} } });
           break;
         case 'tool_result':
