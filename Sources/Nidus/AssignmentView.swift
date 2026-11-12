@@ -10,7 +10,7 @@ struct AssignmentView: View {
         ScrollingPage {
             PageHeader(title: "모델 배정", subtitle: "역할과 Worker 작업 난이도마다 사용할 모델을 우선순위 순서로 정합니다. 위에서부터 쓸 수 있는 첫 모델이 선택되고, 쓸 수 있는 후보가 없으면 다른 칸의 모델로 대신하지 않고 실패합니다. Main과 Manager 칸에는 텍스트 검사를 통과한 모델을, Worker 칸에는 도구 호출 검사까지 통과한 모델을 넣을 수 있습니다.")
             ForEach(overview.slots) { slot in
-                SlotCard(slot: slot, onAdd: { adding = slot })
+                SlotCard(slot: slot, health: overview.health ?? [:], onAdd: { adding = slot })
             }
         }
         .sheet(item: $adding) { slot in
@@ -22,6 +22,7 @@ struct AssignmentView: View {
 private struct SlotCard: View {
     @EnvironmentObject private var store: VaultStore
     let slot: Slot
+    let health: [String: ModelHealth]
     let onAdd: () -> Void
 
     private func update(_ candidates: [String]) {
@@ -58,6 +59,9 @@ private struct SlotCard: View {
                         Text("\(index + 1)").monospacedDigit().foregroundStyle(.secondary).frame(width: 18, alignment: .trailing)
                         Text(candidate).font(.system(.body, design: .monospaced)).textSelection(.enabled)
                         if candidate == slot.resolved { Text("선택됨").font(.caption).foregroundStyle(.green) }
+                        if let state = health[candidate], let note = state.note {
+                            Text(note).font(.caption).foregroundStyle(state.restingUntil.map { $0 > Date() } == true ? .orange : .secondary)
+                        }
                         Spacer()
                         Button { move(index, by: -1) } label: { Image(systemName: "arrow.up") }
                             .disabled(index == 0 || store.busy).help("우선순위 올리기")

@@ -37,6 +37,8 @@ export type WorkerOutcome = { status: 'finished'; summary: string } | { status: 
 
 /** Errors worth another try: the provider or the network, not the request itself. */
 const TRANSIENT = new Set(['provider_error', 'rate_limit', 'network', 'timeout']);
+/** Errors of one model (missing, unsupported, out of quota): another candidate may well work. */
+const MODEL_FAULT = new Set(['not_found', 'unsupported', 'quota', 'invalid_response']);
 export const RETRY_WAITS = [5_000, 15_000];
 /** Rate limits pass after a while: wait longer (about five minutes in all) before giving up. */
 export const RATE_LIMIT_WAITS = [15_000, 30_000, 60_000, 90_000, 120_000];
@@ -68,7 +70,7 @@ export async function sendWithRetry(gateway: WorkerGateway, target: CallTarget, 
       // Slow providers take minutes for a long context, but a hung one should not hold the task.
       return await gateway.send({ ...target, ...(avoid.length ? { avoid } : {}) }, request, { signal, timeoutMs: 300_000 });
     } catch (error: any) {
-      if (signal.aborted || !TRANSIENT.has(error?.code)) throw error;
+      if (signal.aborted || !(TRANSIENT.has(error?.code) || MODEL_FAULT.has(error?.code))) throw error;
       const message = String(error.message ?? error);
       const ref: string | undefined = error.modelRef;
       // A model not yet known to be failing: pass it over and try another candidate now.
@@ -79,6 +81,8 @@ export async function sendWithRetry(gateway: WorkerGateway, target: CallTarget, 
         continue;
       }
       if (ref) cooling.set(ref, Date.now() + cooldownMs);
+      // Waiting does not fix a model that is missing or unsupported.
+      if (!TRANSIENT.has(error.code)) throw error;
       if (error.code === 'rate_limit') {
         if (rateWaited >= rateLimitWaits.length) throw error;
         const wait = rateLimitWaits[rateWaited++]!;

@@ -102,6 +102,12 @@ export class UsageLog {
     return id;
   }
 
+  /** Calls since a time, newest first, for judging how models are doing. */
+  recentCalls(since: Date, limit = 2000): { provider: string; model: string; at: string; status: string; error: string | null; durationMs: number }[] {
+    return (this.db.prepare('SELECT provider, model, at, status, error, duration_ms FROM calls WHERE at > ? ORDER BY at DESC LIMIT ?').all(since.toISOString(), limit) as Record<string, string | number | null>[])
+      .map(row => ({ provider: String(row.provider), model: String(row.model), at: String(row.at), status: String(row.status), error: row.error === null ? null : String(row.error), durationMs: Number(row.duration_ms) }));
+  }
+
   /** Known cost of the month in nano-USD. Calls with an unknown price are not included. */
   monthCost(month = monthOf(this.now())): bigint {
     const row = this.db.prepare('SELECT COALESCE(SUM(cost),0) AS total FROM calls WHERE month=?').get(month) as { total: number | bigint };
@@ -171,7 +177,7 @@ export async function saveBudget(path: string, monthlyUSD: string | null): Promi
 }
 
 export interface Warning {
-  code: 'budget_exceeded' | 'cost_unknown';
+  code: 'budget_exceeded' | 'cost_unknown' | 'hedged';
   message: string;
 }
 
