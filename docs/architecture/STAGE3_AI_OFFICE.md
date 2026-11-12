@@ -1,6 +1,6 @@
 # 3단계 설계 — AI Office
 
-상태: **3a 구현 중** (2026-11-12).
+상태: **3a 완료, 3b(기억) 구현 중** (2026-11-13).
 
 [CONCEPT.md](CONCEPT.md)의 AI Office를 단계적으로 만든다. 1단계 [Model Gateway](STAGE1_MODEL_GATEWAY.md)가 역할과 난이도별로 모델을 고르고, 2단계 [Agent Workspace](STAGE2_AGENT_WORKSPACE.md)가 Worker가 일하는 VM과 브라우저를 준다. 3단계는 그 위에 일을 나누고 맡기고 검토하는 조직을 올린다.
 
@@ -104,6 +104,28 @@ CONCEPT의 Task Board를 요청(Project) 단위로 둔다. `.nidus/local/board/<
 - 섞임: "체크리스트를 만들어 checklist.md로 저장" → 텍스트 작업 초안 다음에 VM 저장. VM은 136초, VM Task가 시작될 때 켜졌다. Worker는 넘겨받은 초안을 `checklist.md`로 커밋했고, 결과 검토 → 브랜치까지 갔다.
 
 - 병렬 (2026-11-13): "fib.py 작성·실행 / primes.py 작성·실행 / 메모 팁 초안(파일 없음)" → Main이 VM Task 둘과 VM 없는 Task 하나로 계획. 25초에 세 Task가 함께 시작해 Manager 셋이 동시에 지시했다. VM 없는 Task는 VM이 켜지는 동안 일했고, primes Task는 fib Task가 VM을 쓰는 동안 차례를 기다렸다. fib Task가 끝나자 Manager가 fib를 검토하는 사이 primes Worker가 VM에서 일했다(사용자가 제안한 방식). 세 Task 모두 통과, 계획부터 최종 보고·브랜치까지 3분 28초. 커밋은 Task별로 나뉘었다.
+
+## 3b. 기억 — Home · Desk · Library
+
+요청이 끝나도 남는 것을 만든다. 순서는 Home → Desk → Library(사용자 결정, 2026-11-13).
+
+### 결정 (사용자, 2026-11-13)
+
+| 항목 | 결정 |
+|---|---|
+| 순서 | Home → Desk → Library |
+| 처음 팀 | 최소한의 기본 팀을 두고, 필요하면 Main이 제안해 승인된 직원을 일시적 또는 상설로 더한다 |
+| Library | Vault 전체가 Library다(사용자 노트 + AI 노트). AI가 만든 문서는 전용 폴더에 모은다 |
+| Library 쓰기 | 전용 폴더에는 승인 없이 바로 쓴다 |
+
+### 3b-1. Home과 상설 팀
+
+- **저장**: `.nidus/office/staff.json`(Git 추적, Vault와 함께 옮겨진다)에 Group과 Employee. Employee는 id, 이름, 소속 Group, 종류(manager/worker), Role, 사용자가 준 원칙. 모델은 적지 않는다(모델 배정은 Gateway). 파일이 없으면 기본 팀을 만든다: 조사(조사 팀장, 리서처) · 개발(개발 팀장, 개발자) · 문서(문서 팀장, 작가). Group당 Manager는 한 명이다. 사용자가 파일을 고쳐 이름·원칙·직원을 바꿀 수 있다.
+- **계획**: Main은 상설 팀 목록을 받고, 맞는 팀은 id로 고른다. 맞는 팀이 없을 때만 새 팀을, 팀에 없는 Role이 필요할 때만 새 Worker(`hires`)를 제안한다. 제안마다 `keep`: `temporary`(이번 요청만, 기본) 또는 `permanent`(상설). Task에는 담당 Worker(`assignee`)가 붙는다. 새 팀에 Manager나 Worker가 빠져 있으면 채운다. 일시적인 팀의 직원은 상설이 될 수 없다.
+- **승인**: 계획을 승인하면 제안도 승인된다. 상설 제안은 그때 `staff.json`에 더해지고, 일시 제안은 그 프로젝트에만 남는다. 앱의 프로젝트 패널이 제안을 따로 보여 준다.
+- **정체성**: Manager와 Worker의 시스템 프롬프트는 "누구인지"(이름, id, Role, 팀, 사용자가 준 원칙, 어떤 모델이 돌리든 같은 정체성)로 시작하고 역할 정의가 뒤따른다. Manager는 지시서를 쓸 때 담당 Worker와 그 원칙을 안다.
+- **State**: `.nidus/local/home/<직원>.json`에 지금 프로젝트·Task와 상태(시작/진행/검토/완료). 맥락 자체가 아니라 복구용 위치다(맥락은 Desk).
+- 확인(실제 모델): "소개 문구를 쓰고 일본어로 번역" → Main이 상설 문서팀을 골랐고(번역가를 새로 뽑지 않음), "문서 팀장 → 작가"로 지시·검토가 진행됐다. 상태 파일이 직원별로 남았다.
 
 ## 다음
 

@@ -44,7 +44,12 @@ struct WorkReview: Decodable {
 
 /// A request handled by Main, its teams and their tasks (the Task Board of one request).
 struct OfficeProject: Decodable {
-    struct Team: Decodable, Identifiable { let id: String; let name: String; let focus: String }
+    struct Team: Decodable, Identifiable { let id: String; let name: String; let focus: String; let proposed: Bool?; let keep: String?; let reason: String? }
+    /// An employee on the project: standing staff, or proposed by Main with the plan.
+    struct Employee: Decodable, Identifiable {
+        let id: String; let name: String; let group: String; let kind: String; let role: String
+        let proposed: Bool?; let keep: String?; let reason: String?
+    }
     struct Contract: Decodable { let goal: String; let scope: String; let constraints: String; let acceptance: [String]; let verification: String }
     struct Review: Decodable { let verdict: String; let feedback: String }
     struct Result: Decodable { let summary: String; let verification: String }
@@ -53,6 +58,7 @@ struct OfficeProject: Decodable {
         let status: String; let difficulty: String?; let attempts: Int; let reviews: [Review]; let result: Result?
         /// "text" (no VM) or "vm"; older boards say "desk" for text, or nothing, which means vm.
         let `where`: String?
+        let assignee: String?
         /// A text task's deliverable.
         let output: String?
         var isText: Bool { `where` == "text" || `where` == "desk" }
@@ -64,12 +70,23 @@ struct OfficeProject: Decodable {
     let summary: String
     let roadmap: [String]
     let teams: [Team]
+    let staff: [Employee]?
     let tasks: [Task]
     let questions: [Question]
     let report: String?
     let error: String?
     let workspace: String?
     var needsVm: Bool { tasks.contains { !$0.isText } }
+    func manager(of team: String) -> Employee? { staff?.first { $0.group == team && $0.kind == "manager" } }
+    func worker(of task: Task) -> Employee? { staff?.first { $0.id == task.assignee } }
+    /// New teams and people Main proposes; approving the plan approves them.
+    var proposals: [String] {
+        let label = { (keep: String?) in keep == "permanent" ? "상설" : "이번 요청만" }
+        let newTeams = teams.filter { $0.proposed == true }
+        let teamLines = newTeams.map { "새 팀 \($0.name) · \(label($0.keep))\($0.reason.map { " — \($0)" } ?? "")" }
+        let hires = (staff ?? []).filter { e in e.proposed == true && e.kind == "worker" && !newTeams.contains { $0.id == e.group } }
+        return teamLines + hires.map { e in "새 직원 \(e.name) (\(e.role), \(teams.first { $0.id == e.group }?.name ?? e.group)) · \(label(e.keep))\(e.reason.map { " — \($0)" } ?? "")" }
+    }
 }
 
 /// The resident Workspace Service (dist/workspace/service.js) for the open Vault: the VM, its

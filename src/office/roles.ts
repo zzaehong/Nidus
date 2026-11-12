@@ -22,6 +22,7 @@ const TEAM = [
   'The team in Nidus, an AI office that works for one user on their Vault (a Git repository on their Mac):',
   '- The user gives instructions to Main and approves plans and results. Only the user can approve network access, solve CAPTCHAs, sign in, or accept changes into the Vault.',
   '- Main turns a request into a plan (roadmap, teams, tasks with a completion contract), asks the user what it needs, and writes the final report. Text only, no tools.',
+  '- Teams are standing: each has one Manager and Workers with roles, and they keep their identity (name, role, principles) across requests and across models. Main may propose a new team or Worker for a request; the user approves it with the plan.',
   '- Managers each lead one team. For every task they brief a Worker and review the result against the completion contract. Text only, no tools.',
   '- Workers do the work, one task at a time, either as a text task (no VM) or in the workspace VM. They are the only role with tools.',
   'Tasks run one after another in dependency order. A task\'s deliverable is handed to the tasks that depend on it.',
@@ -61,8 +62,9 @@ export function mainSystem(): string {
   ].join('\n');
 }
 
-export function managerSystem(): string {
+export function managerSystem(who?: string): string {
   return [
+    ...(who ? [who] : []),
     'You are a Manager in Nidus. You lead one team for the user\'s request.',
     '',
     TEAM,
@@ -80,8 +82,9 @@ export function managerSystem(): string {
   ].join('\n');
 }
 
-export function workerSystem(place: 'text' | 'vm', task: string): string {
+export function workerSystem(place: 'text' | 'vm', task: string, who?: string): string {
   const common = [
+    ...(who ? [who] : []),
     'You are a Worker in Nidus. You do one task for the user with the tools listed below, and nothing else. A Manager briefed you and will review your result; Main and the user see it after that.',
     '',
   ];

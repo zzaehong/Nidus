@@ -23,7 +23,8 @@ import { WorkspaceBrowser } from './browser.js';
 import { WorkerTools } from './tools.js';
 import { WorkerRun, type WorkerEvent, type WorkerOutcome } from './worker.js';
 import { Office, type OfficeEvent } from '../office/office.js';
-import { BoardStore, placeOf, type BoardTask, type Project } from '../office/board.js';
+import { BoardStore, placeOf, workerFor, type BoardTask, type Project } from '../office/board.js';
+import { HomeStore, identity } from '../office/home.js';
 import { TextTools, gitSource } from '../office/text-work.js';
 import { workerSystem } from '../office/roles.js';
 import { workerBrief } from '../office/plan.js';
@@ -51,6 +52,7 @@ let worker: WorkerRun | undefined;
 let running: AbortController | undefined;
 let review: Review | null = null;
 let office: Office | undefined;
+let home: HomeStore | undefined;
 /** Per board task: its Worker conversation, its commits (vm), its text tools (text), the last outcome. */
 interface TaskRun { run: WorkerRun; textTools?: TextTools; last?: WorkerOutcome; trail: string[]; /** vm: [before, after] commits of each attempt. */ ranges: [string, string][] }
 const taskRuns = new Map<string, TaskRun>();
@@ -122,7 +124,8 @@ async function open(vault: string) {
   await chmod(directory, 0o700);
   disks = new CacheDiskStore(join(directory, 'disks'));
   if (saved.task && saved.base) review = await pending(paths.root, saved.task, saved.base).catch(() => null);
-  office = new Office({ gateway, store: new BoardStore(join(paths.local, 'board')), repository: repositoryOverview, work, onEvent: officeEvent });
+  home = new HomeStore(join(paths.nidus, 'office', 'staff.json'), join(paths.local, 'home'));
+  office = new Office({ gateway, store: new BoardStore(join(paths.local, 'board')), home, repository: repositoryOverview, work, onEvent: officeEvent });
   const last = await new BoardStore(join(paths.local, 'board')).latest();
   if (last && !['done', 'failed'].includes(last.status) && !last.closed) {
     // A project cut off by a quit can continue from where it was.
@@ -419,11 +422,18 @@ function taskConversation(task: BoardTask, instruction: string, revision: boolea
   return { entry, instruction };
 }
 
+/** Who the task's Worker is (Home), for the top of its system prompt. */
+function whoWorks(task: BoardTask): string | undefined {
+  const project = office!.project!;
+  const worker = workerFor(project, task);
+  return worker ? identity(worker, project.teams.find(t => t.id === task.team)) : undefined;
+}
+
 function workerEvents(task: BoardTask, trail: string[]) {
   return (e: WorkerEvent) => {
     if (e.type === 'tool_call') trail.push(`${e.name} ${JSON.stringify(e.input).slice(0, 160)}`);
     if (e.type === 'tool_result' && e.isError && trail.length) trail[trail.length - 1] += ' -> error';
-    event('worker', { task: placeOf(task) === 'text' ? undefined : saved?.task, boardTask: task.id, where: placeOf(task), ...clipEvent(e) });
+    event('worker', { task: placeOf(task) === 'text' ? undefined : saved?.task, boardTask: task.id, who: workerFor(office!.project!, task)?.name, where: placeOf(task), ...clipEvent(e) });
   };
 }
 
@@ -433,7 +443,7 @@ async function textWork(task: BoardTask, instruction: string, difficulty: Diffic
     const tools = new TextTools(gitSource(paths!.root));
     // A new conversation keeps what the last one wrote, so "continue" has something to build on.
     tools.deliverable = previous?.textTools?.deliverable;
-    return { run: new WorkerRun(gateway!, tools, { task: office!.project!.id, difficulty, system: workerSystem('text', office!.project!.id), onEvent: workerEvents(task, trail) }), textTools: tools, trail, ranges: [] };
+    return { run: new WorkerRun(gateway!, tools, { task: office!.project!.id, difficulty, system: workerSystem('text', office!.project!.id, whoWorks(task)), onEvent: workerEvents(task, trail) }), textTools: tools, trail, ranges: [] };
   }, next => next.textTools?.deliverable ? `The deliverable written so far (kept; replace or append to it):\n${next.textTools.deliverable.slice(0, 20000)}` : 'Nothing was delivered yet.');
   const { entry } = made;
   const outcome = await entry.run.run(made.instruction, signal);
@@ -448,7 +458,7 @@ async function vmWork(task: BoardTask, instruction: string, difficulty: Difficul
   await ensureProjectWorkspace();
   const made = taskConversation(task, instruction, revision, previous => {
     const trail = previous?.trail ?? [];
-    return { run: new WorkerRun(gateway!, new WorkerTools(workerRuntime(backend!)), { task: saved!.task!, difficulty, onEvent: workerEvents(task, trail) }), trail, ranges: previous?.ranges ?? [] };
+    return { run: new WorkerRun(gateway!, new WorkerTools(workerRuntime(backend!)), { task: saved!.task!, difficulty, system: workerSystem('vm', saved!.task!, whoWorks(task)), onEvent: workerEvents(task, trail) }), trail, ranges: previous?.ranges ?? [] };
   }, () => 'Check the workspace for what was already done and continue.');
   const { entry } = made;
   const before = (await inspect('git rev-parse HEAD')).trim();
@@ -551,6 +561,8 @@ const commands: Record<string, (m: any) => Promise<unknown>> = {
   },
   planReply: async m => planning(signal => office!.reply(m.answers ?? {}, String(m.note ?? ''), signal)),
   approvePlan: () => executeProject(),
+  staff: async () => home!.staff(),
+  setPrinciples: async m => home!.setPrinciples(String(m.employee ?? ''), Array.isArray(m.principles) ? m.principles : []),
   closeProject: async () => {
     if (running) throw new Error('진행 중에는 닫을 수 없습니다. 먼저 중지하세요');
     if (office?.project) { office.project.closed = true; await new BoardStore(join(paths!.local, 'board')).save(office.project); office.project = null; }

@@ -31,6 +31,13 @@ struct ProjectPanel: View {
                             }
                         }
                     }
+                    if !project.proposals.isEmpty && project.status == "waiting_user" {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Label("Main의 제안 (계획을 승인하면 함께 승인됩니다)", systemImage: "person.badge.plus").font(.caption.weight(.semibold))
+                            ForEach(project.proposals, id: \.self) { Text("· \($0)").font(.caption) }
+                        }
+                        .foregroundStyle(.orange)
+                    }
                     if !project.tasks.isEmpty {
                         Label(project.needsVm ? "VM이 필요한 Task가 있어, 그 Task를 시작할 때 VM을 켭니다" : "모든 Task를 VM 없이 처리합니다",
                               systemImage: project.needsVm ? "shippingbox" : "text.page")
@@ -72,8 +79,8 @@ struct ProjectPanel: View {
             ForEach(project.teams) { team in
                 let mine = project.tasks.filter { $0.team == team.id }
                 if !mine.isEmpty {
-                    Text("\(team.name) · \(team.focus)").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                    ForEach(mine) { task in TaskRow(task: task) }
+                    Text("\(team.name)\(project.manager(of: team.id).map { " · \($0.name)" } ?? "") · \(team.focus)").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    ForEach(mine) { task in TaskRow(task: task, worker: project.worker(of: task)?.name) }
                 }
             }
         }
@@ -130,6 +137,7 @@ struct ProjectPanel: View {
 
 private struct TaskRow: View {
     let task: OfficeProject.Task
+    var worker: String? = nil
     @State private var expanded = false
 
     var body: some View {
@@ -138,6 +146,7 @@ private struct TaskRow: View {
                 Image(systemName: icon).foregroundStyle(color).frame(width: 14)
                 Text(task.title).font(.callout).lineLimit(expanded ? nil : 1)
                 Spacer()
+                if let worker { Text(worker).font(.caption2).foregroundStyle(.secondary) }
                 Text(task.isText ? "텍스트" : "VM").font(.caption2).foregroundStyle(.secondary)
                     .padding(.horizontal, 5).padding(.vertical, 1)
                     .background(.quaternary, in: Capsule())
