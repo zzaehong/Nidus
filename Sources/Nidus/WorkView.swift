@@ -9,11 +9,21 @@ struct WorkView: View {
 
     @State private var instruction = ""
     @State private var difficulty = "normal"
+    /// Who gets the instruction: Main (plan, teams, review) or a Worker directly.
+    @AppStorage("workMode") private var mode = "main"
     @State private var address = ""
 
     private var vmRunning: Bool { session.vm == "running" }
     private var userControl: Bool { session.control == "user" }
     private func workerSlot(_ difficulty: String) -> Slot? { overview.slots.first { $0.role == "worker" && $0.difficulty == difficulty } }
+    /// Roles the Main mode needs that have no model assigned.
+    private var missingRoles: [String] {
+        var missing: [String] = []
+        if overview.slots.first(where: { $0.role == "main" })?.candidates.isEmpty ?? true { missing.append("Main") }
+        if overview.slots.first(where: { $0.role == "manager" })?.candidates.isEmpty ?? true { missing.append("Manager") }
+        if overview.slots.filter({ $0.role == "worker" }).allSatisfy({ $0.candidates.isEmpty }) { missing.append("Worker") }
+        return missing
+    }
 
     var body: some View {
         FixedPage {
@@ -161,7 +171,9 @@ struct WorkView: View {
     private var sidePanel: some View {
         VStack(alignment: .leading, spacing: Layout.spacing) {
             if !session.approvals.isEmpty { approvals }
-            if let review = session.review { ReviewPanel(review: review) } else { composer }
+            if let review = session.review { ReviewPanel(review: review) }
+            else if let project = session.project { ProjectPanel(project: project) }
+            else { composer }
             log
         }
     }
@@ -191,19 +203,28 @@ struct WorkView: View {
     private var composer: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(session.task == nil ? "새 작업" : "작업 \(session.task!)").font(.headline).lineLimit(1)
-                Spacer()
-                Picker("난이도", selection: $difficulty) {
-                    Text("단순").tag("simple"); Text("보통").tag("normal"); Text("복잡").tag("complex")
+                Picker("받는 쪽", selection: $mode) {
+                    Text("Main에게").tag("main"); Text("Worker에게").tag("worker")
                 }
-                .labelsHidden().pickerStyle(.segmented).frame(width: 150)
+                .labelsHidden().pickerStyle(.segmented).frame(width: 170)
+                .help("Main에게: 계획과 질문 → 승인 → Manager가 Worker에게 맡기고 검토. Worker에게: 한 Worker가 바로 수행.")
+                Spacer()
+                if mode == "worker" {
+                    Picker("난이도", selection: $difficulty) {
+                        Text("단순").tag("simple"); Text("보통").tag("normal"); Text("복잡").tag("complex")
+                    }
+                    .labelsHidden().pickerStyle(.segmented).frame(width: 150)
+                }
             }
             TextEditor(text: $instruction)
                 .font(.body)
                 .frame(height: 72)
                 .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color(nsColor: .separatorColor)))
                 .disabled(session.running)
-            if let slot = workerSlot(difficulty), slot.candidates.isEmpty {
+            if mode == "main", !missingRoles.isEmpty {
+                Label("모델이 배정되지 않은 역할: \(missingRoles.joined(separator: ", ")). 모델 배정 탭에서 추가하세요.", systemImage: "exclamationmark.circle")
+                    .font(.caption).foregroundStyle(.orange)
+            } else if mode == "worker", let slot = workerSlot(difficulty), slot.candidates.isEmpty {
                 Label("이 난이도에 배정된 Worker 모델이 없습니다. 모델 배정 탭에서 추가하세요.", systemImage: "exclamationmark.circle")
                     .font(.caption).foregroundStyle(.orange)
             }
@@ -218,7 +239,9 @@ struct WorkView: View {
                         .toggleStyle(.checkbox).font(.callout)
                         .help("이번 작업 동안 사이트마다 묻지 않습니다. 사설 주소와 Mac 포트는 계속 막거나 묻습니다.")
                     Spacer()
-                    if session.task != nil {
+                    if mode == "main" {
+                        Button("Main에게 지시") { sendToMain() }.buttonStyle(.borderedProminent)
+                    } else if session.task != nil {
                         Button("새 작업으로") { send(fresh: true) }.help("Vault의 최신 커밋에서 새 작업 공간으로 시작합니다.")
                         Button("이어서 지시") { send(fresh: false) }.buttonStyle(.borderedProminent).help("같은 작업 공간과 대화를 이어갑니다.")
                     } else {
@@ -226,7 +249,8 @@ struct WorkView: View {
                     }
                 }
             }
-            .disabled(!vmRunning && !session.running)
+            // Main plans without the VM; it starts when the plan is approved.
+            .disabled(mode == "worker" && !vmRunning && !session.running)
             .disabled(instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !session.running)
             if session.costUSD > 0 || session.costUnknown {
                 Text("이번 실행 비용 약 $\(String(format: "%.4f", session.costUSD))\(session.costUnknown ? " (일부 모델은 가격 정보 없음)" : "")")
@@ -234,6 +258,13 @@ struct WorkView: View {
             }
         }
         .padding(Layout.inset).panel()
+    }
+
+    private func sendToMain() {
+        let text = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        session.plan(text)
+        instruction = ""
     }
 
     private func send(fresh: Bool) {
@@ -279,13 +310,13 @@ private struct RunEntryRow: View {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Image(systemName: icon).foregroundStyle(color).frame(width: 14)
                 Text(entry.title)
-                    .font(entry.kind == .tool ? .system(.caption, design: .monospaced) : .callout)
+                    .font(entry.kind == .tool ? .system(.caption, design: .monospaced) : entry.kind == .main || entry.kind == .manager ? .callout.weight(.semibold) : .callout)
                     .lineLimit(expanded ? nil : (entry.kind == .tool ? 2 : 8))
                     .textSelection(.enabled)
                 if entry.pending { ProgressView().controlSize(.mini) }
             }
             if !entry.detail.isEmpty && entry.kind != .model {
-                Button(expanded ? "접기" : "결과 보기") { expanded.toggle() }.buttonStyle(.link).font(.caption)
+                Button(expanded ? "접기" : (entry.kind == .main || entry.kind == .manager ? "내용 보기" : "결과 보기")) { expanded.toggle() }.buttonStyle(.link).font(.caption)
                 if expanded {
                     Text(entry.detail).font(.system(.caption2, design: .monospaced)).textSelection(.enabled)
                         .padding(6).frame(maxWidth: .infinity, alignment: .leading)
@@ -308,12 +339,16 @@ private struct RunEntryRow: View {
         case .failed: return "exclamationmark.octagon"
         case .retry: return "arrow.clockwise"
         case .note: return "info.circle"
+        case .main: return "person.crop.circle.badge.checkmark"
+        case .manager: return "person.2"
         }
     }
 
     private var color: Color {
         switch entry.kind {
         case .instruction: return .primary
+        case .main: return .purple
+        case .manager: return entry.isError ? .red : .teal
         case .finished: return .green
         case .failed, .stopped, .retry: return .red
         case .tool: return entry.isError ? .red : .secondary

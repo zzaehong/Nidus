@@ -3,7 +3,7 @@ import AppKit
 
 /// One line of the run log in the Work tab.
 struct RunEntry: Identifiable {
-    enum Kind { case instruction, model, tool, finished, stopped, failed, retry, note }
+    enum Kind { case instruction, model, tool, finished, stopped, failed, retry, note, main, manager }
     let id = UUID()
     let kind: Kind
     var title: String
@@ -42,6 +42,29 @@ struct WorkReview: Decodable {
     let sensitive: [String]
 }
 
+/// A request handled by Main, its teams and their tasks (the Task Board of one request).
+struct OfficeProject: Decodable {
+    struct Team: Decodable, Identifiable { let id: String; let name: String; let focus: String }
+    struct Contract: Decodable { let goal: String; let scope: String; let constraints: String; let acceptance: [String]; let verification: String }
+    struct Review: Decodable { let verdict: String; let feedback: String }
+    struct Result: Decodable { let summary: String; let verification: String }
+    struct Task: Decodable, Identifiable {
+        let id: String; let team: String; let title: String; let contract: Contract; let dependsOn: [String]
+        let status: String; let difficulty: String?; let attempts: Int; let reviews: [Review]; let result: Result?
+    }
+    struct Question: Decodable, Identifiable { let id: String; let text: String; let answer: String? }
+    let id: String
+    let instruction: String
+    let status: String
+    let summary: String
+    let roadmap: [String]
+    let teams: [Team]
+    let tasks: [Task]
+    let questions: [Question]
+    let report: String?
+    let error: String?
+}
+
 /// The resident Workspace Service (dist/workspace/service.js) for the open Vault: the VM, its
 /// browser and the Worker. Talks to it in JSON lines over stdin/stdout.
 @MainActor
@@ -61,6 +84,7 @@ final class WorkspaceSession: ObservableObject {
     @Published private(set) var approvals: [ApprovalRequest] = []
     @Published private(set) var entries: [RunEntry] = []
     @Published private(set) var review: WorkReview?
+    @Published private(set) var project: OfficeProject?
     @Published private(set) var git = "ready"
     @Published private(set) var costUSD = 0.0
     @Published private(set) var costUnknown = false
@@ -93,7 +117,7 @@ final class WorkspaceSession: ObservableObject {
 
     private func reset() {
         vm = "stopped"; detail = ""; task = nil; running = false; control = "ai"; controlReason = nil
-        frame = nil; tabs = []; approvals = []; entries = []; review = nil; costUSD = 0; costUnknown = false; allowAll = false
+        frame = nil; tabs = []; approvals = []; entries = []; review = nil; project = nil; costUSD = 0; costUnknown = false; allowAll = false
     }
 
     private func launch() throws {
@@ -214,6 +238,15 @@ final class WorkspaceSession: ObservableObject {
             }
         case "log":
             entries.append(RunEntry(kind: .note, title: m["text"] as? String ?? ""))
+        case "project":
+            if let value = m["project"], !(value is NSNull), let data = try? JSONSerialization.data(withJSONObject: value) {
+                project = try? JSONDecoder().decode(OfficeProject.self, from: data)
+            } else {
+                project = nil
+            }
+        case "office":
+            let from = m["from"] as? String ?? "main"
+            entries.append(RunEntry(kind: from == "manager" ? .manager : .main, title: m["title"] as? String ?? "", detail: m["text"] as? String ?? "", isError: m["isError"] as? Bool ?? false))
         case "worker":
             worker(m)
         default:
@@ -288,6 +321,10 @@ final class WorkspaceSession: ObservableObject {
         }
     }
     func cancel() { perform("cancel") }
+    func plan(_ instruction: String) { perform("plan", ["instruction": instruction]) }
+    func replyToPlan(answers: [String: String], note: String) { perform("planReply", ["answers": answers, "note": note]) }
+    func approvePlan() { perform("approvePlan") }
+    func closeProject() { perform("closeProject") }
     func takeOver() { perform("takeOver") }
     func handBack() { perform("handBack") }
     func answer(_ request: ApprovalRequest, _ answer: String) {
