@@ -5,12 +5,15 @@ if not ID or any(c not in '0123456789abcdef-' for c in ID):raise ValueError('ses
 SECONDS=int(SECONDS)
 ROOT=pathlib.Path('/sessions')/ID;CG=pathlib.Path('/sys/fs/cgroup')/ID
 profile=sys.argv[4] if len(sys.argv)>4 else 'shell'
-if profile not in ['shell','browser','interactive','resident']:raise ValueError('profile')
+if profile not in ['shell','browser','interactive','resident','service']:raise ValueError('profile')
 interactive=profile=='interactive'
-# The resident browser runs beside Shell sessions: it holds /run/browser, not /run/busy.
+# The resident browser and background services run beside Shell sessions: each holds its own
+# lock (/run/browser, /run/service-<id>), not /run/busy.
 resident=profile=='resident'
-LOCK=pathlib.Path('/run/browser' if resident else '/run/busy')
-if not 1<=SECONDS<=(86400 if resident else 900 if interactive else 120):raise ValueError('deadline')
+service=profile=='service'
+LOCK=pathlib.Path('/run/browser' if resident else f'/run/service-{ID}' if service else '/run/busy')
+if not 1<=SECONDS<=(86400 if resident or service else 900 if interactive else 3600):raise ValueError('deadline')
+if service:profile='shell'
 if interactive:
  profile='browser'
  ENCODED=base64.b64encode(b'exec /usr/bin/node /usr/lib/nidus/browser-live.mjs').decode()
@@ -19,8 +22,9 @@ if resident:
 browserish=profile in ['browser','resident']
 CG.mkdir();ROOT.mkdir()
 if browserish:pathlib.Path('/proc/sys/user/max_user_namespaces').write_text('128')
-(CG/'memory.max').write_text(str((1536 if resident else 1024 if profile=='browser' else 512)*1024*1024))
-(CG/'pids.max').write_text('512' if resident else '256' if profile=='browser' else '64')
+# Builds, test runners and dev servers need room: 1 GiB and 256 processes for Shell work too.
+(CG/'memory.max').write_text(str((1536 if resident else 1024)*1024*1024))
+(CG/'pids.max').write_text('512' if resident else '256')
 (CG/'cpu.max').write_text('200000 100000' if resident else '100000 100000')
 for name in ['bin','lib','usr','etc','dev','dev/shm','proc','work','snapshot','tmp','home']:(ROOT/name).mkdir(parents=True,exist_ok=True)
 for name in ['work','tmp','home','dev/shm']:os.chown(ROOT/name,1000,1000)

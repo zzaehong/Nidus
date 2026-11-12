@@ -155,6 +155,14 @@ while read -r action id payload seconds snapshot; do
     case "$id" in ''|*[!a-f0-9-]*) continue;; esac
     if test -p "/run/$id.input"; then printf '%s\n' "$payload" > "/run/$id.input"; fi
     ;;
+  service-start)
+    # A background process (dev server, watcher) beside Shell sessions; at most four.
+    case "$id" in ''|*[!a-f0-9-]*) echo 'NIDUS_REJECT id'; continue;; esac
+    case "$seconds" in ''|*[!0-9]*) echo "NIDUS_REJECT service $id"; continue;; esac
+    if ! test -d /opt/development || test "$(ls /run | grep -c '^service-')" -ge 4; then echo "NIDUS_REJECT service $id"; continue; fi
+    touch "/run/service-$id"
+    chroot /opt/development /usr/bin/python3 /nidus/session.py "$id" "$payload" "$seconds" service &
+    ;;
   workspace-import|workspace-export)
     # id: task name, payload: one-time transfer token, seconds: size, snapshot: sha256 or base commit.
     case "$id" in ''|*[!a-z0-9-]*) echo 'NIDUS_REJECT id'; continue;; esac
@@ -208,7 +216,7 @@ while read -r action id payload seconds snapshot; do
   cancel) case "$id" in ''|*[!a-zA-Z0-9-]*) continue;; esac
     touch "/run/$id.cancel"; if test -d "$CG/$id"; then echo 1 > "$CG/$id/cgroup.kill"; fi ;;
   stop)
-    if test -e /run/busy || test -e /run/browser; then echo NIDUS_REJECT busy; continue; fi
+    if test -e /run/busy || test -e /run/browser || ls /run | grep -q '^service-'; then echo NIDUS_REJECT busy; continue; fi
     if test -n "$cache_mode"; then
      sync
      if mountpoint -q /opt/development/browser-profile; then umount /opt/development/browser-profile || { echo NIDUS_BLOCKED cache-unmount; continue; }; fi

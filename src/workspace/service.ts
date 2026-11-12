@@ -48,6 +48,17 @@ let review: Review | null = null;
 /** "Allow every site" as the user set it; it holds for the task about to run or running. */
 let allowAll = false;
 const approvals = new Map<string, (answer: EgressAnswer) => void>();
+const approvalWaiters: (() => void)[] = [];
+const services = new Map<string, string>(); // name -> VM session id
+function approvalsSettled() { if (!approvals.size) for (const wake of approvalWaiters.splice(0)) wake(); }
+/** Waits until no network approval is pending; true if there was one to wait for. */
+function waitForApprovals(signal?: AbortSignal): Promise<boolean> {
+  if (!approvals.size) return Promise.resolve(false);
+  return new Promise(resolve => {
+    approvalWaiters.push(() => resolve(true));
+    signal?.addEventListener('abort', () => resolve(true), { once: true });
+  });
+}
 const ENVIRONMENT = '00000000-0000-4000-8000-00000000e2e0';
 
 function status(detail?: string) {
@@ -68,10 +79,12 @@ async function open(vault: string) {
   rules = await EgressRules.load(paths.networkFile);
   proxy = new EgressProxy({
     rules,
+    // The user may be away for a while; the task waits for them rather than failing.
+    approvalTimeoutMs: 30 * 60_000,
     approve: (request, signal) => new Promise(resolve => {
       const id = randomUUID();
       approvals.set(id, resolve);
-      signal.addEventListener('abort', () => { if (approvals.delete(id)) { event('approvalDone', { id }); resolve('deny'); } }, { once: true });
+      signal.addEventListener('abort', () => { if (approvals.delete(id)) { event('approvalDone', { id }); resolve('deny'); approvalsSettled(); } }, { once: true });
       event('approval', { id, ...request });
     }),
     onEvent: e => event('network', e),
@@ -172,6 +185,7 @@ async function stop() {
   if (vm === 'stopped' || !backend) return;
   running?.abort();
   vm = 'stopping'; status('VM을 종료합니다');
+  services.clear();
   try { await browser?.close(); await backend.closeBrowser(); } catch {}
   browser = undefined;
   try {
@@ -220,6 +234,21 @@ async function run(instruction: string, difficulty: Difficulty, fresh: boolean) 
       finally { signal?.removeEventListener('abort', cancel); }
     },
     browser: ensureBrowser,
+    startService: async (name, command) => {
+      if (services.has(name)) await backendNow.stopService(services.get(name)!).catch(() => {});
+      const id = randomUUID();
+      await backendNow.startService(id, command);
+      services.set(name, id);
+    },
+    stopService: async name => {
+      const id = services.get(name);
+      if (!id) return false;
+      services.delete(name);
+      await backendNow.stopService(id);
+      return true;
+    },
+    services: () => [...services.keys()].filter(name => backendNow.runningServices.includes(services.get(name)!)),
+    waitForApprovals,
   }), { task, difficulty, onEvent: (e: WorkerEvent) => event('worker', { task, ...clipEvent(e) }) });
   running = new AbortController();
   status('작업 중');
@@ -249,6 +278,9 @@ async function collect() {
 }
 
 async function removeWorkspace() {
+  // Background services belong to the task's workspace.
+  for (const id of services.values()) await backend?.stopService(id).catch(() => {});
+  services.clear();
   if (saved?.task && backend) await backend.removeWorkspace(saved.task).catch(() => {});
   saved = { vaultId: saved!.vaultId };
   worker = undefined;
@@ -284,7 +316,7 @@ const commands: Record<string, (m: any) => Promise<unknown>> = {
   input: async m => { await (await ensureBrowser()).input(m.input); return {}; },
   answer: async m => {
     const resolve = approvals.get(String(m.approval));
-    if (resolve && ['once', 'always', 'deny'].includes(m.answer)) { approvals.delete(String(m.approval)); resolve(m.answer); event('approvalDone', { id: m.approval }); }
+    if (resolve && ['once', 'always', 'deny'].includes(m.answer)) { approvals.delete(String(m.approval)); resolve(m.answer); event('approvalDone', { id: m.approval }); approvalsSettled(); }
     return {};
   },
   allowAll: async m => { allowAll = !!m.enabled; proxy?.setAllowAll(allowAll); event('allowAll', { enabled: allowAll }); return {}; },

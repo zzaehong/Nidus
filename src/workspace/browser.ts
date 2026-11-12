@@ -256,7 +256,8 @@ export class WorkspaceBrowser extends EventEmitter {
       }
       case 'navigate': {
         const url = allowedUrl(a.url);
-        const result = await this.cdp.call('Page.navigate', { url }, this.session());
+        // Slow sites and proxy approvals take time; the page itself settles below.
+        const result = await this.cdp.call('Page.navigate', { url }, this.session(), 180_000);
         this.reader = undefined;
         await this.settle();
         const page = await this.observe(signal);

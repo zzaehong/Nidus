@@ -10,6 +10,12 @@ export interface ToolRuntime {
   /** Runs a command in a fresh VM session whose working directory is /workspace. */
   shell(command: string, seconds: number, signal?: AbortSignal): Promise<ShellResult>;
   browser(): Promise<WorkspaceBrowser>;
+  /** Background commands (dev servers) by name; they keep running between tool calls. */
+  startService?(name: string, command: string): Promise<void>;
+  stopService?(name: string): Promise<boolean>;
+  services?(): string[];
+  /** Resolves once no network approval is waiting for the user; true if it had to wait. */
+  waitForApprovals?(signal?: AbortSignal): Promise<boolean>;
 }
 
 export interface ToolOutcome { content: string; isError: boolean; finish?: string }
@@ -21,7 +27,10 @@ const str = (description: string) => ({ type: 'string', description });
 const int = (description: string) => ({ type: 'integer', description });
 
 export const WORKER_TOOLS: ToolSpec[] = [
-  { name: 'shell', description: 'Run a bash command in the VM. Working directory is /workspace (the task\'s Git repository). Each call is a fresh session limited to the given seconds (max 110); background processes end with it. Network access goes through a proxy the user approves per site.', inputSchema: object({ command: str('Bash command'), timeout_seconds: int('1-110, default 60') }, ['command']) },
+  { name: 'shell', description: 'Run a bash command in the VM. Working directory is /workspace (the task\'s Git repository). Each call is a fresh session that ends after the command (default limit 120 seconds, up to 1800 for builds and installs); processes it leaves behind end with it, so use start_service for servers. Network access goes through a proxy the user approves per site.', inputSchema: object({ command: str('Bash command'), timeout_seconds: int('1-1800, default 120') }, ['command']) },
+  { name: 'start_service', description: 'Start a long-running command in the background (a dev server, a watcher) in /workspace. It keeps running while you use other tools; its output goes to a log you read with service_log. Open servers in the browser at http://localhost:<port>.', inputSchema: object({ name: str('Short name, letters, digits and dashes'), command: str('Bash command, e.g. npm run dev -- --port 3000') }, ['name', 'command']) },
+  { name: 'stop_service', description: 'Stop a background command started with start_service.', inputSchema: object({ name: str('Service name') }, ['name']) },
+  { name: 'service_log', description: 'Show the last lines of a background command\'s output.', inputSchema: object({ name: str('Service name'), lines: int('Lines from the end, default 80') }, ['name']) },
   { name: 'read_file', description: 'Read a text file (path relative to /workspace or absolute). Returns up to 30000 bytes from offset.', inputSchema: object({ path: str('File path'), offset: int('Byte offset, default 0') }, ['path']) },
   { name: 'write_file', description: `Write a text file, creating directories. At most ${MAX_WRITE} bytes per call; for larger files write the first part, then call again with append=true.`, inputSchema: object({ path: str('File path'), content: str('Full text to write'), append: { type: 'boolean', description: 'Append instead of replacing' } }, ['path', 'content']) },
   { name: 'list_files', description: 'List files under a directory (default /workspace), skipping .git.', inputSchema: object({ path: str('Directory'), depth: int('1-4, default 2') }) },
@@ -41,6 +50,10 @@ export const WORKER_TOOLS: ToolSpec[] = [
 ];
 
 const b64 = (value: string) => Buffer.from(value, 'utf8').toString('base64');
+function serviceName(value: unknown): string {
+  if (typeof value !== 'string' || !/^[a-z0-9][a-z0-9-]{0,31}$/.test(value)) throw new Error('service name: lowercase letters, digits and dashes, up to 32');
+  return value;
+}
 const clip = (text: string, limit = MAX_OUTPUT) => text.length > limit ? `${text.slice(0, limit)}\n… (${text.length - limit} more characters cut)` : text;
 
 function shellText(r: ShellResult): string {
@@ -109,7 +122,14 @@ export class WorkerTools {
   }
 
   private async browse(action: BrowserAction, signal?: AbortSignal): Promise<string> {
-    const page = await (await this.runtime.browser()).act(action, signal);
+    const browser = await this.runtime.browser();
+    let page = await browser.act(action, signal);
+    // The browser gives up on a site after about a minute; a network approval can take longer.
+    // Wait for the user's answer, then try once more instead of returning the failure.
+    const stalled = page.navigationError || page.pageState === 'browser_access_blocked';
+    if (stalled && ['navigate', 'reload', 'back'].includes(action.op) && await this.runtime.waitForApprovals?.(signal)) {
+      page = await browser.act(action.op === 'navigate' ? action : { op: 'reload' }, signal);
+    }
     if (page.elements?.length || action.op !== 'read') this.snapshot = page.snapshotId;
     return describePage(page);
   }
@@ -129,7 +149,7 @@ export class WorkerTools {
     const path = (value: unknown) => { if (typeof value !== 'string' || !value.trim()) throw new Error('path is required'); return b64(value); };
     switch (name) {
       case 'shell': {
-        const seconds = Number.isInteger(input.timeout_seconds) ? Math.min(110, Math.max(1, input.timeout_seconds)) : 60;
+        const seconds = Number.isInteger(input.timeout_seconds) ? Math.min(1800, Math.max(1, input.timeout_seconds)) : 120;
         if (typeof input.command !== 'string' || !input.command.trim()) throw new Error('command is required');
         if (Buffer.byteLength(input.command) > 40_000) throw new Error('command too long (40000 bytes); write a script with write_file first');
         return shell(input.command, seconds);
@@ -148,6 +168,26 @@ export class WorkerTools {
         const depth = Number.isInteger(input.depth) ? Math.min(4, Math.max(1, input.depth)) : 2;
         const dir = typeof input.path === 'string' && input.path.trim() ? path(input.path) : b64('/workspace');
         return shell(`p=$(printf %s ${dir} | base64 -d); find "$p" -maxdepth ${depth} -name .git -prune -o -print | sort | head -400`);
+      }
+      case 'start_service': {
+        if (!this.runtime.startService) throw new Error('background services are not available here');
+        const name = serviceName(input.name);
+        if (typeof input.command !== 'string' || !input.command.trim()) throw new Error('command is required');
+        const log = `/workspace/.git/nidus-logs/${name}.log`;
+        await this.runtime.startService(name, `mkdir -p /workspace/.git/nidus-logs && cmd=$(printf %s ${b64(input.command)} | base64 -d) && exec bash -c "$cmd" > ${log} 2>&1`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        const first = await this.runtime.shell(`tail -n 20 ${log} 2>/dev/null`, 10, signal);
+        return ok(`Service "${name}" is running. Running services: ${this.runtime.services?.().join(', ')}.\n[first output]\n${clip(first.stdout || '(nothing yet)', 2000)}`);
+      }
+      case 'stop_service': {
+        const name = serviceName(input.name);
+        if (!await this.runtime.stopService?.(name)) throw new Error(`no running service named ${name}`);
+        return ok(`Service "${name}" stopped.`);
+      }
+      case 'service_log': {
+        const name = serviceName(input.name);
+        const lines = Number.isInteger(input.lines) ? Math.min(400, Math.max(1, input.lines)) : 80;
+        return shell(`tail -n ${lines} /workspace/.git/nidus-logs/${name}.log`, 10);
       }
       case 'web_search': {
         if (typeof input.query !== 'string' || !input.query.trim()) throw new Error('query is required');

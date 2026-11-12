@@ -231,8 +231,32 @@ export class AppleOfflineBackend implements SharedBackend {
    return {head:head!,bundle};
   }finally{this.transfers.delete(token);}
  }
+ private services=new Map<string,Promise<any>>();
+ /** Starts a background command (a dev server) beside Shell sessions. It runs until stopService or VM stop. */
+ async startService(id:string,command:string,seconds=86400):Promise<void>{
+  if(!this.child||this.closed||this.stopped||!this.development)throw new VaultError('vm_not_running');
+  if(!/^[0-9a-f-]{36}$/.test(id))throw new VaultError('vm_invalid_session');
+  if(!command.trim()||Buffer.byteLength(command)>49152||command.includes('\0'))throw new VaultError('vm_invalid_request');
+  const result=(e:any)=>e.event==='guest'&&typeof e.line==='string'&&e.line.startsWith(`NIDUS_RESULT ${id} `);
+  const ended=this.wait(e=>result(e)||(e.event==='guest'&&e.line===`NIDUS_REJECT service ${id}`),seconds*1000+15000);
+  ended.catch(()=>{});
+  this.services.set(id,ended);
+  void ended.finally(()=>this.services.delete(id));
+  this.child.stdin.write(`service-start ${id} ${Buffer.from(command).toString('base64')} ${seconds}\n`);
+  // Refused, or exited at once (a typo): report it instead of a service that is not there.
+  const early=await Promise.race([ended.then(e=>e,()=>null),new Promise(r=>setTimeout(()=>r(undefined),1500))]);
+  if(early!==undefined){this.services.delete(id);throw new VaultError(early&&early.line.startsWith('NIDUS_REJECT')?'service_rejected':'service_exited');}
+ }
+ /** Stops a background command and confirms its processes are gone. */
+ async stopService(id:string):Promise<void>{
+  const ended=this.services.get(id);if(!ended)return;
+  this.cancel(id);
+  await Promise.race([ended,new Promise((_,reject)=>setTimeout(()=>reject(new VaultError('service_cleanup_unconfirmed')),15000).unref())]);
+ }
+ get runningServices(){return [...this.services.keys()];}
  async stop(){
   if(!this.child)return;if(this.closed){if(!this.stopped)throw new VaultError('STOP_UNCONFIRMED');return;}
+  for(const id of [...this.services.keys()])await this.stopService(id).catch(()=>{});
   if(this.browserId)await this.closeBrowser();
   const closed=this.wait(e=>e.event==='closed',12000);this.child.stdin.write('stop\n');await closed;
   if(!this.stopped)throw new VaultError('STOP_UNCONFIRMED');

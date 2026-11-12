@@ -13,7 +13,8 @@ export interface WorkerGateway {
 }
 
 export interface WorkerLimits { modelCalls: number; toolCalls: number; ms: number }
-export const DEFAULT_LIMITS: WorkerLimits = { modelCalls: 60, toolCalls: 150, ms: 30 * 60_000 };
+/** Safety valves against a runaway loop, not work budgets: no time limit (ms 0); the user stops it. */
+export const DEFAULT_LIMITS: WorkerLimits = { modelCalls: 200, toolCalls: 600, ms: 0 };
 
 export type WorkerEvent =
   | { type: 'instruction'; text: string }
@@ -33,7 +34,7 @@ export function workerSystemPrompt(task: string): string {
     '',
     'Environment:',
     `- /workspace is a copy of the user's Git repository (the committed state), on the branch nidus/${task}. Change files there and commit your work with git as you go. When you finish, the user reviews the changes and decides whether they become a branch in their repository; nothing you do reaches their files before that.`,
-    '- Shell commands run as a normal user; each call is a fresh session of at most 110 seconds, so a server you start ends with that call. Python 3, Node.js, npm, pip and git are installed.',
+    '- Shell commands run as a normal user; each call is a fresh session (default limit 120 s, set timeout_seconds up to 1800 for installs and builds). Anything it leaves running ends with it: start servers with start_service and read their output with service_log. Python 3, Node.js, npm, pip and git are installed.',
     '- Network: the VM reaches the internet only through a proxy. The first visit to each site may wait for the user to approve it; a refused site fails. Do not retry a refused site in a loop.',
     '- The browser is a real Chromium the user watches live. They can take it over at any time; your browser tools then wait until they hand it back. Pages served inside the VM open at http://localhost:<port>; files at file:///workspace/...',
     '- If a page needs something only the user can do (sign-in, CAPTCHA, a personal choice), call browser_ask_user. Never try to solve or get around CAPTCHAs yourself.',
@@ -74,7 +75,8 @@ export class WorkerRun {
         return await this.gateway.send(
           { role: 'worker', difficulty: this.options.difficulty, taskId: this.options.task },
           { system: workerSystemPrompt(this.options.task), messages: this.messages, tools: this.tools.specs },
-          { signal },
+          // Slow providers take minutes for a long context; the user can always stop the task.
+          { signal, timeoutMs: 600_000 },
         );
       } catch (error: any) {
         if (signal.aborted || attempt >= waits.length || !TRANSIENT.has(error?.code)) throw error;
@@ -99,7 +101,7 @@ export class WorkerRun {
       for (;;) {
         if (signal.aborted) return stop('user', '사용자가 중지했습니다');
         if (this.modelCalls >= limits.modelCalls) return stop('limit', `모델 호출 ${limits.modelCalls}회 한도`);
-        if (now() - started > limits.ms) return stop('limit', `실행 시간 ${Math.round(limits.ms / 60000)}분 한도`);
+        if (limits.ms > 0 && now() - started > limits.ms) return stop('limit', `실행 시간 ${Math.round(limits.ms / 60000)}분 한도`);
         this.modelCalls++;
         const result = await this.call(signal);
         const { response } = result;

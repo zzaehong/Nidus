@@ -120,3 +120,40 @@ test('browser tools use the latest observation; pages are shown as untrusted dat
   assert.match(actions[2].url, /bing\.com/);
   assert.equal(describePage({ ...page, elements: [], pageState: 'captcha_required' }).includes('State: captcha_required'), true);
 });
+
+test('a page that timed out while an approval was pending is opened again after the answer', async () => {
+  const actions = [];
+  const failed = { url: 'https://slow.example/', title: '', text: '', textOffset: 0, textLength: 0, nextOffset: null, pageState: 'browser_access_blocked', navigationError: 'net::ERR_TIMED_OUT', snapshotId: 'S0', elements: [] };
+  const loaded = { ...failed, pageState: 'page', navigationError: undefined, title: 'Slow', snapshotId: 'S1' };
+  const browser = { act: async action => { actions.push(action); return actions.length === 1 ? failed : loaded; } };
+  let waited = 0;
+  const tools = new WorkerTools({ shell: async () => ({}), browser: async () => browser, waitForApprovals: async () => { waited++; return true; } });
+  const result = await tools.run(call('c1', 'browser_open', { url: 'https://slow.example/' }));
+  assert.equal(waited, 1);
+  assert.equal(actions.length, 2, 'opened again after the approval');
+  assert.match(result.content, /Title: Slow/);
+  // Without a pending approval the failure is returned as it is.
+  const once = new WorkerTools({ shell: async () => ({}), browser: async () => ({ act: async () => failed }), waitForApprovals: async () => false });
+  assert.match((await once.run(call('c2', 'browser_open', { url: 'https://slow.example/' }))).content, /ERR_TIMED_OUT/);
+});
+
+test('background services start in /workspace with a log, and stop by name', async () => {
+  const started = [], commands = [];
+  const tools = new WorkerTools({
+    shell: async command => { commands.push(command); return { exitCode: 0, stdout: 'listening on 3000\n', stderr: '', reason: 'completed' }; },
+    browser: async () => { throw new Error('x'); },
+    startService: async (name, command) => { started.push({ name, command }); },
+    stopService: async name => name === 'web',
+    services: () => ['web'],
+  });
+  const result = await tools.run(call('c1', 'start_service', { name: 'web', command: 'npm run dev' }));
+  assert.equal(result.isError, false);
+  assert.match(result.content, /listening on 3000/);
+  assert.equal(started[0].name, 'web');
+  assert.ok(started[0].command.includes(Buffer.from('npm run dev').toString('base64')));
+  assert.ok(started[0].command.includes('/workspace/.git/nidus-logs/web.log'));
+  assert.equal((await tools.run(call('c2', 'stop_service', { name: 'web' }))).isError, false);
+  assert.equal((await tools.run(call('c3', 'stop_service', { name: 'db' }))).isError, true);
+  assert.match((await tools.run(call('c4', 'start_service', { name: 'Bad Name', command: 'x' }))).content, /service name/);
+  assert.match((await tools.run(call('c5', 'shell', { command: 'npm ci', timeout_seconds: 5000 }))).content, /exit code 0/);
+});
