@@ -15,11 +15,11 @@ const variants = {
     directories: ['adapters', 'vault', 'tools', 'agent', 'gateway', 'vm-assets'],
     helpers: ['nidus-keychain', 'nidus-vault-files', 'nidus-vault-vm'],
   },
-  // The Vault app has no VM features yet, so the VM image and helpers stay out of its bundle.
+  // The Vault app with the Work tab: the workspace engine, the VM image and the VM helper.
   nidus: {
     app: 'Nidus.app', product: 'Nidus', plist: 'Nidus-Info.plist',
-    directories: ['adapters', 'vault', 'tools', 'agent', 'gateway'],
-    helpers: ['nidus-keychain'],
+    directories: ['adapters', 'vault', 'tools', 'agent', 'gateway', 'workspace', 'vm-assets'],
+    helpers: ['nidus-keychain', 'nidus-vault-files', 'nidus-vault-vm'],
   },
 };
 const variant = variants[process.argv[2] ?? 'base'];

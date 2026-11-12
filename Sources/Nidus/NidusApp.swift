@@ -8,6 +8,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    /// The workspace VM must be stopped properly (its disk is marked clean only then): quitting waits for it.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        Task { @MainActor in
+            await WorkspaceSession.shared.shutdown()
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         Bridge.shared.shutdown()
     }
@@ -24,6 +33,7 @@ struct NidusApp: App {
         WindowGroup("Nidus") {
             RootView()
                 .environmentObject(store)
+                .environmentObject(WorkspaceSession.shared)
                 .frame(minWidth: 880, minHeight: 560)
                 .task { await store.restoreLastVault() }
         }
@@ -95,6 +105,7 @@ enum VaultSection: String, CaseIterable, Identifiable {
     case providers = "Provider"
     case usage = "사용량"
     case trial = "시험 호출"
+    case work = "작업"
 
     var id: String { rawValue }
     var icon: String {
@@ -103,6 +114,7 @@ enum VaultSection: String, CaseIterable, Identifiable {
         case .providers: return "key"
         case .usage: return "chart.bar"
         case .trial: return "paperplane"
+        case .work: return "hammer"
         }
     }
 }
@@ -144,6 +156,7 @@ struct VaultView: View {
                 case .providers: ProvidersView(overview: overview)
                 case .usage: UsageView(overview: overview)
                 case .trial: TrialView(overview: overview)
+                case .work: WorkView(overview: overview)
                 }
             } else {
                 ProgressView("Vault를 읽는 중…").frame(maxWidth: .infinity, maxHeight: .infinity)
