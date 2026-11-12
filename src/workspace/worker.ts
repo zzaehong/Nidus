@@ -155,7 +155,7 @@ export class WorkerRun {
       if (!summary) throw new Error('empty summary');
       // Instructions still in the kept turns stay there; the earlier ones go into the header.
       const kept = new Set(this.messages.slice(cut).flatMap(m => m.role === 'user' ? m.content.filter(b => b.type === 'text').map(b => (b as { text: string }).text) : []));
-      applySummary(this.messages, cut, summary.slice(0, 8_000), this.given.filter(text => !kept.has(text)));
+      applySummary(this.messages, cut, summary.slice(0, 10_000), this.given.filter(text => !kept.has(text)));
       this.summarizedAt = this.messages.length;
       this.emit({ type: 'compacted', how: 'summarized', beforeChars: size, afterChars: conversationChars(this.messages), model: result.response.model });
     } catch {
