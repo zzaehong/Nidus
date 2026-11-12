@@ -115,7 +115,7 @@ test('stopping during execution leaves the project stopped and resumable', async
   await o.plan('x', new AbortController().signal);
   const project = await o.execute(controller.signal);
   assert.equal(project.status, 'stopped');
-  assert.equal(project.tasks[0].status, 'in_progress');
+  assert.equal(project.tasks[0].status, 'pending', 'the interrupted task is set to start over at once');
   const resumed = await o.execute(new AbortController().signal);
   assert.equal(resumed.status, 'done', 'execute again picks up');
 });
@@ -195,4 +195,58 @@ test('every Main and Manager call carries its role\'s full system prompt, the fi
     else assert.equal(call.request.system, managerSystem());
   }
   assert.match(g.calls[0].request.messages[0].content[0].text, /Answer with one JSON object only/, 'the plan format is part of the request');
+});
+
+test('independent tasks run side by side, each with its own Manager calls; a dependent task waits', async t => {
+  const tasks = [
+    { id: 'a', team: 'research', title: 'A', where: 'vm', goal: 'g', acceptance: ['x'] },
+    { id: 'b', team: 'docs', title: 'B', where: 'desk', goal: 'g', acceptance: ['x'] },
+    { id: 'c', team: 'docs', title: 'C', where: 'desk', goal: 'g', acceptance: ['x'], dependsOn: ['a', 'b'] },
+  ];
+  const timeline = [];
+  let running = 0, most = 0;
+  const { o } = await office(t, (role, last) => {
+    if (role === 'main') return last.includes('All tasks have ended') ? '보고' : plan({ tasks, questions: [] });
+    if (last.includes("Write the Worker's instructions")) return '{"difficulty": "simple", "instructions": "하라"}';
+    return '{"verdict":"accept","summary":"완료"}';
+  }, async task => {
+    running++; most = Math.max(most, running); timeline.push(`start ${task.id}`);
+    await new Promise(resolve => setTimeout(resolve, task.id === 'a' ? 60 : 20));
+    running--; timeline.push(`end ${task.id}`);
+    return { outcome: { status: 'finished', summary: task.id }, evidence: 'e', output: task.id };
+  });
+  await o.plan('x', new AbortController().signal);
+  const project = await o.execute(new AbortController().signal);
+  assert.equal(project.status, 'done');
+  assert.equal(most, 2, 'a and b at once');
+  assert.deepEqual(timeline.slice(0, 2).sort(), ['start a', 'start b']);
+  assert.ok(timeline.indexOf('start c') > timeline.indexOf('end a') && timeline.indexOf('start c') > timeline.indexOf('end b'), 'c waits for both');
+  assert.deepEqual(project.tasks.map(t => t.status), ['done', 'done', 'done']);
+});
+
+test('at most maxParallel tasks run at once; a failing Manager stops the others and fails the project', async t => {
+  const tasks = ['a', 'b', 'c', 'd'].map(id => ({ id, team: 'research', title: id.toUpperCase(), where: 'desk', goal: 'g', acceptance: ['x'] }));
+  let running = 0, most = 0;
+  const dir = await (await import('node:fs/promises')).mkdtemp(join(tmpdir(), 'nidus-office-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const gatewayStub = gateway((role, last) => {
+    if (role === 'main') return plan({ tasks, questions: [] });
+    if (last.includes("Write the Worker's instructions")) return '{"difficulty": "simple", "instructions": "하라"}';
+    return last.includes('Task d:') || last.includes('could not be used') ? 'not json' : '{"verdict":"accept","summary":"완료"}';
+  });
+  const o = new Office({ gateway: gatewayStub, store: new BoardStore(dir), repository: async () => '', retryWaits: [], maxParallel: 2, onEvent: () => {},
+    work: async (task, instruction, difficulty, signal) => {
+      running++; most = Math.max(most, running);
+      await new Promise(resolve => setTimeout(resolve, 15));
+      running--;
+      return { outcome: { status: 'finished', summary: task.id }, evidence: 'e' };
+    } });
+  await o.plan('x', new AbortController().signal);
+  const project = await o.execute(new AbortController().signal);
+  assert.equal(most, 2);
+  assert.equal(project.status, 'failed');
+  assert.match(project.error, /Manager의 답을 읽지 못했습니다/);
+  assert.ok(!project.tasks.some(t => t.status === 'in_progress' || t.status === 'review'), 'nothing is left marked as running');
+  const saved = JSON.parse(await (await import('node:fs/promises')).readFile(join(dir, `${project.id}.json`), 'utf8'));
+  assert.deepEqual(saved.tasks.map(t => t.status), project.tasks.map(t => t.status), 'the board on disk is the latest state');
 });

@@ -85,6 +85,44 @@ struct Overview: Decodable, Equatable {
     let usage: UsageSummary
     let budgetUSD: String?
     let budgetWarning: String?
+    /// How each model has done lately, by "provider:model".
+    let health: [String: ModelHealth]?
+}
+
+struct ModelHealth: Decodable, Equatable {
+    let streak: Int
+    let lastError: String?
+    let restUntil: String?
+    let medianMs: Int?
+
+    var restingUntil: Date? { restUntil.flatMap { ISO8601DateFormatter.withFractions.date(from: $0) } }
+
+    /// A short note for the candidate list: usual time, or why and until when it rests.
+    var note: String? {
+        if let until = restingUntil, until > Date() {
+            let why: String
+            switch lastError {
+            case "timeout": why = "시간 초과"
+            case "slow": why = "느림"
+            case "rate_limit": why = "속도 제한"
+            case "not_found": why = "모델 없음 — 배정을 확인하세요"
+            case "quota": why = "할당량 소진"
+            default: why = "오류"
+            }
+            let minutes = max(1, Int(until.timeIntervalSinceNow / 60))
+            return "쉬는 중 · \(why) \(streak)회 연속 · \(minutes < 120 ? "\(minutes)분" : "\(minutes / 60)시간") 남음"
+        }
+        if let ms = medianMs { return "보통 \(ms < 10_000 ? String(format: "%.1f", Double(ms) / 1000) : "\(ms / 1000)")초" }
+        return nil
+    }
+}
+
+extension ISO8601DateFormatter {
+    static let withFractions: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
 }
 
 struct ModelChoice: Decodable, Identifiable, Equatable {

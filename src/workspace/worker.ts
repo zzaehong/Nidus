@@ -8,6 +8,7 @@ import type { CallTarget, GatewayRequest, GatewayResult } from '../gateway/gatew
 import type { RequestOptions } from '../types.js';
 import type { ToolOutcome } from './tools.js';
 import { workerSystem } from '../office/roles.js';
+import { DEFAULT_COMPACT, SUMMARY_SYSTEM, applySummary, clearOldResults, conversationChars, summaryCut, transcript, type CompactLimits } from './compact.js';
 
 /** The tools a Worker gets: the workspace VM's (WorkerTools) or the desk's (DeskTools). */
 export interface WorkerToolSet {
@@ -29,6 +30,8 @@ export type WorkerEvent =
   | { type: 'tool_call'; id: string; name: string; input: unknown }
   | { type: 'tool_result'; id: string; name: string; content: string; isError: boolean; ms: number }
   | { type: 'retry'; attempt: number; error: string; waitMs: number }
+  /** The conversation was made smaller: old tool results cleared, or the start summarized. */
+  | { type: 'compacted'; how: 'cleared' | 'summarized'; beforeChars: number; afterChars: number; model?: string }
   | { type: 'finished'; summary: string }
   | { type: 'stopped'; reason: 'user' | 'limit'; detail: string }
   | { type: 'failed'; error: string };
@@ -37,6 +40,8 @@ export type WorkerOutcome = { status: 'finished'; summary: string } | { status: 
 
 /** Errors worth another try: the provider or the network, not the request itself. */
 const TRANSIENT = new Set(['provider_error', 'rate_limit', 'network', 'timeout']);
+/** Errors of one model (missing, unsupported, out of quota): another candidate may well work. */
+const MODEL_FAULT = new Set(['not_found', 'unsupported', 'quota', 'invalid_response']);
 export const RETRY_WAITS = [5_000, 15_000];
 /** Rate limits pass after a while: wait longer (about five minutes in all) before giving up. */
 export const RATE_LIMIT_WAITS = [15_000, 30_000, 60_000, 90_000, 120_000];
@@ -68,7 +73,7 @@ export async function sendWithRetry(gateway: WorkerGateway, target: CallTarget, 
       // Slow providers take minutes for a long context, but a hung one should not hold the task.
       return await gateway.send({ ...target, ...(avoid.length ? { avoid } : {}) }, request, { signal, timeoutMs: 300_000 });
     } catch (error: any) {
-      if (signal.aborted || !TRANSIENT.has(error?.code)) throw error;
+      if (signal.aborted || !(TRANSIENT.has(error?.code) || MODEL_FAULT.has(error?.code))) throw error;
       const message = String(error.message ?? error);
       const ref: string | undefined = error.modelRef;
       // A model not yet known to be failing: pass it over and try another candidate now.
@@ -79,6 +84,8 @@ export async function sendWithRetry(gateway: WorkerGateway, target: CallTarget, 
         continue;
       }
       if (ref) cooling.set(ref, Date.now() + cooldownMs);
+      // Waiting does not fix a model that is missing or unsupported.
+      if (!TRANSIENT.has(error.code)) throw error;
       if (error.code === 'rate_limit') {
         if (rateWaited >= rateLimitWaits.length) throw error;
         const wait = rateLimitWaits[rateWaited++]!;
@@ -102,11 +109,17 @@ export class WorkerRun {
   readonly messages: Message[] = [];
   private modelCalls = 0;
   private toolCalls = 0;
+  /** Every instruction given, oldest first: a summary must not lose them. */
+  private readonly given: string[] = [];
+  /** After a failed summary, calls to wait before trying again. */
+  private summaryBackoff = 0;
+  /** Conversation length right after the last summary: the next waits for new turns. */
+  private summarizedAt = 0;
 
   constructor(
     private readonly gateway: WorkerGateway,
     private readonly tools: WorkerToolSet,
-    private readonly options: { task: string; difficulty: Difficulty; system?: string; limits?: Partial<WorkerLimits>; onEvent?: (event: WorkerEvent) => void; now?: () => number; retryWaits?: number[] },
+    private readonly options: { task: string; difficulty: Difficulty; system?: string; compact?: Partial<CompactLimits> | false; limits?: Partial<WorkerLimits>; onEvent?: (event: WorkerEvent) => void; now?: () => number; retryWaits?: number[] },
   ) {}
 
   private emit(event: WorkerEvent): void { this.options.onEvent?.(event); }
@@ -119,6 +132,38 @@ export class WorkerRun {
       (attempt, error, waitMs) => this.emit({ type: 'retry', attempt, error, waitMs }));
   }
 
+  /** Keeps the conversation small before a model call (see compact.ts). Never fails the run. */
+  private async compact(signal: AbortSignal): Promise<void> {
+    if (this.options.compact === false) return;
+    const limits = { ...DEFAULT_COMPACT, ...this.options.compact };
+    const before = conversationChars(this.messages);
+    if (clearOldResults(this.messages, limits)) {
+      this.emit({ type: 'compacted', how: 'cleared', beforeChars: before, afterChars: conversationChars(this.messages) });
+    }
+    const size = conversationChars(this.messages);
+    if (size <= limits.summarizeAboveChars) return;
+    if (this.summaryBackoff > 0) { this.summaryBackoff--; return; }
+    if (this.summarizedAt && this.messages.length < this.summarizedAt + 4) return;
+    const cut = summaryCut(this.messages, limits.keepMessages);
+    if (cut === null) return;
+    try {
+      const result = await sendWithRetry(this.gateway,
+        { role: 'worker', difficulty: this.options.difficulty, taskId: this.options.task },
+        { system: SUMMARY_SYSTEM, messages: [{ role: 'user', content: [{ type: 'text', text: `The Worker's conversation so far:\n\n${transcript(this.messages.slice(0, cut))}\n\nWrite the summary now.` }] }], maxOutputTokens: 4000 },
+        signal, this.options.retryWaits ? { waits: this.options.retryWaits, rateLimitWaits: this.options.retryWaits } : {});
+      const summary = result.response.content.filter((b): b is Extract<ContentBlock, { type: 'text' }> => b.type === 'text').map(b => b.text).join('\n').trim();
+      if (!summary) throw new Error('empty summary');
+      // Instructions still in the kept turns stay there; the earlier ones go into the header.
+      const kept = new Set(this.messages.slice(cut).flatMap(m => m.role === 'user' ? m.content.filter(b => b.type === 'text').map(b => (b as { text: string }).text) : []));
+      applySummary(this.messages, cut, summary.slice(0, 10_000), this.given.filter(text => !kept.has(text)));
+      this.summarizedAt = this.messages.length;
+      this.emit({ type: 'compacted', how: 'summarized', beforeChars: size, afterChars: conversationChars(this.messages), model: result.response.model });
+    } catch {
+      // Not worth stopping the work for: go on with the larger conversation, try again later.
+      this.summaryBackoff = 5;
+    }
+  }
+
   /** Gives an instruction (the first, or a follow-up in the same conversation) and works until done. */
   async run(instruction: string, signal: AbortSignal): Promise<WorkerOutcome> {
     const limits = { ...DEFAULT_LIMITS, ...this.options.limits };
@@ -127,6 +172,7 @@ export class WorkerRun {
     // Counts are per instruction: a follow-up gets a full budget again.
     this.modelCalls = 0; this.toolCalls = 0;
     this.messages.push({ role: 'user', content: [{ type: 'text', text: instruction }] });
+    this.given.push(instruction);
     this.emit({ type: 'instruction', text: instruction });
     const stop = (reason: 'user' | 'limit', detail: string): WorkerOutcome => { this.emit({ type: 'stopped', reason, detail }); return { status: 'stopped', reason, detail }; };
     try {
@@ -135,6 +181,8 @@ export class WorkerRun {
         if (this.modelCalls >= limits.modelCalls) return stop('limit', `모델 호출 ${limits.modelCalls}회 한도`);
         if (limits.ms > 0 && now() - started > limits.ms) return stop('limit', `실행 시간 ${Math.round(limits.ms / 60000)}분 한도`);
         this.modelCalls++;
+        await this.compact(signal);
+        if (signal.aborted) return stop('user', '사용자가 중지했습니다');
         const result = await this.call(signal);
         const { response } = result;
         const text = response.content.filter((b): b is Extract<ContentBlock, { type: 'text' }> => b.type === 'text').map(b => b.text).join('\n').trim();

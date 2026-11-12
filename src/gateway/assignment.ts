@@ -161,7 +161,7 @@ async function pick(table: AssignmentTable, target: AssignTarget, availability: 
 
   for (const [index, ref] of list.entries()) {
     const skip = (why: string) => skipped.push({ ref: refName(ref), why });
-    if (passOver.includes(refName(ref))) { skip('passed over for now (rate limited)'); continue; }
+    if (passOver.includes(refName(ref))) { skip('passed over for now (failing or slow lately)'); continue; }
     if (!await availability.hasKey(ref.provider)) { skip('no API key connected'); continue; }
     const model = await availability.cachedModel(ref.provider, ref.model);
     if (!model) { skip('model not in the cached model list'); continue; }

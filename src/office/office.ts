@@ -1,8 +1,10 @@
 // The instruction structure: the user instructs Main; Main plans (roadmap, teams, tasks with a
 // completion contract) and asks what it needs; after the user approves the plan, each task goes
 // to its team's Manager, who briefs a Worker and reviews the result; Main reports at the end.
-// Tasks run one at a time, in dependency order (the user's choice). A desk task runs without the
-// VM (text over the Vault's files); a vm task runs in the one shared workspace VM.
+// Tasks whose dependencies are done run side by side, each with its own Manager and Worker
+// conversation (up to maxParallel). A desk task runs without the VM (text over the Vault's
+// files); vm tasks share one workspace VM, which the work dependency hands to one Worker at a
+// time, so one Worker can use it while another's result is being reviewed.
 // Main and Managers work in text only.
 import type { Message } from '../gateway/contract.js';
 import type { Difficulty } from '../gateway/assignment.js';
@@ -29,7 +31,11 @@ export interface OfficeDeps {
   work(task: BoardTask, instruction: string, difficulty: Difficulty, signal: AbortSignal, revision: boolean): Promise<{ outcome: WorkerOutcome; evidence: string; output?: string }>;
   onEvent(event: OfficeEvent): void;
   retryWaits?: number[];
+  /** Tasks run at once, at most (default 3). */
+  maxParallel?: number;
 }
+
+export const DEFAULT_PARALLEL = 3;
 
 /** A Worker gets this many tries per task: the first and up to two revisions. */
 export const MAX_ATTEMPTS = 3;
@@ -43,10 +49,16 @@ export class Office {
     return this.deps.retryWaits ? { waits: this.deps.retryWaits, rateLimitWaits: this.deps.retryWaits } : {};
   }
 
+  /** Saves in order: with tasks side by side, a later state must never be overwritten by an earlier one. */
+  private saving: Promise<void> = Promise.resolve();
+
   private async publish(): Promise<void> {
     if (!this.project) return;
-    await this.deps.store.save(this.project);
-    this.deps.onEvent({ type: 'project', project: structuredClone(this.project) });
+    const snapshot = structuredClone(this.project);
+    const saved = this.saving.then(() => this.deps.store.save(snapshot));
+    this.saving = saved.catch(() => {});
+    await saved;
+    this.deps.onEvent({ type: 'project', project: snapshot });
   }
 
   /** A model call whose JSON answer is parsed; a malformed answer is asked for once more. */
@@ -119,16 +131,31 @@ export class Office {
     // A task interrupted by a stop starts over.
     for (const t of project.tasks) if (t.status === 'in_progress' || t.status === 'review') t.status = 'pending';
     await this.publish();
+    const limit = Math.max(1, this.deps.maxParallel ?? DEFAULT_PARALLEL);
+    const active = new Map<string, Promise<void>>();
+    const inner = new AbortController();
+    const stopAll = () => inner.abort();
+    signal.addEventListener('abort', stopAll, { once: true });
+    let failure: unknown;
     try {
       for (;;) {
-        if (signal.aborted) throw new Error('stopped');
+        if (signal.aborted) { await Promise.allSettled(active.values()); throw new Error('stopped'); }
         for (const t of unreachable(project)) {
           t.status = 'skipped';
           t.reviews.push({ verdict: 'blocked', feedback: '선행 Task가 완료되지 못해 진행하지 않았습니다', at: new Date().toISOString() });
         }
-        const next = readyTasks(project)[0];
-        if (!next) break;
-        await this.runTask(next, signal);
+        // Start what is ready, up to the limit; then wait for any running task to end.
+        for (const task of readyTasks(project)) {
+          if (active.size >= limit || failure) break;
+          active.set(task.id, this.runTask(task, inner.signal).catch(error => {
+            // One task's Manager failing ends the run: the others stop too.
+            failure ??= error;
+            inner.abort();
+          }).finally(() => active.delete(task.id)));
+        }
+        if (!active.size) break;
+        await Promise.race(active.values());
+        if (failure) { await Promise.allSettled(active.values()); throw failure; }
       }
       project.status = 'reviewing';
       await this.publish();
@@ -139,6 +166,10 @@ export class Office {
     } catch (error) {
       if (signal.aborted) project.status = 'stopped';
       else { project.status = 'failed'; project.error = String((error as Error).message ?? error); }
+      // A task cut short starts over when the project goes on.
+      for (const t of project.tasks) if (t.status === 'in_progress' || t.status === 'review') t.status = 'pending';
+    } finally {
+      signal.removeEventListener('abort', stopAll);
     }
     await this.publish();
     return project;

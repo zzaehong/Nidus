@@ -16,6 +16,7 @@ import { providerMetadata } from '../providers.js';
 import { providerIds } from '../types.js';
 import { classifyModel } from '../classification.js';
 import type { VaultPaths } from './vault.js';
+import { hedgeDelayMs, modelHealth, resting, type ModelHealth } from './health.js';
 
 export interface CallTarget {
   role: string;
@@ -42,6 +43,11 @@ export interface GatewayDependencies {
   models?: ModelStore;
   usage?: UsageLog;
   now?: () => Date;
+  /**
+   * When a call has not answered after this long, the next candidate is asked too and the first
+   * answer wins (default: from the model's usual time, 20-60 s). null turns this off.
+   */
+  hedgeDelayMs?: ((medianMs: number | null) => number) | null;
 }
 
 export interface SlotView {
@@ -61,6 +67,8 @@ export interface VaultOverview {
   usage: UsageSummary;
   budgetUSD: string | null;
   budgetWarning: string | null;
+  /** How each model has done lately ("provider:model"): resting models are passed over. */
+  health: Record<string, { streak: number; lastError: string | null; restUntil: string | null; medianMs: number | null }>;
 }
 
 export type CheckOutcome = 'passed' | 'failed' | 'inconclusive';
@@ -103,6 +111,7 @@ export class ModelGateway implements Availability {
   private readonly models: ModelStore;
   private readonly usage: UsageLog;
   private readonly now: () => Date;
+  private readonly hedgeDelay: ((medianMs: number | null) => number) | null;
   private readonly keys = new Map<ProviderId, string | null>();
 
   constructor(private readonly paths: VaultPaths, dependencies: GatewayDependencies) {
@@ -111,6 +120,7 @@ export class ModelGateway implements Availability {
     this.models = dependencies.models ?? new FileModelStore(paths.modelCache);
     this.now = dependencies.now ?? (() => new Date());
     this.usage = dependencies.usage ?? new UsageLog(paths.usageDb, this.now);
+    this.hedgeDelay = dependencies.hedgeDelayMs === undefined ? hedgeDelayMs : dependencies.hedgeDelayMs;
   }
 
   close(): void {
@@ -177,15 +187,64 @@ export class ModelGateway implements Availability {
   }
 
   /** Chooses the model for the role and difficulty, calls it and records the usage. */
+  /** How each model has done over the last day (failures in a row, rest, usual time). */
+  health(): Map<string, ModelHealth> {
+    return modelHealth(this.usage.recentCalls(new Date(this.now().getTime() - 24 * 3600_000)));
+  }
+
+  /**
+   * Chooses the model for the role and difficulty, calls it and records the usage.
+   * Models that keep failing rest for a while and are passed over while the slot has another
+   * candidate. A call that takes much longer than usual is sent to the next candidate as well;
+   * the first answer is used and the slower call is stopped and noted, so it moves back.
+   */
   async send(target: CallTarget, request: GatewayRequest, options: RequestOptions = {}): Promise<GatewayResult> {
-    const assignment = await this.assign({ role: target.role, difficulty: target.difficulty, needs: { tools: Boolean(request.tools?.length) }, avoid: target.avoid });
-    try {
-      return await this.call(assignment, target, request, options);
-    } catch (error) {
-      // Callers that switch models on rate limits need to know which one failed.
-      if (error && typeof error === 'object') (error as { modelRef?: string }).modelRef = `${assignment.provider}:${assignment.model}`;
-      throw error;
+    const health = this.health();
+    const avoid = [...new Set([...(target.avoid ?? []), ...resting(health, this.now())])];
+    const needs = { tools: Boolean(request.tools?.length) };
+    const first = await this.assign({ role: target.role, difficulty: target.difficulty, needs, avoid });
+    const firstRef = refName(first);
+    const tagged = (error: unknown, ref: string) => {
+      // Callers that switch models on failures need to know which one failed.
+      if (error && typeof error === 'object') (error as { modelRef?: string }).modelRef = ref;
+      return error;
+    };
+    const attempt = (assignment: Assignment) => {
+      const stop = new AbortController();
+      const signal = options.signal ? AbortSignal.any([options.signal, stop.signal]) : stop.signal;
+      const lost: { value: 'slow' | 'unused' | null } = { value: null };
+      const promise = this.call(assignment, target, request, { ...options, signal }, lost);
+      return { promise, ref: refName(assignment), cancel: (why: 'slow' | 'unused') => { lost.value = why; stop.abort(); } };
+    };
+    const a = attempt(first);
+    if (!this.hedgeDelay) return a.promise.catch(error => { throw tagged(error, a.ref); });
+    const delay = this.hedgeDelay(health.get(firstRef)?.medianMs ?? null);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<'late'>(resolve => { timer = setTimeout(() => resolve('late'), delay); });
+    const settled = a.promise.then(() => 'done' as const, () => 'done' as const);
+    if (await Promise.race([settled, late]) === 'done' || options.signal?.aborted) {
+      clearTimeout(timer);
+      return a.promise.catch(error => { throw tagged(error, a.ref); });
     }
+    let second: Assignment | null = null;
+    try { second = await assign(await loadTable(this.paths.modelsFile), { role: target.role, difficulty: target.difficulty, needs, avoid: [...avoid, firstRef] }, this); } catch {}
+    if (!second || refName(second) === firstRef) return a.promise.catch(error => { throw tagged(error, a.ref); });
+    const b = attempt(second);
+    const both = [a, b];
+    return new Promise<GatewayResult>((resolve, reject) => {
+      let failures = 0, firstError: unknown;
+      for (const run of both) {
+        run.promise.then(result => {
+          // The late first model is noted as slow; a backup that was not needed is not held against it.
+          for (const other of both) if (other !== run) other.cancel(other === a ? 'slow' : 'unused');
+          const note = `${a.ref}이(가) ${Math.round(delay / 1000)}초 안에 답하지 않아 ${b.ref}에게도 보냈고, ${run.ref}의 답을 썼습니다.`;
+          resolve({ ...result, warnings: [...result.warnings, { code: 'hedged', message: note }] });
+        }, error => {
+          if (run === a) firstError = error;
+          if (++failures === both.length) reject(tagged(firstError ?? error, a.ref));
+        });
+      }
+    });
   }
 
   /** Same call as send, delivered as stream events. Wires do not stream yet, so the response arrives whole. */
@@ -198,7 +257,7 @@ export class ModelGateway implements Availability {
     return result;
   }
 
-  private async call(assignment: Assignment, target: CallTarget, request: GatewayRequest, options: RequestOptions): Promise<GatewayResult> {
+  private async call(assignment: Assignment, target: CallTarget, request: GatewayRequest, options: RequestOptions, lost: { value: 'slow' | 'unused' | null } = { value: null }): Promise<GatewayResult> {
     const { provider, model } = assignment;
     const key = await this.key(provider);
     if (!key) throw new NidusError('missing_key', `No API key connected for ${provider}.`);
@@ -217,7 +276,9 @@ export class ModelGateway implements Availability {
     } catch (error) {
       const failure = error instanceof NidusError ? error : null;
       // Failed requests can still report billed tokens.
-      this.usage.record({ ...record, status: failure?.code === 'cancelled' ? 'cancelled' : 'failed', errorCode: failure?.code ?? 'provider_error',
+      // Stopped because another candidate answered first: noted as slow, which counts against it.
+      const errorCode = lost.value ?? failure?.code ?? 'provider_error';
+      this.usage.record({ ...record, status: failure?.code === 'cancelled' || lost.value ? 'cancelled' : 'failed', errorCode,
         usage: failure?.usage ?? null, costNano: calculatedCost(priceFor(provider, model), failure?.usage), durationMs: Date.now() - started });
       throw error;
     }
@@ -333,12 +394,15 @@ export class ModelGateway implements Availability {
       ...Object.entries(table.roles).map(([role, list]) => ({ id: `roles.${role}`, target: { role }, candidates: list.map(refName) })),
       ...difficulties.map(difficulty => ({ id: `worker.${difficulty}`, target: { role: 'worker', difficulty }, candidates: table.worker[difficulty].map(refName) })),
     ];
+    const health = this.health();
+    const now = this.now();
+    const avoid = resting(health, now);
     const slots: SlotView[] = [];
     for (const { id, target, candidates } of targets) {
       const view: SlotView = { id, role: target.role, difficulty: target.difficulty ?? null, candidates, resolved: null, reason: null, problem: null };
       try {
         // Workers do the tool work; main and managers plan and review in text.
-        const chosen = await assign(table, { ...target, needs: { tools: target.role === 'worker' } }, this);
+        const chosen = await assign(table, { ...target, needs: { tools: target.role === 'worker' }, avoid }, this);
         view.resolved = refName(chosen);
         view.reason = chosen.reason;
       } catch (error) {
@@ -356,7 +420,8 @@ export class ModelGateway implements Availability {
     const usage = this.usage.summary();
     const budget = await loadBudget(this.paths.budgetFile);
     return { vault: this.paths.root, slots, providers, usage, budgetUSD: budget === null ? null : dollars(budget),
-      budgetWarning: budgetWarning(budget, this.usage.monthCost(usage.month), usage.month)?.message ?? null };
+      budgetWarning: budgetWarning(budget, this.usage.monthCost(usage.month), usage.month)?.message ?? null,
+      health: Object.fromEntries([...health].map(([ref, h]) => [ref, { streak: h.streak, lastError: h.lastError, restUntil: h.restUntil && h.restUntil > now ? h.restUntil.toISOString() : null, medianMs: h.medianMs }])) };
   }
 
   /** Text models of a provider with their tool support, for choosing candidates. */
