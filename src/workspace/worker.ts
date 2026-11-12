@@ -10,7 +10,7 @@ import type { ToolOutcome } from './tools.js';
 import { workerSystem } from '../office/roles.js';
 import { DEFAULT_COMPACT, SUMMARY_SYSTEM, applySummary, clearOldResults, conversationChars, summaryCut, transcript, type CompactLimits } from './compact.js';
 
-/** The tools a Worker gets: the workspace VM's (WorkerTools) or the desk's (DeskTools). */
+/** The tools a Worker gets: the workspace VM's (WorkerTools) or a text task's (TextTools). */
 export interface WorkerToolSet {
   readonly specs: ToolSpec[];
   run(call: ToolCallBlock, signal?: AbortSignal): Promise<ToolOutcome>;

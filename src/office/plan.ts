@@ -48,8 +48,9 @@ export function parsePlan(answer: string): Plan {
     if (!contract.acceptance.length) throw new PlanError(`task ${t?.id}: at least one acceptance criterion`);
     const team = id(t?.team, 'task team');
     if (!teamIds.has(team)) throw new PlanError(`task ${t?.id}: unknown team ${team}`);
-    if (t?.where !== undefined && t.where !== 'desk' && t.where !== 'vm') throw new PlanError(`task ${t?.id}: where must be "desk" or "vm"`);
-    return { id: id(t?.id, 'task id'), team, title: text(t?.title, 'task title', 200), where: t?.where === 'desk' ? 'desk' as const : 'vm' as const, contract, dependsOn: list(t?.dependsOn ?? [], 'dependsOn', 12).map(d => id(d, 'dependency')) };
+    // "desk" is what text tasks were called before 2026-11-13.
+    if (t?.where !== undefined && t.where !== 'text' && t.where !== 'vm' && t.where !== 'desk') throw new PlanError(`task ${t?.id}: where must be "text" or "vm"`);
+    return { id: id(t?.id, 'task id'), team, title: text(t?.title, 'task title', 200), where: t?.where === 'text' || t?.where === 'desk' ? 'text' as const : 'vm' as const, contract, dependsOn: list(t?.dependsOn ?? [], 'dependsOn', 12).map(d => id(d, 'dependency')) };
   });
   if (!tasks.length) throw new PlanError('at least one task');
   const ids = new Set<string>();
@@ -90,11 +91,11 @@ export const PLAN_FORMAT = [
   '- summary: what will be delivered.',
   '- roadmap: the main steps, in order (short phrases).',
   '- teams: 1-4 teams this request needs (id, name, focus). Prefer fewer teams.',
-  '- tasks: 1-12 tasks. Each is a unit a Worker can finish and a Manager can check: id, team, title, where ("desk" or "vm"), goal, scope, constraints, acceptance (observable criteria, a list), verification (how to check them), dependsOn (ids of tasks that must finish first).',
-  '- where: "desk" whenever the task only needs thinking and writing over the request, the user\'s answers, earlier results and the repository\'s files. "vm" only when it must run commands or code, create or change files in the repository, or use the internet or a browser. A request that needs no vm task never starts the VM. If the user wants a deliverable saved as a file in their repository, a vm task must write it.',
+  '- tasks: 1-12 tasks. Each is a unit a Worker can finish and a Manager can check: id, team, title, where ("text" or "vm"), goal, scope, constraints, acceptance (observable criteria, a list), verification (how to check them), dependsOn (ids of tasks that must finish first).',
+  '- where: "text" whenever the task only needs thinking and writing over the request, the user\'s answers, earlier results and the repository\'s files. "vm" only when it must run commands or code, create or change files in the repository, or use the internet or a browser. A request that needs no vm task never starts the VM. If the user wants a deliverable saved as a file in their repository, a vm task must write it.',
   '- questions: only what you truly need from the user before starting. Ask none if the request is clear.',
   'Ids are lowercase letters, digits and dashes. Answer with one JSON object only:',
-  '{"summary": "...", "roadmap": ["..."], "teams": [{"id": "research", "name": "...", "focus": "..."}], "tasks": [{"id": "t1", "team": "research", "title": "...", "where": "desk", "goal": "...", "scope": "...", "constraints": "...", "acceptance": ["..."], "verification": "...", "dependsOn": []}], "questions": ["..."]}',
+  '{"summary": "...", "roadmap": ["..."], "teams": [{"id": "research", "name": "...", "focus": "..."}], "tasks": [{"id": "t1", "team": "research", "title": "...", "where": "text", "goal": "...", "scope": "...", "constraints": "...", "acceptance": ["..."], "verification": "...", "dependsOn": []}], "questions": ["..."]}',
 ].join('\n');
 
 export function planRequest(instruction: string, repository: string): string {
@@ -117,7 +118,7 @@ function projectContext(project: Project, task: BoardTask): string {
     `Other tasks:\n${others || '(none)'}`,
     '',
     `Task ${task.id}: ${task.title}`,
-    `Runs at: ${placeOf(task) === 'desk' ? 'desk (no VM: reads the repository, writes a text deliverable)' : 'vm (the shared workspace VM)'}`,
+    `Runs at: ${placeOf(task) === 'text' ? 'text (no VM: reads the repository, writes a text deliverable)' : 'vm (the shared workspace VM)'}`,
     `Goal: ${task.contract.goal}`,
     `Scope: ${task.contract.scope || '-'}`,
     `Constraints: ${task.contract.constraints || '-'}`,
@@ -142,7 +143,7 @@ export function workerBrief(project: Project, task: BoardTask): string {
 }
 
 export function briefRequest(project: Project, task: BoardTask): string {
-  return `${projectContext(project, task)}\n\nWrite the Worker's instructions: what to do, where (paths, sites), how to verify each acceptance criterion, and what to report in its summary. For a vm task say what to commit; for a desk task say what the deliverable must contain (the deliverables listed above are given to the Worker with your instructions). Be concrete. Answer with one JSON object only:\n{"difficulty": "simple|normal|complex", "instructions": "..."}`;
+  return `${projectContext(project, task)}\n\nWrite the Worker's instructions: what to do, where (paths, sites), how to verify each acceptance criterion, and what to report in its summary. For a vm task say what to commit; for a text task say what the deliverable must contain (the deliverables listed above are given to the Worker with your instructions). Be concrete. Answer with one JSON object only:\n{"difficulty": "simple|normal|complex", "instructions": "..."}`;
 }
 
 export function reviewRequest(project: Project, task: BoardTask, evidence: string, attempt: number, maxAttempts: number): string {
@@ -165,6 +166,6 @@ export function finalRequest(project: Project): string {
   }).join('\n');
   const changes = project.workspace
     ? 'The combined changes in the repository will be shown to them for approval.'
-    : 'No task used the VM, so nothing in their repository changed; the user reads desk deliverables in the task list, so point to them rather than repeating them in full.';
+    : 'No task used the VM, so nothing in their repository changed; the user reads text deliverables in the task list, so point to them rather than repeating them in full.';
   return `All tasks have ended. Request: ${project.instruction}\nPlan: ${project.summary}\n\nTasks:\n${tasks}\n\nWrite the final report for the user, in their language: what was delivered, how it was checked, what is unfinished or blocked and why, and what they should review or decide next. ${changes} Plain text, concise.`;
 }

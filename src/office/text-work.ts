@@ -1,4 +1,4 @@
-// The desk: where a Worker does a task that needs no VM. It reads the Vault's committed files
+// Text tasks: where a Worker does a task that needs no VM. It reads the Vault's committed files
 // (the same state a VM workspace would start from) through git on the Mac, read only, and
 // produces a text deliverable. No shell, no internet, no browser, nothing written to the Vault:
 // what it makes reaches the user in the Task Board and later Tasks, not as file changes.
@@ -8,7 +8,7 @@ import type { ToolOutcome } from '../workspace/tools.js';
 import type { WorkerToolSet } from '../workspace/worker.js';
 
 /** Read-only access to the repository's committed files. */
-export interface DeskSource {
+export interface TextSource {
   list(path: string): Promise<string[]>;
   /** The file's text, or null if there is no such file; binary files are refused. */
   read(path: string): Promise<string | null>;
@@ -21,7 +21,7 @@ const MAX_DELIVERABLE = 60_000;
 const object = (properties: Record<string, unknown>, required: string[] = []) => ({ type: 'object', properties, required, additionalProperties: false });
 const str = (description: string) => ({ type: 'string', description });
 
-export const DESK_TOOLS: ToolSpec[] = [
+export const TEXT_TOOLS: ToolSpec[] = [
   { name: 'list_files', description: 'List files in the user\'s repository (committed state), optionally under a directory.', inputSchema: object({ path: str('Directory, default the whole repository') }) },
   { name: 'read_file', description: `Read a text file of the repository. Returns up to ${MAX_READ} characters from offset.`, inputSchema: object({ path: str('Path relative to the repository root'), offset: { type: 'integer', description: 'Character offset, default 0' } }, ['path']) },
   { name: 'search_files', description: 'Search the repository\'s text files for a regular expression (case-insensitive). Returns matching lines with file and line number.', inputSchema: object({ pattern: str('Regular expression'), path: str('Directory or file to search, default everything') }, ['pattern']) },
@@ -40,13 +40,13 @@ function repoPath(value: unknown, field = 'path'): string {
 
 const clip = (text: string, limit: number) => text.length > limit ? `${text.slice(0, limit)}\n… (${text.length - limit} more characters cut)` : text;
 
-export class DeskTools implements WorkerToolSet {
+export class TextTools implements WorkerToolSet {
   /** The deliverable so far; undefined until the Worker writes one. */
   deliverable: string | undefined;
 
-  constructor(private readonly source: DeskSource) {}
+  constructor(private readonly source: TextSource) {}
 
-  get specs(): ToolSpec[] { return DESK_TOOLS; }
+  get specs(): ToolSpec[] { return TEXT_TOOLS; }
 
   async run(call: ToolCallBlock): Promise<ToolOutcome> {
     if (call.inputError) return { content: `Invalid call: ${call.inputError}`, isError: true };
@@ -86,7 +86,7 @@ export class DeskTools implements WorkerToolSet {
           return { content: 'Task finished.', isError: false, finish: input.summary };
         }
         default:
-          return { content: `Unknown tool ${call.name}. At the desk there are only: ${DESK_TOOLS.map(t => t.name).join(', ')}.`, isError: true };
+          return { content: `Unknown tool ${call.name}. A text task has only: ${TEXT_TOOLS.map(t => t.name).join(', ')}.`, isError: true };
       }
     } catch (error: any) {
       return { content: `Error: ${String(error?.message ?? error)}`, isError: true };
@@ -95,7 +95,7 @@ export class DeskTools implements WorkerToolSet {
 }
 
 /** The Vault's committed files through git, read only. */
-export function gitSource(root: string): DeskSource {
+export function gitSource(root: string): TextSource {
   const git = (args: string[], maxBuffer = 32 * 1024 * 1024) => new Promise<{ code: number; stdout: Buffer }>((resolve, reject) => {
     execFile('git', ['-c', 'core.quotepath=off', ...args], { cwd: root, encoding: 'buffer', maxBuffer }, (error, stdout) => {
       const code = (error as any)?.code;

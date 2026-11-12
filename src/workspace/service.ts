@@ -24,7 +24,7 @@ import { WorkerTools } from './tools.js';
 import { WorkerRun, type WorkerEvent, type WorkerOutcome } from './worker.js';
 import { Office, type OfficeEvent } from '../office/office.js';
 import { BoardStore, placeOf, type BoardTask, type Project } from '../office/board.js';
-import { DeskTools, gitSource } from '../office/desk.js';
+import { TextTools, gitSource } from '../office/text-work.js';
 import { workerSystem } from '../office/roles.js';
 import { workerBrief } from '../office/plan.js';
 import { snapshot, receive, approve, discard, pending, type Review } from './sync.js';
@@ -51,8 +51,8 @@ let worker: WorkerRun | undefined;
 let running: AbortController | undefined;
 let review: Review | null = null;
 let office: Office | undefined;
-/** Per board task: its Worker conversation, its commits (vm), its desk tools (desk), the last outcome. */
-interface TaskRun { run: WorkerRun; desk?: DeskTools; last?: WorkerOutcome; trail: string[]; /** vm: [before, after] commits of each attempt. */ ranges: [string, string][] }
+/** Per board task: its Worker conversation, its commits (vm), its text tools (text), the last outcome. */
+interface TaskRun { run: WorkerRun; textTools?: TextTools; last?: WorkerOutcome; trail: string[]; /** vm: [before, after] commits of each attempt. */ ranges: [string, string][] }
 const taskRuns = new Map<string, TaskRun>();
 /** "Allow every site" as the user set it; it holds for the task about to run or running. */
 let allowAll = false;
@@ -380,8 +380,8 @@ async function inspect(command: string): Promise<string> {
 
 /** Office -> Worker: runs or continues a board task where it runs, returns evidence. */
 async function work(task: BoardTask, instruction: string, difficulty: Difficulty, signal: AbortSignal, revision: boolean) {
-  if (placeOf(task) === 'desk') return deskWork(task, instruction, difficulty, signal, revision);
-  // vm tasks take the shared workspace and browser in turn; Managers and desk tasks go on meanwhile.
+  if (placeOf(task) === 'text') return textWork(task, instruction, difficulty, signal, revision);
+  // vm tasks take the shared workspace and browser in turn; Managers and text tasks go on meanwhile.
   if (vmHolder) log(`${task.id}: ${vmHolder}이(가) VM을 쓰는 중이라 차례를 기다립니다`);
   return withVm(task.id, signal, () => vmWork(task, instruction, difficulty, signal, revision));
 }
@@ -410,7 +410,7 @@ function taskConversation(task: BoardTask, instruction: string, revision: boolea
     const before = entry.last;
     const next = make(entry);
     entry.run = next.run;
-    entry.desk = next.desk;
+    entry.textTools = next.textTools;
     if (before && before.status !== 'finished') {
       instruction = `${workerBrief(office!.project!, task)}\n\nA previous attempt ended early (${before.status === 'stopped' ? before.detail : before.error}). ${earlyNote(next)}\n\n${instruction}`;
     }
@@ -423,25 +423,25 @@ function workerEvents(task: BoardTask, trail: string[]) {
   return (e: WorkerEvent) => {
     if (e.type === 'tool_call') trail.push(`${e.name} ${JSON.stringify(e.input).slice(0, 160)}`);
     if (e.type === 'tool_result' && e.isError && trail.length) trail[trail.length - 1] += ' -> error';
-    event('worker', { task: placeOf(task) === 'desk' ? undefined : saved?.task, boardTask: task.id, where: placeOf(task), ...clipEvent(e) });
+    event('worker', { task: placeOf(task) === 'text' ? undefined : saved?.task, boardTask: task.id, where: placeOf(task), ...clipEvent(e) });
   };
 }
 
-async function deskWork(task: BoardTask, instruction: string, difficulty: Difficulty, signal: AbortSignal, revision: boolean) {
+async function textWork(task: BoardTask, instruction: string, difficulty: Difficulty, signal: AbortSignal, revision: boolean) {
   const made = taskConversation(task, instruction, revision, previous => {
     const trail = previous?.trail ?? [];
-    const tools = new DeskTools(gitSource(paths!.root));
+    const tools = new TextTools(gitSource(paths!.root));
     // A new conversation keeps what the last one wrote, so "continue" has something to build on.
-    tools.deliverable = previous?.desk?.deliverable;
-    return { run: new WorkerRun(gateway!, tools, { task: office!.project!.id, difficulty, system: workerSystem('desk', office!.project!.id), onEvent: workerEvents(task, trail) }), desk: tools, trail, ranges: [] };
-  }, next => next.desk?.deliverable ? `The deliverable written so far (kept; replace or append to it):\n${next.desk.deliverable.slice(0, 20000)}` : 'Nothing was delivered yet.');
+    tools.deliverable = previous?.textTools?.deliverable;
+    return { run: new WorkerRun(gateway!, tools, { task: office!.project!.id, difficulty, system: workerSystem('text', office!.project!.id), onEvent: workerEvents(task, trail) }), textTools: tools, trail, ranges: [] };
+  }, next => next.textTools?.deliverable ? `The deliverable written so far (kept; replace or append to it):\n${next.textTools.deliverable.slice(0, 20000)}` : 'Nothing was delivered yet.');
   const { entry } = made;
   const outcome = await entry.run.run(made.instruction, signal);
   entry.last = outcome;
   if (signal.aborted) return { outcome, evidence: '' };
-  const output = entry.desk!.deliverable ?? (outcome.status === 'finished' ? outcome.summary : '');
+  const output = entry.textTools!.deliverable ?? (outcome.status === 'finished' ? outcome.summary : '');
   const shown = output.length > 15000 ? `${output.slice(0, 15000)}\n… (${output.length - 15000} more characters)` : output;
-  return { outcome, output, evidence: `This task ran at the desk (no VM): nothing in the repository changed; the deliverable is the result.\n\nTool calls (latest last):\n${entry.trail.slice(-40).join('\n') || '(none)'}\n\nDeliverable:\n${shown || '(none)'}` };
+  return { outcome, output, evidence: `This was a text task (no VM): nothing in the repository changed; the deliverable is the result.\n\nTool calls (latest last):\n${entry.trail.slice(-40).join('\n') || '(none)'}\n\nDeliverable:\n${shown || '(none)'}` };
 }
 
 async function vmWork(task: BoardTask, instruction: string, difficulty: Difficulty, signal: AbortSignal, revision: boolean) {
@@ -500,8 +500,8 @@ async function ensureProjectWorkspace() {
   proxy!.resetSession();
   proxy!.setAllowAll(allowAll);
   project.workspace = task;
-  // VM conversations belonged to the old workspace; desk ones carry on.
-  for (const [id, run] of taskRuns) if (!run.desk) taskRuns.delete(id);
+  // VM conversations belonged to the old workspace; text ones carry on.
+  for (const [id, run] of taskRuns) if (!run.textTools) taskRuns.delete(id);
   log(`프로젝트 작업 공간 ${task}: Vault의 커밋 ${snap.base.slice(0, 8)}을(를) VM으로 가져왔습니다`);
 }
 

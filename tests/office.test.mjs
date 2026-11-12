@@ -132,27 +132,27 @@ test('plans are checked: teams, ids, dependencies and cycles', () => {
   assert.equal(parsePlan('Here you go:\n' + plan() + '\nThanks').tasks.length, 2, 'JSON inside prose is found');
 });
 
-test('where a task runs: desk or vm (vm when not said); anything else is refused', () => {
+test('where a task runs: text or vm (vm when not said); anything else is refused', () => {
   const tasks = [
-    { id: 't1', team: 'research', title: '정리', where: 'desk', goal: 'g', acceptance: ['a'] },
+    { id: 't1', team: 'research', title: '정리', where: 'text', goal: 'g', acceptance: ['a'] },
     { id: 't2', team: 'research', title: '저장', goal: 'g', acceptance: ['a'], dependsOn: ['t1'] },
   ];
   const parsed = parsePlan(plan({ teams: [{ id: 'research', name: 'r', focus: 'f' }], tasks }));
-  assert.deepEqual(parsed.tasks.map(t => t.where), ['desk', 'vm']);
+  assert.deepEqual(parsed.tasks.map(t => t.where), ['text', 'vm']);
   assert.throws(() => parsePlan(plan({ teams: [{ id: 'research', name: 'r', focus: 'f' }], tasks: [{ ...tasks[0], where: 'cloud' }] })), /where must be/);
-  assert.match(planRequest('x', 'y'), /"desk" whenever/);
+  assert.match(planRequest('x', 'y'), /"text" whenever/);
 });
 
-test('a desk deliverable is kept on the task and handed to the Worker and Manager of tasks that depend on it', async t => {
+test('a text deliverable is kept on the task and handed to the Worker and Manager of tasks that depend on it', async t => {
   const tasks = [
-    { id: 't1', team: 'research', title: '초안', where: 'desk', goal: 'g', acceptance: ['a'] },
+    { id: 't1', team: 'research', title: '초안', where: 'text', goal: 'g', acceptance: ['a'] },
     { id: 't2', team: 'docs', title: '파일로 저장', where: 'vm', goal: 'g', acceptance: ['a'], dependsOn: ['t1'] },
   ];
   const { o, g, works } = await office(t, (role, last) => {
     if (role === 'main') return last.includes('All tasks have ended') ? '보고' : plan({ tasks, questions: [] });
     if (last.includes("Write the Worker's instructions")) return '{"difficulty": "simple", "instructions": "하라"}';
     return '{"verdict":"accept","summary":"완료"}';
-  }, task => task.where === 'desk'
+  }, task => task.where === 'text'
     ? { outcome: { status: 'finished', summary: '초안 완료' }, evidence: 'deliverable', output: '# 초안 본문' }
     : { outcome: { status: 'finished', summary: '저장' }, evidence: 'diff' });
   await o.plan('초안을 쓰고 저장', new AbortController().signal);
@@ -166,11 +166,11 @@ test('a desk deliverable is kept on the task and handed to the Worker and Manage
   assert.match(brief, /Runs at: vm/);
   assert.match(brief, /# 초안 본문/, 'so does its Manager');
   const final = g.calls.at(-1).request.messages[0].content[0].text;
-  assert.match(final, /Deliverable \(desk\):\n# 초안 본문/);
+  assert.match(final, /Deliverable \(text\):\n# 초안 본문/);
 });
 
-test('a project with only desk tasks reports that nothing in the repository changed', async t => {
-  const tasks = [{ id: 't1', team: 'research', title: '요약', where: 'desk', goal: 'g', acceptance: ['a'] }];
+test('a project with only text tasks reports that nothing in the repository changed', async t => {
+  const tasks = [{ id: 't1', team: 'research', title: '요약', where: 'text', goal: 'g', acceptance: ['a'] }];
   const { o, g } = await office(t, (role, last) => {
     if (role === 'main') return last.includes('All tasks have ended') ? '보고' : plan({ tasks, questions: [] });
     if (last.includes("Write the Worker's instructions")) return '{"difficulty": "simple", "instructions": "하라"}';
@@ -200,8 +200,8 @@ test('every Main and Manager call carries its role\'s full system prompt, the fi
 test('independent tasks run side by side, each with its own Manager calls; a dependent task waits', async t => {
   const tasks = [
     { id: 'a', team: 'research', title: 'A', where: 'vm', goal: 'g', acceptance: ['x'] },
-    { id: 'b', team: 'docs', title: 'B', where: 'desk', goal: 'g', acceptance: ['x'] },
-    { id: 'c', team: 'docs', title: 'C', where: 'desk', goal: 'g', acceptance: ['x'], dependsOn: ['a', 'b'] },
+    { id: 'b', team: 'docs', title: 'B', where: 'text', goal: 'g', acceptance: ['x'] },
+    { id: 'c', team: 'docs', title: 'C', where: 'text', goal: 'g', acceptance: ['x'], dependsOn: ['a', 'b'] },
   ];
   const timeline = [];
   let running = 0, most = 0;
@@ -225,7 +225,7 @@ test('independent tasks run side by side, each with its own Manager calls; a dep
 });
 
 test('at most maxParallel tasks run at once; a failing Manager stops the others and fails the project', async t => {
-  const tasks = ['a', 'b', 'c', 'd'].map(id => ({ id, team: 'research', title: id.toUpperCase(), where: 'desk', goal: 'g', acceptance: ['x'] }));
+  const tasks = ['a', 'b', 'c', 'd'].map(id => ({ id, team: 'research', title: id.toUpperCase(), where: 'text', goal: 'g', acceptance: ['x'] }));
   let running = 0, most = 0;
   const dir = await (await import('node:fs/promises')).mkdtemp(join(tmpdir(), 'nidus-office-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
@@ -249,4 +249,12 @@ test('at most maxParallel tasks run at once; a failing Manager stops the others 
   assert.ok(!project.tasks.some(t => t.status === 'in_progress' || t.status === 'review'), 'nothing is left marked as running');
   const saved = JSON.parse(await (await import('node:fs/promises')).readFile(join(dir, `${project.id}.json`), 'utf8'));
   assert.deepEqual(saved.tasks.map(t => t.status), project.tasks.map(t => t.status), 'the board on disk is the latest state');
+});
+
+test('plans and boards from before the rename ("desk") still read as text tasks', async () => {
+  const { placeOf } = await import('../dist/office/board.js');
+  const parsed = parsePlan(plan({ teams: [{ id: 'research', name: 'r', focus: 'f' }], tasks: [{ id: 't1', team: 'research', title: 'x', where: 'desk', goal: 'g', acceptance: ['a'] }] }));
+  assert.equal(parsed.tasks[0].where, 'text');
+  assert.equal(placeOf({ where: 'desk' }), 'text');
+  assert.equal(placeOf({}), 'vm');
 });

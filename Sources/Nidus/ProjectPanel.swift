@@ -138,10 +138,10 @@ private struct TaskRow: View {
                 Image(systemName: icon).foregroundStyle(color).frame(width: 14)
                 Text(task.title).font(.callout).lineLimit(expanded ? nil : 1)
                 Spacer()
-                Text(task.onDesk ? "VM 없이" : "VM").font(.caption2).foregroundStyle(.secondary)
+                Text(task.isText ? "텍스트" : "VM").font(.caption2).foregroundStyle(.secondary)
                     .padding(.horizontal, 5).padding(.vertical, 1)
                     .background(.quaternary, in: Capsule())
-                    .help(task.onDesk ? "VM 없이 Vault의 커밋된 파일을 읽고 글로 결과물을 냅니다" : "VM 작업 공간에서 셸·브라우저·인터넷을 써서 작업합니다")
+                    .help(task.isText ? "텍스트 작업: VM 없이 Vault의 커밋된 파일을 읽고 글로 결과물을 냅니다" : "VM 작업 공간에서 셸·브라우저·인터넷을 써서 작업합니다")
                 if task.attempts > 1 { Text("\(task.attempts)차").font(.caption2).foregroundStyle(.secondary) }
                 Button { expanded.toggle() } label: { Image(systemName: expanded ? "chevron.up" : "chevron.down") }.buttonStyle(.plain).foregroundStyle(.secondary)
             }

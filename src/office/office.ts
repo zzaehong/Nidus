@@ -2,7 +2,7 @@
 // completion contract) and asks what it needs; after the user approves the plan, each task goes
 // to its team's Manager, who briefs a Worker and reviews the result; Main reports at the end.
 // Tasks whose dependencies are done run side by side, each with its own Manager and Worker
-// conversation (up to maxParallel). A desk task runs without the VM (text over the Vault's
+// conversation (up to maxParallel). A text task runs without the VM (text over the Vault's
 // files); vm tasks share one workspace VM, which the work dependency hands to one Worker at a
 // time, so one Worker can use it while another's result is being reviewed.
 // Main and Managers work in text only.
@@ -24,9 +24,9 @@ export interface OfficeDeps {
   /** A short description of the Vault's repository for Main (file list, README). */
   repository(): Promise<string>;
   /**
-   * Has a Worker do a task (or continue it after a review) where it runs (desk or the shared
+   * Has a Worker do a task (or continue it after a review) where it runs (a text task, or the shared
    * workspace VM) and returns what happened with evidence for the Manager: summary, tool trail,
-   * and the changes since the task began (vm) or the deliverable (desk, also as output).
+   * and the changes since the task began (vm) or the deliverable (text, also as output).
    */
   work(task: BoardTask, instruction: string, difficulty: Difficulty, signal: AbortSignal, revision: boolean): Promise<{ outcome: WorkerOutcome; evidence: string; output?: string }>;
   onEvent(event: OfficeEvent): void;
@@ -212,7 +212,7 @@ export class Office {
         await this.publish();
         return;
       }
-      instruction = `Your Manager reviewed the work and asks for changes (attempt ${attempt + 1} of ${MAX_ATTEMPTS}):\n${review.value.feedback}\n\n${task.where === 'desk' ? 'Fix this and finish again with the complete, updated deliverable and summary.' : 'Fix this, verify the acceptance criteria again, commit, and finish with an updated summary.'}`;
+      instruction = `Your Manager reviewed the work and asks for changes (attempt ${attempt + 1} of ${MAX_ATTEMPTS}):\n${review.value.feedback}\n\n${task.where === 'text' ? 'Fix this and finish again with the complete, updated deliverable and summary.' : 'Fix this, verify the acceptance criteria again, commit, and finish with an updated summary.'}`;
     }
   }
 

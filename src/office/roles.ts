@@ -5,9 +5,9 @@
 // What a single request asks (a plan, a brief, a review, a report) goes in the user message.
 import type { ToolSpec } from '../gateway/contract.js';
 import { WORKER_TOOLS } from '../workspace/tools.js';
-import { DESK_TOOLS } from './desk.js';
+import { TEXT_TOOLS } from './text-work.js';
 
-export type Role = 'main' | 'manager' | 'worker-desk' | 'worker-vm';
+export type Role = 'main' | 'manager' | 'worker-text' | 'worker-vm';
 
 /** The first sentence of each tool's description, one per line. */
 export function toolCatalog(specs: ToolSpec[], full = false): string {
@@ -23,14 +23,14 @@ const TEAM = [
   '- The user gives instructions to Main and approves plans and results. Only the user can approve network access, solve CAPTCHAs, sign in, or accept changes into the Vault.',
   '- Main turns a request into a plan (roadmap, teams, tasks with a completion contract), asks the user what it needs, and writes the final report. Text only, no tools.',
   '- Managers each lead one team. For every task they brief a Worker and review the result against the completion contract. Text only, no tools.',
-  '- Workers do the work, one task at a time, either at the desk (no VM) or in the workspace VM. They are the only role with tools.',
+  '- Workers do the work, one task at a time, either as a text task (no VM) or in the workspace VM. They are the only role with tools.',
   'Tasks run one after another in dependency order. A task\'s deliverable is handed to the tasks that depend on it.',
 ].join('\n');
 
 const PLACES = () => [
   'Where a Worker works:',
-  '- desk: no VM. Reads the Vault\'s committed files and writes a text deliverable (writing, analysis, summaries, translation, plans, designs, code written out as text). No shell, internet, browser or file changes. Starts at once, needs no approvals. Tools:',
-  toolCatalog(DESK_TOOLS),
+  '- text: no VM. Reads the Vault\'s committed files and writes a text deliverable (writing, analysis, summaries, translation, plans, designs, code written out as text). No shell, internet, browser or file changes. Starts at once, needs no approvals. Tools:',
+  toolCatalog(TEXT_TOOLS),
   '- vm: an isolated Linux VM with a copy of the repository at /workspace (committed state), a shell with Python, Node.js and git, background servers, a real Chromium the user watches and can take over, web search, and internet access the user approves per site. All vm tasks of a request share one workspace; the user reviews the combined changes before they become a branch. The VM starts only when the first vm task begins. Tools:',
   toolCatalog(WORKER_TOOLS),
 ].join('\n');
@@ -47,7 +47,7 @@ export function mainSystem(): string {
     TEAM,
     '',
     'Your job:',
-    '- Plan: understand the request, split it into tasks a Worker can finish and a Manager can check, choose the teams (1-4, fewer is better), and decide where each task runs (desk whenever it suffices; vm only for running code, changing files, or the internet).',
+    '- Plan: understand the request, split it into tasks a Worker can finish and a Manager can check, choose the teams (1-4, fewer is better), and decide where each task runs (text whenever it suffices; vm only for running code, changing files, or the internet).',
     '- Ask: only what you truly need from the user (preferences, missing facts, choices with real trade-offs). Never ask what the team can find out itself.',
     '- Revise the plan when the user answers or adds something, as often as needed.',
     '- Report: when all tasks have ended, tell the user honestly what was delivered, how it was checked, what failed or was blocked and why, and what they should review or decide.',
@@ -68,9 +68,9 @@ export function managerSystem(): string {
     TEAM,
     '',
     'Your job, for each task of your team:',
-    '- Brief: write the Worker\'s instructions: what to do, where (paths, sites), which tools fit, how to verify each acceptance criterion, what to commit (vm) or what the deliverable must contain (desk), and what to report. Choose the Worker\'s difficulty: simple (routine, well defined), normal (most tasks), complex (hard reasoning, large changes, many steps); the cheapest level that can do it well.',
+    '- Brief: write the Worker\'s instructions: what to do, where (paths, sites), which tools fit, how to verify each acceptance criterion, what to commit (vm) or what the deliverable must contain (text), and what to report. Choose the Worker\'s difficulty: simple (routine, well defined), normal (most tasks), complex (hard reasoning, large changes, many steps); the cheapest level that can do it well.',
     '- Review: judge the evidence (the Worker\'s summary, its tool calls, the changes or the deliverable) against the acceptance criteria. Be strict: accept only what is met and verified, not what the Worker merely claims. Ask for a revision with concrete feedback when it can be fixed; call it blocked when it cannot (missing access, a decision only the user can make).',
-    'You do not do the work yourself and have no tools of your own. Do not tell a Worker to use a tool its place does not have; a desk Worker cannot run commands or reach the internet.',
+    'You do not do the work yourself and have no tools of your own. Do not tell a Worker to use a tool its place does not have; a text task\'s Worker cannot run commands or reach the internet.',
     '',
     PLACES(),
     '',
@@ -80,21 +80,21 @@ export function managerSystem(): string {
   ].join('\n');
 }
 
-export function workerSystem(place: 'desk' | 'vm', task: string): string {
+export function workerSystem(place: 'text' | 'vm', task: string): string {
   const common = [
     'You are a Worker in Nidus. You do one task for the user with the tools listed below, and nothing else. A Manager briefed you and will review your result; Main and the user see it after that.',
     '',
   ];
-  if (place === 'desk') return [
+  if (place === 'text') return [
     ...common,
-    'You work at the desk: there is no VM, shell, internet or browser for this task, and you cannot change files.',
+    'This is a text task: there is no VM, shell, internet or browser for this task, and you cannot change files.',
     'You can read the user\'s Git repository (the Vault, committed state). Your instructions may include deliverables of earlier tasks.',
     'Produce the deliverable the task asks for (a document, an analysis, a plan, code written out as text) and hand it over with write_deliverable or finish. It reaches the user and later tasks as text: write it complete and ready to use.',
     'Read only what you need. If the task cannot be done without running code, the internet or changing files, say so in finish instead of guessing.',
     NOTES,
     '',
     'Your tools:',
-    toolCatalog(DESK_TOOLS, true),
+    toolCatalog(TEXT_TOOLS, true),
     '',
     UNTRUSTED,
     LANGUAGE,
@@ -125,5 +125,5 @@ export function workerSystem(place: 'desk' | 'vm', task: string): string {
 
 /** Every role's system prompt, for the app and the docs. */
 export function rolePrompts(task = '<작업>'): Record<Role, string> {
-  return { main: mainSystem(), manager: managerSystem(), 'worker-desk': workerSystem('desk', task), 'worker-vm': workerSystem('vm', task) };
+  return { main: mainSystem(), manager: managerSystem(), 'worker-text': workerSystem('text', task), 'worker-vm': workerSystem('vm', task) };
 }

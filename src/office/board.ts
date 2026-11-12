@@ -24,10 +24,10 @@ export interface CompletionContract {
 export interface TaskReview { verdict: 'accept' | 'revise' | 'blocked'; feedback: string; at: string }
 
 /**
- * Where a Task runs. desk: a Worker without the VM (text work over the Vault's committed files,
+ * Where a Task runs. text: a Worker without the VM (text work over the Vault's committed files,
  * no shell, internet or file changes); vm: the shared workspace VM. Older boards lack it: vm.
  */
-export type TaskPlace = 'desk' | 'vm';
+export type TaskPlace = 'text' | 'vm';
 
 export interface BoardTask {
   id: string;
@@ -42,7 +42,7 @@ export interface BoardTask {
   attempts: number;
   reviews: TaskReview[];
   result?: { summary: string; verification: string };
-  /** A desk Worker's deliverable (the text it produced), passed on to dependent Tasks. */
+  /** A text task's deliverable (the text it produced), passed on to dependent Tasks. */
   output?: string;
   startedAt?: string;
   finishedAt?: string;
@@ -96,7 +96,8 @@ export class BoardStore {
   }
 }
 
-export const placeOf = (task: BoardTask): TaskPlace => task.where === 'desk' ? 'desk' : 'vm';
+/** Boards saved before the rename say "desk" for text tasks. */
+export const placeOf = (task: BoardTask): TaskPlace => task.where === 'text' || (task.where as string) === 'desk' ? 'text' : 'vm';
 
 /** Tasks whose dependencies are done, in plan order. */
 export function readyTasks(project: Project): BoardTask[] {
