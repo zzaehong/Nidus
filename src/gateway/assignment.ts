@@ -25,6 +25,8 @@ export interface AssignTarget {
   /** Required for the worker role, rejected for every other role. */
   difficulty?: Difficulty;
   needs?: { tools?: boolean };
+  /** Candidates to pass over for now (e.g. just rate limited), as "provider:model". Used only if another candidate is available. */
+  avoid?: string[];
 }
 
 export interface Assignment extends ModelRef {
@@ -146,11 +148,20 @@ function slot(table: AssignmentTable, target: AssignTarget): { list: ModelRef[];
  * from another slot: an empty or unusable slot is an error the user resolves.
  */
 export async function assign(table: AssignmentTable, target: AssignTarget, availability: Availability): Promise<Assignment> {
+  // Prefer a candidate that is not being avoided; if every one is, fall back to the usual order.
+  if (target.avoid?.length) {
+    try { return await pick(table, target, availability, target.avoid); } catch {}
+  }
+  return pick(table, target, availability, []);
+}
+
+async function pick(table: AssignmentTable, target: AssignTarget, availability: Availability, passOver: string[]): Promise<Assignment> {
   const { list, name } = slot(table, target);
   const skipped: Assignment['skipped'] = [];
 
   for (const [index, ref] of list.entries()) {
     const skip = (why: string) => skipped.push({ ref: refName(ref), why });
+    if (passOver.includes(refName(ref))) { skip('passed over for now (rate limited)'); continue; }
     if (!await availability.hasKey(ref.provider)) { skip('no API key connected'); continue; }
     const model = await availability.cachedModel(ref.provider, ref.model);
     if (!model) { skip('model not in the cached model list'); continue; }

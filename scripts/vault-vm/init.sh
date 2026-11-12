@@ -17,6 +17,8 @@ mkdir -p /proc /sys /dev /run /sessions
 mount -t proc proc /proc
 mount -t sysfs sysfs /sys
 mount -t devtmpfs devtmpfs /dev
+# Loopback only: there is no network device. The egress relay listens here.
+ip link set lo up 2>/dev/null || ifconfig lo 127.0.0.1 up
 stty -F /dev/hvc0 raw -echo || { echo NIDUS_BLOCKED terminal; exec sleep 86400; }
 # No unprivileged user namespaces; only the root supervisor creates isolation boundaries.
 echo 0 > /proc/sys/user/max_user_namespaces || { echo NIDUS_BLOCKED userns; exec sleep 86400; }
@@ -75,6 +77,13 @@ run_session() {
  echo "NIDUS_RESULT $id $status $clean $reason $peak $out $err"
 }
 if test -d /opt/development; then
+ # Alpine's install hooks never ran (the image is built on the host), so most BusyBox command
+ # links are missing (base64, dirname, tail, seq, du, ...). Link every applet the root lacks.
+ for applet in $(chroot /opt/development /bin/busybox --list 2>/dev/null); do
+  case "$applet" in *[!a-z0-9_.-]*|'') continue;; esac
+  for dir in bin sbin usr/bin usr/sbin; do test -e "/opt/development/$dir/$applet" && continue 2; done
+  ln -s /bin/busybox "/opt/development/usr/bin/$applet"
+ done
  mount --bind /opt/development /opt/development || { echo NIDUS_BLOCKED development-root; exec sleep 86400; }
  for path in proc sys dev run sessions; do
   mkdir -p "/opt/development/$path"
@@ -105,7 +114,34 @@ if test -n "$cache_mode"; then
  fi
  if ! test "$(cat /persistent/owner-id)" = "$disk_id" || ! test -d /persistent/packages || test -L /persistent/packages; then echo NIDUS_BLOCKED cache-owner; exec sleep 86400; fi
  mount --bind /persistent/packages /opt/development/cache || { echo NIDUS_BLOCKED cache-view; exec sleep 86400; }
+ # The workspace browser's profile (cookies, sign-ins) survives VM restarts on the same disk.
+ if ! test -e /persistent/browser; then mkdir /persistent/browser && chown 1000:1000 /persistent/browser && chmod 700 /persistent/browser; fi
+ if test -d /persistent/browser && ! test -L /persistent/browser; then
+  mkdir -p /opt/development/browser-profile
+  mount --bind /persistent/browser /opt/development/browser-profile || { echo NIDUS_BLOCKED browser-profile; exec sleep 86400; }
+ fi
+ # Task workspaces (Git repositories the AI works in) survive VM restarts on the same disk.
+ # Executable, unlike the package cache: build tools run scripts from the workspace.
+ if ! test -e /persistent/workspaces; then mkdir -m 755 /persistent/workspaces; fi
+ if test -d /persistent/workspaces && ! test -L /persistent/workspaces; then
+  mkdir -p /opt/development/workspaces
+  mount --bind /persistent/workspaces /opt/development/workspaces && mount -o remount,bind,nosuid,nodev,exec /opt/development/workspaces || { echo NIDUS_BLOCKED workspaces; exec sleep 86400; }
+ fi
  echo NIDUS_CACHE_READY
+fi
+# Without a cache disk, workspaces live in memory until the VM stops.
+test -d /opt/development && mkdir -p -m 755 /opt/development/workspaces
+# The only way out: a virtio console port to the host's Egress Proxy. Restarted if it dies.
+if test -d /opt/development && grep -qx nidus.egress /sys/class/virtio-ports/*/name 2>/dev/null; then
+ ( while :; do
+    chroot /opt/development /usr/bin/python3 /nidus/egress-relay.py >/run/egress.log 2>&1
+    echo "NIDUS_EGRESS exited $? $(tail -c 400 /run/egress.log | tr '\n' ' ')"
+    sleep 1
+   done ) &
+ # Report ready only once the relay accepts connections (3128 = 0x0C38 in /proc/net/tcp).
+ n=0; while ! grep -q ':0C38 00000000:0000 0A' /proc/net/tcp && test "$n" -lt 200; do sleep 0.05; n=$((n+1)); done
+ touch /run/egress
+ echo NIDUS_EGRESS relay
 fi
 echo 'NIDUS_READY cgroup2'
 while read -r action id payload seconds snapshot; do
@@ -118,6 +154,43 @@ while read -r action id payload seconds snapshot; do
   browser-input)
     case "$id" in ''|*[!a-f0-9-]*) continue;; esac
     if test -p "/run/$id.input"; then printf '%s\n' "$payload" > "/run/$id.input"; fi
+    ;;
+  service-start)
+    # A background process (dev server, watcher) beside Shell sessions; at most four.
+    case "$id" in ''|*[!a-f0-9-]*) echo 'NIDUS_REJECT id'; continue;; esac
+    case "$seconds" in ''|*[!0-9]*) echo "NIDUS_REJECT service $id"; continue;; esac
+    if ! test -d /opt/development || test "$(ls /run | grep -c '^service-')" -ge 4; then echo "NIDUS_REJECT service $id"; continue; fi
+    touch "/run/service-$id"
+    chroot /opt/development /usr/bin/python3 /nidus/session.py "$id" "$payload" "$seconds" service &
+    ;;
+  workspace-import|workspace-export)
+    # id: task name, payload: one-time transfer token, seconds: size, snapshot: sha256 or base commit.
+    case "$id" in ''|*[!a-z0-9-]*) echo 'NIDUS_REJECT id'; continue;; esac
+    if ! test -d /opt/development || ! test -e /run/egress; then echo "NIDUS_WORKSPACE_FAILED $id unavailable"; continue; fi
+    if test "$action" = workspace-import; then
+     chroot /opt/development /usr/bin/python3 /nidus/workspace-sync.py import "$id" "$payload" "$seconds" "$snapshot" &
+    else
+     chroot /opt/development /usr/bin/python3 /nidus/workspace-sync.py export "$id" "$payload" "$snapshot" &
+    fi
+    ;;
+  workspace-remove)
+    case "$id" in ''|*[!a-z0-9-]*) echo 'NIDUS_REJECT id'; continue;; esac
+    rm -rf "/opt/development/workspaces/$id"
+    if test "$(cat /run/workspace-current 2>/dev/null)" = "$id"; then rm -f /run/workspace-current; fi
+    echo "NIDUS_WORKSPACE_REMOVED $id"
+    ;;
+  workspace-select)
+    # After a VM restart: the task's workspace is still on the disk; make it current again.
+    case "$id" in ''|*[!a-z0-9-]*) echo 'NIDUS_REJECT id'; continue;; esac
+    if test -d "/opt/development/workspaces/$id/.git" && ! test -L "/opt/development/workspaces/$id"; then printf '%s' "$id" > /run/workspace-current; echo "NIDUS_WORKSPACE_SELECTED $id"; else echo "NIDUS_WORKSPACE_FAILED $id missing"; fi
+    ;;
+  browser-start)
+    # The resident workspace browser: beside Shell sessions, one at a time, needs the link.
+    case "$id" in ''|*[!a-f0-9-]*) echo 'NIDUS_REJECT id'; continue;; esac
+    case "$seconds" in ''|*[!0-9]*) echo "NIDUS_REJECT browser $id"; continue;; esac
+    if test -e /run/browser || ! test -d /opt/development || ! test -e /run/egress; then echo "NIDUS_REJECT browser $id"; continue; fi
+    touch /run/browser
+    unshare -m -f /bin/sh -c 'mount --make-rprivate / && cd /opt/development && mkdir -p .old-root && pivot_root . .old-root && /bin/busybox umount -l /.old-root && exec /usr/bin/python3 /nidus/session.py "$@"' sh "$id" - "$seconds" resident &
     ;;
   execute-dev|execute-browser|browser-open)
     case "$id" in ''|*[!a-f0-9-]*) echo 'NIDUS_REJECT id'; continue;; esac
@@ -143,9 +216,11 @@ while read -r action id payload seconds snapshot; do
   cancel) case "$id" in ''|*[!a-zA-Z0-9-]*) continue;; esac
     touch "/run/$id.cancel"; if test -d "$CG/$id"; then echo 1 > "$CG/$id/cgroup.kill"; fi ;;
   stop)
-    if test -e /run/busy; then echo NIDUS_REJECT busy; continue; fi
+    if test -e /run/busy || test -e /run/browser || ls /run | grep -q '^service-'; then echo NIDUS_REJECT busy; continue; fi
     if test -n "$cache_mode"; then
      sync
+     if mountpoint -q /opt/development/browser-profile; then umount /opt/development/browser-profile || { echo NIDUS_BLOCKED cache-unmount; continue; }; fi
+     if mountpoint -q /opt/development/workspaces; then umount /opt/development/workspaces || { echo NIDUS_BLOCKED cache-unmount; continue; }; fi
      umount /opt/development/cache && umount /persistent || { echo NIDUS_BLOCKED cache-unmount; continue; }
      echo NIDUS_CACHE_CLEAN
     fi

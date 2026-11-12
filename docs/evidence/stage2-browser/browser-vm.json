@@ -1,0 +1,113 @@
+{
+  "at": "2026-11-11T14:02:20.966Z",
+  "scope": "real Apple Virtualization VM and guest Chromium; approvals by a fixed test policy; user input sent by this script",
+  "checks": [
+    {
+      "name": "browser starts beside the shell, over the link",
+      "startMs": 1435,
+      "tabs": [
+        {
+          "id": "D7499762B6B70330CBBAC869857D1A24",
+          "url": "about:blank",
+          "title": "about:blank",
+          "active": true
+        }
+      ],
+      "pass": true,
+      "ms": 1435,
+      "asked": []
+    },
+    {
+      "name": "Mac page through host.nidus after port approval",
+      "title": "Form",
+      "elements": 3,
+      "pass": true,
+      "ms": 885,
+      "asked": [
+        "mac:55745"
+      ]
+    },
+    {
+      "name": "AI types and submits a form",
+      "url": "http://host.nidus:55745/search?q=Mac+mini",
+      "pass": true,
+      "ms": 1900,
+      "asked": []
+    },
+    {
+      "name": "a link to a new tab opens in front, closing it returns",
+      "tabs": 2,
+      "pass": true,
+      "ms": 2132,
+      "asked": []
+    },
+    {
+      "name": "public site through the Egress Proxy after approval",
+      "title": "Example Domain",
+      "pass": true,
+      "ms": 895,
+      "asked": [
+        "example.com"
+      ]
+    },
+    {
+      "name": "refused site is a page, not a crash",
+      "navigationError": "net::ERR_TUNNEL_CONNECTION_FAILED",
+      "pageState": "browser_access_blocked",
+      "pass": true,
+      "ms": 725,
+      "asked": [
+        "www.wikipedia.org"
+      ]
+    },
+    {
+      "name": "a server inside the VM opens directly, without the proxy",
+      "title": "VM site",
+      "pass": true,
+      "ms": 12263,
+      "asked": []
+    },
+    {
+      "name": "screen streams while the page changes",
+      "fps": 15,
+      "kbPerFrame": 7,
+      "cap": 15,
+      "size": "1280x800",
+      "pass": true,
+      "ms": 7208,
+      "asked": []
+    },
+    {
+      "name": "user takes over: AI waits, user input reaches the page, AI continues after hand back",
+      "value": "abc 한글",
+      "pass": true,
+      "ms": 2223,
+      "asked": []
+    },
+    {
+      "name": "profile survives a browser restart",
+      "text": "cookie=[nidus=kept]",
+      "pass": true,
+      "ms": 2681,
+      "asked": []
+    },
+    {
+      "name": "profile survives a VM restart on the same disk",
+      "text": "cookie=[nidus=kept]",
+      "pass": true,
+      "ms": 20918,
+      "asked": []
+    }
+  ],
+  "frames": {
+    "total": 2
+  },
+  "browserCleanup": "CONFIRMED",
+  "stopped": "STOP_CONFIRMED",
+  "asked": [
+    "mac:55745",
+    "example.com",
+    "www.wikipedia.org"
+  ],
+  "pass": true
+}

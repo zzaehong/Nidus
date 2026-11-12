@@ -1,4 +1,6 @@
-// Independent offline VM owner. No Vault mount, network device, Host shell, or recovery.
+// Independent VM owner. No Vault mount, network device, Host shell, or recovery.
+// Optional egress: with NIDUS_EGRESS_FD set, that inherited socket becomes the virtio console
+// port "nidus.egress", the guest's only way out (see src/workspace/egress-channel.ts).
 import Foundation
 import Virtualization
 import Darwin
@@ -45,6 +47,17 @@ final class Manager: NSObject, VZVirtualMachineDelegate {
             guard lockedFD >= 0, fstat(lockedFD,&info)==0, (info.st_mode & S_IFMT)==S_IFREG, info.st_nlink==1, info.st_uid==getuid(), (info.st_mode & 0o077)==0, info.st_size==512*1024*1024 else {throw NSError(domain:"cache",code:2)}
             let attachment=try VZDiskImageStorageDeviceAttachment(url:URL(fileURLWithPath:disk),readOnly:false,cachingMode:.uncached,synchronizationMode:.full)
             config.storageDevices=[VZVirtioBlockDeviceConfiguration(attachment:attachment)]
+        }
+        if let text = ProcessInfo.processInfo.environment["NIDUS_EGRESS_FD"], let fd = Int32(text), fd > 2 {
+            var info = stat()
+            guard fstat(fd, &info) == 0, (info.st_mode & S_IFMT) == S_IFSOCK else { throw NSError(domain: "egress", code: 1) }
+            let link = FileHandle(fileDescriptor: fd, closeOnDealloc: false)
+            let port = VZVirtioConsolePortConfiguration()
+            port.name = "nidus.egress"
+            port.attachment = VZFileHandleSerialPortAttachment(fileHandleForReading: link, fileHandleForWriting: link)
+            let console = VZVirtioConsoleDeviceConfiguration()
+            console.ports[0] = port
+            config.consoleDevices = [console]
         }
         config.entropyDevices = [VZVirtioEntropyDeviceConfiguration()]
         try config.validate(); vm = VZVirtualMachine(configuration: config)
