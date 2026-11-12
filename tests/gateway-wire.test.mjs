@@ -150,6 +150,19 @@ test('Chat Completions: tool messages, reasoning passback and provider quirks', 
   assert.equal(mistral.requests[0].body.tool_choice, 'any');
 });
 
+test('NVIDIA: reasoning is kept for one tool call but not sent back with several in one turn', async () => {
+  const call = (id, city) => ({ id, type: 'function', function: { name: 'get_weather', arguments: JSON.stringify({ city }) } });
+  const twoCalls = { model: 'm1', choices: [{ finish_reason: 'tool_calls', message: { content: null, reasoning_content: 'thinking', tool_calls: [call('call_1', 'Seoul'), call('call_2', 'Busan')] } }], usage: {} };
+  const done = { choices: [{ finish_reason: 'stop', message: { content: 'Sunny.' } }], usage: {} };
+  const nvidia = fakeProviders(twoCalls, done);
+  const first = await nvidia.client.send('nvidia', 'k', base);
+  const results = first.content.filter(b => b.type === 'tool_call').map(b => ({ type: 'tool_result', callId: b.id, content: 'Sunny', isError: false }));
+  await nvidia.client.send('nvidia', 'k', { ...base, messages: [...base.messages, { role: 'assistant', content: first.content }, { role: 'user', content: results }] });
+  const assistant = nvidia.requests[1].body.messages.find(m => m.role === 'assistant');
+  assert.equal(assistant.tool_calls.length, 2);
+  assert.equal(assistant.reasoning_content, undefined);
+});
+
 test('Cloudflare uses the account endpoint and unpacked token', async () => {
   const { client, requests } = fakeProviders({ choices: [{ finish_reason: 'stop', message: { content: 'Hi' } }], usage: {} });
   const key = JSON.stringify({ token: 'cf-token', accountId: 'a'.repeat(32) });

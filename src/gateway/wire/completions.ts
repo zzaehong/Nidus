@@ -49,6 +49,10 @@ function messages(request: ModelRequest, provider: ProviderId): unknown[] {
       }
     }
     if (!text && !calls.length) continue;
+    // NVIDIA's hosted models answer HTTP 500 when reasoning comes back with more than one tool
+    // call in the same turn (checked 2026-11-12 with deepseek-v4.1-flash; one call is fine).
+    // Without the reasoning the turn is still complete: the calls and their results remain.
+    if (provider === 'nvidia' && calls.length > 1) state = {};
     result.push({ role: 'assistant', content: text || null, ...(calls.length ? { tool_calls: calls } : {}), ...state });
   }
   return result;
