@@ -49,11 +49,65 @@ export function workerSystemPrompt(task: string): string {
 /** Errors worth another try: the provider or the network, not the request itself. */
 const TRANSIENT = new Set(['provider_error', 'rate_limit', 'network', 'timeout']);
 export const RETRY_WAITS = [5_000, 15_000];
+/** Rate limits pass after a while: wait longer (about five minutes in all) before giving up. */
+export const RATE_LIMIT_WAITS = [15_000, 30_000, 60_000, 90_000, 120_000];
+/** How long a rate-limited model is passed over when its slot has another candidate. */
+export const COOLDOWN_MS = 90_000;
+/** Models that just hit a rate limit, shared by every caller in this process (Main, Managers, Workers). */
+const cooling = new Map<string, number>();
 
 const pause = (ms: number, signal: AbortSignal) => new Promise<void>(resolve => {
   const timer = setTimeout(resolve, ms);
   signal.addEventListener('abort', () => { clearTimeout(timer); resolve(); }, { once: true });
 });
+
+export interface RetryPolicy { waits?: number[]; rateLimitWaits?: number[]; cooldownMs?: number }
+
+/**
+ * One model call through the Gateway, tried again on transient provider errors. A model that
+ * failed that way (rate limit, server error, network, timeout) cools down and the next candidate
+ * of the same slot is used at once; only when there is none does the call wait (longer for rate
+ * limits). Free endpoints fail often; a slot with candidates from two providers keeps going.
+ */
+export async function sendWithRetry(gateway: WorkerGateway, target: CallTarget, request: GatewayRequest, signal: AbortSignal, policy: RetryPolicy | number[] = {}, onRetry?: (attempt: number, error: string, waitMs: number) => void): Promise<GatewayResult> {
+  const { waits = RETRY_WAITS, rateLimitWaits = RATE_LIMIT_WAITS, cooldownMs = COOLDOWN_MS } = Array.isArray(policy) ? { waits: policy, rateLimitWaits: policy } : policy;
+  let waited = 0, rateWaited = 0, switches = 0;
+  for (let attempt = 1; ; attempt++) {
+    const now = Date.now();
+    const avoid = [...cooling].filter(([, until]) => until > now).map(([ref]) => ref);
+    try {
+      // Slow providers take minutes for a long context, but a hung one should not hold the task.
+      return await gateway.send({ ...target, ...(avoid.length ? { avoid } : {}) }, request, { signal, timeoutMs: 300_000 });
+    } catch (error: any) {
+      if (signal.aborted || !TRANSIENT.has(error?.code)) throw error;
+      const message = String(error.message ?? error);
+      const ref: string | undefined = error.modelRef;
+      // A model not yet known to be failing: pass it over and try another candidate now.
+      if (ref && !avoid.includes(ref) && switches < 8) {
+        cooling.set(ref, Date.now() + cooldownMs);
+        switches++;
+        onRetry?.(attempt, `${message} (${ref} 잠시 쉬게 하고 다른 후보로)`, 0);
+        continue;
+      }
+      if (ref) cooling.set(ref, Date.now() + cooldownMs);
+      if (error.code === 'rate_limit') {
+        if (rateWaited >= rateLimitWaits.length) throw error;
+        const wait = rateLimitWaits[rateWaited++]!;
+        onRetry?.(attempt, message, wait);
+        await pause(wait, signal);
+      } else {
+        if (waited >= waits.length) throw error;
+        const wait = waits[waited++]!;
+        onRetry?.(attempt, message, wait);
+        await pause(wait, signal);
+      }
+      if (signal.aborted) throw error;
+    }
+  }
+}
+
+/** Test seam: forget which models are cooling down. */
+export function resetCooling(): void { cooling.clear(); }
 
 export class WorkerRun {
   readonly messages: Message[] = [];
@@ -68,23 +122,12 @@ export class WorkerRun {
 
   private emit(event: WorkerEvent): void { this.options.onEvent?.(event); }
 
-  private async call(signal: AbortSignal): Promise<GatewayResult> {
-    const waits = this.options.retryWaits ?? RETRY_WAITS;
-    for (let attempt = 0; ; attempt++) {
-      try {
-        return await this.gateway.send(
-          { role: 'worker', difficulty: this.options.difficulty, taskId: this.options.task },
-          { system: workerSystemPrompt(this.options.task), messages: this.messages, tools: this.tools.specs },
-          // Slow providers take minutes for a long context; the user can always stop the task.
-          { signal, timeoutMs: 600_000 },
-        );
-      } catch (error: any) {
-        if (signal.aborted || attempt >= waits.length || !TRANSIENT.has(error?.code)) throw error;
-        this.emit({ type: 'retry', attempt: attempt + 1, error: String(error.message ?? error), waitMs: waits[attempt]! });
-        await pause(waits[attempt]!, signal);
-        if (signal.aborted) throw error;
-      }
-    }
+  private call(signal: AbortSignal): Promise<GatewayResult> {
+    return sendWithRetry(this.gateway,
+      { role: 'worker', difficulty: this.options.difficulty, taskId: this.options.task },
+      { system: workerSystemPrompt(this.options.task), messages: this.messages, tools: this.tools.specs },
+      signal, this.options.retryWaits ? { waits: this.options.retryWaits, rateLimitWaits: this.options.retryWaits } : {},
+      (attempt, error, waitMs) => this.emit({ type: 'retry', attempt, error, waitMs }));
   }
 
   /** Gives an instruction (the first, or a follow-up in the same conversation) and works until done. */

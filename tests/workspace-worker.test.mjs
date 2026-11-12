@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { WorkerRun } from '../dist/workspace/worker.js';
+import { WorkerRun, resetCooling as resetCoolingForTests } from '../dist/workspace/worker.js';
 import { WorkerTools, describePage } from '../dist/workspace/tools.js';
 
 const usage = { inputTokens: 10, outputTokens: 5, totalTokens: 15, cachedInputTokens: null, cacheWriteTokens: null, reasoningTokens: null };
@@ -80,6 +80,7 @@ test('limits and the user stop the worker; gateway errors fail it', async () => 
 });
 
 test('transient provider errors are retried; other errors are not', async () => {
+  resetCoolingForTests();
   const flaky = Object.assign(new Error('Provider request failed (HTTP 500, provider_error).'), { code: 'provider_error' });
   const events = [];
   const g = gateway([flaky, { content: [call('c1', 'finish', { summary: 'ok' })] }]);
@@ -156,4 +157,33 @@ test('background services start in /workspace with a log, and stop by name', asy
   assert.equal((await tools.run(call('c3', 'stop_service', { name: 'db' }))).isError, true);
   assert.match((await tools.run(call('c4', 'start_service', { name: 'Bad Name', command: 'x' }))).content, /service name/);
   assert.match((await tools.run(call('c5', 'shell', { command: 'npm ci', timeout_seconds: 5000 }))).content, /exit code 0/);
+});
+
+test('a rate-limited model is passed over for another candidate at once; with none left the call waits', async () => {
+  const { sendWithRetry, resetCooling } = await import('../dist/workspace/worker.js');
+  const { assign, parseTable } = await import('../dist/gateway/assignment.js');
+  resetCooling();
+  const limited = ref => Object.assign(new Error('Provider request failed (HTTP 429, rate_limit).'), { code: 'rate_limit', modelRef: ref });
+  // Two candidates: a is limited, b answers.
+  const seen = [];
+  const two = { async send(target) { seen.push(target.avoid ?? []); if (!(target.avoid ?? []).includes('gemini:a')) throw limited('gemini:a'); return { response: { content: [], usage }, costUSD: null, warnings: [] }; } };
+  const retries = [];
+  await sendWithRetry(two, { role: 'main' }, { messages: [] }, new AbortController().signal, { waits: [1], rateLimitWaits: [1] }, (n, e, wait) => retries.push(wait));
+  assert.deepEqual(seen, [[], ['gemini:a']]);
+  assert.deepEqual(retries, [0], 'switched without waiting');
+  // Only one candidate, and it stays limited: wait, then give up.
+  resetCooling();
+  let calls = 0;
+  const one = { async send() { calls++; throw limited('gemini:only'); } };
+  await assert.rejects(sendWithRetry(one, { role: 'main' }, { messages: [] }, new AbortController().signal, { waits: [1], rateLimitWaits: [1, 1] }), /rate_limit/);
+  assert.equal(calls, 4, 'first call, one switch attempt to the same model, then two waits');
+  resetCooling();
+
+  // Assignment: avoided candidates are passed over while another exists.
+  const table = parseTable({ version: 1, roles: { main: ['gemini:a', 'nvidia:b'], 'lead-manager': [], manager: [] }, worker: { simple: [], normal: [], complex: [] } });
+  const model = { capabilities: { chat: 'supported', tools: 'supported' }, limits: { outputTokens: null } };
+  const availability = { hasKey: async () => true, cachedModel: async () => model, toolsVerified: async () => true };
+  assert.equal((await assign(table, { role: 'main', avoid: ['gemini:a'] }, availability)).model, 'b');
+  assert.equal((await assign(table, { role: 'main', avoid: ['gemini:a', 'nvidia:b'] }, availability)).model, 'a', 'all avoided: usual order');
+  assert.equal((await assign(table, { role: 'main' }, availability)).model, 'a');
 });

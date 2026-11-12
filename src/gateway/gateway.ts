@@ -20,6 +20,8 @@ import type { VaultPaths } from './vault.js';
 export interface CallTarget {
   role: string;
   difficulty?: Difficulty;
+  /** Candidates to pass over if another one is available ("provider:model"). */
+  avoid?: string[];
   agentId?: string;
   taskId?: string;
 }
@@ -176,8 +178,14 @@ export class ModelGateway implements Availability {
 
   /** Chooses the model for the role and difficulty, calls it and records the usage. */
   async send(target: CallTarget, request: GatewayRequest, options: RequestOptions = {}): Promise<GatewayResult> {
-    const assignment = await this.assign({ role: target.role, difficulty: target.difficulty, needs: { tools: Boolean(request.tools?.length) } });
-    return this.call(assignment, target, request, options);
+    const assignment = await this.assign({ role: target.role, difficulty: target.difficulty, needs: { tools: Boolean(request.tools?.length) }, avoid: target.avoid });
+    try {
+      return await this.call(assignment, target, request, options);
+    } catch (error) {
+      // Callers that switch models on rate limits need to know which one failed.
+      if (error && typeof error === 'object') (error as { modelRef?: string }).modelRef = `${assignment.provider}:${assignment.model}`;
+      throw error;
+    }
   }
 
   /** Same call as send, delivered as stream events. Wires do not stream yet, so the response arrives whole. */
