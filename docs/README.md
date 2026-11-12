@@ -16,6 +16,7 @@
 - [Agent Vault](architecture/CONCEPT.md)
 - [1단계 설계 — Model Gateway와 Model Assignment](architecture/STAGE1_MODEL_GATEWAY.md)
 - [2단계 설계 — Agent Workspace](architecture/STAGE2_AGENT_WORKSPACE.md)
+- [3단계 설계 — AI Office](architecture/STAGE3_AI_OFFICE.md)
 
 ## Provider 연결과 모델 분류
 
