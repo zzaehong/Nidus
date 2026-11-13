@@ -103,7 +103,6 @@ struct WelcomeView: View {
 enum VaultSection: String, CaseIterable, Identifiable {
     case main = "Main"
     case work = "작업"
-    case library = "Library"
     case staff = "직원"
     case assignment = "모델 배정"
     case providers = "Provider"
@@ -118,7 +117,6 @@ enum VaultSection: String, CaseIterable, Identifiable {
         case .main: return "bubble.left.and.bubble.right"
         case .work: return "hammer"
         case .staff: return "person.3"
-        case .library: return "books.vertical"
         }
     }
 }
@@ -155,14 +153,13 @@ struct VaultView: View {
             .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 260)
         } detail: {
             if let overview = store.overview {
-                switch VaultSection(rawValue: storedSection) ?? .assignment {
+                switch VaultSection(rawValue: storedSection) ?? .main {
                 case .assignment: AssignmentView(overview: overview)
                 case .providers: ProvidersView(overview: overview)
                 case .usage: UsageView(overview: overview)
                 case .main: MainView(overview: overview)
                 case .work: WorkView(overview: overview)
                 case .staff: StaffView()
-                case .library: LibraryView()
                 }
             } else {
                 ProgressView("Vault를 읽는 중…").frame(maxWidth: .infinity, maxHeight: .infinity)

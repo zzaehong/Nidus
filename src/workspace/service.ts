@@ -626,7 +626,6 @@ const commands: Record<string, (m: any) => Promise<unknown>> = {
   },
   cancelChat: async () => { chatting?.abort(); return {}; },
   clearChat: async () => { await chat!.clear(); return {}; },
-  librarySearch: async m => ({ hits: await library!.search(String(m.query ?? ''), 30) }),
   staff: async () => home!.staff(),
   setPrinciples: async m => home!.setPrinciples(String(m.employee ?? ''), Array.isArray(m.principles) ? m.principles : []),
   closeProject: async () => {

@@ -52,7 +52,10 @@ struct ProjectPanel: View {
                     if let knowledge = project.knowledge, !knowledge.isEmpty {
                         VStack(alignment: .leading, spacing: 2) {
                             Label("Library에 기록했습니다", systemImage: "books.vertical").font(.caption.weight(.semibold))
-                            ForEach(knowledge, id: \.self) { Text($0).font(.caption).textSelection(.enabled) }
+                            ForEach(knowledge, id: \.self) { path in
+                                Button { openNote(path) } label: { Text(path).font(.caption).multilineTextAlignment(.leading) }
+                                    .buttonStyle(.link).help("Obsidian에서 엽니다(없으면 기본 앱)")
+                            }
                         }
                         .foregroundStyle(.secondary)
                     }
@@ -67,6 +70,16 @@ struct ProjectPanel: View {
             actions
         }
         .padding(Layout.inset).panel()
+    }
+
+    /// Opens a Library document in Obsidian, where the user keeps the Vault; otherwise in its default app.
+    private func openNote(_ path: String) {
+        guard let vault = session.vault else { return }
+        let file = URL(fileURLWithPath: vault).appendingPathComponent(path)
+        var link = URLComponents(string: "obsidian://open")!
+        link.queryItems = [URLQueryItem(name: "path", value: file.path)]
+        if let url = link.url, NSWorkspace.shared.urlForApplication(toOpen: url) != nil, NSWorkspace.shared.open(url) { return }
+        NSWorkspace.shared.open(file)
     }
 
     private var title: String {
