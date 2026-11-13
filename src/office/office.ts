@@ -11,6 +11,7 @@ import type { Difficulty } from '../gateway/assignment.js';
 import { sendWithRetry, type RetryPolicy, type WorkerGateway, type WorkerOutcome } from '../workspace/worker.js';
 import { BoardStore, managerFor, projectId, readyTasks, unreachable, workerFor, type BoardTask, type Project } from './board.js';
 import { identity, type HomeStore, type Staff } from './home.js';
+import type { DeskStore } from './desk.js';
 import { PlanError, answersMessage, briefRequest, finalRequest, parseBrief, parsePlan, parseReview, planRequest, reviewRequest, workerBrief } from './plan.js';
 import { mainSystem, managerSystem } from './roles.js';
 
@@ -24,6 +25,8 @@ export interface OfficeDeps {
   store: BoardStore;
   /** The Vault's standing staff (Home). Without it every team is made up for the request. */
   home?: HomeStore;
+  /** Workers' Desks: a task that ends gets its final checkpoint. */
+  desk?: DeskStore;
   /** A short description of the Vault's repository for Main (file list, README). */
   repository(): Promise<string>;
   /**
@@ -229,6 +232,7 @@ export class Office {
       if (verdict !== 'revise') {
         task.status = verdict === 'accept' ? 'done' : 'blocked';
         at(task.status);
+        await this.deps.desk?.checkpoint(project.id, task.id, worker?.id ?? null, 'final', `${label}: ${review.value.summary}`).catch(() => {});
         task.result = { summary: review.value.summary, verification: review.value.verification };
         task.finishedAt = new Date().toISOString();
         await this.publish();

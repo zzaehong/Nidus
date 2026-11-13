@@ -119,7 +119,9 @@ export class WorkerRun {
   constructor(
     private readonly gateway: WorkerGateway,
     private readonly tools: WorkerToolSet,
-    private readonly options: { task: string; difficulty: Difficulty; system?: string; compact?: Partial<CompactLimits> | false; limits?: Partial<WorkerLimits>; onEvent?: (event: WorkerEvent) => void; now?: () => number; retryWaits?: number[] },
+    private readonly options: { task: string; difficulty: Difficulty; system?: string; compact?: Partial<CompactLimits> | false;
+      /** The Worker's Desk as text, put back into the conversation after a summary; and where a summary is kept. */
+      desk?: () => Promise<string | undefined>; onSummary?: (summary: string) => void | Promise<void>; limits?: Partial<WorkerLimits>; onEvent?: (event: WorkerEvent) => void; now?: () => number; retryWaits?: number[] },
   ) {}
 
   private emit(event: WorkerEvent): void { this.options.onEvent?.(event); }
@@ -155,7 +157,9 @@ export class WorkerRun {
       if (!summary) throw new Error('empty summary');
       // Instructions still in the kept turns stay there; the earlier ones go into the header.
       const kept = new Set(this.messages.slice(cut).flatMap(m => m.role === 'user' ? m.content.filter(b => b.type === 'text').map(b => (b as { text: string }).text) : []));
-      applySummary(this.messages, cut, summary.slice(0, 10_000), this.given.filter(text => !kept.has(text)));
+      await Promise.resolve(this.options.onSummary?.(summary.slice(0, 10_000))).catch(() => {});
+      const desk = await this.options.desk?.().catch(() => undefined);
+      applySummary(this.messages, cut, summary.slice(0, 10_000), this.given.filter(text => !kept.has(text)), desk);
       this.summarizedAt = this.messages.length;
       this.emit({ type: 'compacted', how: 'summarized', beforeChars: size, afterChars: conversationChars(this.messages), model: result.response.model });
     } catch {

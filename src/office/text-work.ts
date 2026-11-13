@@ -44,7 +44,8 @@ export class TextTools implements WorkerToolSet {
   /** The deliverable so far; undefined until the Worker writes one. */
   deliverable: string | undefined;
 
-  constructor(private readonly source: TextSource) {}
+  /** onDraft: told each time the deliverable changes, so a draft outlives the conversation. */
+  constructor(private readonly source: TextSource, private readonly onDraft?: (text: string) => void) {}
 
   get specs(): ToolSpec[] { return TEXT_TOOLS; }
 
@@ -78,11 +79,12 @@ export class TextTools implements WorkerToolSet {
           const next = input.append ? `${this.deliverable ?? ''}${input.content}` : input.content;
           if (next.length > MAX_DELIVERABLE) throw new Error(`the deliverable may be at most ${MAX_DELIVERABLE} characters`);
           this.deliverable = next;
+          this.onDraft?.(next);
           return { content: `Deliverable is now ${next.length} characters.`, isError: false };
         }
         case 'finish': {
           if (typeof input.summary !== 'string' || !input.summary.trim()) throw new Error('summary is required');
-          if (typeof input.deliverable === 'string' && input.deliverable.trim()) this.deliverable = input.deliverable.slice(0, MAX_DELIVERABLE);
+          if (typeof input.deliverable === 'string' && input.deliverable.trim()) { this.deliverable = input.deliverable.slice(0, MAX_DELIVERABLE); this.onDraft?.(this.deliverable); }
           return { content: 'Task finished.', isError: false, finish: input.summary };
         }
         default:

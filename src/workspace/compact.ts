@@ -127,7 +127,7 @@ const SUMMARY_MARK = '[Summary of the work so far';
  * Step 2: replaces the messages before `cut` by one user message: every instruction given so far
  * (kept by the Worker, so a second summary does not lose them) and the summary.
  */
-export function applySummary(messages: Message[], cut: number, summary: string, given: string[]): void {
+export function applySummary(messages: Message[], cut: number, summary: string, given: string[], desk?: string): void {
   const instructions = given.map(text => text.length > 8_000 ? `${text.slice(0, 8_000)} …` : text);
   const header = [
     `${SUMMARY_MARK}: earlier messages were compacted to keep the conversation small.]`,
@@ -137,6 +137,7 @@ export function applySummary(messages: Message[], cut: number, summary: string, 
     '',
     'Summary of what happened:',
     summary.trim(),
+    ...(desk ? ['', 'Your Desk (your own notes, kept outside this conversation):', desk] : []),
     '',
     'Continue from here. The latest messages follow.',
   ].join('\n');

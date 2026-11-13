@@ -299,6 +299,9 @@ final class WorkspaceSession: ObservableObject {
             }
         case "retry":
             entries.append(RunEntry(kind: .retry, title: tag + "모델 호출 실패, 다시 시도합니다 (\(m["attempt"] as? Int ?? 0)회째)", detail: m["error"] as? String ?? "", isError: true))
+        case "desk":
+            let progress = m["progress"] as? String ?? "", next = m["next"] as? String ?? ""
+            entries.append(RunEntry(kind: .note, title: tag + "Desk 기록" + (next.isEmpty ? "" : " · 다음: \(next)"), detail: progress))
         case "compacted":
             let before = (m["beforeChars"] as? Int ?? 0) / 1000, after = (m["afterChars"] as? Int ?? 0) / 1000
             let how = m["how"] as? String == "summarized" ? "앞부분을 요약" : "오래된 도구 결과를 비움"

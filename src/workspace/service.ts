@@ -21,10 +21,12 @@ import { EgressProxy, EgressRules, type EgressAnswer } from './egress.js';
 import { CDPClient } from './cdp.js';
 import { WorkspaceBrowser } from './browser.js';
 import { WorkerTools } from './tools.js';
-import { WorkerRun, type WorkerEvent, type WorkerOutcome } from './worker.js';
+import { WorkerRun, type WorkerEvent, type WorkerOutcome, type WorkerToolSet } from './worker.js';
 import { Office, type OfficeEvent } from '../office/office.js';
 import { BoardStore, placeOf, workerFor, type BoardTask, type Project } from '../office/board.js';
 import { HomeStore, identity } from '../office/home.js';
+import { DeskStore, deskHasContext, recoveryBrief, renderDesk, withDesk } from '../office/desk.js';
+import { MAX_ATTEMPTS } from '../office/office.js';
 import { TextTools, gitSource } from '../office/text-work.js';
 import { workerSystem } from '../office/roles.js';
 import { workerBrief } from '../office/plan.js';
@@ -53,6 +55,7 @@ let running: AbortController | undefined;
 let review: Review | null = null;
 let office: Office | undefined;
 let home: HomeStore | undefined;
+let desks: DeskStore | undefined;
 /** Per board task: its Worker conversation, its commits (vm), its text tools (text), the last outcome. */
 interface TaskRun { run: WorkerRun; textTools?: TextTools; last?: WorkerOutcome; trail: string[]; /** vm: [before, after] commits of each attempt. */ ranges: [string, string][] }
 const taskRuns = new Map<string, TaskRun>();
@@ -125,7 +128,8 @@ async function open(vault: string) {
   disks = new CacheDiskStore(join(directory, 'disks'));
   if (saved.task && saved.base) review = await pending(paths.root, saved.task, saved.base).catch(() => null);
   home = new HomeStore(join(paths.nidus, 'office', 'staff.json'), join(paths.local, 'home'));
-  office = new Office({ gateway, store: new BoardStore(join(paths.local, 'board')), home, repository: repositoryOverview, work, onEvent: officeEvent });
+  desks = new DeskStore(join(paths.local, 'desk'));
+  office = new Office({ gateway, store: new BoardStore(join(paths.local, 'board')), home, desk: desks, repository: repositoryOverview, work, onEvent: officeEvent });
   const last = await new BoardStore(join(paths.local, 'board')).latest();
   if (last && !['done', 'failed'].includes(last.status) && !last.closed) {
     // A project cut off by a quit can continue from where it was.
@@ -402,24 +406,48 @@ function withVm<T>(holder: string, signal: AbortSignal, action: () => Promise<T>
   return turn;
 }
 
-/** The task's Worker conversation: new, or the same one for a revision; restarted after a failure. */
-function taskConversation(task: BoardTask, instruction: string, revision: boolean, make: (previous: TaskRun | undefined) => TaskRun, earlyNote: (next: TaskRun) => string): { entry: TaskRun; instruction: string } {
+/**
+ * The task's Worker conversation: new, or the same one for a revision; restarted after a failure.
+ * A new conversation for a task that already has a Desk (the app was restarted, the project was
+ * stopped, the last attempt broke off) begins with context recovery.
+ */
+async function taskConversation(task: BoardTask, instruction: string, revision: boolean, make: (previous: TaskRun | undefined) => TaskRun, earlyNote: (next: TaskRun) => string): Promise<{ entry: TaskRun; instruction: string }> {
+  const project = office!.project!;
   let entry = taskRuns.get(task.id);
-  if (!entry) {
-    entry = make(undefined);
-    taskRuns.set(task.id, entry);
-  } else if (!revision || entry.last?.status !== 'finished') {
-    // The last attempt did not end cleanly: a new conversation, told what happened.
-    const before = entry.last;
+  const continued = !!entry && revision && entry.last?.status === 'finished';
+  if (!continued) {
+    const before = entry?.last;
     const next = make(entry);
-    entry.run = next.run;
-    entry.textTools = next.textTools;
-    if (before && before.status !== 'finished') {
-      instruction = `${workerBrief(office!.project!, task)}\n\nA previous attempt ended early (${before.status === 'stopped' ? before.detail : before.error}). ${earlyNote(next)}\n\n${instruction}`;
-    }
+    if (entry) { entry.run = next.run; entry.textTools = next.textTools; }
+    else { entry = next; taskRuns.set(task.id, entry); }
+    const desk = await desks!.load(project.id, task.id).catch(() => null);
+    const parts: string[] = [];
+    // A revision in a new conversation needs the brief again; a first attempt already is the brief.
+    if (revision || before) parts.push(workerBrief(project, task));
+    if (deskHasContext(desk)) parts.push(recoveryBrief(project, task, desk, MAX_ATTEMPTS));
+    if (before && before.status !== 'finished') parts.push(`A previous attempt ended early (${before.status === 'stopped' ? before.detail : before.error}).`);
+    if (revision || before || deskHasContext(desk)) parts.push(earlyNote(entry));
+    if (parts.length) instruction = [...parts, instruction].join('\n\n');
   }
-  entry.trail.push(`--- attempt ${task.attempts} ---`);
-  return { entry, instruction };
+  entry!.trail.push(`--- attempt ${task.attempts} ---`);
+  return { entry: entry!, instruction };
+}
+
+/** The Worker's Desk for a task: its tool, its text for summaries, and where summaries are kept. */
+function deskFor(task: BoardTask) {
+  const project = office!.project!.id, employee = workerFor(office!.project!, task)?.id ?? null;
+  return {
+    wrap: (tools: WorkerToolSet) => withDesk(tools, async patch => {
+      const desk = await desks!.update(project, task.id, employee, patch);
+      event('worker', { boardTask: task.id, who: workerFor(office!.project!, task)?.name, type: 'desk', progress: desk.progress, next: desk.next });
+      return desk;
+    }),
+    options: {
+      desk: async () => { const desk = await desks!.load(project, task.id); return deskHasContext(desk) ? renderDesk(desk) : undefined; },
+      onSummary: async (summary: string) => { await desks!.checkpoint(project, task.id, employee, 'summary', summary); },
+    },
+    evidence: async () => { const desk = await desks!.load(project, task.id).catch(() => null); return deskHasContext(desk) ? `\n\nThe Worker's Desk notes:\n${renderDesk({ ...desk, checkpoints: [] })}` : ''; },
+  };
 }
 
 /** Who the task's Worker is (Home), for the top of its system prompt. */
@@ -438,12 +466,15 @@ function workerEvents(task: BoardTask, trail: string[]) {
 }
 
 async function textWork(task: BoardTask, instruction: string, difficulty: Difficulty, signal: AbortSignal, revision: boolean) {
-  const made = taskConversation(task, instruction, revision, previous => {
+  const desk = deskFor(task);
+  const projectId = office!.project!.id;
+  const draft = taskRuns.has(task.id) ? undefined : await desks!.loadDraft(projectId, task.id);
+  const made = await taskConversation(task, instruction, revision, previous => {
     const trail = previous?.trail ?? [];
-    const tools = new TextTools(gitSource(paths!.root));
+    const tools = new TextTools(gitSource(paths!.root), text => { void desks!.saveDraft(projectId, task.id, text).catch(() => {}); });
     // A new conversation keeps what the last one wrote, so "continue" has something to build on.
-    tools.deliverable = previous?.textTools?.deliverable;
-    return { run: new WorkerRun(gateway!, tools, { task: office!.project!.id, difficulty, system: workerSystem('text', office!.project!.id, whoWorks(task)), onEvent: workerEvents(task, trail) }), textTools: tools, trail, ranges: [] };
+    tools.deliverable = previous?.textTools?.deliverable ?? draft ?? task.output;
+    return { run: new WorkerRun(gateway!, desk.wrap(tools), { task: office!.project!.id, difficulty, system: workerSystem('text', office!.project!.id, whoWorks(task), true), onEvent: workerEvents(task, trail), ...desk.options }), textTools: tools, trail, ranges: [] };
   }, next => next.textTools?.deliverable ? `The deliverable written so far (kept; replace or append to it):\n${next.textTools.deliverable.slice(0, 20000)}` : 'Nothing was delivered yet.');
   const { entry } = made;
   const outcome = await entry.run.run(made.instruction, signal);
@@ -451,14 +482,15 @@ async function textWork(task: BoardTask, instruction: string, difficulty: Diffic
   if (signal.aborted) return { outcome, evidence: '' };
   const output = entry.textTools!.deliverable ?? (outcome.status === 'finished' ? outcome.summary : '');
   const shown = output.length > 15000 ? `${output.slice(0, 15000)}\n… (${output.length - 15000} more characters)` : output;
-  return { outcome, output, evidence: `This was a text task (no VM): nothing in the repository changed; the deliverable is the result.\n\nTool calls (latest last):\n${entry.trail.slice(-40).join('\n') || '(none)'}\n\nDeliverable:\n${shown || '(none)'}` };
+  return { outcome, output, evidence: `This was a text task (no VM): nothing in the repository changed; the deliverable is the result.\n\nTool calls (latest last):\n${entry.trail.slice(-40).join('\n') || '(none)'}\n\nDeliverable:\n${shown || '(none)'}${await desk.evidence()}` };
 }
 
 async function vmWork(task: BoardTask, instruction: string, difficulty: Difficulty, signal: AbortSignal, revision: boolean) {
   await ensureProjectWorkspace();
-  const made = taskConversation(task, instruction, revision, previous => {
+  const desk = deskFor(task);
+  const made = await taskConversation(task, instruction, revision, previous => {
     const trail = previous?.trail ?? [];
-    return { run: new WorkerRun(gateway!, new WorkerTools(workerRuntime(backend!)), { task: saved!.task!, difficulty, system: workerSystem('vm', saved!.task!, whoWorks(task)), onEvent: workerEvents(task, trail) }), trail, ranges: previous?.ranges ?? [] };
+    return { run: new WorkerRun(gateway!, desk.wrap(new WorkerTools(workerRuntime(backend!))), { task: saved!.task!, difficulty, system: workerSystem('vm', saved!.task!, whoWorks(task), true), onEvent: workerEvents(task, trail), ...desk.options }), trail, ranges: previous?.ranges ?? [] };
   }, () => 'Check the workspace for what was already done and continue.');
   const { entry } = made;
   const before = (await inspect('git rev-parse HEAD')).trim();
@@ -471,7 +503,7 @@ async function vmWork(task: BoardTask, instruction: string, difficulty: Difficul
   if (after !== before) entry.ranges.push([before, after]);
   if (signal.aborted) return { outcome, evidence: '' };
   const trail = entry.trail.slice(-40).join('\n');
-  return { outcome, evidence: `Tool calls (latest last):\n${trail}\n\n${await taskChanges(entry.ranges)}` };
+  return { outcome, evidence: `Tool calls (latest last):\n${trail}\n\n${await taskChanges(entry.ranges)}${await desk.evidence()}` };
 }
 
 /** What a task changed: its own commits only (other tasks commit in the same workspace in between). */
