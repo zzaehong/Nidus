@@ -75,6 +75,8 @@ export interface Project {
   /** Main's conversation while planning, so a revision builds on what was said. */
   conversation: Message[];
   report?: string;
+  /** Library documents written when the project ended (paths in the Vault). */
+  knowledge?: string[];
   /** The user dismissed it from the Work tab; it stays on the board as history. */
   closed?: boolean;
   /** The workspace task (VM /workspace, branch nidus/<workspace>) the project works in. */

@@ -27,6 +27,7 @@ import { BoardStore, placeOf, workerFor, type BoardTask, type Project } from '..
 import { HomeStore, identity } from '../office/home.js';
 import { DeskStore, deskHasContext, recoveryBrief, renderDesk, withDesk } from '../office/desk.js';
 import { MAX_ATTEMPTS } from '../office/office.js';
+import { Library, libraryFolder, withLibrary } from '../office/library.js';
 import { TextTools, gitSource } from '../office/text-work.js';
 import { workerSystem } from '../office/roles.js';
 import { workerBrief } from '../office/plan.js';
@@ -56,6 +57,7 @@ let review: Review | null = null;
 let office: Office | undefined;
 let home: HomeStore | undefined;
 let desks: DeskStore | undefined;
+let library: Library | undefined;
 /** Per board task: its Worker conversation, its commits (vm), its text tools (text), the last outcome. */
 interface TaskRun { run: WorkerRun; textTools?: TextTools; last?: WorkerOutcome; trail: string[]; /** vm: [before, after] commits of each attempt. */ ranges: [string, string][] }
 const taskRuns = new Map<string, TaskRun>();
@@ -129,7 +131,8 @@ async function open(vault: string) {
   if (saved.task && saved.base) review = await pending(paths.root, saved.task, saved.base).catch(() => null);
   home = new HomeStore(join(paths.nidus, 'office', 'staff.json'), join(paths.local, 'home'));
   desks = new DeskStore(join(paths.local, 'desk'));
-  office = new Office({ gateway, store: new BoardStore(join(paths.local, 'board')), home, desk: desks, repository: repositoryOverview, work, onEvent: officeEvent });
+  library = new Library(paths.root, await libraryFolder(join(paths.nidus, 'office', 'library.json')));
+  office = new Office({ gateway, store: new BoardStore(join(paths.local, 'board')), home, desk: desks, library, repository: repositoryOverview, work, onEvent: officeEvent });
   const last = await new BoardStore(join(paths.local, 'board')).latest();
   if (last && !['done', 'failed'].includes(last.status) && !last.closed) {
     // A project cut off by a quit can continue from where it was.
@@ -437,7 +440,7 @@ async function taskConversation(task: BoardTask, instruction: string, revision: 
 function deskFor(task: BoardTask) {
   const project = office!.project!.id, employee = workerFor(office!.project!, task)?.id ?? null;
   return {
-    wrap: (tools: WorkerToolSet) => withDesk(tools, async patch => {
+    wrap: (tools: WorkerToolSet) => withDesk(withLibrary(tools, library!), async patch => {
       const desk = await desks!.update(project, task.id, employee, patch);
       event('worker', { boardTask: task.id, who: workerFor(office!.project!, task)?.name, type: 'desk', progress: desk.progress, next: desk.next });
       return desk;
@@ -474,7 +477,7 @@ async function textWork(task: BoardTask, instruction: string, difficulty: Diffic
     const tools = new TextTools(gitSource(paths!.root), text => { void desks!.saveDraft(projectId, task.id, text).catch(() => {}); });
     // A new conversation keeps what the last one wrote, so "continue" has something to build on.
     tools.deliverable = previous?.textTools?.deliverable ?? draft ?? task.output;
-    return { run: new WorkerRun(gateway!, desk.wrap(tools), { task: office!.project!.id, difficulty, system: workerSystem('text', office!.project!.id, whoWorks(task), true), onEvent: workerEvents(task, trail), ...desk.options }), textTools: tools, trail, ranges: [] };
+    return { run: new WorkerRun(gateway!, desk.wrap(tools), { task: office!.project!.id, difficulty, system: workerSystem('text', office!.project!.id, whoWorks(task), true, true), onEvent: workerEvents(task, trail), ...desk.options }), textTools: tools, trail, ranges: [] };
   }, next => next.textTools?.deliverable ? `The deliverable written so far (kept; replace or append to it):\n${next.textTools.deliverable.slice(0, 20000)}` : 'Nothing was delivered yet.');
   const { entry } = made;
   const outcome = await entry.run.run(made.instruction, signal);
@@ -490,7 +493,7 @@ async function vmWork(task: BoardTask, instruction: string, difficulty: Difficul
   const desk = deskFor(task);
   const made = await taskConversation(task, instruction, revision, previous => {
     const trail = previous?.trail ?? [];
-    return { run: new WorkerRun(gateway!, desk.wrap(new WorkerTools(workerRuntime(backend!))), { task: saved!.task!, difficulty, system: workerSystem('vm', saved!.task!, whoWorks(task), true), onEvent: workerEvents(task, trail), ...desk.options }), trail, ranges: previous?.ranges ?? [] };
+    return { run: new WorkerRun(gateway!, desk.wrap(new WorkerTools(workerRuntime(backend!))), { task: saved!.task!, difficulty, system: workerSystem('vm', saved!.task!, whoWorks(task), true, true), onEvent: workerEvents(task, trail), ...desk.options }), trail, ranges: previous?.ranges ?? [] };
   }, () => 'Check the workspace for what was already done and continue.');
   const { entry } = made;
   const before = (await inspect('git rev-parse HEAD')).trim();

@@ -74,6 +74,7 @@ struct OfficeProject: Decodable {
     let tasks: [Task]
     let questions: [Question]
     let report: String?
+    let knowledge: [String]?
     let error: String?
     let workspace: String?
     var needsVm: Bool { tasks.contains { !$0.isText } }

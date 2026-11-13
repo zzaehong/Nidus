@@ -12,6 +12,7 @@ import { sendWithRetry, type RetryPolicy, type WorkerGateway, type WorkerOutcome
 import { BoardStore, managerFor, projectId, readyTasks, unreachable, workerFor, type BoardTask, type Project } from './board.js';
 import { identity, type HomeStore, type Staff } from './home.js';
 import type { DeskStore } from './desk.js';
+import { knowledgeRequest, parseKnowledge, recordProject, type Library } from './library.js';
 import { PlanError, answersMessage, briefRequest, finalRequest, parseBrief, parsePlan, parseReview, planRequest, reviewRequest, workerBrief } from './plan.js';
 import { mainSystem, managerSystem } from './roles.js';
 
@@ -27,6 +28,8 @@ export interface OfficeDeps {
   home?: HomeStore;
   /** Workers' Desks: a task that ends gets its final checkpoint. */
   desk?: DeskStore;
+  /** The Library: Main sees what earlier projects taught, and a finished project is written into it. */
+  library?: Library;
   /** A short description of the Vault's repository for Main (file list, README). */
   repository(): Promise<string>;
   /**
@@ -87,7 +90,7 @@ export class Office {
 
   async plan(instruction: string, signal: AbortSignal): Promise<Project> {
     this.project = { id: projectId(), instruction, createdAt: new Date().toISOString(), status: 'planning', summary: '', roadmap: [], teams: [], tasks: [], questions: [], conversation: [] };
-    this.project.conversation.push({ role: 'user', content: [{ type: 'text', text: planRequest(instruction, await this.deps.repository(), await this.deps.home?.staff()) }] });
+    this.project.conversation.push({ role: 'user', content: [{ type: 'text', text: planRequest(instruction, await this.deps.repository(), await this.deps.home?.staff(), await this.deps.library?.digest().catch(() => '')) }] });
     await this.publish();
     return this.revise(signal);
   }
@@ -177,6 +180,17 @@ export class Office {
       const result = await sendWithRetry(this.deps.gateway, { role: 'main', taskId: project.id }, { system: mainSystem(), messages: [{ role: 'user', content: [{ type: 'text', text: finalRequest(project) }] }] }, signal, this.retry);
       project.report = result.response.content.filter(b => b.type === 'text').map(b => (b as { text: string }).text).join('\n').trim();
       this.deps.onEvent({ type: 'message', from: 'main', title: '최종 보고', text: project.report, model: result.response.model });
+      // Knowledge Integration (CONCEPT): the project is not over until what it taught is in the Library.
+      if (this.deps.library && project.tasks.some(t => t.status === 'done')) {
+        try {
+          const { value: knowledge } = await this.ask('main', mainSystem(), [{ role: 'user', content: [{ type: 'text', text: knowledgeRequest(project) }] }], parseKnowledge, signal);
+          project.knowledge = await recordProject(this.deps.library, project, knowledge);
+          this.deps.onEvent({ type: 'message', from: 'main', title: 'Library에 기록', text: project.knowledge.join('\n') });
+        } catch (error) {
+          if (signal.aborted) throw error;
+          this.deps.onEvent({ type: 'message', from: 'main', title: 'Library에 기록하지 못했습니다', text: String((error as Error).message ?? error) });
+        }
+      }
       project.status = 'done';
     } catch (error) {
       if (signal.aborted) project.status = 'stopped';
@@ -197,11 +211,10 @@ export class Office {
     await this.publish();
     const manager = managerFor(project, task), worker = workerFor(project, task);
     const managerPrompt = managerSystem(manager ? identity(manager, project.teams.find(t => t.id === task.team)) : undefined);
-    const at = (status: 'started' | 'working' | 'review' | 'done' | 'blocked') => {
-      void this.deps.home?.setState({ employee: worker?.id ?? '', project: project.id, task: task.id, status });
-      void this.deps.home?.setState({ employee: manager?.id ?? '', project: project.id, task: task.id, status });
+    const at = async (status: 'started' | 'working' | 'review' | 'done' | 'blocked') => {
+      await Promise.all([worker?.id, manager?.id].map(employee => this.deps.home?.setState({ employee: employee ?? '', project: project.id, task: task.id, status })));
     };
-    at('started');
+    await at('started');
     const brief = await this.ask('manager', managerPrompt, [{ role: 'user', content: [{ type: 'text', text: briefRequest(project, task) }] }], parseBrief, signal, task.id);
     task.brief = brief.value.instructions;
     task.difficulty = brief.value.difficulty;
@@ -213,7 +226,7 @@ export class Office {
       task.attempts = attempt;
       task.status = 'in_progress';
       await this.publish();
-      at('working');
+      await at('working');
       const { outcome, evidence, output } = await this.deps.work(task, instruction, brief.value.difficulty, signal, attempt > 1);
       if (signal.aborted) throw new Error('stopped');
       if (output !== undefined) task.output = output.slice(0, 60000);
@@ -221,7 +234,7 @@ export class Office {
       await this.publish();
       const history = task.reviews.length ? `\nEarlier reviews:\n${task.reviews.map((r, i) => `${i + 1}. ${r.verdict}: ${r.feedback}`).join('\n')}\n` : '';
       const outcomeText = outcome.status === 'finished' ? `Worker's summary: ${outcome.summary}` : outcome.status === 'stopped' ? `The Worker stopped early: ${outcome.detail}` : `The Worker failed: ${outcome.error}`;
-      at('review');
+      await at('review');
       const review = await this.ask('manager', managerPrompt, [{ role: 'user', content: [{ type: 'text', text: reviewRequest(project, task, `${outcomeText}\n${history}\n${evidence}`, attempt, MAX_ATTEMPTS) }] }], parseReview, signal, task.id);
       let verdict = review.value.verdict;
       // No tries left: a task that still needs work is blocked, not quietly accepted.
@@ -231,7 +244,7 @@ export class Office {
       this.deps.onEvent({ type: 'message', from: 'manager', taskId: task.id, title: `${manager ? `${manager.name} · ` : ''}${task.title} · 검토: ${label}`, text: verdict === 'accept' ? review.value.summary : review.value.feedback || review.value.summary, model: review.model });
       if (verdict !== 'revise') {
         task.status = verdict === 'accept' ? 'done' : 'blocked';
-        at(task.status);
+        await at(task.status);
         await this.deps.desk?.checkpoint(project.id, task.id, worker?.id ?? null, 'final', `${label}: ${review.value.summary}`).catch(() => {});
         task.result = { summary: review.value.summary, verification: review.value.verification };
         task.finishedAt = new Date().toISOString();

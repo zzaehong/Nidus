@@ -136,9 +136,10 @@ export const PLAN_FORMAT = [
   '{"summary": "...", "roadmap": ["..."], "teams": [{"id": "research"}], "hires": [], "tasks": [{"id": "t1", "team": "research", "assignee": "researcher", "title": "...", "where": "text", "goal": "...", "scope": "...", "constraints": "...", "acceptance": ["..."], "verification": "...", "dependsOn": []}], "questions": ["..."]}',
 ].join('\n');
 
-export function planRequest(instruction: string, repository: string, standing?: Staff): string {
+export function planRequest(instruction: string, repository: string, standing?: Staff, knowledge?: string): string {
   const teams = standing ? `\n\nThe standing teams of this Vault (they keep their identity across requests):\n${describeStaff(standing)}` : '';
-  return `User request:\n${instruction}\n\nThe user's repository (the Vault), for context:\n${repository}${teams}\n\n${PLAN_FORMAT}`;
+  const learned = knowledge ? `\n\nFrom the Library, what earlier projects taught (apply what fits: put it into task constraints, or tell Workers which document to read with library_read):\n${knowledge}` : '';
+  return `User request:\n${instruction}\n\nThe user's repository (the Vault), for context:\n${repository}${teams}${learned}\n\n${PLAN_FORMAT}`;
 }
 
 export function answersMessage(project: Project, note: string): string {

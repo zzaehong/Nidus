@@ -49,6 +49,13 @@ struct ProjectPanel: View {
                         Text("최종 보고").font(.subheadline.bold())
                         Text(report).font(.callout).textSelection(.enabled)
                     }
+                    if let knowledge = project.knowledge, !knowledge.isEmpty {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Label("Library에 기록했습니다", systemImage: "books.vertical").font(.caption.weight(.semibold))
+                            ForEach(knowledge, id: \.self) { Text($0).font(.caption).textSelection(.enabled) }
+                        }
+                        .foregroundStyle(.secondary)
+                    }
                     if let error = project.error {
                         Label(error, systemImage: "exclamationmark.octagon").font(.callout).foregroundStyle(.red)
                     }
