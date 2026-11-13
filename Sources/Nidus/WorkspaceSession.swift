@@ -124,6 +124,8 @@ final class WorkspaceSession: ObservableObject {
     /// The conversation with Main.
     @Published private(set) var chat: [ChatLine] = []
     @Published private(set) var chatBusy = false
+    /// A Dream Sequence (tidying the Library's lessons and decisions) is running.
+    @Published private(set) var dreaming = false
     @Published private(set) var git = "ready"
     @Published private(set) var costUSD = 0.0
     @Published private(set) var costUnknown = false
@@ -156,7 +158,7 @@ final class WorkspaceSession: ObservableObject {
 
     private func reset() {
         vm = "stopped"; detail = ""; task = nil; running = false; control = "ai"; controlReason = nil
-        frame = nil; tabs = []; approvals = []; entries = []; review = nil; project = nil; chat = []; chatBusy = false; costUSD = 0; costUnknown = false; allowAll = false
+        frame = nil; tabs = []; approvals = []; entries = []; review = nil; project = nil; chat = []; chatBusy = false; dreaming = false; costUSD = 0; costUnknown = false; allowAll = false
     }
 
     private func launch() throws {
@@ -277,6 +279,8 @@ final class WorkspaceSession: ObservableObject {
             }
         case "log":
             entries.append(RunEntry(kind: .note, title: m["text"] as? String ?? ""))
+        case "dream":
+            dreaming = m["running"] as? Bool ?? false
         case "chat":
             if let value = m["messages"], let data = try? JSONSerialization.data(withJSONObject: value) {
                 chat = (try? JSONDecoder().decode([ChatLine].self, from: data)) ?? chat
@@ -385,6 +389,9 @@ final class WorkspaceSession: ObservableObject {
     }
     func cancelChat() { perform("cancelChat") }
     func clearChat() { perform("clearChat") }
+    /// Tidies the Library; the report arrives as a message from Main.
+    func tidyLibrary() { perform("dream") }
+    func cancelTidy() { perform("cancelDream") }
     func approvePlan() { perform("approvePlan") }
     func closeProject() { perform("closeProject") }
     func takeOver() { perform("takeOver") }

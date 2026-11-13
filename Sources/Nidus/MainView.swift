@@ -83,6 +83,14 @@ struct MainView: View {
                 HStack {
                     Text("Return으로 보내고, Option+Return으로 줄을 바꿉니다.").font(.caption).foregroundStyle(.tertiary)
                     Spacer()
+                    if session.dreaming {
+                        ProgressView().controlSize(.small)
+                        Text("Library 정리 중").font(.caption).foregroundStyle(.secondary)
+                        Button("멈춤") { session.cancelTidy() }.controlSize(.small)
+                    } else {
+                        Button("Library 정리") { session.tidyLibrary() }.controlSize(.small).disabled(session.running)
+                            .help("쌓인 교훈과 결정을 살펴 같은 것은 합치고, 남길 가치가 낮은 것은 Archive 폴더로 옮깁니다. 지우지 않습니다.")
+                    }
                     Button("대화 지우기") { session.clearChat() }.controlSize(.small).disabled(session.chat.isEmpty || session.chatBusy)
                 }
             }

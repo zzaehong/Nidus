@@ -28,6 +28,7 @@ import { HomeStore, identity } from '../office/home.js';
 import { DeskStore, deskHasContext, recoveryBrief, renderDesk, withDesk } from '../office/desk.js';
 import { MAX_ATTEMPTS } from '../office/office.js';
 import { Library, libraryFolder, withLibrary } from '../office/library.js';
+import { Dream, describeDream } from '../office/dream.js';
 import { ChatStore, MainChat } from '../office/chat.js';
 import { describeStaff } from '../office/home.js';
 import { TextTools, gitSource } from '../office/text-work.js';
@@ -61,6 +62,8 @@ let home: HomeStore | undefined;
 let desks: DeskStore | undefined;
 let library: Library | undefined;
 let chat: MainChat | undefined;
+let dream: Dream | undefined;
+let dreaming: AbortController | undefined;
 let chatting: AbortController | undefined;
 /** Per board task: its Worker conversation, its commits (vm), its text tools (text), the last outcome. */
 interface TaskRun { run: WorkerRun; textTools?: TextTools; last?: WorkerOutcome; trail: string[]; /** vm: [before, after] commits of each attempt. */ ranges: [string, string][] }
@@ -137,11 +140,13 @@ async function open(vault: string) {
   desks = new DeskStore(join(paths.local, 'desk'));
   library = new Library(paths.root, await libraryFolder(join(paths.nidus, 'office', 'library.json')));
   office = new Office({ gateway, store: new BoardStore(join(paths.local, 'board')), home, desk: desks, library, repository: repositoryOverview, work, onEvent: officeEvent });
+  dream = new Dream({ gateway, library, stateFile: join(paths.local, 'dream.json') });
   chat = new MainChat({
     gateway, store: new ChatStore(join(paths.local, 'main-chat.json')),
     context: chatContext,
     blocked: () => running ? '다른 작업이 진행 중입니다' : review ? '검토를 기다리는 결과가 있습니다. 승인하거나 버린 뒤 다시 말씀해 주세요' : office?.project && !['done', 'failed'].includes(office.project.status) ? '열려 있는 프로젝트가 있습니다. 끝내거나 닫은 뒤 다시 말씀해 주세요' : null,
     start: async instruction => { taskRuns.clear(); planning(signal => office!.plan(instruction, signal)); },
+    tidy: () => { tidyLibrary(); },
     onChange: messages => event('chat', { messages: messages.slice(-100) }),
   });
   const last = await new BoardStore(join(paths.local, 'board')).latest();
@@ -576,7 +581,25 @@ async function executeProject() {
     running = undefined;
     status(office!.project?.status === 'done' ? '프로젝트 완료' : '프로젝트 중지');
     if (project.workspace && project.workspace === saved?.task) await collect().catch(error => log(`결과를 가져오지 못했습니다: ${error.message}`));
+    // Enough new lessons and decisions since the last time: tidy them now, while nothing reads them.
+    if (project.status === 'done' && !dreaming && await dream!.due().catch(() => false)) { try { tidyLibrary(); } catch {} }
   });
+  return {};
+}
+
+/**
+ * A Dream Sequence: the Library's lessons and decisions are merged and put away in the background;
+ * the report comes into the chat with Main. Not while a project is working (it reads those notes).
+ */
+function tidyLibrary() {
+  if (dreaming) throw new Error('Library를 이미 정리하는 중입니다');
+  if (running) throw new Error('작업이 진행 중입니다. 끝난 뒤 정리합니다');
+  const controller = dreaming = new AbortController();
+  event('dream', { running: true });
+  void dream!.run(controller.signal).then(
+    report => { log(`Library 정리: 합침 ${report.merged.length}건, 보관 ${report.retired.length}건, 확인 필요 ${report.conflicts.length}건`); return chat!.note(describeDream(report)); },
+    error => chat!.note(controller.signal.aborted ? 'Library 정리를 멈췄습니다. 바뀐 것은 없습니다.' : `Library를 정리하지 못했습니다: ${String(error?.message ?? error)}`, true),
+  ).finally(() => { dreaming = undefined; event('dream', { running: false }); });
   return {};
 }
 
@@ -626,6 +649,8 @@ const commands: Record<string, (m: any) => Promise<unknown>> = {
   },
   cancelChat: async () => { chatting?.abort(); return {}; },
   clearChat: async () => { await chat!.clear(); return {}; },
+  dream: async () => tidyLibrary(),
+  cancelDream: async () => { dreaming?.abort(); return {}; },
   staff: async () => home!.staff(),
   setPrinciples: async m => home!.setPrinciples(String(m.employee ?? ''), Array.isArray(m.principles) ? m.principles : []),
   closeProject: async () => {

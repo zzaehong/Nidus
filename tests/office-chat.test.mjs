@@ -69,9 +69,27 @@ test('a failed call is shown as an error and left out of what Main is sent next'
 });
 
 test('parseChat reads the JSON, a fenced one too, and falls back to the text', () => {
-  assert.deepEqual(parseChat('```json\n{"reply": "a", "project": " b "}\n```'), { reply: 'a', project: 'b' });
-  assert.deepEqual(parseChat('{"reply": "", "project": "일"}'), { reply: '계획을 세우겠습니다.', project: '일' });
-  assert.deepEqual(parseChat('{"reply": "a", "project": ""}'), { reply: 'a', project: null });
-  assert.deepEqual(parseChat('안녕하세요'), { reply: '안녕하세요', project: null });
+  assert.deepEqual(parseChat('```json\n{"reply": "a", "project": " b "}\n```'), { reply: 'a', project: 'b', tidy: false });
+  assert.deepEqual(parseChat('{"reply": "", "project": "일"}'), { reply: '계획을 세우겠습니다.', project: '일', tidy: false });
+  assert.deepEqual(parseChat('{"reply": "a", "project": ""}'), { reply: 'a', project: null, tidy: false });
+  assert.deepEqual(parseChat('안녕하세요'), { reply: '안녕하세요', project: null, tidy: false });
+  assert.deepEqual(parseChat('{"reply": "", "project": null, "tidy": true}'), { reply: 'Library를 정리하겠습니다.', project: null, tidy: true });
+  assert.equal(parseChat('{"reply": "a", "project": "일", "tidy": true}').tidy, false, 'a project and a tidy do not start together');
   assert.match(chatSystem(), /^You are Main/);
+});
+
+test('asked to tidy the Library, Main starts a Dream Sequence after its answer; the report is one turn with the answer', async t => {
+  const order = [];
+  const { c, requests } = await chat(t, ['{"reply": "정리를 시작합니다.", "project": null, "tidy": true}', '{"reply": "네", "project": null}'], { tidy: () => { order.push(`tidy after ${c.messages.length}`); } });
+  await c.send('Library 정리해 줘', signal());
+  assert.deepEqual(order, ['tidy after 2'], 'the answer is in the conversation before the tidy starts');
+  await c.note('합침 1건');
+  await c.send('고마워', signal());
+  const sent = requests[1].request.messages;
+  assert.deepEqual(sent.map(m => m.role), ['user', 'assistant', 'user']);
+  assert.equal(JSON.parse(sent[1].content[0].text).reply, '정리를 시작합니다.\n\n합침 1건');
+  const refused = await chat(t, ['{"reply": "정리합니다.", "tidy": true}'], { tidy: () => { throw new Error('작업이 진행 중입니다'); } });
+  await refused.c.send('정리', signal());
+  assert.match(refused.c.messages.at(-1).text, /Library 정리를 시작하지 못했습니다: 작업이 진행 중입니다/);
+  assert.equal(refused.c.messages.at(-1).isError, true);
 });

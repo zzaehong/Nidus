@@ -9,7 +9,7 @@
 // When a project ends, Main turns it into knowledge (CONCEPT: Knowledge Integration); when the
 // next one is planned, Main is shown what was learned, and Workers can search and read.
 import { execFile } from 'node:child_process';
-import { mkdir, readFile, readdir, realpath, rename, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, realpath, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import { join, relative, resolve, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { ToolCallBlock, ToolSpec } from '../gateway/contract.js';
@@ -19,6 +19,8 @@ import { placeOf, type Project } from './board.js';
 import { extractJson, PlanError } from './plan.js';
 
 export const DEFAULT_FOLDER = 'Nidus';
+/** Inside the AI's folder: documents a Dream Sequence put away. */
+export const ARCHIVE = 'Archive';
 const MAX_READ = 30_000;
 /** Never part of the Library: Nidus's own state, Git, and tools' settings folders. */
 const hidden = (path: string) => path.split('/').some(part => part.startsWith('.'));
@@ -83,7 +85,7 @@ export class Library {
       const seen = new Set<string>();
       for (const row of stdout.split('\n')) {
         const match = row.match(/^(.*?):(\d+):(.*)$/);
-        if (!match || hidden(match[1]!)) continue;
+        if (!match || hidden(match[1]!) || this.archived(match[1]!)) continue;
         const entry = scores.get(match[1]!) ?? { matched: 0, lines: 0, line: '' };
         if (!seen.has(match[1]!)) { entry.matched++; seen.add(match[1]!); }
         entry.lines++;
@@ -92,7 +94,7 @@ export class Library {
       }
       // A word in the file's name counts too.
       for (const path of names) {
-        if (!path || hidden(path) || seen.has(path) || !path.toLowerCase().includes(term.toLowerCase())) continue;
+        if (!path || hidden(path) || this.archived(path) || seen.has(path) || !path.toLowerCase().includes(term.toLowerCase())) continue;
         const entry = scores.get(path) ?? { matched: 0, lines: 0, line: '(file name)' };
         entry.matched++; seen.add(path);
         scores.set(path, entry);
@@ -101,6 +103,11 @@ export class Library {
     return [...scores].map(([path, s]) => ({ path, matched: s.matched, lines: s.lines, line: s.line }))
       .sort((a, b) => b.matched - a.matched || b.lines - a.lines || a.path.localeCompare(b.path)).slice(0, limit)
       .map(({ path, matched, line }) => ({ path, matched, line }));
+  }
+
+  /** Put away by a Dream Sequence: kept for the links to it, but no longer found by search. */
+  private archived(path: string): boolean {
+    return path.startsWith(`${this.folder}/${ARCHIVE}/`);
   }
 
   /** A document's text as it is in the Vault now, or null if there is none. */
@@ -153,6 +160,44 @@ export class Library {
       out.push({ path: relative(this.root, join(directory, name)).split(sep).join('/'), title: name.replace(/\.md$/, ''), excerpt: body.replace(/\s+/g, ' ').slice(0, 280) });
     }
     return out;
+  }
+
+  /** All of the AI's own documents of one kind, oldest first, with their whole text. */
+  async notes(subfolder: string): Promise<{ path: string; title: string; text: string; at: number }[]> {
+    const directory = resolve(this.root, this.folder, subfolder);
+    let names: string[];
+    try { names = (await readdir(directory)).filter(n => n.endsWith('.md') && !n.startsWith('.')); } catch { return []; }
+    const out = [];
+    for (const name of names) {
+      const file = join(directory, name);
+      const info = await stat(file).catch(() => null);
+      if (!info?.isFile()) continue;
+      out.push({ path: relative(this.root, file).split(sep).join('/'), title: name.replace(/\.md$/, ''), text: await readFile(file, 'utf8').catch(() => ''), at: info.mtimeMs });
+    }
+    return out.sort((a, b) => a.at - b.at || a.path.localeCompare(b.path));
+  }
+
+  /**
+   * Puts one of the AI's own documents away: moved to <folder>/Archive/<kind>/ with a line saying
+   * why. Nothing is deleted, and links to it by name still lead to it. Returns the new path.
+   */
+  async archive(path: string, why: string): Promise<string> {
+    const clean = cleanRelative(path);
+    const parts = clean.split('/');
+    if (!clean.startsWith(`${this.folder}/`) || parts.length !== this.folder.split('/').length + 2 || this.archived(clean)) throw new Error(`${path}: not a document of the AI's own folder`);
+    await this.inside(clean, resolve(this.root, this.folder));
+    const directory = `${this.folder}/${ARCHIVE}/${parts[parts.length - 2]}`;
+    await mkdir(resolve(this.root, directory), { recursive: true });
+    await this.inside(directory, resolve(this.root, this.folder));
+    const name = parts[parts.length - 1]!.replace(/\.md$/, '');
+    let target = `${directory}/${name}.md`;
+    for (let n = 2; await stat(resolve(this.root, target)).then(() => true, () => false); n++) target = `${directory}/${name} ${n}.md`;
+    const text = await readFile(resolve(this.root, clean), 'utf8');
+    const pending = `${resolve(this.root, target)}.${randomUUID()}.pending`;
+    await writeFile(pending, `${text.trimEnd()}\n\n> 보관됨: ${why.replace(/\s+/g, ' ').trim()}\n`);
+    await rename(pending, resolve(this.root, target));
+    await unlink(resolve(this.root, clean));
+    return target;
   }
 
   /** What earlier projects taught, for Main when it plans the next one. */
