@@ -101,12 +101,13 @@ struct WelcomeView: View {
 }
 
 enum VaultSection: String, CaseIterable, Identifiable {
+    case main = "Main"
+    case work = "작업"
+    case library = "Library"
+    case staff = "직원"
     case assignment = "모델 배정"
     case providers = "Provider"
     case usage = "사용량"
-    case trial = "시험 호출"
-    case work = "작업"
-    case staff = "직원"
 
     var id: String { rawValue }
     var icon: String {
@@ -114,9 +115,10 @@ enum VaultSection: String, CaseIterable, Identifiable {
         case .assignment: return "person.2"
         case .providers: return "key"
         case .usage: return "chart.bar"
-        case .trial: return "paperplane"
+        case .main: return "bubble.left.and.bubble.right"
         case .work: return "hammer"
         case .staff: return "person.3"
+        case .library: return "books.vertical"
         }
     }
 }
@@ -157,9 +159,10 @@ struct VaultView: View {
                 case .assignment: AssignmentView(overview: overview)
                 case .providers: ProvidersView(overview: overview)
                 case .usage: UsageView(overview: overview)
-                case .trial: TrialView(overview: overview)
+                case .main: MainView(overview: overview)
                 case .work: WorkView(overview: overview)
                 case .staff: StaffView()
+                case .library: LibraryView()
                 }
             } else {
                 ProgressView("Vault를 읽는 중…").frame(maxWidth: .infinity, maxHeight: .infinity)

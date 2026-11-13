@@ -28,6 +28,8 @@ import { HomeStore, identity } from '../office/home.js';
 import { DeskStore, deskHasContext, recoveryBrief, renderDesk, withDesk } from '../office/desk.js';
 import { MAX_ATTEMPTS } from '../office/office.js';
 import { Library, libraryFolder, withLibrary } from '../office/library.js';
+import { ChatStore, MainChat } from '../office/chat.js';
+import { describeStaff } from '../office/home.js';
 import { TextTools, gitSource } from '../office/text-work.js';
 import { workerSystem } from '../office/roles.js';
 import { workerBrief } from '../office/plan.js';
@@ -58,6 +60,8 @@ let office: Office | undefined;
 let home: HomeStore | undefined;
 let desks: DeskStore | undefined;
 let library: Library | undefined;
+let chat: MainChat | undefined;
+let chatting: AbortController | undefined;
 /** Per board task: its Worker conversation, its commits (vm), its text tools (text), the last outcome. */
 interface TaskRun { run: WorkerRun; textTools?: TextTools; last?: WorkerOutcome; trail: string[]; /** vm: [before, after] commits of each attempt. */ ranges: [string, string][] }
 const taskRuns = new Map<string, TaskRun>();
@@ -133,6 +137,13 @@ async function open(vault: string) {
   desks = new DeskStore(join(paths.local, 'desk'));
   library = new Library(paths.root, await libraryFolder(join(paths.nidus, 'office', 'library.json')));
   office = new Office({ gateway, store: new BoardStore(join(paths.local, 'board')), home, desk: desks, library, repository: repositoryOverview, work, onEvent: officeEvent });
+  chat = new MainChat({
+    gateway, store: new ChatStore(join(paths.local, 'main-chat.json')),
+    context: chatContext,
+    blocked: () => running ? '다른 작업이 진행 중입니다' : review ? '검토를 기다리는 결과가 있습니다. 승인하거나 버린 뒤 다시 말씀해 주세요' : office?.project && !['done', 'failed'].includes(office.project.status) ? '열려 있는 프로젝트가 있습니다. 끝내거나 닫은 뒤 다시 말씀해 주세요' : null,
+    start: async instruction => { taskRuns.clear(); planning(signal => office!.plan(instruction, signal)); },
+    onChange: messages => event('chat', { messages: messages.slice(-100) }),
+  });
   const last = await new BoardStore(join(paths.local, 'board')).latest();
   if (last && !['done', 'failed'].includes(last.status) && !last.closed) {
     // A project cut off by a quit can continue from where it was.
@@ -143,6 +154,7 @@ async function open(vault: string) {
   status();
   publishProject();
   if (review) event('review', { review });
+  await chat.load();
   return { vault: paths.root, task: saved.task ?? null, git: await gitState() };
 }
 
@@ -568,6 +580,17 @@ async function executeProject() {
   return {};
 }
 
+/** What Main is told with each chat message: the open project, the staff, what the Library holds. */
+async function chatContext(): Promise<string> {
+  const project = office?.project;
+  const state = project
+    ? `Open project ${project.id} (${project.status}): ${project.instruction.slice(0, 300)}\nPlan: ${project.summary.slice(0, 600)}\nTasks: ${project.tasks.map(t => `${t.title} [${t.status}]`).join('; ') || '(none yet)'}${project.questions.some(q => !q.answer) ? '\nYou asked the user questions in the plan panel that are not answered yet.' : ''}${project.report ? `\nFinal report: ${project.report.slice(0, 800)}` : ''}`
+    : 'No project is open.';
+  const staff = await home!.staff().then(describeStaff, () => '');
+  const learned = await library!.digest(2500).catch(() => '');
+  return [state, review ? 'A result is waiting for the user\'s review in the Work tab.' : '', staff ? `Standing teams:\n${staff}` : '', learned ? `In the Library (the team's notes):\n${learned}` : '', `VM: ${vm}.`].filter(Boolean).join('\n\n');
+}
+
 /** Planning runs in the background; the app follows it through project events. */
 function planning(step: (signal: AbortSignal) => Promise<Project>) {
   if (running) throw new Error('이미 작업이 진행 중입니다');
@@ -596,6 +619,14 @@ const commands: Record<string, (m: any) => Promise<unknown>> = {
   },
   planReply: async m => planning(signal => office!.reply(m.answers ?? {}, String(m.note ?? ''), signal)),
   approvePlan: () => executeProject(),
+  chat: async m => {
+    chatting = new AbortController();
+    const answer = await chat!.send(String(m.text ?? ''), chatting.signal);
+    return { project: answer.project ?? null };
+  },
+  cancelChat: async () => { chatting?.abort(); return {}; },
+  clearChat: async () => { await chat!.clear(); return {}; },
+  librarySearch: async m => ({ hits: await library!.search(String(m.query ?? ''), 30) }),
   staff: async () => home!.staff(),
   setPrinciples: async m => home!.setPrinciples(String(m.employee ?? ''), Array.isArray(m.principles) ? m.principles : []),
   closeProject: async () => {

@@ -47,7 +47,7 @@ struct ProjectPanel: View {
                     if let report = project.report, !report.isEmpty {
                         Divider()
                         Text("최종 보고").font(.subheadline.bold())
-                        Text(report).font(.callout).textSelection(.enabled)
+                        MarkdownText(text: report).font(.callout)
                     }
                     if let knowledge = project.knowledge, !knowledge.isEmpty {
                         VStack(alignment: .leading, spacing: 2) {

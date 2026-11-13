@@ -90,6 +90,17 @@ struct OfficeProject: Decodable {
     }
 }
 
+/// One message of the conversation with Main.
+struct ChatLine: Decodable, Identifiable, Equatable {
+    let role: String
+    let text: String
+    let at: String
+    let project: String?
+    let model: String?
+    let isError: Bool?
+    var id: String { "\(at)-\(role)-\(text.count)" }
+}
+
 /// The resident Workspace Service (dist/workspace/service.js) for the open Vault: the VM, its
 /// browser and the Worker. Talks to it in JSON lines over stdin/stdout.
 @MainActor
@@ -110,6 +121,9 @@ final class WorkspaceSession: ObservableObject {
     @Published private(set) var entries: [RunEntry] = []
     @Published private(set) var review: WorkReview?
     @Published private(set) var project: OfficeProject?
+    /// The conversation with Main.
+    @Published private(set) var chat: [ChatLine] = []
+    @Published private(set) var chatBusy = false
     @Published private(set) var git = "ready"
     @Published private(set) var costUSD = 0.0
     @Published private(set) var costUnknown = false
@@ -142,7 +156,7 @@ final class WorkspaceSession: ObservableObject {
 
     private func reset() {
         vm = "stopped"; detail = ""; task = nil; running = false; control = "ai"; controlReason = nil
-        frame = nil; tabs = []; approvals = []; entries = []; review = nil; project = nil; costUSD = 0; costUnknown = false; allowAll = false
+        frame = nil; tabs = []; approvals = []; entries = []; review = nil; project = nil; chat = []; chatBusy = false; costUSD = 0; costUnknown = false; allowAll = false
     }
 
     private func launch() throws {
@@ -263,6 +277,10 @@ final class WorkspaceSession: ObservableObject {
             }
         case "log":
             entries.append(RunEntry(kind: .note, title: m["text"] as? String ?? ""))
+        case "chat":
+            if let value = m["messages"], let data = try? JSONSerialization.data(withJSONObject: value) {
+                chat = (try? JSONDecoder().decode([ChatLine].self, from: data)) ?? chat
+            }
         case "project":
             if let value = m["project"], !(value is NSNull), let data = try? JSONSerialization.data(withJSONObject: value) {
                 project = try? JSONDecoder().decode(OfficeProject.self, from: data)
@@ -357,6 +375,16 @@ final class WorkspaceSession: ObservableObject {
     func cancel() { perform("cancel") }
     func plan(_ instruction: String) { perform("plan", ["instruction": instruction]) }
     func replyToPlan(answers: [String: String], note: String) { perform("planReply", ["answers": answers, "note": note]) }
+    /// Says something to Main; the answer arrives with the chat event.
+    func sendChat(_ text: String) {
+        chatBusy = true
+        Task {
+            do { try await send("chat", ["text": text]) } catch { self.error = error.localizedDescription }
+            chatBusy = false
+        }
+    }
+    func cancelChat() { perform("cancelChat") }
+    func clearChat() { perform("clearChat") }
     func approvePlan() { perform("approvePlan") }
     func closeProject() { perform("closeProject") }
     func takeOver() { perform("takeOver") }
