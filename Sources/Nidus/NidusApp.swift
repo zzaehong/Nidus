@@ -106,6 +106,7 @@ enum VaultSection: String, CaseIterable, Identifiable {
     case usage = "사용량"
     case trial = "시험 호출"
     case work = "작업"
+    case staff = "직원"
 
     var id: String { rawValue }
     var icon: String {
@@ -115,6 +116,7 @@ enum VaultSection: String, CaseIterable, Identifiable {
         case .usage: return "chart.bar"
         case .trial: return "paperplane"
         case .work: return "hammer"
+        case .staff: return "person.3"
         }
     }
 }
@@ -157,6 +159,7 @@ struct VaultView: View {
                 case .usage: UsageView(overview: overview)
                 case .trial: TrialView(overview: overview)
                 case .work: WorkView(overview: overview)
+                case .staff: StaffView()
                 }
             } else {
                 ProgressView("Vault를 읽는 중…").frame(maxWidth: .infinity, maxHeight: .infinity)
