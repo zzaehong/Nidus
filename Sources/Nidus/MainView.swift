@@ -19,15 +19,15 @@ struct MainView: View {
                 if proxy.size.width > 760 {
                     HStack(alignment: .top, spacing: Layout.spacing) {
                         conversation.frame(maxWidth: .infinity, maxHeight: .infinity)
-                        if let project = session.project {
-                            ScrollView { ProjectPanel(project: project) }.frame(width: min(420, proxy.size.width * 0.42))
+                        if session.project != nil || showsCuration {
+                            ScrollView { side }.frame(width: min(420, proxy.size.width * 0.42))
                         }
                     }
                 } else {
                     VStack(spacing: Layout.spacing) {
                         conversation.frame(maxWidth: .infinity, maxHeight: .infinity)
-                        if let project = session.project {
-                            ScrollView { ProjectPanel(project: project) }.frame(maxHeight: proxy.size.height * 0.45)
+                        if session.project != nil || showsCuration {
+                            ScrollView { side }.frame(maxHeight: proxy.size.height * 0.45)
                         }
                     }
                 }
@@ -38,6 +38,16 @@ struct MainView: View {
         .alert("Main", isPresented: Binding(get: { session.error != nil }, set: { if !$0 { session.error = nil } })) {
             Button("확인", role: .cancel) {}
         } message: { Text(session.error ?? "") }
+    }
+
+    private var showsCuration: Bool { session.curation != nil || session.curating }
+
+    /// Beside the conversation: the project's plan, and the suggestions for the user's notes.
+    private var side: some View {
+        VStack(spacing: Layout.spacing) {
+            if let project = session.project { ProjectPanel(project: project) }
+            if showsCuration { CurationPanel(curation: session.curation) }
+        }
     }
 
     private var conversation: some View {
@@ -91,6 +101,8 @@ struct MainView: View {
                         Button("Library 정리") { session.tidyLibrary() }.controlSize(.small).disabled(session.running)
                             .help("쌓인 교훈과 결정을 살펴 같은 것은 합치고, 남길 가치가 낮은 것은 Archive 폴더로 옮깁니다. 지우지 않습니다.")
                     }
+                    Button("문서 연결 제안") { session.curate() }.controlSize(.small).disabled(session.curating)
+                        .help("내 노트를 살펴 서로 이을 만한 문서를 제안합니다. 고른 것만 적용하며, 그 전에는 아무것도 바꾸지 않습니다.")
                     Button("대화 지우기") { session.clearChat() }.controlSize(.small).disabled(session.chat.isEmpty || session.chatBusy)
                 }
             }

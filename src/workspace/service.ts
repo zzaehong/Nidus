@@ -27,7 +27,8 @@ import { BoardStore, placeOf, workerFor, type BoardTask, type Project } from '..
 import { HomeStore, identity } from '../office/home.js';
 import { DeskStore, deskHasContext, recoveryBrief, renderDesk, withDesk } from '../office/desk.js';
 import { MAX_ATTEMPTS } from '../office/office.js';
-import { Library, libraryFolder, withLibrary } from '../office/library.js';
+import { Library, libraryFolder, libraryRules, setLibraryRules, withLibrary } from '../office/library.js';
+import { Curator, CurationStore, describeCuration } from '../office/curate.js';
 import { Dream, describeDream } from '../office/dream.js';
 import { ChatStore, MainChat } from '../office/chat.js';
 import { describeStaff } from '../office/home.js';
@@ -64,6 +65,8 @@ let library: Library | undefined;
 let chat: MainChat | undefined;
 let dream: Dream | undefined;
 let dreaming: AbortController | undefined;
+let curator: Curator | undefined;
+let curating: AbortController | undefined;
 let chatting: AbortController | undefined;
 /** Per board task: its Worker conversation, its commits (vm), its text tools (text), the last outcome. */
 interface TaskRun { run: WorkerRun; textTools?: TextTools; last?: WorkerOutcome; trail: string[]; /** vm: [before, after] commits of each attempt. */ ranges: [string, string][] }
@@ -141,12 +144,16 @@ async function open(vault: string) {
   library = new Library(paths.root, await libraryFolder(join(paths.nidus, 'office', 'library.json')));
   office = new Office({ gateway, store: new BoardStore(join(paths.local, 'board')), home, desk: desks, library, repository: repositoryOverview, work, onEvent: officeEvent });
   dream = new Dream({ gateway, library, stateFile: join(paths.local, 'dream.json') });
+  const libraryConfig = join(paths.nidus, 'office', 'library.json');
+  curator = new Curator({ gateway, library, store: new CurationStore(join(paths.local, 'curation.json')), rules: () => libraryRules(libraryConfig), onChange: curation => event('curation', { curation, running: !!curating }) });
+  await curator.load();
   chat = new MainChat({
     gateway, store: new ChatStore(join(paths.local, 'main-chat.json')),
     context: chatContext,
     blocked: () => running ? '다른 작업이 진행 중입니다' : review ? '검토를 기다리는 결과가 있습니다. 승인하거나 버린 뒤 다시 말씀해 주세요' : office?.project && !['done', 'failed'].includes(office.project.status) ? '열려 있는 프로젝트가 있습니다. 끝내거나 닫은 뒤 다시 말씀해 주세요' : null,
     start: async instruction => { taskRuns.clear(); planning(signal => office!.plan(instruction, signal)); },
     tidy: () => { tidyLibrary(); },
+    connect: () => { suggestLinks(); },
     onChange: messages => event('chat', { messages: messages.slice(-100) }),
   });
   const last = await new BoardStore(join(paths.local, 'board')).latest();
@@ -603,6 +610,21 @@ function tidyLibrary() {
   return {};
 }
 
+/**
+ * The Library Manager looks over the user's notes and suggests links and moves, in the background.
+ * Nothing in the Vault changes here; the user picks what to apply (applyCuration).
+ */
+function suggestLinks() {
+  if (curating) throw new Error('이미 노트를 살펴보는 중입니다');
+  const controller = curating = new AbortController();
+  event('curation', { curation: curator!.current, running: true });
+  void curator!.suggest(controller.signal).then(
+    curation => chat!.note(describeCuration(curation)),
+    error => chat!.note(controller.signal.aborted ? '노트 살펴보기를 멈췄습니다.' : `제안을 만들지 못했습니다: ${String(error?.message ?? error)}`, true),
+  ).finally(() => { curating = undefined; event('curation', { curation: curator!.current, running: false }); });
+  return {};
+}
+
 /** What Main is told with each chat message: the open project, the staff, what the Library holds. */
 async function chatContext(): Promise<string> {
   const project = office?.project;
@@ -651,6 +673,17 @@ const commands: Record<string, (m: any) => Promise<unknown>> = {
   clearChat: async () => { await chat!.clear(); return {}; },
   dream: async () => tidyLibrary(),
   cancelDream: async () => { dreaming?.abort(); return {}; },
+  curate: async () => suggestLinks(),
+  cancelCurate: async () => { curating?.abort(); return {}; },
+  applyCuration: async m => {
+    const done = await curator!.apply(Array.isArray(m.ids) ? m.ids.map(String) : []);
+    const applied = done.suggestions.filter(s => s.status === 'applied').length, failed = done.suggestions.filter(s => s.status === 'failed').length;
+    log(`문서 연결 제안 적용: ${applied}건${failed ? `, 실패 ${failed}건` : ''}`);
+    return {};
+  },
+  discardCuration: async () => { await curator!.discard(); return {}; },
+  libraryRules: async () => ({ rules: await libraryRules(join(paths!.nidus, 'office', 'library.json')) }),
+  setLibraryRules: async m => ({ rules: await setLibraryRules(join(paths!.nidus, 'office', 'library.json'), String(m.rules ?? '')) }),
   staff: async () => home!.staff(),
   setPrinciples: async m => home!.setPrinciples(String(m.employee ?? ''), Array.isArray(m.principles) ? m.principles : []),
   closeProject: async () => {

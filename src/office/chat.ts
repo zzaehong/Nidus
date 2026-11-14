@@ -40,23 +40,24 @@ export function chatSystem(): string {
     'Right now the user is talking with you directly, in a chat.',
     '- Answer yourself when that is enough: a question, a discussion, advice, something about the team, the projects or the Library that you can answer from what this conversation and the context below show. Be direct and brief. Never claim work was done that was not, and do not invent the contents of files you have not been shown.',
     '- When the user wants work done (anything that needs Workers: research, reading or changing files, code, documents, the web), start a project: put a complete instruction in "project", self-contained, with everything agreed in this chat that the plan needs. In "reply" say that you are making a plan and that they will approve it before work starts. Do not start a project for something you can simply answer.',
-    '- When the user asks to tidy, clean up or organize the Library (the team\'s lessons and decisions: merging duplicates, putting away what is not worth keeping), set "tidy" to true and say in "reply" that you are starting; the result follows as its own message. This is not a project.',
+    '- When the user asks to tidy, clean up or organize the Library (the team\'s lessons and decisions: merging duplicates, putting away what is not worth keeping), set "library" to "tidy" and say in "reply" that you are starting; the result follows as its own message. This is not a project.',
+    '- When the user asks to connect, link, classify, file or organize their own notes in the Library, set "library" to "connect": the Library Manager reads the notes and makes suggestions (links between notes; moves if the user has set filing rules), which the user approves one by one in the panel beside this chat. Nothing changes before that. This is not a project either.',
     '- If you are unsure what they want, ask in "reply" and leave "project" null.',
     '- Only one project at a time. When the context says a project is open, leave "project" null; tell them where it stands, and that changes to its plan go through the plan panel (answers and the note to Main), or that it must end or be closed before a new one.',
-    'Answer with one JSON object only: {"reply": "what you say to the user, in their language", "project": null or "the instruction", "tidy": false}',
+    'Answer with one JSON object only: {"reply": "what you say to the user, in their language", "project": null or "the instruction", "library": null or "tidy" or "connect"}',
   ].join('\n');
 }
 
 /** Main's answer; an answer that is not the JSON asked for is taken as what it says. */
-export function parseChat(answer: string): { reply: string; project: string | null; tidy: boolean } {
+export function parseChat(answer: string): { reply: string; project: string | null; library: 'tidy' | 'connect' | null } {
   try {
     const raw = extractJson(answer);
     const reply = typeof raw.reply === 'string' ? raw.reply.trim() : '';
     const project = typeof raw.project === 'string' && raw.project.trim() ? raw.project.trim().slice(0, 8000) : null;
-    const tidy = raw.tidy === true && !project;
-    if (reply || project || tidy) return { reply: reply || (tidy ? 'Library를 정리하겠습니다.' : '계획을 세우겠습니다.'), project, tidy };
+    const library = !project && (raw.library === 'tidy' || raw.library === 'connect') ? raw.library as 'tidy' | 'connect' : null;
+    if (reply || project || library) return { reply: reply || (library === 'tidy' ? 'Library를 정리하겠습니다.' : library ? '노트를 살펴보고 제안을 만들겠습니다.' : '계획을 세우겠습니다.'), project, library };
   } catch {}
-  return { reply: answer.trim() || '(답이 비어 있습니다)', project: null, tidy: false };
+  return { reply: answer.trim() || '(답이 비어 있습니다)', project: null, library: null };
 }
 
 export interface MainChatDeps {
@@ -70,6 +71,8 @@ export interface MainChatDeps {
   start(instruction: string): Promise<void>;
   /** Starts tidying the Library (a Dream Sequence) in the background; its report comes as a note. Throws if it cannot start now. */
   tidy?(): void;
+  /** Starts looking over the user's notes for links and moves to suggest, in the background. Throws if it cannot start now. */
+  connect?(): void;
   onChange(messages: ChatMessage[]): void;
   retryWaits?: number[];
 }
@@ -121,7 +124,7 @@ export class MainChat {
       const conversation: Message[] = recent.map((m, i) => ({
         role: m.role === 'user' ? 'user' as const : 'assistant' as const,
         content: [{ type: 'text' as const, text: m.role === 'main'
-          ? JSON.stringify({ reply: m.text, project: m.project ?? null })
+          ? JSON.stringify({ reply: m.text, project: m.project ?? null, library: null })
           // The context goes with the latest message only: it is what is true now.
           : i === recent.length - 1 && context ? `[Context now, not from the user]\n${context}\n\n[The user says]\n${m.text}` : m.text }],
       }));
@@ -129,28 +132,29 @@ export class MainChat {
       while (conversation.length && conversation[0]!.role !== 'user') conversation.shift();
       const policy: RetryPolicy = this.deps.retryWaits ? { waits: this.deps.retryWaits, rateLimitWaits: this.deps.retryWaits } : {};
       let answer: ChatMessage;
-      let wantsTidy = false;
+      let wants: 'tidy' | 'connect' | null = null;
       try {
         const result = await sendWithRetry(this.deps.gateway, { role: 'main', taskId: 'chat' }, { system: chatSystem(), messages: conversation }, signal, policy);
         const raw = result.response.content.filter(b => b.type === 'text').map(b => (b as { text: string }).text).join('\n');
-        const { reply, project, tidy } = parseChat(raw);
+        const { reply, project, library } = parseChat(raw);
         answer = { role: 'main', text: reply, at: new Date().toISOString(), model: result.response.model };
         if (project) {
           const why = this.deps.blocked();
           if (why) answer.text = `${reply}\n\n(새 프로젝트를 시작하지 못했습니다: ${why})`;
           else { await this.deps.start(project); answer.project = project; }
         }
-        wantsTidy = tidy;
+        wants = library;
       } catch (error: any) {
         answer = { role: 'main', text: `답하지 못했습니다: ${String(error?.message ?? error)}`, at: new Date().toISOString(), isError: true };
       }
       await this.push(answer);
       // After the answer, so the report never comes before it.
-      if (wantsTidy) {
+      if (wants) {
         try {
-          if (!this.deps.tidy) throw new Error('지금은 할 수 없습니다');
-          this.deps.tidy();
-        } catch (error: any) { await this.note(`Library 정리를 시작하지 못했습니다: ${String(error?.message ?? error)}`, true); }
+          const start = wants === 'tidy' ? this.deps.tidy : this.deps.connect;
+          if (!start) throw new Error('지금은 할 수 없습니다');
+          start();
+        } catch (error: any) { await this.note(`${wants === 'tidy' ? 'Library 정리' : '노트 살펴보기'}를 시작하지 못했습니다: ${String(error?.message ?? error)}`, true); }
       }
       return answer;
     } finally { this.busy = false; }

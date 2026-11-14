@@ -90,6 +90,23 @@ struct OfficeProject: Decodable {
     }
 }
 
+/// A change to one of the user's notes that the Library Manager suggests: a link or a move.
+struct NoteSuggestion: Decodable, Identifiable, Equatable {
+    let id: String
+    let kind: String
+    let path: String
+    let target: String
+    let reason: String
+    let status: String
+    let error: String?
+}
+
+struct NoteCuration: Decodable, Equatable {
+    let at: String
+    let read: Int
+    let suggestions: [NoteSuggestion]
+}
+
 /// One message of the conversation with Main.
 struct ChatLine: Decodable, Identifiable, Equatable {
     let role: String
@@ -126,6 +143,9 @@ final class WorkspaceSession: ObservableObject {
     @Published private(set) var chatBusy = false
     /// A Dream Sequence (tidying the Library's lessons and decisions) is running.
     @Published private(set) var dreaming = false
+    /// The Library Manager's suggestions waiting for the user, and whether it is making some now.
+    @Published private(set) var curation: NoteCuration?
+    @Published private(set) var curating = false
     @Published private(set) var git = "ready"
     @Published private(set) var costUSD = 0.0
     @Published private(set) var costUnknown = false
@@ -158,7 +178,7 @@ final class WorkspaceSession: ObservableObject {
 
     private func reset() {
         vm = "stopped"; detail = ""; task = nil; running = false; control = "ai"; controlReason = nil
-        frame = nil; tabs = []; approvals = []; entries = []; review = nil; project = nil; chat = []; chatBusy = false; dreaming = false; costUSD = 0; costUnknown = false; allowAll = false
+        frame = nil; tabs = []; approvals = []; entries = []; review = nil; project = nil; chat = []; chatBusy = false; dreaming = false; curation = nil; curating = false; costUSD = 0; costUnknown = false; allowAll = false
     }
 
     private func launch() throws {
@@ -279,6 +299,13 @@ final class WorkspaceSession: ObservableObject {
             }
         case "log":
             entries.append(RunEntry(kind: .note, title: m["text"] as? String ?? ""))
+        case "curation":
+            curating = m["running"] as? Bool ?? false
+            if let value = m["curation"], !(value is NSNull), let data = try? JSONSerialization.data(withJSONObject: value) {
+                curation = try? JSONDecoder().decode(NoteCuration.self, from: data)
+            } else {
+                curation = nil
+            }
         case "dream":
             dreaming = m["running"] as? Bool ?? false
         case "chat":
@@ -392,6 +419,13 @@ final class WorkspaceSession: ObservableObject {
     /// Tidies the Library; the report arrives as a message from Main.
     func tidyLibrary() { perform("dream") }
     func cancelTidy() { perform("cancelDream") }
+    /// Has the Library Manager look over the notes; its suggestions arrive with the curation event.
+    func curate() { perform("curate") }
+    func cancelCurate() { perform("cancelCurate") }
+    func applyCuration(_ ids: [String]) { perform("applyCuration", ["ids": ids]) }
+    func discardCuration() { perform("discardCuration") }
+    func libraryRules() async -> String { ((try? await send("libraryRules"))?["rules"] as? String) ?? "" }
+    func setLibraryRules(_ rules: String) { perform("setLibraryRules", ["rules": rules]) }
     func approvePlan() { perform("approvePlan") }
     func closeProject() { perform("closeProject") }
     func takeOver() { perform("takeOver") }

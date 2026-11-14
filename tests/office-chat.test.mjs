@@ -37,7 +37,7 @@ test('Main answers a question itself, and the conversation is kept', async t => 
   const sent = requests[1].request.messages;
   assert.deepEqual(sent.map(m => m.role), ['user', 'assistant', 'user']);
   assert.equal(sent[0].content[0].text, '팀이 몇 개야?', 'the context goes with the latest message only');
-  assert.equal(sent[1].content[0].text, '{"reply":"팀은 세 개입니다.","project":null}');
+  assert.equal(sent[1].content[0].text, '{"reply":"팀은 세 개입니다.","project":null,"library":null}');
   assert.deepEqual((await store.load()).map(m => m.role), ['user', 'main', 'user', 'main']);
   assert.deepEqual(changes, [1, 2, 3, 4]);
   await assert.rejects(c.send('  ', signal()), /비어/);
@@ -69,18 +69,20 @@ test('a failed call is shown as an error and left out of what Main is sent next'
 });
 
 test('parseChat reads the JSON, a fenced one too, and falls back to the text', () => {
-  assert.deepEqual(parseChat('```json\n{"reply": "a", "project": " b "}\n```'), { reply: 'a', project: 'b', tidy: false });
-  assert.deepEqual(parseChat('{"reply": "", "project": "일"}'), { reply: '계획을 세우겠습니다.', project: '일', tidy: false });
-  assert.deepEqual(parseChat('{"reply": "a", "project": ""}'), { reply: 'a', project: null, tidy: false });
-  assert.deepEqual(parseChat('안녕하세요'), { reply: '안녕하세요', project: null, tidy: false });
-  assert.deepEqual(parseChat('{"reply": "", "project": null, "tidy": true}'), { reply: 'Library를 정리하겠습니다.', project: null, tidy: true });
-  assert.equal(parseChat('{"reply": "a", "project": "일", "tidy": true}').tidy, false, 'a project and a tidy do not start together');
+  assert.deepEqual(parseChat('```json\n{"reply": "a", "project": " b "}\n```'), { reply: 'a', project: 'b', library: null });
+  assert.deepEqual(parseChat('{"reply": "", "project": "일"}'), { reply: '계획을 세우겠습니다.', project: '일', library: null });
+  assert.deepEqual(parseChat('{"reply": "a", "project": ""}'), { reply: 'a', project: null, library: null });
+  assert.deepEqual(parseChat('안녕하세요'), { reply: '안녕하세요', project: null, library: null });
+  assert.deepEqual(parseChat('{"reply": "", "project": null, "library": "tidy"}'), { reply: 'Library를 정리하겠습니다.', project: null, library: 'tidy' });
+  assert.equal(parseChat('{"reply": "a", "library": "connect"}').library, 'connect');
+  assert.equal(parseChat('{"reply": "a", "library": "delete"}').library, null);
+  assert.equal(parseChat('{"reply": "a", "project": "일", "library": "tidy"}').library, null, 'a project and a tidy do not start together');
   assert.match(chatSystem(), /^You are Main/);
 });
 
 test('asked to tidy the Library, Main starts a Dream Sequence after its answer; the report is one turn with the answer', async t => {
   const order = [];
-  const { c, requests } = await chat(t, ['{"reply": "정리를 시작합니다.", "project": null, "tidy": true}', '{"reply": "네", "project": null}'], { tidy: () => { order.push(`tidy after ${c.messages.length}`); } });
+  const { c, requests } = await chat(t, ['{"reply": "정리를 시작합니다.", "project": null, "library": "tidy"}', '{"reply": "네", "project": null}'], { tidy: () => { order.push(`tidy after ${c.messages.length}`); } });
   await c.send('Library 정리해 줘', signal());
   assert.deepEqual(order, ['tidy after 2'], 'the answer is in the conversation before the tidy starts');
   await c.note('합침 1건');
@@ -88,8 +90,12 @@ test('asked to tidy the Library, Main starts a Dream Sequence after its answer; 
   const sent = requests[1].request.messages;
   assert.deepEqual(sent.map(m => m.role), ['user', 'assistant', 'user']);
   assert.equal(JSON.parse(sent[1].content[0].text).reply, '정리를 시작합니다.\n\n합침 1건');
-  const refused = await chat(t, ['{"reply": "정리합니다.", "tidy": true}'], { tidy: () => { throw new Error('작업이 진행 중입니다'); } });
+  const refused = await chat(t, ['{"reply": "정리합니다.", "library": "tidy"}'], { tidy: () => { throw new Error('작업이 진행 중입니다'); } });
   await refused.c.send('정리', signal());
   assert.match(refused.c.messages.at(-1).text, /Library 정리를 시작하지 못했습니다: 작업이 진행 중입니다/);
   assert.equal(refused.c.messages.at(-1).isError, true);
+  let connected = 0;
+  const linking = await chat(t, ['{"reply": "노트를 살펴볼게요.", "library": "connect"}'], { connect: () => { connected++; } });
+  await linking.c.send('내 노트들 서로 연결해 줘', signal());
+  assert.equal(connected, 1);
 });

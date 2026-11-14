@@ -47,6 +47,23 @@ export async function libraryFolder(configFile: string): Promise<string> {
   return DEFAULT_FOLDER;
 }
 
+/** The user's rules for where notes belong (free text), or '' if none are set. */
+export async function libraryRules(configFile: string): Promise<string> {
+  try {
+    const rules = JSON.parse(await readFile(configFile, 'utf8'))?.rules;
+    return typeof rules === 'string' ? rules.trim().slice(0, 4000) : '';
+  } catch { return ''; }
+}
+
+export async function setLibraryRules(configFile: string, rules: string): Promise<string> {
+  let config: Record<string, unknown> = {};
+  try { const read = JSON.parse(await readFile(configFile, 'utf8')); if (read && typeof read === 'object' && !Array.isArray(read)) config = read; } catch {}
+  config.rules = rules.trim().slice(0, 4000);
+  await mkdir(resolve(configFile, '..'), { recursive: true });
+  await writeFile(configFile, JSON.stringify(config, null, 2) + '\n');
+  return config.rules as string;
+}
+
 export interface LibraryHit { path: string; matched: number; line: string }
 
 export class Library {
@@ -198,6 +215,61 @@ export class Library {
     await rename(pending, resolve(this.root, target));
     await unlink(resolve(this.root, clean));
     return target;
+  }
+
+  /** Every Markdown note of the Library (not hidden, not ignored, not archived), with when it last changed. */
+  async documents(): Promise<{ path: string; at: number; own: boolean }[]> {
+    const names = (await this.git(['ls-files', '-co', '--exclude-standard'])).stdout.split('\n');
+    const out = [];
+    for (const path of names) {
+      if (!path.endsWith('.md') || hidden(path) || this.archived(path)) continue;
+      const info = await stat(resolve(this.root, path)).catch(() => null);
+      if (info?.isFile()) out.push({ path, at: info.mtimeMs, own: path.startsWith(`${this.folder}/`) });
+    }
+    return out;
+  }
+
+  /** A note of the user's: in the Vault, a real file, not in the AI's folder. Returns it absolute. */
+  private async userNote(path: string): Promise<string> {
+    const clean = cleanRelative(path);
+    if (clean.startsWith(`${this.folder}/`) || !clean.endsWith('.md')) throw new Error(`${path}: not a note of the user's`);
+    const target = await this.inside(clean, this.root);
+    if (!(await stat(target)).isFile()) throw new Error(`${path}: not a file`);
+    return target;
+  }
+
+  /**
+   * Adds lines to the end of one of the user's notes. Only ever called for a change the user
+   * approved. The rest of the note is left as it is, byte for byte.
+   */
+  async appendToUserNote(path: string, addition: (text: string) => string | null): Promise<boolean> {
+    const target = await this.userNote(path);
+    const text = await readFile(target, 'utf8');
+    const added = addition(text);
+    if (added === null) return false;
+    const pending = `${target}.${randomUUID()}.pending`;
+    await writeFile(pending, text + added, { mode: (await stat(target)).mode });
+    await rename(pending, target);
+    return true;
+  }
+
+  /** Moves one of the user's notes into another folder of the Vault (approved by the user). Nothing is overwritten. */
+  async moveUserNote(path: string, folder: string): Promise<string> {
+    const source = await this.userNote(path);
+    const directory = cleanRelative(folder);
+    if (directory === this.folder || directory.startsWith(`${this.folder}/`)) throw new Error(`${folder}: the AI's own folder is not for the user's notes`);
+    const name = path.split('/').pop()!;
+    const to = `${directory}/${name}`;
+    if (to === cleanRelative(path)) throw new Error(`${path} is already in ${folder}`);
+    // The nearest folder that exists must be in the Vault before anything is made behind it.
+    let existing = directory;
+    while (existing && !(await stat(resolve(this.root, existing)).then(() => true, () => false))) existing = existing.includes('/') ? existing.slice(0, existing.lastIndexOf('/')) : '';
+    if (existing) await this.inside(existing, this.root);
+    await mkdir(resolve(this.root, directory), { recursive: true });
+    await this.inside(directory, this.root);
+    if (await stat(resolve(this.root, to)).then(() => true, () => false)) throw new Error(`${to} already exists`);
+    await rename(source, resolve(this.root, to));
+    return to;
   }
 
   /** What earlier projects taught, for Main when it plans the next one. */
