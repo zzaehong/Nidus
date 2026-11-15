@@ -1,10 +1,8 @@
 // Access tokens for Google Cloud's management APIs (Cloud Quotas, Cloud Monitoring, Cloud Billing).
-// These are not the Gemini API: an API key cannot read them. A token comes from, in this order:
-//   1. what the user stored in the Keychain (account "google-cloud"): a service account key, or
-//      the refresh token from signing in with a Google account in the app (google-login.ts)
-//   2. Application Default Credentials: $GOOGLE_APPLICATION_CREDENTIALS, or the file that
-//      "gcloud auth application-default login" writes
-//   3. the gcloud CLI, if it is installed and signed in ("gcloud auth print-access-token")
+// These are not the Gemini API: an API key cannot read them. The sign-in is gcloud's, in this order:
+//   1. Application Default Credentials: $GOOGLE_APPLICATION_CREDENTIALS, or the file that
+//      "gcloud auth application-default login" writes (a person's refresh token, or a service account key)
+//   2. the gcloud CLI itself, if it is signed in ("gcloud auth print-access-token")
 // Tokens stay in memory. Nothing here is written to a log, and a secret is only ever sent to
 // Google's token endpoint.
 import { createSign } from 'node:crypto';
@@ -18,20 +16,18 @@ export const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 /** Cloud Quotas accepts only this scope; Monitoring and Billing accept it too. */
 export const CLOUD_SCOPE = 'https://www.googleapis.com/auth/cloud-platform';
 
-export type AuthSource = 'service-account' | 'user' | 'adc-service-account' | 'adc-user' | 'gcloud';
+export type AuthSource = 'adc-service-account' | 'adc-user' | 'gcloud';
 
 export interface AccessToken {
   token: string;
   source: AuthSource;
-  /** A person's credentials: Google then needs to be told which project the request is billed against. */
+  /** A person's credentials: Google then needs to be told which project the request is billed against, where an API demands it. */
   user: boolean;
-  /** The service account's address, when there is one (not a secret). */
+  /** The account's address when the credentials say it (not a secret); gcloud's file often leaves it empty. */
   account: string | null;
 }
 
 export interface GoogleAuthOptions {
-  /** The stored credentials (JSON text: a service account key, or a user's refresh token), or null. */
-  secret?: () => Promise<string | null>;
   env?: NodeJS.ProcessEnv;
   home?: string;
   fetcher?: typeof fetch;
@@ -52,28 +48,16 @@ function runGcloud(home: string): Promise<string> {
 }
 
 interface ServiceAccountKey { type: 'service_account'; client_email: string; private_key: string; token_uri?: string }
-interface UserCredentials { type: 'authorized_user'; client_id: string; client_secret: string; refresh_token: string; account?: string }
+interface UserCredentials { type: 'authorized_user'; client_id: string; client_secret: string; refresh_token: string; account: string | null }
 
 function parseCredentials(text: string): ServiceAccountKey | UserCredentials {
   let raw: any;
-  try { raw = JSON.parse(text); } catch { throw fail('cloud_auth_invalid', 'The Google Cloud credentials are not valid JSON.'); }
+  try { raw = JSON.parse(text); } catch { throw fail('cloud_auth_invalid', 'The Application Default Credentials file is not valid JSON.'); }
   if (raw?.type === 'service_account' && typeof raw.client_email === 'string' && typeof raw.private_key === 'string' && raw.private_key.includes('PRIVATE KEY')) return raw;
   if (raw?.type === 'authorized_user' && [raw.client_id, raw.client_secret, raw.refresh_token].every((v: unknown) => typeof v === 'string' && v)) {
-    return { type: 'authorized_user', client_id: raw.client_id, client_secret: raw.client_secret, refresh_token: raw.refresh_token, account: typeof raw.account === 'string' ? raw.account : undefined };
+    return { type: 'authorized_user', client_id: raw.client_id, client_secret: raw.client_secret, refresh_token: raw.refresh_token, account: typeof raw.account === 'string' && raw.account.includes('@') ? raw.account : null };
   }
-  throw fail('cloud_auth_invalid', 'Expected a service account key, or user credentials from a sign-in.');
-}
-
-/** The stored credentials parsed, for reusing the OAuth client of an earlier sign-in. */
-export function storedUser(text: string): { client_id: string; client_secret: string; account?: string } | null {
-  try { const c = parseCredentials(text); return c.type === 'authorized_user' ? { client_id: c.client_id, client_secret: c.client_secret, account: c.account } : null; } catch { return null; }
-}
-
-/** Checks that a text is a usable service account key; returns the account's address. */
-export function serviceAccountEmail(text: string): string {
-  const key = parseCredentials(text);
-  if (key.type !== 'service_account') throw fail('cloud_auth_invalid', 'Expected a service account key (JSON with "type": "service_account").');
-  return key.client_email;
+  throw fail('cloud_auth_invalid', 'Expected the credentials file that "gcloud auth application-default login" writes, or a service account key.');
 }
 
 export class GoogleAuth {
@@ -90,7 +74,7 @@ export class GoogleAuth {
     this.now = options.now ?? Date.now;
   }
 
-  /** Forget the token (the stored key changed, or Google refused it). */
+  /** Forget the token (Google refused it, or the user signed in again). */
   reset(): void { this.cached = null; }
 
   private async adcText(): Promise<string | null> {
@@ -117,7 +101,7 @@ export class GoogleAuth {
     return { token: raw.access_token, expiresIn: typeof raw.expires_in === 'number' ? raw.expires_in : 3600 };
   }
 
-  private async fromCredentials(text: string, stored: boolean): Promise<{ token: AccessToken; expiresIn: number }> {
+  private async fromCredentials(text: string): Promise<{ token: AccessToken; expiresIn: number }> {
     const credentials = parseCredentials(text);
     if (credentials.type === 'service_account') {
       // The signed assertion goes to Google's token endpoint only, whatever the file says.
@@ -129,21 +113,16 @@ export class GoogleAuth {
       try { signature = createSign('RSA-SHA256').update(unsigned).sign(credentials.private_key).toString('base64url'); }
       catch { throw fail('cloud_auth_invalid', 'The service account key could not be used to sign.'); }
       const { token, expiresIn } = await this.exchange({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: `${unsigned}.${signature}` });
-      return { token: { token, source: stored ? 'service-account' : 'adc-service-account', user: false, account: credentials.client_email }, expiresIn };
+      return { token: { token, source: 'adc-service-account', user: false, account: credentials.client_email }, expiresIn };
     }
     const { token, expiresIn } = await this.exchange({ grant_type: 'refresh_token', client_id: credentials.client_id, client_secret: credentials.client_secret, refresh_token: credentials.refresh_token });
-    return { token: { token, source: stored ? 'user' : 'adc-user', user: true, account: credentials.account ?? null }, expiresIn };
+    return { token: { token, source: 'adc-user', user: true, account: credentials.account }, expiresIn };
   }
 
   /** Which way of signing in is set up, without asking Google. */
   async available(): Promise<{ source: AuthSource; account: string | null } | null> {
-    const stored = await this.options.secret?.().catch(() => null);
-    if (stored) {
-      try { const c = parseCredentials(stored); return c.type === 'service_account' ? { source: 'service-account', account: c.client_email } : { source: 'user', account: c.account ?? null }; }
-      catch { return { source: 'service-account', account: null }; }
-    }
     const adc = await this.adcText();
-    if (adc) { try { const c = parseCredentials(adc); return c.type === 'service_account' ? { source: 'adc-service-account', account: c.client_email } : { source: 'adc-user', account: null }; } catch {} }
+    if (adc) { try { const c = parseCredentials(adc); return c.type === 'service_account' ? { source: 'adc-service-account', account: c.client_email } : { source: 'adc-user', account: c.account }; } catch {} }
     try { if ((await (this.options.gcloud ?? (() => runGcloud(this.home)))()).trim()) return { source: 'gcloud', account: null }; } catch {}
     return null;
   }
@@ -154,14 +133,12 @@ export class GoogleAuth {
       this.cached = { token: found.token, until: this.now() + Math.max(60, found.expiresIn - 120) * 1000 };
       return found.token;
     };
-    const stored = await this.options.secret?.();
-    if (stored) return keep(await this.fromCredentials(stored, true));
     const adc = await this.adcText();
-    if (adc) return keep(await this.fromCredentials(adc, false));
+    if (adc) return keep(await this.fromCredentials(adc));
     let printed = '';
     try { printed = (await (this.options.gcloud ?? (() => runGcloud(this.home)))()).trim(); } catch {}
     // gcloud prints the token alone on a line; anything else is not a token.
     if (/^[\w.~+\/-]{20,4096}=*$/.test(printed)) return keep({ token: { token: printed, source: 'gcloud', user: true, account: null }, expiresIn: 1800 });
-    throw fail('cloud_auth_missing', 'No Google Cloud sign-in is set up. Sign in with a Google account, store a service account key, or run "gcloud auth application-default login".');
+    throw fail('cloud_auth_missing', 'No Google Cloud sign-in is set up. Run "gcloud auth application-default login".');
   }
 }

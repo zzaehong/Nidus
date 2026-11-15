@@ -110,7 +110,13 @@ export function cloudProblem(error: unknown, api: string, permission: string): s
   const code = error instanceof NidusError ? error.code : 'provider_error';
   switch (code) {
     case 'authentication': return (error as NidusError).reason === 'cloud_auth_missing' ? 'Google Cloud 로그인이 설정되지 않았습니다.' : 'Google Cloud 로그인이 만료됐거나 거부됐습니다. 다시 로그인하세요.';
-    case 'permission': return `권한이 없거나 이 프로젝트에서 ${api}가 켜져 있지 않습니다 (필요한 권한: ${permission}).`;
+    case 'permission': {
+      const info = (error as NidusError).info;
+      if (info?.reason === 'SERVICE_DISABLED') return `이 프로젝트에서 ${info.serviceTitle ?? api}가 켜져 있지 않습니다. ${info.activationUrl ? `[Console에서 켜기](${info.activationUrl})` : 'Console의 API 라이브러리에서 켜세요'} — 켠 뒤 1~2분 기다려 새로고침하세요.`;
+      if (info?.reason === 'USER_PROJECT_DENIED') return `로그인한 Google 계정에 이 프로젝트의 "Service Usage 소비자" 역할이 없습니다 (serviceusage.services.use). 프로젝트 소유자·편집자면 이미 있습니다.`;
+      if (info?.billingRequired) return `${api}가 이 프로젝트에 결제 계정이 없다며 거절했습니다.`;
+      return `로그인한 계정에 권한이 없습니다 (필요한 권한: ${permission}). 프로젝트 ID가 이 키의 프로젝트가 맞는지도 확인하세요.`;
+    }
     case 'not_found': return '프로젝트를 찾을 수 없습니다. 프로젝트 ID를 확인하세요.';
     case 'rate_limit': return `${api} 조회 한도에 걸렸습니다. 잠시 뒤 다시 시도하세요.`;
     case 'network': case 'timeout': return 'Google에 연결하지 못했습니다.';
@@ -128,9 +134,22 @@ export interface CloudReader {
 export class GoogleCloud implements CloudReader {
   constructor(private readonly http: HttpClient = new HttpClient()) {}
 
-  private headers(project: string, token: AccessToken): Record<string, string> {
-    // With a person's credentials Google needs the project the request counts against.
-    return { authorization: `Bearer ${token.token}`, ...(token.user ? { 'x-goog-user-project': project } : {}) };
+  /**
+   * With a person's credentials (gcloud), Cloud Quotas demands a "quota project" (x-goog-user-project) and
+   * refuses without it. Monitoring and Billing do not, and naming one there hurts: Monitoring refuses a quota
+   * project that has no billing account (seen 2026-11-16 on a free-tier project), and Billing then wants its
+   * API enabled in that project. So the header goes only where it is required, or where Google asked for it.
+   */
+  private headers(project: string, token: AccessToken, quotaProject: boolean): Record<string, string> {
+    return { authorization: `Bearer ${token.token}`, ...(token.user && quotaProject ? { 'x-goog-user-project': project } : {}) };
+  }
+
+  private async preferringNoQuotaProject<T>(token: AccessToken, call: (quotaProject: boolean) => Promise<T>): Promise<T> {
+    try { return await call(false); }
+    catch (error) {
+      if (token.user && error instanceof NidusError && error.info?.quotaProjectRequired) return call(true);
+      throw error;
+    }
   }
 
   private async pages<T>(url: URL, headers: Record<string, string>, field: string): Promise<T[]> {
@@ -147,7 +166,7 @@ export class GoogleCloud implements CloudReader {
   quotaInfos(project: string, token: AccessToken): Promise<QuotaInfo[]> {
     const url = new URL(`https://cloudquotas.googleapis.com/v1/projects/${projectName(project)}/locations/global/services/${SERVICE}/quotaInfos`);
     url.searchParams.set('pageSize', '500');
-    return this.pages<QuotaInfo>(url, this.headers(project, token), 'quotaInfos');
+    return this.pages<QuotaInfo>(url, this.headers(project, token, true), 'quotaInfos');
   }
 
   timeSeries(project: string, token: AccessToken, metricType: string, start: Date, end: Date): Promise<TimeSeries[]> {
@@ -157,11 +176,11 @@ export class GoogleCloud implements CloudReader {
     url.searchParams.set('interval.endTime', end.toISOString());
     url.searchParams.set('view', 'FULL');
     url.searchParams.set('pageSize', '1000');
-    return this.pages<TimeSeries>(url, this.headers(project, token), 'timeSeries');
+    return this.preferringNoQuotaProject(token, quotaProject => this.pages<TimeSeries>(new URL(url), this.headers(project, token, quotaProject), 'timeSeries'));
   }
 
   async billingEnabled(project: string, token: AccessToken): Promise<boolean> {
-    const raw = await bounded({ timeoutMs: 30_000 }, signal => this.http.json(`https://cloudbilling.googleapis.com/v1/projects/${projectName(project)}/billingInfo`, this.headers(project, token), signal));
+    const raw = await this.preferringNoQuotaProject(token, quotaProject => bounded({ timeoutMs: 30_000 }, signal => this.http.json(`https://cloudbilling.googleapis.com/v1/projects/${projectName(project)}/billingInfo`, this.headers(project, token, quotaProject), signal)));
     return raw.billingEnabled === true;
   }
 }
@@ -195,7 +214,14 @@ export async function readCloud(quota: ProviderQuota, project: string, tier: Gem
     quota.observed = {};
     for (const [metric, what] of Object.entries(METRICS[tier])) {
       const [usage, limit] = await Promise.all(['usage', 'limit'].map(suffix => cloud.timeSeries(project, token, `${SERVICE}/quota/${metric}/${suffix}`, start, now)));
-      for (const [model, kinds] of Object.entries(mapTimeSeries(usage!, limit!, what, now, policy))) quota.observed[model] = { ...quota.observed[model], ...kinds };
+      for (const [model, kinds] of Object.entries(mapTimeSeries(usage!, limit!, what, now, policy))) {
+        quota.observed[model] = { ...quota.observed[model], ...kinds };
+        // Monitoring's ".../limit" series is Google's own statement of the limit. Where Cloud Quotas gave none
+        // (its API not enabled, say), it serves as the limit; a value Cloud Quotas did give stays.
+        for (const [kind, seen] of Object.entries(kinds)) {
+          if (seen.limit != null && seen.limit > 0 && !quota.limits[model]?.[kind as QuotaKind]) (quota.limits[model] ??= {})[kind as QuotaKind] = { value: seen.limit, source: 'cloud' };
+        }
+      }
     }
   } catch (error) {
     quota.observed = {};

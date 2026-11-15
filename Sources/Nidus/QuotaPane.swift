@@ -26,8 +26,9 @@ struct QuotaPane: View {
                 header
                 if let view {
                     ForEach(view.errors.all, id: \.0) { name, text in
-                        Label("\(name): \(text)", systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange)
-                            .fixedSize(horizontal: false, vertical: true)
+                        // The engine may put a Console link in the text, as Markdown; it opens in the browser.
+                        Label { Text(markdown("**\(name)**: \(text)")) } icon: { Image(systemName: "exclamationmark.triangle") }
+                            .font(.caption).foregroundStyle(.orange).tint(.orange).fixedSize(horizontal: false, vertical: true)
                     }
                     table(view)
                     Text("\"이 Vault\"는 Nidus가 이 Vault에서 보낸 호출만 센 값입니다. 할당량은 프로젝트 단위라, 같은 프로젝트를 쓰는 다른 앱·다른 키의 호출은 여기에 없습니다. \"Google 관측\"은 Cloud Monitoring이 프로젝트 전체에 대해 센 값이고 몇 분 늦습니다. 두 값은 더하지 않습니다. 실제로 호출이 허용되는지는 서버의 답이 기준입니다.")
@@ -49,7 +50,7 @@ struct QuotaPane: View {
                 if autoRefresh, ticks % 10 == 0, view?.project != nil, view?.auth != nil { await refresh() } else { await load() }
             }
         }
-        .sheet(isPresented: $settingUpCloud) { CloudSignInSheet(auth: view?.auth) { await load() } }
+        .sheet(isPresented: $settingUpCloud) { CloudSignInSheet(auth: view?.auth, project: view?.project) { await load() } }
         .sheet(item: $editing) { row in ManualLimitSheet(row: row) { limits in Task { await saveManual(row.model, limits) } } }
     }
 
@@ -132,12 +133,10 @@ struct QuotaPane: View {
     }
 
     private var authText: String {
-        guard let auth = view?.auth else { return "설정 안 됨: \"설정…\"에서 Google 계정으로 로그인하세요" }
+        guard let auth = view?.auth else { return "설정 안 됨: \"설정…\"의 안내대로 gcloud로 로그인하세요" }
         switch auth.source {
-        case "user": return "Google 계정 \(auth.account ?? "")"
-        case "service-account": return "서비스 계정 \(auth.account ?? "")"
         case "adc-service-account": return "서비스 계정 \(auth.account ?? "") (환경 설정 파일)"
-        case "adc-user": return "gcloud 로그인 (Application Default Credentials)"
+        case "adc-user": return "gcloud 로그인" + (auth.account.map { " (\($0))" } ?? "")
         default: return "gcloud CLI 로그인"
         }
     }
@@ -240,6 +239,11 @@ struct QuotaPane: View {
     }
 }
 
+/// Inline Markdown (bold, links) for a line the engine wrote; the plain text when it does not parse.
+func markdown(_ text: String) -> AttributedString {
+    (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)
+}
+
 /// "2026-11-15T19:50:00.000Z" as a local time, with the date when it is not today.
 func clock(_ iso: String) -> String {
     let parser = ISO8601DateFormatter()
@@ -293,208 +297,82 @@ private struct QuotaCellView: View {
     }
 }
 
-/// How to let Nidus read quotas from Google Cloud, for someone doing it the first time. Three ways,
-/// any one is enough: sign in with a Google account in the browser (no key, no terminal; works
-/// where an organization policy forbids service account keys), a service account key file, or gcloud.
+/// How to let Nidus read quotas from Google Cloud, for someone doing it the first time: gcloud's own
+/// sign-in in the browser, which Nidus picks up by itself. No key file, no settings in the app.
 private struct CloudSignInSheet: View {
-    @EnvironmentObject private var store: VaultStore
     @Environment(\.dismiss) private var dismiss
     let auth: QuotaView.Auth?
+    let project: String?
     let onChange: () async -> Void
+    @State private var checking = false
 
-    private enum Way: String, CaseIterable, Identifiable {
-        case account, key, gcloud
-        var id: String { rawValue }
-        var title: String {
-            switch self {
-            case .account: return "Google 계정 로그인 (권장)"
-            case .key: return "서비스 계정 키 파일"
-            case .gcloud: return "gcloud (터미널)"
-            }
-        }
+    private var enableQuotasURL: URL? {
+        URL(string: "https://console.cloud.google.com/apis/library/cloudquotas.googleapis.com" + (project.map { "?project=\($0)" } ?? ""))
     }
-
-    @State private var way: Way = .account
-    @State private var choosing = false
-    @State private var signingIn = false
-    @State private var problem: String?
-
-    private static let clientsURL = URL(string: "https://console.cloud.google.com/auth/clients")
-    private static let overviewURL = URL(string: "https://console.cloud.google.com/auth/overview")
-    private static let serviceAccountsURL = URL(string: "https://console.cloud.google.com/iam-admin/serviceaccounts")
-    private static let libraryURL = URL(string: "https://console.cloud.google.com/apis/library")
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("할당량 조회용 Google Cloud 로그인").font(.headline)
-            Text("Gemini API 키로는 프로젝트의 제한과 사용량을 볼 수 없습니다. 그래서 Google Cloud에 읽기 전용으로 따로 로그인합니다. 모델을 호출하지 않고 요금이 들지 않으며, 로그인하지 않아도 모델 호출은 그대로 됩니다. 아래 세 방법 중 하나면 충분합니다.")
+            Text("Gemini API 키로는 프로젝트의 제한과 사용량을 볼 수 없어서, Google의 명령줄 도구 gcloud로 내 Google 계정에 한 번 로그인합니다. 읽기 전용이고 모델을 호출하지 않으며 요금이 들지 않습니다. 로그인하지 않아도 모델 호출은 그대로 되고, 할당량 표의 제한만 Unknown으로 남습니다.")
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             current
-            Picker("방법", selection: $way) { ForEach(Way.allCases) { Text($0.title).tag($0) } }.pickerStyle(.segmented).labelsHidden()
-            ScrollView {
-                VStack(alignment: .leading, spacing: 10) {
-                    switch way {
-                    case .account: accountWay
-                    case .key: keyWay
-                    case .gcloud: gcloudWay
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+            GroupBox("터미널에서 (한 번만, 5분)") {
+                VStack(alignment: .leading, spacing: 6) {
+                    step(1, "터미널 앱을 열고(Spotlight에서 \"터미널\" 검색) gcloud를 설치합니다. Homebrew가 있으면 한 줄입니다:")
+                    command("brew install --cask gcloud-cli")
+                    Text("Homebrew가 없으면 cloud.google.com/sdk/docs/install의 macOS 안내대로 설치합니다. 설치 뒤 터미널을 한 번 닫았다 엽니다.")
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).padding(.leading, 18)
+                    step(2, "내 Google 계정으로 로그인합니다. 브라우저가 열리면 Gemini API 키를 만든 그 Google 계정을 고르고 \"허용\"을 누릅니다:")
+                    command("gcloud auth application-default login")
+                    Text("\"command not found: gcloud\"가 나오면 1번이 아직 안 된 것입니다. 로그인은 이 Mac에만 저장되고 만료되지 않습니다(계정 비밀번호를 바꾸거나 권한을 취소하면 다시 로그인).")
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).padding(.leading, 18)
+                    step(3, "이 창의 \"다시 확인\"을 누릅니다. \"지금: gcloud 로그인 사용 중\"으로 바뀝니다.")
+                }.frame(maxWidth: .infinity, alignment: .leading).padding(4)
             }
-            .frame(maxHeight: 440)
-            Text("로그인 정보는 이 Mac의 Keychain에만 저장합니다. Vault 폴더나 로그에는 남기지 않고, Google의 주소로만 보냅니다.")
+            GroupBox("Google Cloud Console에서 (브라우저, 1분)") {
+                VStack(alignment: .leading, spacing: 6) {
+                    step(4, "모델별 제한을 읽는 Cloud Quotas API를 이 프로젝트에서 한 번 켭니다. 아래 링크를 열고 \"사용\"을 누른 뒤 1~2분 기다려 할당량 화면의 \"새로고침\"을 누릅니다. (사용량과 결제 상태는 켤 것 없이 바로 읽힙니다.)")
+                    HStack(spacing: 12) {
+                        if let url = enableQuotasURL { Link(project == nil ? "Cloud Quotas API 켜기 (프로젝트는 직접 고름)" : "Cloud Quotas API 켜기", destination: url) }
+                    }.font(.caption).padding(.leading, 18)
+                    Text("권한: 로그인한 계정이 이 프로젝트의 소유자(직접 만든 프로젝트면 그렇습니다)면 더 할 것이 없습니다. 남이 만든 프로젝트면 관리자에게 역할 세 개를 부탁하세요: Cloud Quotas 뷰어, Monitoring 뷰어, Service Usage 소비자.")
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }.frame(maxWidth: .infinity, alignment: .leading).padding(4)
+            }
+            Text("할당량 화면에 주황색 줄이 남아 있으면 그 줄이 무엇이 빠졌는지와 바로 가는 링크를 알려 줍니다. 로그인 정보는 gcloud가 이 Mac의 홈 폴더에 두고, Nidus는 읽기만 하며 Vault나 로그에 남기지 않습니다.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            if let problem { Label(problem, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true) }
             HStack {
-                if auth?.source == "service-account" || auth?.source == "user" {
-                    Button("저장한 로그인 지우기", role: .destructive) { Task { await store.clearCloudKey(); await onChange(); dismiss() } }.disabled(signingIn)
-                }
-                if signingIn {
-                    ProgressView().controlSize(.small)
-                    Text("브라우저에서 로그인을 마치면 이 창이 닫힙니다 (최대 4분).").font(.caption).foregroundStyle(.secondary)
-                } else if store.busy { ProgressView().controlSize(.small) }
+                if checking { ProgressView().controlSize(.small) }
                 Spacer()
-                Button("닫기") { dismiss() }.keyboardShortcut(.cancelAction).disabled(signingIn)
-                switch way {
-                case .account:
-                    if auth?.source == "user" { Button("다시 로그인") { Task { await signIn(client: nil) } }.disabled(signingIn) }
-                    Button("클라이언트 파일 고르고 로그인…") { problem = nil; choosing = true }.keyboardShortcut(.defaultAction).disabled(signingIn)
-                case .key:
-                    Button("키 파일 고르기…") { problem = nil; choosing = true }.keyboardShortcut(.defaultAction).disabled(store.busy)
-                case .gcloud:
-                    Button("다시 확인") { Task { await onChange(); dismiss() } }.keyboardShortcut(.defaultAction)
-                }
+                Button("닫기") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("다시 확인") { Task { checking = true; await onChange(); checking = false; dismiss() } }.keyboardShortcut(.defaultAction).disabled(checking)
             }
         }
         .padding(Layout.margin)
-        .frame(width: 620)
-        .onAppear { if auth?.source == "service-account" { way = .key } else if auth?.source == "gcloud" || auth?.source == "adc-user" { way = .gcloud } }
-        .fileImporter(isPresented: $choosing, allowedContentTypes: [.json]) { result in
-            guard case .success(let url) = result else { return }
-            let scoped = url.startAccessingSecurityScopedResource()
-            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-            guard let data = try? Data(contentsOf: url), data.count < 64 * 1024, let text = String(data: data, encoding: .utf8) else {
-                problem = "파일을 읽지 못했습니다. Cloud Console에서 다운로드한 JSON 파일을 고르세요."
-                return
-            }
-            if way == .account { Task { await signIn(client: text) } }
-            else {
-                Task {
-                    if await store.setCloudKey(text) != nil { await onChange(); dismiss() }
-                    else { problem = "이 파일로 로그인하지 못했습니다. 서비스 계정 키(JSON)인지, 계정이 지워지지 않았는지 확인하세요. OAuth 클라이언트 파일이라면 \"Google 계정 로그인\"에서 고르세요." }
-                }
-            }
-        }
+        .frame(width: 600)
     }
-
-    // MARK: now
 
     @ViewBuilder private var current: some View {
         if let auth {
             let text: String = {
                 switch auth.source {
-                case "user": return "지금: Google 계정 \(auth.account ?? "")(으)로 로그인됨"
-                case "service-account", "adc-service-account": return "지금: 서비스 계정 \(auth.account ?? "") 사용 중"
-                default: return "지금: gcloud 로그인 사용 중"
+                case "adc-service-account": return "지금: 서비스 계정 \(auth.account ?? "") 사용 중 (환경 설정 파일)"
+                case "adc-user": return "지금: gcloud 로그인 사용 중" + (auth.account.map { " (\($0))" } ?? "")
+                default: return "지금: gcloud CLI 로그인 사용 중"
                 }
             }()
             Label(text, systemImage: "checkmark.circle.fill").foregroundStyle(.green).font(.callout)
         } else {
-            Label("지금: 로그인이 설정되지 않았습니다. 할당량 표의 제한은 Unknown으로 나옵니다.", systemImage: "circle.dashed").foregroundStyle(.secondary).font(.callout)
+            Label("지금: 로그인이 없습니다. 아래 1~2번을 하면 됩니다.", systemImage: "circle.dashed").foregroundStyle(.secondary).font(.callout)
         }
     }
 
-    // MARK: the three ways
-
-    private var accountWay: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("키를 만들지 않고, 터미널도 쓰지 않습니다. 브라우저에서 내 Google 계정으로 한 번 로그인하면 됩니다. 조직 정책으로 서비스 계정 키를 만들 수 없을 때도 됩니다. 준비는 Cloud Console에서 한 번만 하면 되고 10분쯤 걸립니다.")
-                .font(.callout).fixedSize(horizontal: false, vertical: true)
-            GroupBox("준비 (Google Cloud Console, 브라우저에서 한 번만)") {
-                VStack(alignment: .leading, spacing: 6) {
-                    step(1, "console.cloud.google.com에 들어가 화면 위쪽의 프로젝트 선택에서 Gemini API 키가 속한 프로젝트를 고릅니다. 어느 프로젝트인지 모르면 AI Studio의 API 키 화면에 프로젝트 이름이 있습니다.")
-                    step(2, "왼쪽 메뉴 \"API 및 서비스\" → \"OAuth 동의 화면\"(Google Auth Platform). 처음이면 \"시작하기\"를 누르고 앱 이름(예: Nidus)과 지원 이메일을 적습니다. \"대상\"은 회사·학교 Google 계정이면 \"내부\", 개인 Gmail이면 \"외부\"를 고르고, 연락처 이메일을 적은 뒤 만듭니다.")
-                    step(3, "\"외부\"를 골랐다면 \"대상\" 페이지의 \"테스트 사용자\"에 내 Google 계정을 추가합니다. (외부·테스트 상태의 로그인은 7일마다 만료돼 \"다시 로그인\"을 눌러야 합니다. \"내부\"는 만료되지 않습니다.)")
-                    step(4, "\"클라이언트\" → \"클라이언트 만들기\" → 애플리케이션 유형 \"데스크톱 앱\" → 이름(예: Nidus) → 만들기. 나오는 창에서 \"JSON 다운로드\"를 누릅니다. 이 파일이 아래에서 고를 클라이언트 파일입니다.")
-                    step(5, "\"API 및 서비스\" → \"라이브러리\"에서 Cloud Quotas API, Cloud Monitoring API, Cloud Billing API를 찾아 각각 \"사용\"을 누릅니다.")
-                    step(6, "로그인할 Google 계정에 이 프로젝트를 볼 권한이 있어야 합니다. 프로젝트를 직접 만든 소유자면 이미 충분합니다. 아니라면 관리자에게 역할 세 개를 부탁하세요: Cloud Quotas 뷰어, Monitoring 뷰어, Service Usage 소비자.")
-                    HStack(spacing: 12) {
-                        if let url = Self.overviewURL { Link("OAuth 동의 화면 열기", destination: url) }
-                        if let url = Self.clientsURL { Link("클라이언트 페이지 열기", destination: url) }
-                        if let url = Self.libraryURL { Link("API 라이브러리 열기", destination: url) }
-                    }.font(.caption)
-                }.frame(maxWidth: .infinity, alignment: .leading).padding(4)
-            }
-            GroupBox("앱에서") {
-                VStack(alignment: .leading, spacing: 6) {
-                    step(1, "아래 \"클라이언트 파일 고르고 로그인…\"으로 다운로드한 JSON을 고릅니다. 브라우저가 열립니다.")
-                    step(2, "Google 계정을 고르고 \"허용\"을 누릅니다. \"Google에서 확인하지 않은 앱\" 경고가 나오면(외부 대상일 때 정상) \"고급\" → \"Nidus(으)로 이동\"을 누릅니다.")
-                    step(3, "\"로그인됐습니다\" 페이지가 보이면 앱으로 돌아옵니다. 이 창이 닫히고, 할당량 화면에서 \"새로고침\"을 누르면 Google의 값이 들어옵니다. 다운로드한 파일은 지워도 됩니다.")
-                }.frame(maxWidth: .infinity, alignment: .leading).padding(4)
-            }
-        }
-    }
-
-    private var keyWay: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("읽기 권한만 가진 서비스 계정을 만들고 그 키 파일을 고릅니다. 사람 계정과 상관없이 동작하고 만료되지 않지만, 회사·학교 조직의 프로젝트에서는 키 만들기가 정책으로 막혀 있는 경우가 많습니다.")
-                .font(.callout).fixedSize(horizontal: false, vertical: true)
-            HStack(alignment: .top, spacing: 8) {
-                Image(systemName: "hand.raised.fill").foregroundStyle(.orange)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("키를 만들 때 \"Key creation is not allowed on this service account\"나 \"조직 정책(iam.disableServiceAccountKeyCreation)에 의해 사용 중지됨\" 같은 메시지가 나오면").bold()
-                    Text("조직(회사·학교)이 서비스 계정 키 만들기를 막아 둔 것입니다. 이 Mac이나 Nidus의 문제가 아니고, 조직 정책 관리자만 바꿀 수 있습니다. 바꿀 필요는 없습니다: \"Google 계정 로그인\" 방법은 키를 만들지 않으므로 이 정책과 무관하게 됩니다. 그쪽으로 진행하세요.")
-                        .fixedSize(horizontal: false, vertical: true)
-                }.font(.callout)
-                Spacer(minLength: 0)
-            }
-            .padding(10).background(RoundedRectangle(cornerRadius: 6).fill(Color.orange.opacity(0.1)))
-            GroupBox("Google Cloud Console에서 (브라우저, 5분)") {
-                VStack(alignment: .leading, spacing: 6) {
-                    step(1, "Gemini API 키가 속한 프로젝트를 고르고, \"IAM 및 관리자\" → \"서비스 계정\" → \"서비스 계정 만들기\". 이름은 예: nidus-quota-reader")
-                    step(2, "역할 두 개를 줍니다: Cloud Quotas 뷰어(제한과 결제 연결 여부), Monitoring 뷰어(Google이 센 사용량). 하나만 줘도 되고, 빠진 항목은 Unknown으로 나옵니다.")
-                    step(3, "만든 계정 → \"키\" 탭 → \"키 추가\" → \"새 키 만들기\" → JSON. 파일이 다운로드됩니다. 여기서 위의 메시지가 나오면 이 방법은 쓸 수 없습니다.")
-                    step(4, "\"API 및 서비스\" → \"라이브러리\"에서 Cloud Quotas API, Cloud Monitoring API, Cloud Billing API를 \"사용\"으로 켭니다.")
-                    step(5, "아래 \"키 파일 고르기…\"로 다운로드한 JSON을 고릅니다. 고른 뒤에는 다운로드 폴더의 파일을 지워도 됩니다.")
-                    HStack(spacing: 12) {
-                        if let url = Self.serviceAccountsURL { Link("서비스 계정 페이지 열기", destination: url) }
-                        if let url = Self.libraryURL { Link("API 라이브러리 열기", destination: url) }
-                    }.font(.caption)
-                }.frame(maxWidth: .infinity, alignment: .leading).padding(4)
-            }
-        }
-    }
-
-    private var gcloudWay: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("터미널을 쓸 수 있고 Google의 명령줄 도구(gcloud, 약 500MB)를 설치해도 괜찮다면 이 방법도 됩니다. 설치한 뒤 로그인하면 Nidus가 자동으로 알아봅니다. 설정할 것은 없습니다.")
-                .font(.callout).fixedSize(horizontal: false, vertical: true)
-            GroupBox("터미널에서 (한 줄씩)") {
-                VStack(alignment: .leading, spacing: 6) {
-                    step(1, "설치 (Homebrew가 있을 때):")
-                    Text("brew install --cask gcloud-cli").font(.system(.callout, design: .monospaced)).textSelection(.enabled).padding(.leading, 18)
-                    step(2, "로그인 (브라우저가 열립니다):")
-                    Text("gcloud auth application-default login").font(.system(.callout, design: .monospaced)).textSelection(.enabled).padding(.leading, 18)
-                    step(3, "이 창의 \"다시 확인\"을 누릅니다. \"지금: gcloud 로그인 사용 중\"으로 바뀝니다.")
-                    Text("\"command not found: gcloud\"가 나오면 아직 설치되지 않은 것입니다. 설치가 안 되는 환경이면 \"Google 계정 로그인\" 방법을 쓰세요.")
-                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                }.frame(maxWidth: .infinity, alignment: .leading).padding(4)
-            }
-        }
-    }
-
-    // MARK: actions
-
-    private func signIn(client: String?) async {
-        problem = nil
-        signingIn = true
-        defer { signingIn = false }
-        if await store.signInCloud(client: client) != nil {
-            await onChange()
-            dismiss()
-        } else {
-            problem = "로그인이 끝나지 않았습니다. 브라우저에서 \"허용\"을 눌렀는지, 고른 파일이 \"데스크톱 앱\" 유형의 OAuth 클라이언트인지, \"외부\" 대상이면 테스트 사용자에 내 계정을 넣었는지 확인하세요."
-        }
+    private func command(_ text: String) -> some View {
+        Text(text).font(.system(.callout, design: .monospaced)).textSelection(.enabled)
+            .padding(.horizontal, 8).padding(.vertical, 4)
+            .background(RoundedRectangle(cornerRadius: 4).fill(Color.primary.opacity(0.06)))
+            .padding(.leading, 18)
+            .help("드래그해 복사한 뒤 터미널에 붙여 넣고 Return을 누릅니다.")
     }
 
     private func step(_ n: Int, _ text: String) -> some View {

@@ -88,15 +88,6 @@ export async function dispatch(input: unknown, dependencies: BridgeDependencies 
         return await gateway.refreshQuota(gemini(request.provider));
       case 'provider-settings':
         return await gateway.setProviderSettings(gemini(request.provider), { project: request.project, allowFallback: request.allowFallback, limits: request.limits });
-      case 'cloud-key-set':
-        // The key arrives on stdin like an API key and goes to the Keychain; only the account's address comes back.
-        return await gateway.setCloudKey(text(request.key, 'key'));
-      case 'cloud-sign-in':
-        // Opens the browser and waits for it; the refresh token goes to the Keychain, never to stdout.
-        return await gateway.signInCloud(typeof request.client === 'string' && request.client.trim() ? request.client : null);
-      case 'cloud-key-clear':
-        await gateway.clearCloudKey();
-        return { cleared: true };
       case 'gemini-move':
         await gateway.moveGemini(gemini(request.from), gemini(request.to));
         return await gateway.overview();

@@ -1,4 +1,4 @@
-import { NidusError, type QuotaDetail } from "./errors.js";
+import { NidusError, type QuotaDetail, type ErrorInfo } from "./errors.js";
 import type { RequestOptions } from "./types.js";
 
 export function object(value: unknown): Record<string, unknown> {
@@ -46,12 +46,13 @@ export class HttpClient {
       if (!response.ok) {
         // Never expose raw provider errors: they can echo keys, headers or prompts.
         const status = response.status;
-        let quota = status === 402, invalidKey = status === 401, detail: QuotaDetail | null = null;
+        let quota = status === 402, invalidKey = status === 401, detail: QuotaDetail | null = null, info: ErrorInfo | null = null;
         try {
           const raw = object(JSON.parse(await readBody(response, 1024 * 1024)));
           const e = optionalObject(raw.error);
           quota ||= e.code === "insufficient_quota" || e.type === "insufficient_quota";
           detail = quotaDetail(e.details);
+          if (status === 403) info = errorInfo(e.details, e.message);
           invalidKey ||= Array.isArray(e.details) && e.details.some(detail => detail && typeof detail === "object" && (detail as Record<string, unknown>).reason === "API_KEY_INVALID");
         } catch { /* HTTP status remains sufficient when error JSON is absent or invalid. */ }
         signal.throwIfAborted();
@@ -60,6 +61,7 @@ export class HttpClient {
         const after = retry && /^\d{1,9}$/.test(retry) ? retry : detail?.retryDelaySec != null ? String(Math.ceil(detail.retryDelaySec)) : null;
         const failure = new NidusError(code, `Provider request failed (HTTP ${status}, ${code}).`, status, after);
         if (detail && (status === 429 || quota)) failure.quota = detail;
+        if (info) failure.info = info;
         throw failure;
       }
       // Bound response memory, including chunked bodies. Timeout covers body reads too.
@@ -81,6 +83,30 @@ export class HttpClient {
       throw new NidusError("network", "Provider network request failed.");
     }
   }
+}
+
+const SAFE_NAME = /^[A-Za-z][\w.-]{0,127}$/;
+/**
+ * The structured part of a Google 403 (google.rpc.ErrorInfo), kept to names of the expected shape and a
+ * Console link. Of the free text only two facts are kept, as booleans.
+ */
+export function errorInfo(details: unknown, message: unknown): ErrorInfo | null {
+  const text = typeof message === "string" ? message : "";
+  const out: ErrorInfo = { reason: null, service: null, serviceTitle: null, activationUrl: null, billingRequired: /requires billing to be enabled/i.test(text), quotaProjectRequired: /requires a quota project/i.test(text) };
+  if (Array.isArray(details)) {
+    for (const item of details.slice(0, 20)) {
+      if (!item || typeof item !== "object") continue;
+      const d = item as Record<string, unknown>;
+      if (typeof d["@type"] !== "string" || !d["@type"].endsWith("google.rpc.ErrorInfo")) continue;
+      if (typeof d.reason === "string" && /^[A-Z][A-Z0-9_]{2,63}$/.test(d.reason)) out.reason = d.reason;
+      const meta = optionalObject(d.metadata);
+      if (typeof meta.service === "string" && SAFE_NAME.test(meta.service)) out.service = meta.service;
+      if (typeof meta.serviceTitle === "string" && /^[\w .()-]{1,80}$/.test(meta.serviceTitle)) out.serviceTitle = meta.serviceTitle;
+      if (typeof meta.activationUrl === "string" && /^https:\/\/console\.(developers|cloud)\.google\.com\/[\w\/.?=&%-]{1,300}$/.test(meta.activationUrl)) out.activationUrl = meta.activationUrl;
+      break;
+    }
+  }
+  return out.reason || out.billingRequired || out.quotaProjectRequired ? out : null;
 }
 
 /**

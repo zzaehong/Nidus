@@ -18,8 +18,7 @@ import { classifyModel } from '../classification.js';
 import type { VaultPaths } from './vault.js';
 import { hedgeDelayMs, modelHealth, resting, type ModelHealth } from './health.js';
 import { geminiProviders, isSplitGemini, manualLimits, moveProviderData, ProviderSettingsStore, tierOf, type ManualLimits, type SplitGemini } from './gemini.js';
-import { GoogleAuth, serviceAccountEmail, storedUser, type AuthSource } from './quota/google-auth.js';
-import { parseOAuthClient, signIn, type SignInOptions } from './quota/google-login.js';
+import { GoogleAuth, type AuthSource } from './quota/google-auth.js';
 import { GoogleCloud, projectName, readCloud, cloudProblem, type CloudReader } from './quota/google.js';
 import { blockFrom, emptyQuota, localUsage, nextDayStart, pacificDay, quotaRow, QuotaStore, tierEvidence, type ProviderQuota, type QuotaRow } from './quota/quota.js';
 
@@ -163,7 +162,7 @@ export class ModelGateway implements Availability {
     this.hedgeDelay = dependencies.hedgeDelayMs === undefined ? hedgeDelayMs : dependencies.hedgeDelayMs;
     this.settings = new ProviderSettingsStore(paths.providerSettings);
     this.quotas = new QuotaStore(paths.quotaFile);
-    this.cloudAuth = dependencies.cloudAuth ?? new GoogleAuth({ secret: async () => await this.credentials.cloudKey?.get() ?? null });
+    this.cloudAuth = dependencies.cloudAuth ?? new GoogleAuth();
     this.cloud = dependencies.cloud ?? new GoogleCloud();
   }
 
@@ -316,42 +315,6 @@ export class ModelGateway implements Availability {
       if (change.allowFallback !== undefined && provider === 'gemini-paid') own.allowFallback = change.allowFallback === true;
     });
     return this.quotaView(provider);
-  }
-
-  /** Stores the service account key used to read quotas, after checking that Google accepts it. */
-  async setCloudKey(json: string): Promise<{ account: string }> {
-    const slot = this.credentials.cloudKey;
-    if (!slot) throw new NidusError('unsupported', 'This credential store cannot keep a Google Cloud key.');
-    const account = serviceAccountEmail(json);
-    await new GoogleAuth({ secret: async () => json }).token();
-    await slot.set(json);
-    this.cloudAuth.reset();
-    return { account };
-  }
-
-  /**
-   * Signs in with a Google account in the browser and stores the refresh token in the Keychain.
-   * The OAuth client comes from the file the user chose; without one, the client of an earlier
-   * sign-in is reused (signing in again after the token expired). Nothing but the account's address comes back.
-   */
-  async signInCloud(clientJson: string | null, options: SignInOptions = {}): Promise<{ account: string | null }> {
-    const slot = this.credentials.cloudKey;
-    if (!slot) throw new NidusError('unsupported', 'This credential store cannot keep a Google Cloud sign-in.');
-    let client = clientJson ? parseOAuthClient(clientJson) : null;
-    if (!client) {
-      const previous = storedUser(await slot.get() ?? '');
-      if (!previous) throw new NidusError('invalid_request', 'Choose the OAuth client file first.');
-      client = { clientId: previous.client_id, clientSecret: previous.client_secret };
-    }
-    const user = await signIn(client, options);
-    await slot.set(JSON.stringify(user));
-    this.cloudAuth.reset();
-    return { account: user.account ?? null };
-  }
-
-  async clearCloudKey(): Promise<void> {
-    await this.credentials.cloudKey?.delete();
-    this.cloudAuth.reset();
   }
 
   /** Moves a Gemini connection to the other tier: key, model list, candidates, check results and settings. */

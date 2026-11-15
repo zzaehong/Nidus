@@ -14,7 +14,7 @@ import { initVault } from '../dist/gateway/vault.js';
 import { dispatch } from '../dist/gateway/bridge.js';
 import { UsageLog } from '../dist/gateway/usage.js';
 import { GoogleAuth, TOKEN_URL, CLOUD_SCOPE } from '../dist/gateway/quota/google-auth.js';
-import { GoogleCloud, mapQuotaInfos, mapTimeSeries, readCloud, projectName } from '../dist/gateway/quota/google.js';
+import { GoogleCloud, mapQuotaInfos, mapTimeSeries, readCloud, projectName, cloudProblem } from '../dist/gateway/quota/google.js';
 import { blockFrom, emptyQuota, limitsFor, localUsage, nextDayStart, pacificDay, quotaRow, tierEvidence, zoneMidnight } from '../dist/gateway/quota/quota.js';
 
 const S = 'generativelanguage.googleapis.com';
@@ -24,8 +24,6 @@ const NOON = '2026-11-15T20:00:00.000Z';
 class MemoryCredentials {
   constructor(keys = {}) {
     this.keys = new Map(Object.entries(keys));
-    let cloud = null;
-    this.cloudKey = { get: async () => cloud, set: async v => { cloud = v; }, delete: async () => { cloud = null; } };
   }
   async get(provider) { return this.keys.get(provider) ?? null; }
   async set(provider, key) { this.keys.set(provider, key); }
@@ -53,7 +51,7 @@ function gemini(reply = () => answer) {
   return { providers: new ProviderClient({ http }), calls };
 }
 
-const cloudAuth = (result = { token: 'ya29.test', source: 'service-account', user: false, account: 'reader@p.iam.gserviceaccount.com' }) => ({
+const cloudAuth = (result = { token: 'ya29.test', source: 'adc-user', user: true, account: 'me@example.com' }) => ({
   reset() {}, async available() { return result instanceof Error ? null : { source: result.source, account: result.account }; },
   async token() { if (result instanceof Error) throw result; return result; },
 });
@@ -211,7 +209,7 @@ test('refreshing reads limits, Google\'s own count and billing; the screen keeps
   const view = await g.refreshQuota('gemini-free');
   assert.deepEqual(cloud.asked.sort(), ['billing', 'monitoring', 'monitoring', 'monitoring', 'monitoring', 'quotas']);
   assert.deepEqual([view.project, view.fetchedAt, view.errors, view.billing], ['my-free-project', NOON, {}, { enabled: false, checkedAt: NOON }]);
-  assert.deepEqual(view.auth, { source: 'service-account', account: 'reader@p.iam.gserviceaccount.com' });
+  assert.deepEqual(view.auth, { source: 'adc-user', account: 'me@example.com' });
   const row = view.rows.find(r => r.model === 'gemini-2.5-flash');
   assert.deepEqual(row.rpd, { local: 1, limit: 250, source: 'cloud', observed: { usage: 41, limit: 250, at: '2026-11-15T19:50:00.000Z' } }, '1 call from here, 41 seen by Google across all callers: shown side by side, never added');
   assert.deepEqual(row.rpm, { local: 1, limit: 10, source: 'cloud', observed: null });
@@ -246,7 +244,7 @@ test('no permission, an expired sign-in or no sign-in: each source says why, and
   const partial = await gateway(t, { cloud: fakeCloud({ fail: { quotas: denied, billing: new NidusError('not_found', 'x', 404) } }) });
   await partial.g.setProviderSettings('gemini-free', { project: 'my-free-project' });
   const view = await partial.g.refreshQuota('gemini-free');
-  assert.match(view.errors.quotas, /권한이 없거나.*Cloud Quotas API.*cloudquotas\.quotas\.get/);
+  assert.match(view.errors.quotas, /권한이 없습니다 \(필요한 권한: cloudquotas\.quotas\.get\)/);
   assert.match(view.errors.billing, /프로젝트를 찾을 수 없습니다/);
   assert.equal(view.errors.monitoring, undefined, 'the source that worked still counts');
   assert.equal(view.billing, null);
@@ -262,7 +260,7 @@ test('no permission, an expired sign-in or no sign-in: each source says why, and
   }
 });
 
-test('Google Cloud sign-in: a service account key is exchanged at Google only; refusals are told apart; secrets stay out of errors', async t => {
+test('Google Cloud sign-in is gcloud\'s: the ADC file (a person, or a service account key) and then the gcloud CLI; secrets stay out of errors', async t => {
   const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
   const key = JSON.stringify({ type: 'service_account', client_email: 'reader@p.iam.gserviceaccount.com', private_key: privateKey.export({ type: 'pkcs8', format: 'pem' }), token_uri: TOKEN_URL });
   const posts = [];
@@ -271,29 +269,31 @@ test('Google Cloud sign-in: a service account key is exchanged at Google only; r
   t.after(() => rm(empty, { recursive: true, force: true }));
   const base = { env: {}, home: empty, gcloud: async () => { throw new Error('no gcloud'); }, now: () => Date.parse(NOON) };
 
-  const auth = new GoogleAuth({ ...base, secret: async () => key, fetcher: fetcher({ body: { access_token: 'ya29.abc', expires_in: 3600 } }) });
-  assert.deepEqual(await auth.available(), { source: 'service-account', account: 'reader@p.iam.gserviceaccount.com' });
-  assert.deepEqual(await auth.token(), { token: 'ya29.abc', source: 'service-account', user: false, account: 'reader@p.iam.gserviceaccount.com' });
+  // $GOOGLE_APPLICATION_CREDENTIALS naming a service account key: a signed assertion goes to Google's token endpoint only.
+  await writeFile(join(empty, 'sa.json'), key);
+  const auth = new GoogleAuth({ ...base, env: { GOOGLE_APPLICATION_CREDENTIALS: join(empty, 'sa.json') }, fetcher: fetcher({ body: { access_token: 'ya29.abc', expires_in: 3600 } }) });
+  assert.deepEqual(await auth.available(), { source: 'adc-service-account', account: 'reader@p.iam.gserviceaccount.com' });
+  assert.deepEqual(await auth.token(), { token: 'ya29.abc', source: 'adc-service-account', user: false, account: 'reader@p.iam.gserviceaccount.com' });
   await auth.token();
   assert.equal(posts.length, 1, 'the token is reused until it is about to expire');
   assert.equal(posts[0].url, TOKEN_URL);
   const [header, claims, signature] = posts[0].body.get('assertion').split('.');
   assert.deepEqual(JSON.parse(Buffer.from(claims, 'base64url')), { iss: 'reader@p.iam.gserviceaccount.com', scope: CLOUD_SCOPE, aud: TOKEN_URL, iat: Date.parse(NOON) / 1000, exp: Date.parse(NOON) / 1000 + 3600 });
   assert.ok(createVerify('RSA-SHA256').update(`${header}.${claims}`).verify(publicKey, Buffer.from(signature, 'base64url')));
-
-  // A key file that names another token endpoint is not followed.
   posts.length = 0;
-  await assert.rejects(new GoogleAuth({ ...base, secret: async () => JSON.stringify({ ...JSON.parse(key), token_uri: 'https://evil.example/token' }), fetcher: fetcher({ body: {} }) }).token(), { reason: 'cloud_auth_invalid' });
-  assert.equal(posts.length, 0);
+  await writeFile(join(empty, 'evil.json'), JSON.stringify({ ...JSON.parse(key), token_uri: 'https://evil.example/token' }));
+  await assert.rejects(new GoogleAuth({ ...base, env: { GOOGLE_APPLICATION_CREDENTIALS: join(empty, 'evil.json') }, fetcher: fetcher({ body: {} }) }).token(), { reason: 'cloud_auth_invalid' });
+  assert.equal(posts.length, 0, 'a key file that names another token endpoint is not followed');
 
-  // gcloud's user credentials: a refresh that Google no longer accepts is "expired", not "missing".
+  // The file "gcloud auth application-default login" writes: a person's refresh token. The account is shown when the file has it.
   await mkdir(join(empty, '.config', 'gcloud'), { recursive: true });
-  await writeFile(join(empty, '.config', 'gcloud', 'application_default_credentials.json'), JSON.stringify({ type: 'authorized_user', client_id: 'id', client_secret: 'CLIENT-SECRET', refresh_token: 'REFRESH-TOKEN' }));
+  await writeFile(join(empty, '.config', 'gcloud', 'application_default_credentials.json'), JSON.stringify({ account: '', type: 'authorized_user', client_id: 'id', client_secret: 'CLIENT-SECRET', refresh_token: 'REFRESH-TOKEN' }));
   const user = new GoogleAuth({ ...base, fetcher: fetcher({ body: { access_token: 'ya29.user' } }) });
+  assert.deepEqual(await user.available(), { source: 'adc-user', account: null });
   assert.deepEqual(await user.token(), { token: 'ya29.user', source: 'adc-user', user: true, account: null });
   assert.equal(posts[0].body.get('grant_type'), 'refresh_token');
   const expired = await new GoogleAuth({ ...base, fetcher: fetcher({ status: 400, body: { error: 'invalid_grant', error_description: 'Token has been expired or revoked. REFRESH-TOKEN' } }) }).token().catch(e => e);
-  assert.equal(expired.reason, 'cloud_auth_expired');
+  assert.equal(expired.reason, 'cloud_auth_expired', 'a refresh Google no longer accepts is "expired", not "missing"');
   assert.ok(!JSON.stringify(expired).includes('REFRESH-TOKEN') && !expired.message.includes('SECRET'));
 
   const nothing = await mkdtemp(join(tmpdir(), 'nidus-home-'));
@@ -303,26 +303,49 @@ test('Google Cloud sign-in: a service account key is exchanged at Google only; r
   assert.deepEqual(await new GoogleAuth({ ...base, home: nothing, gcloud: async () => 'ya29.from-gcloud-cli-token-value\n' }).token(), { token: 'ya29.from-gcloud-cli-token-value', source: 'gcloud', user: true, account: null });
 });
 
-test('the Cloud APIs are asked with a bearer token, the project named for a person\'s credentials, and every page read', async () => {
+test('the Cloud APIs are asked with a bearer token, the quota project named only where Google demands it, and every page read', async () => {
   const seen = [];
+  let refuseBillingWithoutQuotaProject = false;
+  const disabled = (service, title) => ({ error: { code: 403, status: 'PERMISSION_DENIED', message: `${title} has not been used in project my-project before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/${service}/overview?project=my-project then retry.`, details: [{ '@type': 'type.googleapis.com/google.rpc.ErrorInfo', reason: 'SERVICE_DISABLED', domain: 'googleapis.com', metadata: { service, serviceTitle: title, activationUrl: `https://console.developers.google.com/apis/api/${service}/overview?project=my-project`, consumer: 'projects/my-project' } }] } });
   const http = new HttpClient(async (url, init) => {
     seen.push({ url: new URL(String(url)), headers: init.headers, method: init.method });
     const page = new URL(String(url)).searchParams.get('pageToken');
+    if (String(url).includes('cloudbilling') && refuseBillingWithoutQuotaProject && !init.headers['x-goog-user-project']) {
+      return new Response(JSON.stringify({ error: { code: 403, status: 'PERMISSION_DENIED', message: 'Your application is authenticating by using local Application Default Credentials. The cloudbilling.googleapis.com API requires a quota project, which is not set by default.', details: [{ '@type': 'type.googleapis.com/google.rpc.ErrorInfo', reason: 'SERVICE_DISABLED', metadata: { service: 'cloudbilling.googleapis.com' } }] } }), { status: 403 });
+    }
+    if (String(url).includes('cloudquotas') && new URL(String(url)).pathname.includes('disabled-project')) return new Response(JSON.stringify(disabled('cloudquotas.googleapis.com', 'Cloud Quotas API')), { status: 403 });
     return new Response(JSON.stringify(String(url).includes('cloudquotas') ? { quotaInfos: [{ quotaId: page ?? 'first' }], ...(page ? {} : { nextPageToken: 'p2' }) } : String(url).includes('monitoring') ? { timeSeries: [{}] } : { billingEnabled: true }));
   });
   const cloud = new GoogleCloud(http);
-  const sa = { token: 'T', source: 'service-account', user: false, account: 'a' }, person = { token: 'U', source: 'adc-user', user: true, account: null };
+  const sa = { token: 'T', source: 'adc-service-account', user: false, account: 'a' }, person = { token: 'U', source: 'adc-user', user: true, account: null };
   assert.deepEqual(await cloud.quotaInfos('my-project', sa), [{ quotaId: 'first' }, { quotaId: 'p2' }]);
   assert.equal(seen[0].url.href, `https://cloudquotas.googleapis.com/v1/projects/my-project/locations/global/services/${S}/quotaInfos?pageSize=500`);
   assert.deepEqual([seen[0].method, seen[0].headers.authorization, seen[0].headers['x-goog-user-project']], ['GET', 'Bearer T', undefined]);
+  await cloud.quotaInfos('my-project', person);
+  assert.equal(seen.at(-1).headers['x-goog-user-project'], 'my-project', 'Cloud Quotas refuses a person without a quota project, so it is always named there');
+  // An API that is not enabled: the reason and the Console link come through, the free text does not.
+  const off = await cloud.quotaInfos('disabled-project', person).catch(e => e);
+  assert.deepEqual([off.code, off.info.reason, off.info.serviceTitle, off.info.activationUrl], ['permission', 'SERVICE_DISABLED', 'Cloud Quotas API', 'https://console.developers.google.com/apis/api/cloudquotas.googleapis.com/overview?project=my-project']);
+  assert.ok(!off.message.includes('has not been used'));
+  assert.match(cloudProblem(off, 'Cloud Quotas API', 'cloudquotas.quotas.get'), /^이 프로젝트에서 Cloud Quotas API가 켜져 있지 않습니다\. \[Console에서 켜기\]\(https:\/\/console\.developers\.google\.com\/apis\/api\/cloudquotas\.googleapis\.com\/overview\?project=my-project\)/);
+  assert.match(cloudProblem(Object.assign(new NidusError('permission', 'x', 403), { info: { reason: 'USER_PROJECT_DENIED', service: null, serviceTitle: null, activationUrl: null, billingRequired: false, quotaProjectRequired: false } }), 'Cloud Monitoring API', 'p'), /Service Usage 소비자/);
+  assert.match(cloudProblem(new NidusError('permission', 'x', 403), 'Cloud Monitoring API', 'monitoring.timeSeries.list'), /권한이 없습니다 \(필요한 권한: monitoring\.timeSeries\.list\)/);
   await cloud.timeSeries('my-project', person, `${S}/quota/generate_content_free_tier_requests/usage`, new Date('2026-11-15T08:00:00Z'), new Date(NOON));
   const monitoring = seen.at(-1);
   assert.equal(monitoring.url.origin + monitoring.url.pathname, 'https://monitoring.googleapis.com/v3/projects/my-project/timeSeries');
   assert.deepEqual([monitoring.url.searchParams.get('filter'), monitoring.url.searchParams.get('interval.startTime'), monitoring.url.searchParams.get('interval.endTime'), monitoring.url.searchParams.get('view')],
     [`metric.type="${S}/quota/generate_content_free_tier_requests/usage"`, '2026-11-15T08:00:00.000Z', NOON, 'FULL']);
-  assert.equal(monitoring.headers['x-goog-user-project'], 'my-project');
+  assert.equal(monitoring.headers['x-goog-user-project'], undefined, 'Monitoring refuses a quota project without billing, and needs none: a person is not made to name one');
   assert.equal(await cloud.billingEnabled('123456789', sa), true);
   assert.equal(seen.at(-1).url.href, 'https://cloudbilling.googleapis.com/v1/projects/123456789/billingInfo');
+  assert.equal(await cloud.billingEnabled('123456789', person), true);
+  assert.equal(seen.at(-1).headers['x-goog-user-project'], undefined);
+  // Should Google ever insist on a quota project there, the call is made again with one.
+  refuseBillingWithoutQuotaProject = true;
+  const before = seen.length;
+  assert.equal(await cloud.billingEnabled('123456789', person), true);
+  assert.deepEqual(seen.slice(before).map(s => s.headers['x-goog-user-project']), [undefined, '123456789']);
+  assert.equal(await cloud.billingEnabled('123456789', sa).catch(e => e.code), 'permission', 'a service account is not retried: the header is for people');
   for (const bad of ['', 'a/b', '../x', 'UPPER', 'x']) assert.throws(() => projectName(bad), { code: 'invalid_request' });
 });
 
@@ -446,7 +469,7 @@ test('local counting: only calls that reached Google, per window, and a second k
   assert.deepEqual([shown.rpd.local, shown.rpd.observed.usage, shown.rpd.limit, shown.status], [5, 180, 250, 'available']);
 });
 
-test('the app bridge: quota view, settings and the Cloud key never echo a secret', async t => {
+test('the app bridge: quota view and settings', async t => {
   const paths = await vault(t, table(['gemini-free:gemini-2.5-flash']));
   const credentials = new MemoryCredentials({ 'gemini-free': 'FREE-KEY' });
   const api = gemini();
@@ -458,75 +481,4 @@ test('the app bridge: quota view, settings and the Cloud key never echo a secret
   assert.deepEqual(view.rows.map(r => [r.model, r.status]), [['gemini-2.5-flash', 'unknown']]);
   await assert.rejects(call('quota', { provider: 'openai' }), /Gemini Free and Gemini Paid/);
   await assert.rejects(call('connect', { provider: 'gemini', key: 'x' }), /Provider must be one of/);
-  const bad = await call('cloud-key-set', { key: '{"type":"service_account","private_key":"SECRET-PEM"}' }).catch(e => e);
-  assert.equal(bad.reason, 'cloud_auth_invalid');
-  assert.ok(!JSON.stringify(bad).includes('SECRET-PEM'));
-  assert.equal(await credentials.cloudKey.get(), null, 'a key that cannot be used is not stored');
-  assert.deepEqual(await call('cloud-key-clear'), { cleared: true });
-  // Signing in needs the OAuth client file the first time; a web client is refused before any browser opens.
-  await assert.rejects(call('cloud-sign-in'), /Choose the OAuth client file first/);
-  const web = await call('cloud-sign-in', { client: '{"web":{"client_id":"a.apps.googleusercontent.com","client_secret":"WEB-SECRET"}}' }).catch(e => e);
-  assert.equal(web.reason, 'oauth_client_web');
-  assert.ok(!JSON.stringify(web).includes('WEB-SECRET'));
-});
-
-test('signing in with a Google account: the browser comes back to 127.0.0.1 with a code, the code is exchanged at Google only, and the refresh token is what is stored', async t => {
-  const { signIn, parseOAuthClient, AUTH_URL, SIGN_IN_SCOPES } = await import('../dist/gateway/quota/google-login.js');
-  const { storedUser, GoogleAuth } = await import('../dist/gateway/quota/google-auth.js');
-  const consoleFile = JSON.stringify({ installed: { client_id: 'abc.apps.googleusercontent.com', client_secret: 'CLIENT-SECRET', redirect_uris: ['http://localhost'] } });
-  assert.deepEqual(parseOAuthClient(consoleFile), { clientId: 'abc.apps.googleusercontent.com', clientSecret: 'CLIENT-SECRET' });
-  assert.throws(() => parseOAuthClient(JSON.stringify({ web: { client_id: 'abc.apps.googleusercontent.com', client_secret: 's' } })), { reason: 'oauth_client_web' });
-  assert.throws(() => parseOAuthClient('{"type":"service_account"}'), { reason: 'oauth_client_invalid' });
-
-  const posts = [];
-  const idToken = `h.${Buffer.from(JSON.stringify({ email: 'me@example.com' })).toString('base64url')}.s`;
-  const fetcher = async (url, init) => { posts.push({ url: String(url), body: new URLSearchParams(init.body) }); return new Response(JSON.stringify({ access_token: 'ya29.x', refresh_token: 'REFRESH', id_token: idToken, expires_in: 3599 })); };
-  // The test plays the browser: it follows the sign-in URL's redirect_uri back with a code.
-  const browser = async url => {
-    const open = new URL(url);
-    assert.equal(open.origin + open.pathname, AUTH_URL);
-    assert.equal(open.searchParams.get('scope'), SIGN_IN_SCOPES.join(' '));
-    assert.equal(open.searchParams.get('code_challenge_method'), 'S256');
-    assert.equal(open.searchParams.get('prompt'), 'consent');
-    const back = new URL(open.searchParams.get('redirect_uri'));
-    assert.equal(back.hostname, '127.0.0.1');
-    back.searchParams.set('code', 'CODE-1');
-    back.searchParams.set('state', open.searchParams.get('state'));
-    const page = await fetch(back);
-    assert.equal(page.status, 200);
-    assert.match(await page.text(), /로그인됐습니다/);
-  };
-  const user = await signIn(parseOAuthClient(consoleFile), { open: browser, fetcher });
-  assert.deepEqual(user, { type: 'authorized_user', client_id: 'abc.apps.googleusercontent.com', client_secret: 'CLIENT-SECRET', refresh_token: 'REFRESH', account: 'me@example.com' });
-  assert.equal(posts.length, 1);
-  assert.equal(posts[0].url, TOKEN_URL);
-  assert.equal(posts[0].body.get('grant_type'), 'authorization_code');
-  assert.equal(posts[0].body.get('code'), 'CODE-1');
-  assert.ok(posts[0].body.get('code_verifier'));
-
-  // GoogleAuth then uses what was stored, and names the account.
-  const stored = JSON.stringify(user);
-  assert.deepEqual(storedUser(stored), { client_id: 'abc.apps.googleusercontent.com', client_secret: 'CLIENT-SECRET', account: 'me@example.com' });
-  const auth = new GoogleAuth({ env: {}, home: '/nonexistent', gcloud: async () => { throw new Error('no'); }, secret: async () => stored, fetcher: async () => new Response(JSON.stringify({ access_token: 'ya29.user' })) });
-  assert.deepEqual(await auth.available(), { source: 'user', account: 'me@example.com' });
-  assert.deepEqual(await auth.token(), { token: 'ya29.user', source: 'user', user: true, account: 'me@example.com' });
-
-  // Declined in the browser, or a reply with the wrong state: no exchange happens.
-  posts.length = 0;
-  const declined = signIn(parseOAuthClient(consoleFile), { fetcher, open: async url => {
-    const open = new URL(url);
-    const wrong = new URL(open.searchParams.get('redirect_uri')); wrong.searchParams.set('code', 'X'); wrong.searchParams.set('state', 'forged');
-    assert.equal((await fetch(wrong)).status, 400);
-    const back = new URL(open.searchParams.get('redirect_uri')); back.searchParams.set('error', 'access_denied'); back.searchParams.set('state', open.searchParams.get('state'));
-    await fetch(back);
-  } });
-  await assert.rejects(declined, { reason: 'sign_in_declined' });
-  assert.equal(posts.length, 0);
-  await assert.rejects(signIn(parseOAuthClient(consoleFile), { fetcher, open: async () => {}, timeoutMs: 50 }), { reason: 'sign_in_timeout' });
-  const refused = signIn(parseOAuthClient(consoleFile), { fetcher: async () => new Response(JSON.stringify({ error: 'invalid_grant' }), { status: 400 }), open: async url => {
-    const open = new URL(url); const back = new URL(open.searchParams.get('redirect_uri')); back.searchParams.set('code', 'C'); back.searchParams.set('state', open.searchParams.get('state')); await fetch(back);
-  } });
-  const error = await refused.catch(e => e);
-  assert.equal(error.reason, 'sign_in_failed');
-  assert.ok(!JSON.stringify(error).includes('CLIENT-SECRET'));
 });
