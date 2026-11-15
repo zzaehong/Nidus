@@ -191,6 +191,8 @@ API 키로는 볼 수 없어 Cloud 로그인이 따로 필요하다. 모델 호�
 | 결제 연결 여부 | Cloud Billing `projects.getBillingInfo` | `resourcemanager.projects.get` |
 
 - 지표: 무료는 `generate_content_free_tier_requests`(분 → RPM, 일 → RPD), `generate_content_free_tier_input_token_count`(분 → TPM). 유료는 `generate_requests_per_model`, `generate_content_paid_tier_input_token_count`. 모델 이름은 정확히 같은 것만 잇는다. 다른 등급의 지표나 알아보지 못한 지표는 제한으로 쓰지 않는다(실제 프로젝트 테스트가 그 목록을 출력한다).
+- 권한: 역할 두 개로 충분하다. Cloud Quotas Viewer(`roles/cloudquotas.viewer`: `cloudquotas.quotas.get`, `resourcemanager.projects.get` 포함)와 Monitoring Viewer(`roles/monitoring.viewer`).
+- 터미널 없이: Cloud Console에서 서비스 계정을 만들고 JSON 키를 받아, 앱의 "키 파일 고르기…"로 고른다(gcloud가 없는 Mac 기준, 2026-11-15 사용자 환경).
 - 로그인(순서대로): Keychain에 저장한 서비스 계정 키 → Application Default Credentials(`gcloud auth application-default login`) → `gcloud` CLI. 토큰은 메모리에만 두고, 서비스 계정 키는 Google의 토큰 주소로만 보낸다.
 - 실패: 출처마다 따로 실패한다. 값을 추정하지 않고 Unknown과 이유(권한 없음, 로그인 만료, API 꺼짐)를 보여 준다. 제한은 직접 입력할 수 있다. 모델 호출은 그대로 된다.
 
