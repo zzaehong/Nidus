@@ -367,7 +367,12 @@ export async function recordProject(library: Library, project: Project, knowledg
   for (const d of knowledge.decisions) decisions.push(await library.write('Decisions', d.title, note('decision', d)));
   for (const l of knowledge.lessons) lessons.push(await library.write('Lessons', l.title, note('lesson', l)));
   const list = (items: string[]) => items.length ? items.map(i => `- ${i}`).join('\n') : '- (없음)';
-  const deliverables = project.tasks.filter(t => placeOf(t) === 'text' && t.output).map(t => `### ${t.title}\n\n${t.output}`);
+  // Each text deliverable is a file of its own, so it can be opened and linked by itself; the record links them.
+  const deliverables: string[] = [];
+  for (const t of project.tasks.filter(t => placeOf(t) === 'text' && t.output)) {
+    const head = ['---', 'type: deliverable', `project: ${project.id}`, `task: ${t.id}`, `date: ${date}`, 'author: Nidus', '---', `# ${t.title}`, '', t.output!.trim(), '', `출처: ${projectLink}`].join('\n');
+    deliverables.push(await library.write('Projects', `${projectTitle} — ${fileTitle(t.title)}`, head));
+  }
   const body = [
     '---', 'type: project', `project: ${project.id}`, `date: ${date}`, `status: ${project.status}`, `teams: [${project.teams.map(t => t.name).join(', ')}]`, 'author: Nidus', '---',
     `# ${knowledge.title}`, '',
@@ -378,9 +383,9 @@ export async function recordProject(library: Library, project: Project, knowledg
     ...(decisions.length ? ['## 결정', '', list(decisions.map(link)), ''] : []),
     ...(lessons.length ? ['## 교훈', '', list(lessons.map(link)), ''] : []),
     '## Task', '', ...project.tasks.map(t => `- ${t.title} — ${t.status}${t.result ? `: ${t.result.summary.replace(/\s+/g, ' ').slice(0, 400)}` : ''}`), '',
-    ...(deliverables.length ? ['## 결과물', '', ...deliverables, ''] : []),
+    ...(deliverables.length ? ['## 결과물', '', list(deliverables.map(link)), ''] : []),
     ...(project.report ? ['## 최종 보고', '', project.report, ''] : []),
   ].join('\n');
   const path = await library.write('Projects', projectTitle, body);
-  return [path, ...decisions, ...lessons];
+  return [path, ...deliverables, ...decisions, ...lessons];
 }

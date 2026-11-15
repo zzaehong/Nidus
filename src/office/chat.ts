@@ -15,6 +15,43 @@ const KEEP = 200;
 /** Turns sent to the model with each message. */
 const WINDOW = 24;
 
+/** A file of the Vault as a link the app opens in its Library tab. */
+export const libraryLink = (path: string): string => `nidus://library/${encodeURI(path).replace(/[()]/g, c => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)}`;
+
+/** A Markdown link to the Library, as a model writes it: the path may hold spaces and one level of parentheses. */
+const LINK = /\[([^\]\n]*)\]\(\s*nidus:\/\/library\/((?:[^()\n]|\([^()\n]*\))+?)\s*\)/g;
+
+/**
+ * Main's links to files are made true: a path that exists is kept (normalized), a wrong path with a
+ * known file's name is corrected, and a path that exists nowhere becomes plain text marked as missing.
+ * When the files that do exist are not linked at all, they are listed at the end.
+ */
+export async function checkedLinks(text: string, files: string[], exists: (path: string) => Promise<boolean>): Promise<string> {
+  const known = new Map(files.map(f => [f, true]));
+  const byName = new Map<string, string>();
+  for (const f of files) { const base = f.slice(f.lastIndexOf('/') + 1); byName.set(base, f); byName.set(base.replace(/\.md$/i, ''), f); }
+  const linked = new Set<string>();
+  const matches = [...text.matchAll(LINK)];
+  let out = text;
+  for (const m of matches.reverse()) {
+    const title = m[1]!;
+    let path = m[2]!.trim();
+    try { path = decodeURIComponent(path); } catch {}
+    path = path.replace(/^\/+/, '');
+    const base = path.slice(path.lastIndexOf('/') + 1);
+    let found: string | null = null;
+    if (known.has(path) || await exists(path)) found = path;
+    else if (known.has(`${path}.md`) || await exists(`${path}.md`)) found = `${path}.md`;
+    else if (byName.has(base)) found = byName.get(base)!;
+    const replacement = found ? `[${title}](${libraryLink(found)})` : `${title} (파일 없음: ${path})`;
+    if (found) linked.add(found);
+    out = out.slice(0, m.index!) + replacement + out.slice(m.index! + m[0].length);
+  }
+  const unlinked = files.filter(f => !linked.has(f));
+  if (files.length && linked.size === 0) out += `\n\n결과 파일 (Library):\n${unlinked.map(f => `- [${f.slice(f.lastIndexOf('/') + 1).replace(/\.md$/i, '')}](${libraryLink(f)})`).join('\n')}`;
+  return out;
+}
+
 export class ChatStore {
   constructor(private readonly file: string) {}
 
@@ -140,7 +177,7 @@ export class MainChat {
    * conversation, from the results — the findings themselves, not a pointer to the task list.
    * Waits for a turn in progress; when Main cannot answer, the team's report is said as it is.
    */
-  async conclude(brief: string, report: string, signal: AbortSignal): Promise<ChatMessage> {
+  async conclude(brief: string, report: string, signal: AbortSignal, files: string[] = [], exists: (path: string) => Promise<boolean> = async () => false): Promise<ChatMessage> {
     for (let waited = 0; this.busy && waited < 120_000 && !signal.aborted; waited += 500) await new Promise(r => setTimeout(r, 500));
     if (this.busy) return this.note(report, false);
     this.busy = true;
@@ -151,9 +188,9 @@ export class MainChat {
       try {
         const result = await sendWithRetry(this.deps.gateway, { role: 'main', taskId: 'chat' }, { system: chatSystem(), messages: conversation }, signal, this.policy);
         const raw = result.response.content.filter(b => b.type === 'text').map(b => (b as { text: string }).text).join('\n');
-        answer = { role: 'main', text: parseChat(raw).reply, at: new Date().toISOString(), model: result.response.model, provider: result.response.provider };
+        answer = { role: 'main', text: await checkedLinks(parseChat(raw).reply, files, exists), at: new Date().toISOString(), model: result.response.model, provider: result.response.provider };
       } catch (error: any) {
-        answer = { role: 'main', text: `결과를 정리해 답하지 못했습니다 (${String(error?.message ?? error)}). 팀의 보고를 그대로 전합니다.\n\n${report}`, at: new Date().toISOString() };
+        answer = { role: 'main', text: await checkedLinks(`결과를 정리해 답하지 못했습니다 (${String(error?.message ?? error)}). 팀의 보고를 그대로 전합니다.\n\n${report}`, files, exists), at: new Date().toISOString() };
       }
       await this.push(answer);
       return answer;

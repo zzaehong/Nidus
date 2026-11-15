@@ -122,3 +122,16 @@ test('when the project ends, Main answers the user from the results in the conve
   assert.match(fallback.text, /팀의 보고를 그대로 전합니다\.\n\n보고 원문$/);
   assert.equal(fallback.isError, undefined);
 });
+
+test('links in Main\'s answer are made true: wrong folders are corrected by name, missing files are said to be missing, and the files that exist are always offered', async () => {
+  const { checkedLinks, libraryLink } = await import('../dist/office/chat.js');
+  const files = ['Nidus/Projects/2026-11-16 문서 구조.md', 'Nidus/Projects/2026-11-16 문서 구조 — 가이드 (초안).md'];
+  const exists = async p => files.includes(p) || p === 'README.md';
+  assert.equal(libraryLink('Nidus/Projects/2026-11-16 문서 구조 — 가이드 (초안).md'), 'nidus://library/Nidus/Projects/2026-11-16%20%EB%AC%B8%EC%84%9C%20%EA%B5%AC%EC%A1%B0%20%E2%80%94%20%EA%B0%80%EC%9D%B4%EB%93%9C%20%28%EC%B4%88%EC%95%88%29.md');
+  const text = '가이드: [가이드](nidus://library/02.knowledge/2026-11-16 문서 구조 — 가이드 (초안).md), 기록: [기록](nidus://library/Nidus/Projects/2026-11-16%20%EB%AC%B8%EC%84%9C%20%EA%B5%AC%EC%A1%B0), 없음: [템플릿](nidus://library/96.templates/AI_Readable_Template.md), 사용자 문서: [README](nidus://library/README.md)';
+  const fixed = await checkedLinks(text, files, exists);
+  assert.equal(fixed, `가이드: [가이드](${libraryLink(files[1])}), 기록: [기록](${libraryLink(files[0])}), 없음: 템플릿 (파일 없음: 96.templates/AI_Readable_Template.md), 사용자 문서: [README](${libraryLink('README.md')})`);
+  const none = await checkedLinks('파일을 만들었습니다.', files, exists);
+  assert.equal(none, `파일을 만들었습니다.\n\n결과 파일 (Library):\n- [2026-11-16 문서 구조](${libraryLink(files[0])})\n- [2026-11-16 문서 구조 — 가이드 (초안)](${libraryLink(files[1])})`);
+  assert.equal(await checkedLinks('아무 파일도 없습니다.', [], exists), '아무 파일도 없습니다.');
+});

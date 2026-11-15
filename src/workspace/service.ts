@@ -8,9 +8,9 @@ import { createInterface } from 'node:readline';
 import { randomUUID } from 'node:crypto';
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdir, readFile, rmdir, writeFile, chmod } from 'node:fs/promises';
+import { mkdir, readFile, rmdir, writeFile, chmod, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { AppleOfflineBackend } from '../vault/apple-backend.js';
 import { CacheDiskStore, type CacheAttachment } from '../vault/cache-disk.js';
 import { KeychainStore } from '../credentials.js';
@@ -593,7 +593,13 @@ async function executeProject() {
     // The work was asked for in the conversation: Main answers there, from the results and the Library record. The report itself stays in this tab.
     if (project.status === 'done' && chat) {
       const report = project.report ?? '';
-      void chat.conclude(concludeBrief(project), report, AbortSignal.timeout(10 * 60_000)).catch(() => chat!.note(report, false).catch(() => {}));
+      const root = paths!.root;
+      const inVault = async (relative: string) => {
+        const target = resolve(root, relative);
+        if (!target.startsWith(root + '/') || relative.includes('\0')) return false;
+        return stat(target).then(s => s.isFile(), () => false);
+      };
+      void chat.conclude(concludeBrief(project), report, AbortSignal.timeout(10 * 60_000), project.knowledge ?? [], inVault).catch(() => chat!.note(report, false).catch(() => {}));
     }
     // A project that did not reach its report still gets a word in the conversation.
     if (project.status === 'failed') void chat?.note(`프로젝트를 끝내지 못했습니다: ${project.error ?? '원인을 알 수 없습니다'}. 작업 탭에서 다시 시작하거나 닫을 수 있습니다.`, true).catch(() => {});

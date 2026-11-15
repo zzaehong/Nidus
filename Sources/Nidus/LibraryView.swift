@@ -97,7 +97,9 @@ final class LibraryModel: ObservableObject {
             let url = root.appendingPathComponent(candidate).standardizedFileURL
             if url.path.hasPrefix(root.path + "/"), FileManager.default.fileExists(atPath: url.path) { select(LibraryNode(url: url, isDirectory: false, children: nil)); return true }
         }
-        problem = "\"\(relative)\" 파일이 Vault에 없습니다."
+        // The folder may be wrong while the name is right (a link written from memory).
+        if let found = note(named: (relative as NSString).lastPathComponent) { select(LibraryNode(url: found, isDirectory: false, children: nil)); return true }
+        problem = "\"\(relative)\" 파일이 Vault에 없습니다. AI가 만들었다고 한 파일이라면, 실제로 만들어진 파일은 \(root.lastPathComponent)/Nidus/Projects 폴더에 있습니다."
         return false
     }
 
@@ -381,6 +383,9 @@ struct LibraryView: View {
             }
         } else {
             VStack(spacing: 10) {
+                if let problem = model.problem {
+                    Label(problem, systemImage: "exclamationmark.triangle").font(.callout).foregroundStyle(.orange).multilineTextAlignment(.center).padding(.bottom, 8)
+                }
                 Image(systemName: "books.vertical").font(.system(size: 40)).foregroundStyle(.tertiary)
                 Text("Library").font(.title2)
                 Text("이 Vault의 노트를 읽는 곳입니다. 왼쪽에서 문서를 고르면 미리보기로 열립니다(Markdown·HTML). 고치는 것은 Obsidian에서 하세요.\nAI 팀이 쓴 문서는 \(aiFolder) 폴더에 모이고, Main의 답에 있는 링크를 누르면 그 문서가 여기서 열립니다.")
