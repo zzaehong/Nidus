@@ -125,12 +125,41 @@ enum VaultSection: String, CaseIterable, Identifiable {
 
 struct VaultView: View {
     @EnvironmentObject private var store: VaultStore
+    @EnvironmentObject private var session: WorkspaceSession
     /// The last opened section is remembered between launches.
     @AppStorage("section") private var storedSection = VaultSection.assignment.rawValue
     /// Whether the sidebar was closed is remembered too.
     @AppStorage("sidebarHidden") private var sidebarHidden = false
 
     private var vaultURL: URL { URL(fileURLWithPath: store.vault ?? "") }
+
+    /// How many things in a section wait for the user's decision: approvals and a result to review in
+    /// 작업, a plan or questions and note suggestions in Main, warnings on providers.
+    private func attention(_ section: VaultSection) -> Int {
+        switch section {
+        case .work: return session.approvals.count + (session.review != nil ? 1 : 0)
+        case .main: return (session.project?.status == "waiting_user" ? 1 : 0) + (session.curation != nil ? 1 : 0)
+        case .providers: return store.overview?.providers.filter { $0.notice != nil }.count ?? 0
+        default: return 0
+        }
+    }
+
+    private func attentionHelp(_ section: VaultSection) -> String {
+        switch section {
+        case .work:
+            var parts: [String] = []
+            if !session.approvals.isEmpty { parts.append("네트워크 승인 \(session.approvals.count)건") }
+            if session.review != nil { parts.append("검토를 기다리는 결과") }
+            return parts.joined(separator: " · ")
+        case .main:
+            var parts: [String] = []
+            if session.project?.status == "waiting_user" { parts.append(session.project?.questions.isEmpty == false ? "Main의 질문" : "계획 승인 대기") }
+            if session.curation != nil { parts.append("문서 연결 제안") }
+            return parts.joined(separator: " · ")
+        case .providers: return "확인할 Provider 알림"
+        default: return ""
+        }
+    }
 
     var body: some View {
         NavigationSplitView(columnVisibility: Binding(
@@ -139,6 +168,9 @@ struct VaultView: View {
         )) {
             List(VaultSection.allCases, selection: Binding(get: { VaultSection(rawValue: storedSection) }, set: { storedSection = ($0 ?? .assignment).rawValue })) { item in
                 Label(item.rawValue, systemImage: item.icon).tag(item)
+                    // Things waiting for the user in a section they are not looking at.
+                    .badge(attention(item))
+                    .help(attentionHelp(item))
             }
             // The open vault is named here and in each page header, not in the toolbar:
             // a toolbar title sits after the sidebar button and never lines up with the page.

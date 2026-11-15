@@ -221,6 +221,45 @@ struct WebPreview: NSViewRepresentable {
     }
 }
 
+/// The tree's rows. A folder opens and closes on a click anywhere in its row, not only on the
+/// triangle; a file row selects the file.
+private struct TreeRows: View {
+    let nodes: [LibraryNode]
+    @Binding var expanded: Set<URL>
+    /// While a name filter is on, every folder with a match stays open.
+    let forceOpen: Bool
+    let aiFolder: String
+    let icon: (LibraryNode) -> String
+
+    var body: some View {
+        ForEach(nodes) { node in
+            if node.isDirectory {
+                DisclosureGroup(isExpanded: Binding(
+                    get: { forceOpen || expanded.contains(node.url) },
+                    set: { open in if open { expanded.insert(node.url) } else { expanded.remove(node.url) } }
+                )) {
+                    TreeRows(nodes: node.children ?? [], expanded: $expanded, forceOpen: forceOpen, aiFolder: aiFolder, icon: icon)
+                } label: {
+                    label(node)
+                        .contentShape(Rectangle())
+                        .onTapGesture { if expanded.contains(node.url) { expanded.remove(node.url) } else { expanded.insert(node.url) } }
+                }
+            } else {
+                label(node).tag(node.url)
+            }
+        }
+    }
+
+    private func label(_ node: LibraryNode) -> some View {
+        Label {
+            Text(node.isDirectory ? node.name : (node.kind == .markdown ? node.url.deletingPathExtension().lastPathComponent : node.name)).lineLimit(1)
+        } icon: {
+            Image(systemName: icon(node)).foregroundStyle(node.isDirectory && node.name == aiFolder ? Color.accentColor : .secondary)
+        }
+        .help(node.isDirectory && node.name == aiFolder ? "AI 팀이 쓴 문서가 모이는 폴더입니다" : node.name)
+    }
+}
+
 /// The Library tab: the Vault's notes as a tree, with a read-only preview (Markdown rendered,
 /// HTML shown as a page). Main's answers link the files that hold results; the links open here.
 struct LibraryView: View {
@@ -237,6 +276,8 @@ struct LibraryView: View {
     @State private var rendered = ""
     @State private var renderTask: Task<Void, Never>?
     @State private var selection: URL?
+    /// Folders the user opened. A folder on the way to the open note is opened for them.
+    @State private var expanded: Set<URL> = []
 
     private var aiFolder: String { "Nidus" }
 
@@ -269,6 +310,11 @@ struct LibraryView: View {
         }
         .onChange(of: model.selected) { node in
             selection = node?.url; allowActive = false; render(now: true)
+            // The folders above the open note are opened, so it is visible in the tree.
+            if let node, let root = model.root {
+                var folder = node.url.deletingLastPathComponent().standardizedFileURL
+                while folder.path.hasPrefix(root.path + "/") { expanded.insert(folder); folder = folder.deletingLastPathComponent().standardizedFileURL }
+            }
             if let node, !node.isDirectory, let root = model.root, node.url.path.hasPrefix(root.path + "/") { last = String(node.url.path.dropFirst(root.path.count + 1)) }
         }
         .onChange(of: model.text) { _ in render(now: true) }
@@ -324,13 +370,8 @@ struct LibraryView: View {
                     }
                 }.listStyle(.sidebar)
             } else {
-                List(filtered(model.tree), children: \.children, selection: $selection) { node in
-                    Label {
-                        Text(node.isDirectory ? node.name : (node.kind == .markdown ? node.url.deletingPathExtension().lastPathComponent : node.name)).lineLimit(1)
-                    } icon: {
-                        Image(systemName: icon(node)).foregroundStyle(node.isDirectory && node.name == aiFolder ? Color.accentColor : .secondary)
-                    }
-                    .help(node.isDirectory && node.name == aiFolder ? "AI 팀이 쓴 문서가 모이는 폴더입니다" : node.name)
+                List(selection: $selection) {
+                    TreeRows(nodes: filtered(model.tree), expanded: $expanded, forceOpen: !filter.trimmingCharacters(in: .whitespaces).isEmpty, aiFolder: aiFolder, icon: icon)
                 }
                 .listStyle(.sidebar)
             }
