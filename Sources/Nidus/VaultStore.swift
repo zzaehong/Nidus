@@ -131,13 +131,22 @@ final class VaultStore: ObservableObject {
         }
     }
 
-    /// Returns true when the key was accepted and stored.
-    func connect(_ provider: ProviderInfo, key: String, accountId: String) async -> Bool {
+    /// Nil when the key was accepted and stored; otherwise why not. The failure is returned, not published
+    /// as `error`: the caller is a sheet, and the app's alert cannot appear over a sheet (it would wait
+    /// until the sheet closes), so the sheet shows the words itself.
+    func connect(_ provider: ProviderInfo, key: String, accountId: String) async -> String? {
         var extra: [String: Any] = ["provider": provider.id, "key": key]
         if provider.needsAccountId, !accountId.trimmingCharacters(in: .whitespaces).isEmpty { extra["accountId"] = accountId.trimmingCharacters(in: .whitespaces) }
-        let result: ConnectResult? = await run { try await bridge.call("connect", arguments(extra)) }
-        if result != nil { await reload() }
-        return result != nil
+        pending += 1
+        updateBusy()
+        defer { pending -= 1; updateBusy() }
+        do {
+            let _: ConnectResult = try await bridge.call("connect", arguments(extra))
+        } catch {
+            return error.localizedDescription
+        }
+        await reload()
+        return nil
     }
 
     func refresh(_ provider: ProviderInfo) async {

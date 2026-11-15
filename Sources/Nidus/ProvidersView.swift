@@ -269,10 +269,13 @@ private struct ConnectSheet: View {
                 Button("확인 후 저장") {
                     Task {
                         problem = nil
-                        if await store.connect(provider, key: key, accountId: accountId) { key = ""; dismiss(); return }
-                        // Keep the key typed so the user can add what was missing and try again.
-                        problem = store.error ?? "연결하지 못했습니다."
-                        store.error = nil
+                        if let failure = await store.connect(provider, key: key, accountId: accountId) {
+                            // Shown here, in the sheet; the key stays typed so what was missing can be added and tried again.
+                            problem = failure
+                            return
+                        }
+                        key = ""
+                        dismiss()
                     }
                 }
                 .keyboardShortcut(.defaultAction)
