@@ -1,7 +1,10 @@
 // Connecting and filing the user's notes (CONCEPT: "AI는 사용자 문서에 [[Wiki Link]] 형태의 참조를
 // 추가하고, 사용자가 정한 분류 규칙에 따라 폴더를 생성하거나 문서를 이동할 수 있다"). This is the one
 // place where the AI changes the user's own documents, so it only ever proposes:
-//   1. the Library Manager reads the notes (titles, how they begin, the links they have)
+//   1. the Library Manager reads the notes whole. A small Library goes to it as it is; for a
+//      larger one it first reads every note in full, in batches, and writes a card of each
+//      (what the whole note covers), then works from the cards. Cards are kept by the note's
+//      content (.nidus/local/note-cards.json), so only changed notes are read again.
 //   2. it suggests links between notes, and moves where the user's filing rules say so
 //   3. the user picks; only what was picked is applied
 // A link is added as one line under "## 관련 문서" at the end of the note; nothing else in the
@@ -9,13 +12,20 @@
 // without rules no move is suggested. Suggestions wait in .nidus/local/curation.json.
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { Message } from '../gateway/contract.js';
 import { sendWithRetry, type RetryPolicy, type WorkerGateway } from '../workspace/worker.js';
 import { extractJson, PlanError } from './plan.js';
 import type { Library } from './library.js';
 
-export interface CatalogueNote { id: string; path: string; title: string; excerpt: string; links: string[]; own: boolean }
+export interface CatalogueNote {
+  id: string; path: string; title: string; links: string[]; own: boolean;
+  /** The whole note, without frontmatter. */
+  text: string;
+  hash: string;
+  /** What the whole note covers, written by the Library Manager after reading it (larger Libraries only). */
+  card?: string;
+}
 
 export interface Suggestion {
   id: string;
@@ -31,8 +41,12 @@ export interface Suggestion {
 
 export interface Curation { at: string; read: number; suggestions: Suggestion[] }
 
-/** Notes shown to the Library Manager in one run, the most recently changed first. */
-const MAX_NOTES = 150;
+/** Notes looked over in one run, the most recently changed first. */
+const MAX_NOTES = 400;
+/** Up to this many characters of notes in all, the Library Manager gets every note whole in one request. */
+export const WHOLE_BUDGET = 80_000;
+/** Characters of notes read per request when cards are written. A longer note is read in parts of this size. */
+export const BATCH = 40_000;
 const MAX_SUGGESTIONS = 20;
 export const RELATED_HEADING = '## 관련 문서';
 
@@ -51,8 +65,8 @@ export async function catalogue(library: Library): Promise<CatalogueNote[]> {
     const text = await library.read(document.path).catch(() => null);
     // The records of Dream Sequences are logs, not knowledge to link to.
     if (text === null || document.path.startsWith(`${library.folder}/Dream/`)) continue;
-    const body = text.replace(/^---\n[\s\S]*?\n---\n?/, '').replace(/\s+/g, ' ').trim();
-    out.push({ id: `N${out.length + 1}`, path: document.path, title: titleOf(document.path), excerpt: body.slice(0, 260), links: linksIn(text), own: document.own });
+    const body = text.replace(/^---\n[\s\S]*?\n---\n?/, '').trim();
+    out.push({ id: `N${out.length + 1}`, path: document.path, title: titleOf(document.path), text: body, hash: createHash('sha256').update(body).digest('hex').slice(0, 24), links: linksIn(text), own: document.own });
   }
   return out;
 }
@@ -66,12 +80,13 @@ export function curateSystem(): string {
 }
 
 export function curateRequest(notes: CatalogueNote[], rules: string): string {
-  const show = (n: CatalogueNote) => `[${n.id}] ${n.path}${n.own ? ' (the team\'s note)' : ''}${n.links.length ? ` | links to: ${n.links.slice(0, 12).join(', ')}` : ''}\n${n.excerpt || '(empty)'}`;
+  const cards = notes.some(n => n.card !== undefined);
+  const show = (n: CatalogueNote) => `[${n.id}] ${n.path}${n.own ? ' (the team\'s note)' : ''}${n.links.length ? ` | links to: ${n.links.slice(0, 12).join(', ')}` : ''}\n${(n.card ?? n.text) || '(empty)'}`;
   const folders = [...new Set(notes.filter(n => !n.own).map(n => folderOf(n.path)).filter(Boolean))].sort();
   return [
-    `The notes (${notes.length}):`,
+    cards ? `The notes (${notes.length}). Under each is a card: what the whole note covers, written by you after reading it in full.` : `The notes (${notes.length}), each in full:`,
     '',
-    notes.map(show).join('\n\n'),
+    notes.map(show).join(cards ? '\n\n' : '\n\n-----\n\n'),
     '',
     `Folders the user has: ${folders.join(', ') || '(none; all notes are at the top)'}`,
     rules ? `The user's filing rules:\n${rules}` : 'The user has set no filing rules: suggest no moves.',
@@ -138,6 +153,73 @@ export function relatedAddition(text: string, link: string, reason: string): str
   return inSection ? `${gap}${line}` : `${gap}${text.trim() ? '\n' : ''}${RELATED_HEADING}\n\n${line}`;
 }
 
+// --- cards: reading every note whole when the Library is too large for one request ----------
+
+export interface CardPart { id: string; note: CatalogueNote; part: number; parts: number; text: string }
+
+/** The notes that need a card, cut into requests of about BATCH characters; a long note becomes several parts. */
+export function cardBatches(notes: CatalogueNote[], size = BATCH): CardPart[][] {
+  const parts: CardPart[] = [];
+  for (const note of notes) {
+    const count = Math.max(1, Math.ceil(note.text.length / size));
+    for (let i = 0; i < count; i++) parts.push({ id: count > 1 ? `${note.id}.${i + 1}` : note.id, note, part: i + 1, parts: count, text: note.text.slice(i * size, (i + 1) * size) });
+  }
+  const batches: CardPart[][] = [];
+  let used = 0;
+  for (const part of parts) {
+    if (!batches.length || used + part.text.length > size) { batches.push([]); used = 0; }
+    batches[batches.length - 1]!.push(part);
+    used += part.text.length;
+  }
+  return batches;
+}
+
+export function cardRequest(batch: CardPart[]): string {
+  return [
+    `Read these notes in full (${batch.length}). For each, write a card: what the note covers from beginning to end, so that someone who has not read it can tell which other notes belong with it.`,
+    '- Subjects, the main points and conclusions, what it decides or leaves open, and the names in it (people, books, projects, tools, terms). Later sections count as much as the opening.',
+    '- Three to six sentences, in the language of the note. Only what the note says. An empty or trivial note gets one sentence.',
+    '- Some entries are one part of a long note ("part 2 of 3"): write the card of that part.',
+    '',
+    batch.map(p => `[${p.id}] ${p.note.path}${p.parts > 1 ? ` (part ${p.part} of ${p.parts})` : ''}\n${p.text || '(empty)'}`).join('\n\n-----\n\n'),
+    '',
+    'Answer with one JSON object only, one card for every id above:',
+    '{"cards": [{"id": "N1", "card": "..."}]}',
+  ].join('\n');
+}
+
+export function parseCards(answer: string, batch: CardPart[]): Map<string, string> {
+  const raw = extractJson(answer);
+  if (!Array.isArray(raw.cards)) throw new PlanError('give a "cards" list');
+  const out = new Map<string, string>();
+  for (const c of raw.cards) {
+    const id = String(c?.id ?? '').replace(/^\[|\]$/g, '').trim();
+    const card = typeof c?.card === 'string' ? c.card.replace(/\s+/g, ' ').trim().slice(0, 1200) : '';
+    if (card && batch.some(p => p.id === id)) out.set(id, card);
+  }
+  if (!out.size) throw new PlanError('no card for any of the ids asked for');
+  return out;
+}
+
+/** Cards by path, each for one content of the note: .nidus/local/note-cards.json */
+export class CardStore {
+  constructor(private readonly file: string) {}
+
+  async load(): Promise<Record<string, { hash: string; card: string }>> {
+    try {
+      const cards = JSON.parse(await readFile(this.file, 'utf8'));
+      return cards && typeof cards === 'object' && !Array.isArray(cards) ? cards : {};
+    } catch { return {}; }
+  }
+
+  async save(cards: Record<string, { hash: string; card: string }>): Promise<void> {
+    await mkdir(dirname(this.file), { recursive: true });
+    const pending = `${this.file}.${randomUUID()}.pending`;
+    await writeFile(pending, JSON.stringify(cards) + '\n');
+    await rename(pending, this.file);
+  }
+}
+
 export class CurationStore {
   constructor(private readonly file: string) {}
 
@@ -161,7 +243,11 @@ export interface CuratorDeps {
   library: Library;
   store: CurationStore;
   rules(): Promise<string>;
+  /** Cards of notes already read; without it every run reads every note again. */
+  cards?: CardStore;
   onChange(curation: Curation | null): void;
+  /** While the notes are being read: how far it is. */
+  onProgress?(text: string): void;
   retryWaits?: number[];
 }
 
@@ -190,10 +276,12 @@ export class Curator {
       const notes = await catalogue(this.deps.library);
       if (notes.filter(n => !n.own).length < 2) { const none = { at: new Date().toISOString(), read: notes.length, suggestions: [] }; await this.set(none); return none; }
       const policy: RetryPolicy = this.deps.retryWaits ? { waits: this.deps.retryWaits, rateLimitWaits: this.deps.retryWaits } : {};
+      // Every note is read whole: together in one request when they fit, otherwise through cards.
+      if (notes.reduce((sum, n) => sum + n.text.length, 0) > WHOLE_BUDGET) await this.writeCards(notes, signal, policy);
+      this.deps.onProgress?.('제안을 만드는 중');
       const messages: Message[] = [{ role: 'user', content: [{ type: 'text', text: curateRequest(notes, await this.deps.rules()) }] }];
       for (let attempt = 0; ; attempt++) {
-        const result = await sendWithRetry(this.deps.gateway, { role: 'main', taskId: 'curate' }, { system: curateSystem(), messages }, signal, policy);
-        const text = result.response.content.filter(b => b.type === 'text').map(b => (b as { text: string }).text).join('\n');
+        const text = await this.call(messages, signal, policy);
         try {
           const curation = { at: new Date().toISOString(), read: notes.length, suggestions: parseCuration(text, notes, this.deps.library.folder) };
           await this.set(curation);
@@ -204,6 +292,47 @@ export class Curator {
         }
       }
     } finally { this.busy = false; }
+  }
+
+  private async call(messages: Message[], signal: AbortSignal, policy: RetryPolicy): Promise<string> {
+    const result = await sendWithRetry(this.deps.gateway, { role: 'main', taskId: 'curate' }, { system: curateSystem(), messages }, signal, policy);
+    return result.response.content.filter(b => b.type === 'text').map(b => (b as { text: string }).text).join('\n');
+  }
+
+  /** Gives every note its card: kept ones where the note has not changed, the rest by reading the notes in full. */
+  private async writeCards(notes: CatalogueNote[], signal: AbortSignal, policy: RetryPolicy): Promise<void> {
+    const kept = await this.deps.cards?.load() ?? {};
+    for (const n of notes) if (kept[n.path]?.hash === n.hash) n.card = kept[n.path]!.card;
+    const batches = cardBatches(notes.filter(n => n.card === undefined));
+    const written = new Map<string, string>();
+    for (const [i, batch] of batches.entries()) {
+      if (signal.aborted) throw new Error('stopped');
+      this.deps.onProgress?.(`노트를 읽는 중 (${i + 1}/${batches.length})`);
+      const messages: Message[] = [{ role: 'user', content: [{ type: 'text', text: cardRequest(batch) }] }];
+      for (let attempt = 0; ; attempt++) {
+        const text = await this.call(messages, signal, policy);
+        try { for (const [id, card] of parseCards(text, batch)) written.set(id, card); break; } catch (error) {
+          if (!(error instanceof PlanError) || attempt >= 1) throw new Error(`노트를 읽고 정리하지 못했습니다: ${(error as Error).message}`);
+          messages.push({ role: 'assistant', content: [{ type: 'text', text }] }, { role: 'user', content: [{ type: 'text', text: `That answer could not be used: ${(error as Error).message}. Answer again with the JSON object only.` }] });
+        }
+      }
+      // After each request: a run that is stopped or fails later keeps what was read.
+      for (const part of batch) {
+        const note = part.note;
+        const ids = Array.from({ length: part.parts }, (_, k) => part.parts > 1 ? `${note.id}.${k + 1}` : note.id);
+        if (part.part !== part.parts && !ids.every(id => written.has(id))) continue;
+        const cards = ids.map(id => written.get(id)).filter(Boolean);
+        // A part the model skipped is shown as it begins, so the note is never left out.
+        note.card = cards.length === ids.length ? cards.join(' ') : [...cards, note.text.replace(/\s+/g, ' ').slice(0, 600)].join(' ');
+        if (cards.length === ids.length) kept[note.path] = { hash: note.hash, card: note.card };
+      }
+      await this.deps.cards?.save(kept).catch(() => {});
+    }
+    for (const n of notes) n.card ??= n.text.replace(/\s+/g, ' ').slice(0, 600);
+    // Cards of notes that are gone are dropped.
+    const paths = new Set(notes.map(n => n.path));
+    for (const path of Object.keys(kept)) if (!paths.has(path)) delete kept[path];
+    await this.deps.cards?.save(kept).catch(() => {});
   }
 
   /** Applies the suggestions the user picked (by id). Each stands alone: one failing does not stop the others. */

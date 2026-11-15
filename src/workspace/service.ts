@@ -28,7 +28,7 @@ import { HomeStore, identity } from '../office/home.js';
 import { DeskStore, deskHasContext, recoveryBrief, renderDesk, withDesk } from '../office/desk.js';
 import { MAX_ATTEMPTS } from '../office/office.js';
 import { Library, libraryFolder, libraryRules, setLibraryRules, withLibrary } from '../office/library.js';
-import { Curator, CurationStore, describeCuration } from '../office/curate.js';
+import { CardStore, Curator, CurationStore, describeCuration } from '../office/curate.js';
 import { Dream, describeDream } from '../office/dream.js';
 import { ChatStore, MainChat } from '../office/chat.js';
 import { describeStaff } from '../office/home.js';
@@ -145,7 +145,8 @@ async function open(vault: string) {
   office = new Office({ gateway, store: new BoardStore(join(paths.local, 'board')), home, desk: desks, library, repository: repositoryOverview, work, onEvent: officeEvent });
   dream = new Dream({ gateway, library, stateFile: join(paths.local, 'dream.json') });
   const libraryConfig = join(paths.nidus, 'office', 'library.json');
-  curator = new Curator({ gateway, library, store: new CurationStore(join(paths.local, 'curation.json')), rules: () => libraryRules(libraryConfig), onChange: curation => event('curation', { curation, running: !!curating }) });
+  curator = new Curator({ gateway, library, store: new CurationStore(join(paths.local, 'curation.json')), rules: () => libraryRules(libraryConfig), cards: new CardStore(join(paths.local, 'note-cards.json')),
+    onChange: curation => event('curation', { curation, running: !!curating }), onProgress: progress => event('curation', { curation: curator!.current, running: true, progress }) });
   await curator.load();
   chat = new MainChat({
     gateway, store: new ChatStore(join(paths.local, 'main-chat.json')),

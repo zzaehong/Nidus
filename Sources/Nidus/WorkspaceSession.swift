@@ -146,6 +146,7 @@ final class WorkspaceSession: ObservableObject {
     /// The Library Manager's suggestions waiting for the user, and whether it is making some now.
     @Published private(set) var curation: NoteCuration?
     @Published private(set) var curating = false
+    @Published private(set) var curatingProgress = ""
     @Published private(set) var git = "ready"
     @Published private(set) var costUSD = 0.0
     @Published private(set) var costUnknown = false
@@ -301,6 +302,7 @@ final class WorkspaceSession: ObservableObject {
             entries.append(RunEntry(kind: .note, title: m["text"] as? String ?? ""))
         case "curation":
             curating = m["running"] as? Bool ?? false
+            curatingProgress = curating ? (m["progress"] as? String ?? curatingProgress) : ""
             if let value = m["curation"], !(value is NSNull), let data = try? JSONSerialization.data(withJSONObject: value) {
                 curation = try? JSONDecoder().decode(NoteCuration.self, from: data)
             } else {

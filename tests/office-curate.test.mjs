@@ -5,7 +5,7 @@ import { mkdtemp, rm, writeFile, mkdir, readFile, symlink, readdir, stat } from 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Library, libraryRules, setLibraryRules, libraryFolder } from '../dist/office/library.js';
-import { Curator, CurationStore, catalogue, curateRequest, parseCuration, linksIn, linkName, relatedAddition, describeCuration } from '../dist/office/curate.js';
+import { Curator, CurationStore, CardStore, cardBatches, cardRequest, parseCards, WHOLE_BUDGET, BATCH, catalogue, curateRequest, parseCuration, linksIn, linkName, relatedAddition, describeCuration } from '../dist/office/curate.js';
 import { resetCooling } from '../dist/workspace/worker.js';
 
 const files = {
@@ -38,10 +38,12 @@ test('the catalogue lists the Library\'s notes with how they begin and what they
   const { library } = await vault(t);
   const notes = await catalogue(library);
   assert.deepEqual(notes.map(n => `${n.id} ${n.path}${n.own ? ' own' : ''}`), ['N1 Nidus/Lessons/예시를 먼저 모은다.md own', 'N2 독서/영구 메모.md', 'N3 독서/제텔카스텐.md', 'N4 할 일.md', 'N5 회의록 11월.md']);
-  assert.deepEqual([notes[2].title, notes[2].links, notes[2].excerpt], ['제텔카스텐', ['영구 메모'], '# 제텔카스텐 메모를 연결하는 방법. [[영구 메모]]를 쌓는다.']);
+  assert.deepEqual([notes[2].title, notes[2].links, notes[2].text], ['제텔카스텐', ['영구 메모'], '# 제텔카스텐\n메모를 연결하는 방법. [[영구 메모]]를 쌓는다.'], 'the whole note, without frontmatter');
+  assert.match(notes[2].hash, /^[0-9a-f]{24}$/);
   assert.deepEqual(linksIn('[[a/b|x]] [[c#d]] [[c]] [e]'), ['b', 'c']);
   const request = curateRequest(notes, '');
-  assert.match(request, /\[N3\] 독서\/제텔카스텐\.md \| links to: 영구 메모\n/);
+  assert.match(request, /\[N3\] 독서\/제텔카스텐\.md \| links to: 영구 메모\n# 제텔카스텐\n메모를 연결하는 방법/);
+  assert.match(request, /^The notes \(5\), each in full:/);
   assert.match(request, /\[N1\] Nidus\/Lessons\/예시를 먼저 모은다\.md \(the team's note\)/);
   assert.match(request, /Folders the user has: 독서\n/);
   assert.match(request, /no filing rules: suggest no moves/);
@@ -141,4 +143,56 @@ test('filing rules live in library.json beside the folder setting', async t => {
   assert.equal(await setLibraryRules(config, '  회의록은 회의/ 폴더에  '), '회의록은 회의/ 폴더에');
   assert.equal(await libraryRules(config), '회의록은 회의/ 폴더에');
   assert.equal(await libraryFolder(config), 'AI', 'the folder setting is kept');
+});
+
+test('a Library too large for one request is read whole through cards, and only changed notes are read again', async t => {
+  const { dir, library } = await vault(t);
+  // Three long notes; what connects two of them is at the very end, far past any excerpt.
+  const filler = n => Array.from({ length: n }, (_, i) => `문단 ${i}: 그날의 기록을 이어서 적는다.`).join('\n');
+  await writeFile(join(dir, '일지 봄.md'), `${filler(1500)}\n맨 끝: 온실 설계는 겨울 일지의 단열 실험에서 나왔다.\n`);
+  await writeFile(join(dir, '일지 겨울.md'), `${filler(1500)}\n맨 끝: 단열 실험 결과 이중 비닐이 가장 나았다.\n`);
+  await writeFile(join(dir, '일지 긴 것.md'), `${filler(4000)}\n맨 끝: 긴 노트의 마지막 줄.\n`);
+  const notes = await catalogue(library);
+  assert.ok(notes.reduce((n, x) => n + x.text.length, 0) > WHOLE_BUDGET);
+  const long = notes.find(n => n.title === '일지 긴 것');
+  const batches = cardBatches(notes);
+  const parts = batches.flat().filter(p => p.note === long);
+  assert.ok(parts.length >= 2 && parts.map(p => p.text).join('') === long.text, 'a long note is read in parts that together are the whole note');
+  assert.ok(batches.every(b => b.length === 1 || b.reduce((n, p) => n + p.text.length, 0) <= BATCH));
+  assert.match(cardRequest(batches.find(b => b.includes(parts[1]))), new RegExp(`\\[${long.id}\\.2\\] 일지 긴 것\\.md \\(part 2 of ${parts.length}\\)`));
+  assert.throws(() => parseCards('{"cards": [{"id": "N99", "card": "x"}]}', batches[0]), /no card/);
+
+  resetCooling();
+  const requests = [], progress = [];
+  const answerFor = request => {
+    const text = request.messages[0].content[0].text;
+    if (text.startsWith('Read these notes in full')) {
+      const ids = [...text.matchAll(/^\[(N[\d.]+)\] /gm)].map(m => m[1]);
+      // The card says what the end of the note says: proof the whole text was sent.
+      return JSON.stringify({ cards: ids.map(id => ({ id, card: `카드 ${id}${text.includes('단열 실험 결과') && id === notes.find(n => n.title === '일지 겨울').id ? ': 단열 실험 결과' : ''}` })) });
+    }
+    return JSON.stringify({ links: [{ from: '일지 봄.md', to: '일지 겨울.md', reason: '온실 설계의 근거' }], moves: [] });
+  };
+  const gateway = { async send(target, request) { requests.push(structuredClone(request)); return { response: { provider: 'p', model: 'm', content: [{ type: 'text', text: answerFor(request) }], stopReason: 'end', usage: { inputTokens: 1, outputTokens: 1 } }, costUSD: null, warnings: [] }; } };
+  const cards = new CardStore(join(dir, '.nidus', 'local', 'note-cards.json'));
+  const make = () => new Curator({ gateway, library, store: new CurationStore(join(dir, '.nidus', 'local', 'curation.json')), cards, rules: async () => '', onChange: () => {}, onProgress: p => progress.push(p), retryWaits: [] });
+  const made = await make().suggest(signal());
+  assert.equal(requests.length, batches.length + 1, 'one request per batch of notes, then one for the suggestions');
+  const sent = requests.slice(0, -1).map(r => r.messages[0].content[0].text).join('\n');
+  for (const end of ['맨 끝: 온실 설계는', '맨 끝: 단열 실험 결과', '맨 끝: 긴 노트의 마지막 줄']) assert.ok(sent.includes(end), `the end of the note was read: ${end}`);
+  const final = requests.at(-1).messages[0].content[0].text;
+  assert.match(final, /Under each is a card: what the whole note covers/);
+  assert.match(final, /일지 겨울\.md\n카드 N\d+: 단열 실험 결과/);
+  assert.match(final, new RegExp(`일지 긴 것\\.md\\n${parts.map((_, i) => `카드 ${long.id}\\.${i + 1}`).join(' ')}\\n`), 'the parts of a long note make one card');
+  assert.ok(!final.includes('문단 1400'), 'the suggestions are made from cards, not the full text again');
+  assert.deepEqual(made.suggestions.map(s => `${s.path} -> ${s.target}`), ['일지 봄.md -> 일지 겨울.md']);
+  assert.deepEqual([progress[0], progress.at(-1)], [`노트를 읽는 중 (1/${batches.length})`, '제안을 만드는 중']);
+  assert.equal(Object.keys(await cards.load()).length, notes.length);
+
+  // Next time: only the note that changed is read again.
+  await writeFile(join(dir, '할 일.md'), '- 장보기\n- 온실 비닐 사기\n');
+  requests.length = 0;
+  await make().suggest(signal());
+  assert.equal(requests.length, 2);
+  assert.match(requests[0].messages[0].content[0].text, /^Read these notes in full \(1\)[\s\S]*온실 비닐 사기/);
 });

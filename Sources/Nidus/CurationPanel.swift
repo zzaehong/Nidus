@@ -21,7 +21,7 @@ struct CurationPanel: View {
                 if session.curating { ProgressView().controlSize(.small) }
             }
             if session.curating {
-                Text("노트를 살펴보고 있습니다…").foregroundStyle(.secondary)
+                Text(session.curatingProgress.isEmpty ? "노트를 살펴보고 있습니다…" : "\(session.curatingProgress)…").foregroundStyle(.secondary)
             } else if let curation {
                 if curation.suggestions.isEmpty {
                     Text("노트 \(curation.read)개를 살펴봤습니다. 제안할 것이 없었습니다.").font(.callout).foregroundStyle(.secondary)
