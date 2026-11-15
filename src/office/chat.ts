@@ -94,9 +94,11 @@ export class MainChat {
     this.deps.onChange(this.messages);
   }
 
-  /** Something Main says on its own: the report of work that ran beside the conversation. */
-  async note(text: string, isError = false): Promise<void> {
-    await this.push({ role: 'main', text, at: new Date().toISOString(), ...(isError ? { isError } : {}) });
+  /** Something Main says on its own: the report of work that ran beside the conversation. `by` names the model that wrote it, as "provider:model". */
+  async note(text: string, isError = false, by?: string): Promise<void> {
+    const split = by?.indexOf(':') ?? -1;
+    const who = by && split > 0 ? { provider: by.slice(0, split), model: by.slice(split + 1) } : {};
+    await this.push({ role: 'main', text, at: new Date().toISOString(), ...who, ...(isError ? { isError } : {}) });
   }
 
   async clear(): Promise<void> {

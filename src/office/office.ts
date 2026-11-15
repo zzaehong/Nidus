@@ -18,7 +18,7 @@ import { mainSystem, managerSystem } from './roles.js';
 
 export type OfficeEvent =
   | { type: 'project'; project: Project }
-  | { type: 'message'; from: 'main' | 'manager'; taskId?: string; title: string; text: string; /** "provider:model" of the call that produced this, for the user's judgement. */ model?: string; difficulty?: Difficulty }
+  | { type: 'message'; from: 'main' | 'manager'; taskId?: string; title: string; text: string; /** "provider:model" of the call that produced this, for the user's judgement. */ model?: string; difficulty?: Difficulty; /** Main's final report of the project: it is also said in the conversation. */ final?: true }
   | { type: 'retry'; from: string; attempt: number; error: string };
 
 export interface OfficeDeps {
@@ -179,7 +179,7 @@ export class Office {
       await this.publish();
       const result = await sendWithRetry(this.deps.gateway, { role: 'main', taskId: project.id }, { system: mainSystem(), messages: [{ role: 'user', content: [{ type: 'text', text: finalRequest(project) }] }] }, signal, this.retry);
       project.report = result.response.content.filter(b => b.type === 'text').map(b => (b as { text: string }).text).join('\n').trim();
-      this.deps.onEvent({ type: 'message', from: 'main', title: '최종 보고', text: project.report, model: result.response.model });
+      this.deps.onEvent({ type: 'message', from: 'main', title: '최종 보고', text: project.report, model: `${result.response.provider}:${result.response.model}`, final: true });
       // Knowledge Integration (CONCEPT): the project is not over until what it taught is in the Library.
       if (this.deps.library && project.tasks.some(t => t.status === 'done')) {
         try {
