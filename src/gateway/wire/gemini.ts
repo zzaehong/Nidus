@@ -3,6 +3,7 @@ import { array, object, optionalObject, count } from '../../http.js';
 import { usage as normalizeUsage } from '../../adapters/base.js';
 import { DEFAULT_MAX_OUTPUT_TOKENS, type ContentBlock, type ModelRequest, type StopReason } from '../contract.js';
 import { finish, newCallId, toolCall, type Wire } from './shared.js';
+import { isGemini } from '../../types.js';
 
 const stopReasons: Record<string, StopReason> = {
   STOP: 'end',
@@ -28,7 +29,7 @@ function contents(request: ModelRequest): unknown[] {
     // Gemini 3 refuses function calls without a signature. Calls another provider's model made
     // (the Gateway switched models mid-conversation) have none: the first call of such a turn
     // carries the value Gemini documents for calls it did not produce.
-    let foreign = message.role === 'assistant' && !message.content.some(b => b.type === 'provider_state' && b.provider === 'gemini');
+    let foreign = message.role === 'assistant' && !message.content.some(b => b.type === 'provider_state' && isGemini(b.provider));
     const push = (part: Record<string, unknown>) => {
       parts.push(signature === undefined ? part : { ...part, thoughtSignature: signature });
       signature = undefined;
@@ -47,7 +48,7 @@ function contents(request: ModelRequest): unknown[] {
           push({ functionResponse: { name: toolNames.get(block.callId) ?? 'unknown', response: block.isError ? { error: block.content } : { result: block.content } } });
           break;
         case 'provider_state':
-          if (block.provider === 'gemini') signature = optionalObject(block.data).thoughtSignature;
+          if (isGemini(block.provider)) signature = optionalObject(block.data).thoughtSignature;
           break;
       }
     }

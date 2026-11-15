@@ -6,11 +6,19 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { Message } from '../gateway/contract.js';
 import type { Difficulty } from '../gateway/assignment.js';
+import type { Employee } from './home.js';
 
 export type ProjectStatus = 'planning' | 'waiting_user' | 'running' | 'reviewing' | 'done' | 'stopped' | 'failed';
 export type TaskStatus = 'pending' | 'in_progress' | 'review' | 'done' | 'blocked' | 'skipped';
 
-export interface Team { id: string; name: string; focus: string }
+/** A team of the project: a standing Group of the Vault, or one Main proposed for this request. */
+export interface Team { id: string; name: string; focus: string; proposed?: boolean; keep?: Keep; reason?: string }
+
+/** A proposal is for this project only, or joins the Vault's standing staff once the user approves the plan. */
+export type Keep = 'temporary' | 'permanent';
+
+/** An employee working on the project: standing staff, or proposed by Main (a hire, or a new team's people). */
+export interface ProjectEmployee extends Employee { proposed?: boolean; keep?: Keep; reason?: string }
 
 /** What the Task must achieve and how completion is judged (CONCEPT: Completion Contract). */
 export interface CompletionContract {
@@ -36,6 +44,8 @@ export interface BoardTask {
   contract: CompletionContract;
   dependsOn: string[];
   where?: TaskPlace;
+  /** The Worker (employee id) who does the task. */
+  assignee?: string;
   status: TaskStatus;
   difficulty?: Difficulty;
   brief?: string;
@@ -58,11 +68,15 @@ export interface Project {
   summary: string;
   roadmap: string[];
   teams: Team[];
+  /** The employees of those teams (Managers and Workers), as of the plan. */
+  staff?: ProjectEmployee[];
   tasks: BoardTask[];
   questions: Question[];
   /** Main's conversation while planning, so a revision builds on what was said. */
   conversation: Message[];
   report?: string;
+  /** Library documents written when the project ended (paths in the Vault). */
+  knowledge?: string[];
   /** The user dismissed it from the Work tab; it stays on the board as history. */
   closed?: boolean;
   /** The workspace task (VM /workspace, branch nidus/<workspace>) the project works in. */
@@ -118,3 +132,7 @@ export function unreachable(project: Project): BoardTask[] {
   }
   return out;
 }
+
+export const managerFor = (project: Project, task: BoardTask): ProjectEmployee | undefined => project.staff?.find(e => e.group === task.team && e.kind === 'manager');
+export const workerFor = (project: Project, task: BoardTask): ProjectEmployee | undefined =>
+  project.staff?.find(e => e.id === task.assignee && e.kind === 'worker') ?? project.staff?.find(e => e.group === task.team && e.kind === 'worker');

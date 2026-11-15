@@ -31,6 +31,13 @@ struct ProjectPanel: View {
                             }
                         }
                     }
+                    if !project.proposals.isEmpty && project.status == "waiting_user" {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Label("Main의 제안 (계획을 승인하면 함께 승인됩니다)", systemImage: "person.badge.plus").font(.caption.weight(.semibold))
+                            ForEach(project.proposals, id: \.self) { Text("· \($0)").font(.caption) }
+                        }
+                        .foregroundStyle(.orange)
+                    }
                     if !project.tasks.isEmpty {
                         Label(project.needsVm ? "VM이 필요한 Task가 있어, 그 Task를 시작할 때 VM을 켭니다" : "모든 Task를 VM 없이 처리합니다",
                               systemImage: project.needsVm ? "shippingbox" : "text.page")
@@ -40,7 +47,17 @@ struct ProjectPanel: View {
                     if let report = project.report, !report.isEmpty {
                         Divider()
                         Text("최종 보고").font(.subheadline.bold())
-                        Text(report).font(.callout).textSelection(.enabled)
+                        MarkdownText(text: report).font(.callout)
+                    }
+                    if let knowledge = project.knowledge, !knowledge.isEmpty {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Label("Library에 기록했습니다", systemImage: "books.vertical").font(.caption.weight(.semibold))
+                            ForEach(knowledge, id: \.self) { path in
+                                Button { openNote(path) } label: { Text(path).font(.caption).multilineTextAlignment(.leading) }
+                                    .buttonStyle(.link).help("Obsidian에서 엽니다(없으면 기본 앱)")
+                            }
+                        }
+                        .foregroundStyle(.secondary)
                     }
                     if let error = project.error {
                         Label(error, systemImage: "exclamationmark.octagon").font(.callout).foregroundStyle(.red)
@@ -53,6 +70,16 @@ struct ProjectPanel: View {
             actions
         }
         .padding(Layout.inset).panel()
+    }
+
+    /// Opens a Library document in Obsidian, where the user keeps the Vault; otherwise in its default app.
+    private func openNote(_ path: String) {
+        guard let vault = session.vault else { return }
+        let file = URL(fileURLWithPath: vault).appendingPathComponent(path)
+        var link = URLComponents(string: "obsidian://open")!
+        link.queryItems = [URLQueryItem(name: "path", value: file.path)]
+        if let url = link.url, NSWorkspace.shared.urlForApplication(toOpen: url) != nil, NSWorkspace.shared.open(url) { return }
+        NSWorkspace.shared.open(file)
     }
 
     private var title: String {
@@ -72,8 +99,8 @@ struct ProjectPanel: View {
             ForEach(project.teams) { team in
                 let mine = project.tasks.filter { $0.team == team.id }
                 if !mine.isEmpty {
-                    Text("\(team.name) · \(team.focus)").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                    ForEach(mine) { task in TaskRow(task: task) }
+                    Text("\(team.name)\(project.manager(of: team.id).map { " · \($0.name)" } ?? "") · \(team.focus)").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    ForEach(mine) { task in TaskRow(task: task, worker: project.worker(of: task)?.name) }
                 }
             }
         }
@@ -130,6 +157,7 @@ struct ProjectPanel: View {
 
 private struct TaskRow: View {
     let task: OfficeProject.Task
+    var worker: String? = nil
     @State private var expanded = false
 
     var body: some View {
@@ -138,6 +166,7 @@ private struct TaskRow: View {
                 Image(systemName: icon).foregroundStyle(color).frame(width: 14)
                 Text(task.title).font(.callout).lineLimit(expanded ? nil : 1)
                 Spacer()
+                if let worker { Text(worker).font(.caption2).foregroundStyle(.secondary) }
                 Text(task.isText ? "텍스트" : "VM").font(.caption2).foregroundStyle(.secondary)
                     .padding(.horizontal, 5).padding(.vertical, 1)
                     .background(.quaternary, in: Capsule())

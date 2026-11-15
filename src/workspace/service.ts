@@ -8,9 +8,9 @@ import { createInterface } from 'node:readline';
 import { randomUUID } from 'node:crypto';
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdir, readFile, rmdir, writeFile, chmod } from 'node:fs/promises';
+import { mkdir, readFile, rmdir, writeFile, chmod, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { AppleOfflineBackend } from '../vault/apple-backend.js';
 import { CacheDiskStore, type CacheAttachment } from '../vault/cache-disk.js';
 import { KeychainStore } from '../credentials.js';
@@ -21,9 +21,18 @@ import { EgressProxy, EgressRules, type EgressAnswer } from './egress.js';
 import { CDPClient } from './cdp.js';
 import { WorkspaceBrowser } from './browser.js';
 import { WorkerTools } from './tools.js';
-import { WorkerRun, type WorkerEvent, type WorkerOutcome } from './worker.js';
+import { WorkerRun, type WorkerEvent, type WorkerOutcome, type WorkerToolSet } from './worker.js';
 import { Office, type OfficeEvent } from '../office/office.js';
-import { BoardStore, placeOf, type BoardTask, type Project } from '../office/board.js';
+import { concludeBrief } from '../office/plan.js';
+import { BoardStore, placeOf, workerFor, type BoardTask, type Project } from '../office/board.js';
+import { HomeStore, identity } from '../office/home.js';
+import { DeskStore, deskHasContext, recoveryBrief, renderDesk, withDesk } from '../office/desk.js';
+import { MAX_ATTEMPTS } from '../office/office.js';
+import { Library, libraryFolder, libraryRules, setLibraryRules, withLibrary } from '../office/library.js';
+import { CardStore, Curator, CurationStore, describeCuration } from '../office/curate.js';
+import { Dream, describeDream } from '../office/dream.js';
+import { ChatStore, MainChat } from '../office/chat.js';
+import { describeStaff } from '../office/home.js';
 import { TextTools, gitSource } from '../office/text-work.js';
 import { workerSystem } from '../office/roles.js';
 import { workerBrief } from '../office/plan.js';
@@ -51,6 +60,15 @@ let worker: WorkerRun | undefined;
 let running: AbortController | undefined;
 let review: Review | null = null;
 let office: Office | undefined;
+let home: HomeStore | undefined;
+let desks: DeskStore | undefined;
+let library: Library | undefined;
+let chat: MainChat | undefined;
+let dream: Dream | undefined;
+let dreaming: AbortController | undefined;
+let curator: Curator | undefined;
+let curating: AbortController | undefined;
+let chatting: AbortController | undefined;
 /** Per board task: its Worker conversation, its commits (vm), its text tools (text), the last outcome. */
 interface TaskRun { run: WorkerRun; textTools?: TextTools; last?: WorkerOutcome; trail: string[]; /** vm: [before, after] commits of each attempt. */ ranges: [string, string][] }
 const taskRuns = new Map<string, TaskRun>();
@@ -122,7 +140,24 @@ async function open(vault: string) {
   await chmod(directory, 0o700);
   disks = new CacheDiskStore(join(directory, 'disks'));
   if (saved.task && saved.base) review = await pending(paths.root, saved.task, saved.base).catch(() => null);
-  office = new Office({ gateway, store: new BoardStore(join(paths.local, 'board')), repository: repositoryOverview, work, onEvent: officeEvent });
+  home = new HomeStore(join(paths.nidus, 'office', 'staff.json'), join(paths.local, 'home'));
+  desks = new DeskStore(join(paths.local, 'desk'));
+  library = new Library(paths.root, await libraryFolder(join(paths.nidus, 'office', 'library.json')));
+  office = new Office({ gateway, store: new BoardStore(join(paths.local, 'board')), home, desk: desks, library, repository: repositoryOverview, work, onEvent: officeEvent });
+  dream = new Dream({ gateway, library, stateFile: join(paths.local, 'dream.json') });
+  const libraryConfig = join(paths.nidus, 'office', 'library.json');
+  curator = new Curator({ gateway, library, store: new CurationStore(join(paths.local, 'curation.json')), rules: () => libraryRules(libraryConfig), cards: new CardStore(join(paths.local, 'note-cards.json')),
+    onChange: curation => event('curation', { curation, running: !!curating }), onProgress: progress => event('curation', { curation: curator!.current, running: true, progress }) });
+  await curator.load();
+  chat = new MainChat({
+    gateway, store: new ChatStore(join(paths.local, 'main-chat.json')),
+    context: chatContext,
+    blocked: () => running ? '다른 작업이 진행 중입니다' : review ? '검토를 기다리는 결과가 있습니다. 승인하거나 버린 뒤 다시 말씀해 주세요' : office?.project && !['done', 'failed'].includes(office.project.status) ? '열려 있는 프로젝트가 있습니다. 끝내거나 닫은 뒤 다시 말씀해 주세요' : null,
+    start: async instruction => { taskRuns.clear(); planning(signal => office!.plan(instruction, signal)); },
+    tidy: () => { tidyLibrary(); },
+    connect: () => { suggestLinks(); },
+    onChange: messages => event('chat', { messages: messages.slice(-100) }),
+  });
   const last = await new BoardStore(join(paths.local, 'board')).latest();
   if (last && !['done', 'failed'].includes(last.status) && !last.closed) {
     // A project cut off by a quit can continue from where it was.
@@ -133,6 +168,7 @@ async function open(vault: string) {
   status();
   publishProject();
   if (review) event('review', { review });
+  await chat.load();
   return { vault: paths.root, task: saved.task ?? null, git: await gitState() };
 }
 
@@ -334,7 +370,8 @@ function publishProject() {
 function officeEvent(e: OfficeEvent) {
   if (e.type === 'project') { publishProject(); return; }
   if (e.type === 'retry') { event('office', { from: e.from, title: `모델 호출 재시도 (${e.attempt}회째)`, text: e.error, isError: true }); return; }
-  event('office', { from: e.from, taskId: e.taskId, title: e.title, text: e.text, model: e.model });
+  event('office', { from: e.from, taskId: e.taskId, title: e.title, text: e.text, model: e.model, difficulty: e.difficulty });
+
 }
 
 /** What Main sees of the Vault: tracked files and the README. */
@@ -399,41 +436,75 @@ function withVm<T>(holder: string, signal: AbortSignal, action: () => Promise<T>
   return turn;
 }
 
-/** The task's Worker conversation: new, or the same one for a revision; restarted after a failure. */
-function taskConversation(task: BoardTask, instruction: string, revision: boolean, make: (previous: TaskRun | undefined) => TaskRun, earlyNote: (next: TaskRun) => string): { entry: TaskRun; instruction: string } {
+/**
+ * The task's Worker conversation: new, or the same one for a revision; restarted after a failure.
+ * A new conversation for a task that already has a Desk (the app was restarted, the project was
+ * stopped, the last attempt broke off) begins with context recovery.
+ */
+async function taskConversation(task: BoardTask, instruction: string, revision: boolean, make: (previous: TaskRun | undefined) => TaskRun, earlyNote: (next: TaskRun) => string): Promise<{ entry: TaskRun; instruction: string }> {
+  const project = office!.project!;
   let entry = taskRuns.get(task.id);
-  if (!entry) {
-    entry = make(undefined);
-    taskRuns.set(task.id, entry);
-  } else if (!revision || entry.last?.status !== 'finished') {
-    // The last attempt did not end cleanly: a new conversation, told what happened.
-    const before = entry.last;
+  const continued = !!entry && revision && entry.last?.status === 'finished';
+  if (!continued) {
+    const before = entry?.last;
     const next = make(entry);
-    entry.run = next.run;
-    entry.textTools = next.textTools;
-    if (before && before.status !== 'finished') {
-      instruction = `${workerBrief(office!.project!, task)}\n\nA previous attempt ended early (${before.status === 'stopped' ? before.detail : before.error}). ${earlyNote(next)}\n\n${instruction}`;
-    }
+    if (entry) { entry.run = next.run; entry.textTools = next.textTools; }
+    else { entry = next; taskRuns.set(task.id, entry); }
+    const desk = await desks!.load(project.id, task.id).catch(() => null);
+    const parts: string[] = [];
+    // A revision in a new conversation needs the brief again; a first attempt already is the brief.
+    if (revision || before) parts.push(workerBrief(project, task));
+    if (deskHasContext(desk)) parts.push(recoveryBrief(project, task, desk, MAX_ATTEMPTS));
+    if (before && before.status !== 'finished') parts.push(`A previous attempt ended early (${before.status === 'stopped' ? before.detail : before.error}).`);
+    if (revision || before || deskHasContext(desk)) parts.push(earlyNote(entry));
+    if (parts.length) instruction = [...parts, instruction].join('\n\n');
   }
-  entry.trail.push(`--- attempt ${task.attempts} ---`);
-  return { entry, instruction };
+  entry!.trail.push(`--- attempt ${task.attempts} ---`);
+  return { entry: entry!, instruction };
+}
+
+/** The Worker's Desk for a task: its tool, its text for summaries, and where summaries are kept. */
+function deskFor(task: BoardTask) {
+  const project = office!.project!.id, employee = workerFor(office!.project!, task)?.id ?? null;
+  return {
+    wrap: (tools: WorkerToolSet) => withDesk(withLibrary(tools, library!), async patch => {
+      const desk = await desks!.update(project, task.id, employee, patch);
+      event('worker', { boardTask: task.id, who: workerFor(office!.project!, task)?.name, type: 'desk', progress: desk.progress, next: desk.next });
+      return desk;
+    }),
+    options: {
+      desk: async () => { const desk = await desks!.load(project, task.id); return deskHasContext(desk) ? renderDesk(desk) : undefined; },
+      onSummary: async (summary: string) => { await desks!.checkpoint(project, task.id, employee, 'summary', summary); },
+    },
+    evidence: async () => { const desk = await desks!.load(project, task.id).catch(() => null); return deskHasContext(desk) ? `\n\nThe Worker's Desk notes:\n${renderDesk({ ...desk, checkpoints: [] })}` : ''; },
+  };
+}
+
+/** Who the task's Worker is (Home), for the top of its system prompt. */
+function whoWorks(task: BoardTask): string | undefined {
+  const project = office!.project!;
+  const worker = workerFor(project, task);
+  return worker ? identity(worker, project.teams.find(t => t.id === task.team)) : undefined;
 }
 
 function workerEvents(task: BoardTask, trail: string[]) {
   return (e: WorkerEvent) => {
     if (e.type === 'tool_call') trail.push(`${e.name} ${JSON.stringify(e.input).slice(0, 160)}`);
     if (e.type === 'tool_result' && e.isError && trail.length) trail[trail.length - 1] += ' -> error';
-    event('worker', { task: placeOf(task) === 'text' ? undefined : saved?.task, boardTask: task.id, where: placeOf(task), ...clipEvent(e) });
+    event('worker', { task: placeOf(task) === 'text' ? undefined : saved?.task, boardTask: task.id, who: workerFor(office!.project!, task)?.name, where: placeOf(task), ...clipEvent(e) });
   };
 }
 
 async function textWork(task: BoardTask, instruction: string, difficulty: Difficulty, signal: AbortSignal, revision: boolean) {
-  const made = taskConversation(task, instruction, revision, previous => {
+  const desk = deskFor(task);
+  const projectId = office!.project!.id;
+  const draft = taskRuns.has(task.id) ? undefined : await desks!.loadDraft(projectId, task.id);
+  const made = await taskConversation(task, instruction, revision, previous => {
     const trail = previous?.trail ?? [];
-    const tools = new TextTools(gitSource(paths!.root));
+    const tools = new TextTools(gitSource(paths!.root), text => { void desks!.saveDraft(projectId, task.id, text).catch(() => {}); });
     // A new conversation keeps what the last one wrote, so "continue" has something to build on.
-    tools.deliverable = previous?.textTools?.deliverable;
-    return { run: new WorkerRun(gateway!, tools, { task: office!.project!.id, difficulty, system: workerSystem('text', office!.project!.id), onEvent: workerEvents(task, trail) }), textTools: tools, trail, ranges: [] };
+    tools.deliverable = previous?.textTools?.deliverable ?? draft ?? task.output;
+    return { run: new WorkerRun(gateway!, desk.wrap(tools), { task: office!.project!.id, difficulty, system: workerSystem('text', office!.project!.id, whoWorks(task), true, true), onEvent: workerEvents(task, trail), ...desk.options }), textTools: tools, trail, ranges: [] };
   }, next => next.textTools?.deliverable ? `The deliverable written so far (kept; replace or append to it):\n${next.textTools.deliverable.slice(0, 20000)}` : 'Nothing was delivered yet.');
   const { entry } = made;
   const outcome = await entry.run.run(made.instruction, signal);
@@ -441,14 +512,15 @@ async function textWork(task: BoardTask, instruction: string, difficulty: Diffic
   if (signal.aborted) return { outcome, evidence: '' };
   const output = entry.textTools!.deliverable ?? (outcome.status === 'finished' ? outcome.summary : '');
   const shown = output.length > 15000 ? `${output.slice(0, 15000)}\n… (${output.length - 15000} more characters)` : output;
-  return { outcome, output, evidence: `This was a text task (no VM): nothing in the repository changed; the deliverable is the result.\n\nTool calls (latest last):\n${entry.trail.slice(-40).join('\n') || '(none)'}\n\nDeliverable:\n${shown || '(none)'}` };
+  return { outcome, output, evidence: `This was a text task (no VM): nothing in the repository changed; the deliverable is the result.\n\nTool calls (latest last):\n${entry.trail.slice(-40).join('\n') || '(none)'}\n\nDeliverable:\n${shown || '(none)'}${await desk.evidence()}` };
 }
 
 async function vmWork(task: BoardTask, instruction: string, difficulty: Difficulty, signal: AbortSignal, revision: boolean) {
   await ensureProjectWorkspace();
-  const made = taskConversation(task, instruction, revision, previous => {
+  const desk = deskFor(task);
+  const made = await taskConversation(task, instruction, revision, previous => {
     const trail = previous?.trail ?? [];
-    return { run: new WorkerRun(gateway!, new WorkerTools(workerRuntime(backend!)), { task: saved!.task!, difficulty, onEvent: workerEvents(task, trail) }), trail, ranges: previous?.ranges ?? [] };
+    return { run: new WorkerRun(gateway!, desk.wrap(new WorkerTools(workerRuntime(backend!))), { task: saved!.task!, difficulty, system: workerSystem('vm', saved!.task!, whoWorks(task), true, true), onEvent: workerEvents(task, trail), ...desk.options }), trail, ranges: previous?.ranges ?? [] };
   }, () => 'Check the workspace for what was already done and continue.');
   const { entry } = made;
   const before = (await inspect('git rev-parse HEAD')).trim();
@@ -461,7 +533,7 @@ async function vmWork(task: BoardTask, instruction: string, difficulty: Difficul
   if (after !== before) entry.ranges.push([before, after]);
   if (signal.aborted) return { outcome, evidence: '' };
   const trail = entry.trail.slice(-40).join('\n');
-  return { outcome, evidence: `Tool calls (latest last):\n${trail}\n\n${await taskChanges(entry.ranges)}` };
+  return { outcome, evidence: `Tool calls (latest last):\n${trail}\n\n${await taskChanges(entry.ranges)}${await desk.evidence()}` };
 }
 
 /** What a task changed: its own commits only (other tasks commit in the same workspace in between). */
@@ -518,9 +590,67 @@ async function executeProject() {
   void office.execute(controller.signal).then(async () => {
     running = undefined;
     status(office!.project?.status === 'done' ? '프로젝트 완료' : '프로젝트 중지');
+    // The work was asked for in the conversation: Main answers there, from the results and the Library record. The report itself stays in this tab.
+    if (project.status === 'done' && chat) {
+      const report = project.report ?? '';
+      const root = paths!.root;
+      const inVault = async (relative: string) => {
+        const target = resolve(root, relative);
+        if (!target.startsWith(root + '/') || relative.includes('\0')) return false;
+        return stat(target).then(s => s.isFile(), () => false);
+      };
+      void chat.conclude(concludeBrief(project), report, AbortSignal.timeout(10 * 60_000), project.knowledge ?? [], inVault).catch(() => chat!.note(report, false).catch(() => {}));
+    }
+    // A project that did not reach its report still gets a word in the conversation.
+    if (project.status === 'failed') void chat?.note(`프로젝트를 끝내지 못했습니다: ${project.error ?? '원인을 알 수 없습니다'}. 작업 탭에서 다시 시작하거나 닫을 수 있습니다.`, true).catch(() => {});
+    else if (project.status === 'stopped') void chat?.note('프로젝트를 중지했습니다. 작업 탭에서 이어서 하거나 닫을 수 있습니다.').catch(() => {});
     if (project.workspace && project.workspace === saved?.task) await collect().catch(error => log(`결과를 가져오지 못했습니다: ${error.message}`));
+    // Enough new lessons and decisions since the last time: tidy them now, while nothing reads them.
+    if (project.status === 'done' && !dreaming && await dream!.due().catch(() => false)) { try { tidyLibrary(); } catch {} }
   });
   return {};
+}
+
+/**
+ * A Dream Sequence: the Library's lessons and decisions are merged and put away in the background;
+ * the report comes into the chat with Main. Not while a project is working (it reads those notes).
+ */
+function tidyLibrary() {
+  if (dreaming) throw new Error('Library를 이미 정리하는 중입니다');
+  if (running) throw new Error('작업이 진행 중입니다. 끝난 뒤 정리합니다');
+  const controller = dreaming = new AbortController();
+  event('dream', { running: true });
+  void dream!.run(controller.signal).then(
+    report => { log(`Library 정리: 합침 ${report.merged.length}건, 보관 ${report.retired.length}건, 확인 필요 ${report.conflicts.length}건`); return chat!.note(describeDream(report)); },
+    error => chat!.note(controller.signal.aborted ? 'Library 정리를 멈췄습니다. 바뀐 것은 없습니다.' : `Library를 정리하지 못했습니다: ${String(error?.message ?? error)}`, true),
+  ).finally(() => { dreaming = undefined; event('dream', { running: false }); });
+  return {};
+}
+
+/**
+ * The Library Manager looks over the user's notes and suggests links and moves, in the background.
+ * Nothing in the Vault changes here; the user picks what to apply (applyCuration).
+ */
+function suggestLinks() {
+  if (curating) throw new Error('이미 노트를 살펴보는 중입니다');
+  const controller = curating = new AbortController();
+  event('curation', { curation: curator!.current, running: true });
+  void curator!.suggest(controller.signal).then(
+    curation => chat!.note(describeCuration(curation)),
+    error => chat!.note(controller.signal.aborted ? '노트 살펴보기를 멈췄습니다.' : `제안을 만들지 못했습니다: ${String(error?.message ?? error)}`, true),
+  ).finally(() => { curating = undefined; event('curation', { curation: curator!.current, running: false }); });
+  return {};
+}
+
+/** What Main is told with each chat message: the open project, the staff, what the Library holds. */
+async function chatContext(): Promise<string> {
+  const project = office?.project;
+  const state = project
+    ? `Open project ${project.id} (${project.status}): ${project.instruction.slice(0, 300)}\nPlan: ${project.summary.slice(0, 600)}\nTasks: ${project.tasks.map(t => `${t.title} [${t.status}]`).join('; ') || '(none yet)'}${project.questions.some(q => !q.answer) ? '\nYou asked the user questions in the plan panel that are not answered yet.' : ''}${project.report ? `\nFinal report: ${project.report.slice(0, 800)}` : ''}`
+    : 'No project is open.';
+  const staff = await home!.staff().then(describeStaff, () => '');
+  const learned = await library!.digest(2500).catch(() => '');
+  return [state, review ? 'A result is waiting for the user\'s review in the Work tab.' : '', staff ? `Standing teams:\n${staff}` : '', learned ? `In the Library (the team's notes):\n${learned}` : '', `VM: ${vm}.`].filter(Boolean).join('\n\n');
 }
 
 /** Planning runs in the background; the app follows it through project events. */
@@ -551,6 +681,29 @@ const commands: Record<string, (m: any) => Promise<unknown>> = {
   },
   planReply: async m => planning(signal => office!.reply(m.answers ?? {}, String(m.note ?? ''), signal)),
   approvePlan: () => executeProject(),
+  chat: async m => {
+    chatting = new AbortController();
+    const answer = await chat!.send(String(m.text ?? ''), chatting.signal);
+    return { project: answer.project ?? null };
+  },
+  cancelChat: async () => { chatting?.abort(); return {}; },
+  clearChat: async () => { await chat!.clear(); return {}; },
+  dream: async () => tidyLibrary(),
+  cancelDream: async () => { dreaming?.abort(); return {}; },
+  curate: async () => suggestLinks(),
+  cancelCurate: async () => { curating?.abort(); return {}; },
+  applyCuration: async m => {
+    const done = await curator!.apply(Array.isArray(m.ids) ? m.ids.map(String) : []);
+    const applied = done.suggestions.filter(s => s.status === 'applied').length, failed = done.suggestions.filter(s => s.status === 'failed').length;
+    log(`문서 연결 제안 적용: ${applied}건${failed ? `, 실패 ${failed}건` : ''}`);
+    return {};
+  },
+  discardCuration: async () => { await curator!.discard(); return {}; },
+  librarySearch: async m => ({ hits: await library!.search(String(m.query ?? ''), 30) }),
+  libraryRules: async () => ({ rules: await libraryRules(join(paths!.nidus, 'office', 'library.json')) }),
+  setLibraryRules: async m => ({ rules: await setLibraryRules(join(paths!.nidus, 'office', 'library.json'), String(m.rules ?? '')) }),
+  staff: async () => home!.staff(),
+  setPrinciples: async m => home!.setPrinciples(String(m.employee ?? ''), Array.isArray(m.principles) ? m.principles : []),
   closeProject: async () => {
     if (running) throw new Error('진행 중에는 닫을 수 없습니다. 먼저 중지하세요');
     if (office?.project) { office.project.closed = true; await new BoardStore(join(paths!.local, 'board')).save(office.project); office.project = null; }

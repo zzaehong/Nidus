@@ -108,6 +108,17 @@ export class UsageLog {
       .map(row => ({ provider: String(row.provider), model: String(row.model), at: String(row.at), status: String(row.status), error: row.error === null ? null : String(row.error), durationMs: Number(row.duration_ms) }));
   }
 
+  /** A provider's calls since a time, for counting what was used of its rate limits. */
+  callsSince(provider: string, since: Date): { model: string; at: string; input: number | null; status: string; error: string | null }[] {
+    return (this.db.prepare('SELECT model, at, input, status, error FROM calls WHERE provider=? AND at > ? ORDER BY at').all(provider, since.toISOString()) as Record<string, string | number | null>[])
+      .map(row => ({ model: String(row.model), at: String(row.at), input: row.input === null ? null : Number(row.input), status: String(row.status), error: row.error === null ? null : String(row.error) }));
+  }
+
+  /** Calls recorded under one provider id now belong to another (a connection that was renamed). */
+  renameProvider(from: string, to: string): void {
+    this.db.prepare('UPDATE calls SET provider=? WHERE provider=?').run(to, from);
+  }
+
   /** Known cost of the month in nano-USD. Calls with an unknown price are not included. */
   monthCost(month = monthOf(this.now())): bigint {
     const row = this.db.prepare('SELECT COALESCE(SUM(cost),0) AS total FROM calls WHERE month=?').get(month) as { total: number | bigint };

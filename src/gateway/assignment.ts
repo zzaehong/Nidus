@@ -3,7 +3,7 @@
 import { randomUUID } from 'node:crypto';
 import { readFile, rename, writeFile } from 'node:fs/promises';
 import { NidusError } from '../errors.js';
-import { providerIds, type Model, type ProviderId } from '../types.js';
+import { gatewayProviderIds, type Model, type ProviderId } from '../types.js';
 
 export const difficulties = ['simple', 'normal', 'complex'] as const;
 export type Difficulty = typeof difficulties[number];
@@ -13,11 +13,35 @@ export interface ModelRef {
   model: string;
 }
 
+/** A model the user took out after seeing its work. Auto-fill never puts it back. */
+export interface Exclusion {
+  ref: string;
+  at: string;
+  /** Where the work that prompted this was done. */
+  role: string;
+  difficulty: Difficulty | null;
+  /** "slot": out of that one slot; "vault": out of every slot of this Vault. */
+  scope: 'slot' | 'vault';
+  slot: string | null;
+  note: string | null;
+  taskId: string | null;
+}
+
 export interface AssignmentTable {
   version: 1;
   /** Ordered candidates per non-worker role, for example main, lead-manager, manager. */
   roles: Record<string, ModelRef[]>;
   worker: Record<Difficulty, ModelRef[]>;
+  /** Candidates that auto-fill placed, per slot id ("roles.main", "worker.simple"); the rest were the user's own. */
+  auto: Record<string, string[]>;
+  excluded: Exclusion[];
+}
+
+export const slotId = (role: string, difficulty?: Difficulty | null): string => role === 'worker' ? `worker.${difficulty}` : `roles.${role}`;
+
+/** Whether an exclusion keeps a model out of this slot. */
+export function excludedFrom(excluded: Exclusion[], ref: string, slot: string): Exclusion | null {
+  return excluded.find(x => x.ref === ref && (x.scope === 'vault' || x.slot === slot)) ?? null;
 }
 
 export interface AssignTarget {
@@ -44,6 +68,8 @@ export interface Availability {
   hasKey(provider: ProviderId): Promise<boolean>;
   cachedModel(provider: ProviderId, model: string): Promise<Model | null>;
   toolsVerified(provider: ProviderId, model: string): Promise<boolean>;
+  /** Why a candidate must not be used at this position of its slot, or null. For rules that are not about the model itself. */
+  refused?(ref: ModelRef, index: number): Promise<string | null>;
 }
 
 const rolePattern = /^[a-z][a-z0-9-]{0,63}$/;
@@ -60,7 +86,9 @@ export function parseRef(value: unknown): ModelRef {
   const split = value.indexOf(':');
   const provider = value.slice(0, split);
   const model = value.slice(split + 1);
-  if (split < 1 || !providerIds.includes(provider as ProviderId)) invalidTable(`unknown provider in "${value}".`);
+  // Candidates written before Gemini was split into Free and Paid.
+  if (provider === 'gemini') return parseRef(`gemini-free:${model}`);
+  if (split < 1 || !gatewayProviderIds.includes(provider as ProviderId)) invalidTable(`unknown provider in "${value}".`);
   if (!model || model.length > 512 || /[\r\n\0]/.test(model)) invalidTable(`missing model id in "${value}".`);
   return { provider: provider as ProviderId, model };
 }
@@ -85,6 +113,23 @@ export function parseTable(value: unknown): AssignmentTable {
   const worker = raw.worker as Record<string, unknown>;
   const unknown = Object.keys(worker).find(key => !difficulties.includes(key as Difficulty));
   if (unknown) invalidTable(`unknown worker difficulty "${unknown}".`);
+  const auto: Record<string, string[]> = {};
+  if (raw.auto !== undefined) {
+    if (!raw.auto || typeof raw.auto !== 'object' || Array.isArray(raw.auto)) invalidTable('"auto" must be an object.');
+    for (const [slot, list] of Object.entries(raw.auto as Record<string, unknown>)) auto[slot] = candidates(list, `auto.${slot}`).map(refName);
+  }
+  const excluded: Exclusion[] = [];
+  if (raw.excluded !== undefined) {
+    if (!Array.isArray(raw.excluded)) invalidTable('"excluded" must be an array.');
+    for (const item of raw.excluded) {
+      const x = (item && typeof item === 'object' ? item : {}) as Record<string, unknown>;
+      const ref = refName(parseRef(x.ref));
+      const scope = x.scope === 'vault' ? 'vault' : 'slot';
+      const difficulty = difficulties.includes(x.difficulty as Difficulty) ? x.difficulty as Difficulty : null;
+      excluded.push({ ref, at: typeof x.at === 'string' ? x.at : new Date(0).toISOString(), role: typeof x.role === 'string' && rolePattern.test(x.role) ? x.role : 'worker', difficulty, scope,
+        slot: scope === 'slot' ? (typeof x.slot === 'string' ? x.slot : null) : null, note: typeof x.note === 'string' && x.note ? x.note.slice(0, 500) : null, taskId: typeof x.taskId === 'string' ? x.taskId : null });
+    }
+  }
   return {
     version: 1,
     roles,
@@ -93,6 +138,8 @@ export function parseTable(value: unknown): AssignmentTable {
       normal: candidates(worker.normal ?? [], 'worker.normal'),
       complex: candidates(worker.complex ?? [], 'worker.complex'),
     },
+    auto,
+    excluded,
   };
 }
 
@@ -115,10 +162,13 @@ export async function loadTable(path: string): Promise<AssignmentTable> {
 /** Writes the table in its on-disk form: candidates as "provider:model" strings. */
 export async function saveTable(path: string, table: AssignmentTable): Promise<void> {
   const names = (list: ModelRef[]) => list.map(refName);
+  const auto = Object.fromEntries(Object.entries(table.auto).filter(([, list]) => list.length));
   const disk = {
     version: 1,
     roles: Object.fromEntries(Object.entries(table.roles).map(([role, list]) => [role, names(list)])),
     worker: { simple: names(table.worker.simple), normal: names(table.worker.normal), complex: names(table.worker.complex) },
+    ...(Object.keys(auto).length ? { auto } : {}),
+    ...(table.excluded.length ? { excluded: table.excluded } : {}),
   };
   const temporary = `${path}.${randomUUID()}.tmp`;
   try {
@@ -163,6 +213,8 @@ async function pick(table: AssignmentTable, target: AssignTarget, availability: 
     const skip = (why: string) => skipped.push({ ref: refName(ref), why });
     if (passOver.includes(refName(ref))) { skip('passed over for now (failing or slow lately)'); continue; }
     if (!await availability.hasKey(ref.provider)) { skip('no API key connected'); continue; }
+    const refused = await availability.refused?.(ref, index);
+    if (refused) { skip(refused); continue; }
     const model = await availability.cachedModel(ref.provider, ref.model);
     if (!model) { skip('model not in the cached model list'); continue; }
     if (model.capabilities.chat === 'unsupported') { skip('model does not support chat'); continue; }

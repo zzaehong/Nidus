@@ -27,7 +27,7 @@ struct WorkView: View {
 
     var body: some View {
         FixedPage {
-            PageHeader(title: "작업", subtitle: "Worker에게 일을 맡깁니다. AI는 VM 안에서 Vault의 복사본과 브라우저로 일하고, 결과는 검토 후 브랜치로 들어갑니다.")
+            PageHeader(title: "작업", subtitle: "팀이 일하는 모습을 봅니다. AI는 VM 안에서 Vault의 복사본과 브라우저로 일하고, 결과는 검토 후 브랜치로 들어갑니다. 지시와 계획 승인은 Main 탭에서 합니다.")
             if session.git != "ready" { gitBanner }
             // The side panel takes a share of the width (300-400 pt); the browser gets the rest.
             GeometryReader { proxy in
@@ -200,34 +200,9 @@ struct WorkView: View {
         }
     }
 
+    /// Instructions go to Main in the Main tab; here the run is watched and stopped.
     private var composer: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Picker("받는 쪽", selection: $mode) {
-                    Text("Main에게").tag("main"); Text("Worker에게").tag("worker")
-                }
-                .labelsHidden().pickerStyle(.segmented).frame(width: 170)
-                .help("Main에게: 계획과 질문 → 승인 → Manager가 Worker에게 맡기고 검토. Worker에게: 한 Worker가 바로 수행.")
-                Spacer()
-                if mode == "worker" {
-                    Picker("난이도", selection: $difficulty) {
-                        Text("단순").tag("simple"); Text("보통").tag("normal"); Text("복잡").tag("complex")
-                    }
-                    .labelsHidden().pickerStyle(.segmented).frame(width: 150)
-                }
-            }
-            TextEditor(text: $instruction)
-                .font(.body)
-                .frame(height: 72)
-                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color(nsColor: .separatorColor)))
-                .disabled(session.running)
-            if mode == "main", !missingRoles.isEmpty {
-                Label("모델이 배정되지 않은 역할: \(missingRoles.joined(separator: ", ")). 모델 배정 탭에서 추가하세요.", systemImage: "exclamationmark.circle")
-                    .font(.caption).foregroundStyle(.orange)
-            } else if mode == "worker", let slot = workerSlot(difficulty), slot.candidates.isEmpty {
-                Label("이 난이도에 배정된 Worker 모델이 없습니다. 모델 배정 탭에서 추가하세요.", systemImage: "exclamationmark.circle")
-                    .font(.caption).foregroundStyle(.orange)
-            }
             HStack {
                 if session.running {
                     ProgressView().controlSize(.small)
@@ -235,23 +210,17 @@ struct WorkView: View {
                     Spacer()
                     Button("중지", role: .destructive) { session.cancel() }
                 } else {
-                    Toggle("모든 사이트 허용", isOn: Binding(get: { session.allowAll }, set: { session.setAllowAll($0) }))
-                        .toggleStyle(.checkbox).font(.callout)
-                        .help("이번 작업 동안 사이트마다 묻지 않습니다. 사설 주소와 Mac 포트는 계속 막거나 묻습니다.")
+                    Label("지시는 Main 탭에서 합니다", systemImage: "bubble.left.and.bubble.right").font(.callout).foregroundStyle(.secondary)
                     Spacer()
-                    if mode == "main" {
-                        Button("Main에게 지시") { sendToMain() }.buttonStyle(.borderedProminent)
-                    } else if session.task != nil {
-                        Button("새 작업으로") { send(fresh: true) }.help("Vault의 최신 커밋에서 새 작업 공간으로 시작합니다.")
-                        Button("이어서 지시") { send(fresh: false) }.buttonStyle(.borderedProminent).help("같은 작업 공간과 대화를 이어갑니다.")
-                    } else {
-                        Button("실행") { send(fresh: true) }.buttonStyle(.borderedProminent)
-                    }
                 }
             }
-            // Main plans without the VM; it starts when the plan is approved.
-            .disabled(mode == "worker" && !vmRunning && !session.running)
-            .disabled(instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !session.running)
+            Toggle("모든 사이트 허용", isOn: Binding(get: { session.allowAll }, set: { session.setAllowAll($0) }))
+                .toggleStyle(.checkbox).font(.callout)
+                .help("이번 작업 동안 사이트마다 묻지 않습니다. 사설 주소와 Mac 포트는 계속 막거나 묻습니다.")
+            if !missingRoles.isEmpty {
+                Label("모델이 배정되지 않은 역할: \(missingRoles.joined(separator: ", ")). 모델 배정 탭에서 추가하세요.", systemImage: "exclamationmark.circle")
+                    .font(.caption).foregroundStyle(.orange)
+            }
             if session.costUSD > 0 || session.costUnknown {
                 Text("이번 실행 비용 약 $\(String(format: "%.4f", session.costUSD))\(session.costUnknown ? " (일부 모델은 가격 정보 없음)" : "")")
                     .font(.caption).foregroundStyle(.secondary)
@@ -325,6 +294,12 @@ private struct RunEntryRow: View {
             }
             if entry.kind == .model, !entry.detail.isEmpty {
                 Text(entry.detail).font(.caption2).foregroundStyle(.tertiary)
+            }
+            if let judgement = entry.judgement, !entry.isError {
+                HStack(spacing: 6) {
+                    if entry.kind != .model { Text(judgement.ref).font(.caption2).foregroundStyle(.tertiary) }
+                    ModelFeedbackLink(judgement: judgement)
+                }
             }
         }
     }

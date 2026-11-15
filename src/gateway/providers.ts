@@ -1,4 +1,5 @@
 // Per-provider endpoint, authentication and wire format.
+import { resolveCloudflareCredential } from '../adapters/cloudflare.js';
 import { AnthropicAdapter, CloudflareAdapter, CompatibleAdapter, DeepSeekAdapter, GeminiAdapter, OpenAIAdapter } from '../adapters/index.js';
 import { NidusError } from '../errors.js';
 import { bounded, HttpClient, keyValue } from '../http.js';
@@ -17,6 +18,8 @@ export const defaultEndpoints: Record<ProviderId, string> = {
   openai: 'https://api.openai.com/v1',
   anthropic: 'https://api.anthropic.com/v1',
   gemini: 'https://generativelanguage.googleapis.com/v1beta',
+  'gemini-free': 'https://generativelanguage.googleapis.com/v1beta',
+  'gemini-paid': 'https://generativelanguage.googleapis.com/v1beta',
   deepseek: 'https://api.deepseek.com',
   nvidia: 'https://integrate.api.nvidia.com/v1',
   groq: 'https://api.groq.com/openai/v1',
@@ -28,6 +31,8 @@ const wires: Record<ProviderId, Wire> = {
   openai: responsesWire,
   anthropic: anthropicWire,
   gemini: geminiWire,
+  'gemini-free': geminiWire,
+  'gemini-paid': geminiWire,
   deepseek: completionsWire,
   nvidia: completionsWire,
   groq: completionsWire,
@@ -58,7 +63,7 @@ function cloudflareTarget(endpoint: string, key: string): { endpoint: string; he
 function target(provider: ProviderId, endpoint: string, key: string): { endpoint: string; headers: Record<string, string> } {
   switch (provider) {
     case 'anthropic': return { endpoint, headers: anthropicHeaders(key) };
-    case 'gemini': return { endpoint, headers: { 'x-goog-api-key': key } };
+    case 'gemini': case 'gemini-free': case 'gemini-paid': return { endpoint, headers: { 'x-goog-api-key': key } };
     case 'cloudflare': return cloudflareTarget(endpoint, key);
     default: return { endpoint, headers: { authorization: `Bearer ${key}` } };
   }
@@ -80,6 +85,11 @@ export class ProviderClient {
     this.discovery = discoveryFor(this.endpoints, this.http);
   }
 
+  /** Cloudflare's stored credential, with the Account ID looked up from the token when none was typed. */
+  cloudflareCredential(secret: string, accountId: unknown, options: RequestOptions = {}) {
+    return resolveCloudflareCredential(secret, accountId, this.http, this.endpoints.cloudflare, options);
+  }
+
   listModels(provider: ProviderId, key: string, options: RequestOptions = {}): Promise<Model[]> {
     return this.discovery[provider].listModels(key, options);
   }
@@ -99,6 +109,8 @@ function discoveryFor(endpoints: Record<ProviderId, string>, http: HttpClient) {
     openai: new OpenAIAdapter(endpoints.openai, http),
     anthropic: new AnthropicModels(endpoints.anthropic, http),
     gemini: new GeminiAdapter(endpoints.gemini, http),
+    'gemini-free': new GeminiAdapter(endpoints['gemini-free'], http, 'gemini-free'),
+    'gemini-paid': new GeminiAdapter(endpoints['gemini-paid'], http, 'gemini-paid'),
     deepseek: new DeepSeekAdapter(endpoints.deepseek, http),
     nvidia: new CompatibleAdapter('nvidia', endpoints.nvidia, http),
     groq: new CompatibleAdapter('groq', endpoints.groq, http),

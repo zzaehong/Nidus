@@ -92,6 +92,8 @@ interface ModelResponse {
 | Gemini generateContent | Gemini |
 | Chat Completions 호환 | DeepSeek, Groq, Mistral, NVIDIA, Cloudflare |
 
+Cloudflare만 토큰 외에 Account ID가 필요하다(요청 주소 `/accounts/<id>/ai/…`에 들어간다). 앱에서 비워 두면 그 토큰으로 `GET /accounts`를 불러 계정이 정확히 하나일 때만 그 ID를 쓴다(`resolveCloudflareCredential`). 여럿이거나 토큰이 계정 목록을 볼 수 없으면 추측하지 않고, 대시보드 Workers AI 페이지의 "Use REST API" 화면에서 ID를 옮겨 적으라고 안내한다. 실측(2026-11-16): 대시보드 템플릿으로 만든 Workers AI 전용 토큰은 `GET /accounts`에 오류가 아니라 **빈 목록**을 돌려주고, `/accounts/<id>`·`/memberships`·`/user`는 403이다. 그러므로 그 토큰으로는 자동 조회가 안 되고, 안내 문구와 연결 창의 설명이 ID를 직접 적는 쪽을 기본으로 삼는다. 저장되는 것은 토큰과 ID를 함께 담은 하나의 Keychain 항목이다.
+
 어떤 모델이 무엇을 할 수 있는지는 모델 ID 목록을 코드에 적지 않고 실제 호출로 검사한다(`nidus gateway verify`, 앱의 모델 검사). 검사는 두 가지를 따로 판정한다.
 
 - **텍스트**: 일반 메시지에 텍스트로 답하는가.
@@ -150,6 +152,72 @@ Agent의 Home에는 모델을 기록하지 않는다(CONCEPT의 Home 항목). �
 - **앱**: 모델 배정 화면의 후보마다 평소 응답 시간, 또는 쉬는 이유와 남은 시간을 보여 준다. "선택됨"은 쉬는 모델을 뺀 실제 선택이다.
 
 확인: 사용자의 배정(모두 NVIDIA, deepseek 1순위)을 복사한 Vault에서 같은 종류의 요청이 계획부터 최종 보고까지 3분 4초에 끝났다. deepseek의 서버 오류 뒤 Worker는 deepseek를 건너뛰었고, `not_found` 모델은 다음 후보로 넘어갔고, 45초 동안 답하지 않은 deepseek 대신 nemotron의 8초짜리 답을 썼다.
+
+### 자동 채우기와 제외 (2026-11-16 추가)
+
+사용자 결정: 처음엔 자동으로 채우고, 쓰면서 마음에 안 드는 모델을 걷어낸다. 자동 배정은 버튼을 누를 때만 일어난다(지속 갱신 없음 — 모델이 조용히 바뀌면 "어제까진 괜찮았는데"의 원인을 찾기 어렵다).
+
+- **자동 채우기** (`gateway/autofill.ts`, 앱 배정 탭 "자동 채우기…"): 연결된 Provider의 텍스트 모델 중 그 칸의 검사를 통과한 것(Main·Manager는 텍스트, Worker는 도구 호출)만 후보로 쓴다. 순서는 추측이 아니라 가진 사실로 정한다 — Provider 가격표의 출력 단가를 모델의 "급"으로 보고(가격 순 상·중·하 3등분; Gemini Free는 유료 가격표의 급이되 비용은 0), 같은 급 안에서는 여기서의 비용·중간 응답 시간·문맥 크기 순. Main·Manager·복잡 칸은 상위 급부터, 보통 칸은 중간 급부터, 쉬움 칸은 가벼운 급부터. 한 칸에 최대 3개, 2·3번째는 가능하면 다른 Provider(무료 Provider의 429 때문). 사용자가 직접 넣은 후보는 그대로 앞에 두고, 자동이 넣은 것만 `models.json`의 `auto`에 표시해 다시 누르면 그것만 갈아 끼운다. 적용 전에 계획을 먼저 보여 주고(검사 안 한 모델 수 포함), 가격표에 없는 모델은 중간 급으로 둔다.
+- **제외** ("이 AI의 작업이 마음에 들지 않나요?"): 작업 탭의 각 메시지(Main 계획·보고, Manager 지시·검토, Worker 응답)와 Main 대화 말풍선에 붙는다. 이를 위해 사무실 이벤트와 대화 기록은 그 호출의 **역할·난이도·`provider:model`** 을 함께 싣는다(사용자 요구: 어느 역할·어떤 난이도의 일이었는지 보고 판단해야 한다). 창은 역할·난이도·모델·배정 칸을 보여 주고 "그 칸에서만 빼기" 또는 "Vault 전체에서 빼기"를 고르게 한다. 기록은 `models.json`의 `excluded`(모델, 범위, 칸, 계기가 된 역할·난이도·Task, 메모, 시각)에 남고, 자동 채우기는 그 모델을 다시 넣지 않으며 직접 추가도 막는다(`setCandidates`). Provider 연결·모델 목록·검사 결과는 건드리지 않는다. 배정 탭의 "제외한 모델"에서 다시 허용할 수 있고, 허용해도 칸에 저절로 들어가지는 않는다.
+
+## Gemini Free / Gemini Paid와 할당량 (2026-11-15 추가)
+
+목적: 무료 할당량을 최대한 쓰고, 모르는 사이에 유료 호출이 나가지 않게 한다. 구현은 `src/gateway/gemini.ts`, `src/gateway/quota/`.
+
+### 두 Provider
+
+- `gemini-free`(Gemini Free)와 `gemini-paid`(Gemini Paid). 엔드포인트와 변환기는 같고 키, 프로젝트, 모델 목록, 검사 결과, 사용량, 할당량 기록이 따로다. Keychain 계정도 따로다.
+- **등급은 키 문자열이나 모델 이름으로 판정하지 않는다.** 사용자가 키를 어느 쪽에 등록했는지가 출발점이고, Google이 알려 주는 것으로 확인하거나 반박한다: 프로젝트의 결제 연결 여부(Cloud Billing), 거절된 호출이 가리킨 할당량 이름(`…FreeTier` / `…PaidTier…`). 근거가 없으면 "확인하지 못함"이라고 표시한다.
+- **Gemini Free는 과금 근거가 생기면 호출을 멈춘다**(오류 코드 `billing_risk`, 요청은 나가지 않는다): 프로젝트에 결제 계정이 연결됨, 서버가 유료 등급 할당량으로 답함, Free와 Paid가 같은 프로젝트를 가리킴.
+- **Gemini Paid로 자동으로 넘어가지 않는다.** Paid 모델은 배정 칸의 첫 번째 후보일 때만 쓰인다. 뒤 후보일 때는 사용자가 "넘어가도 됩니다"를 켠 경우에만 쓰인다(기본 꺼짐). 속도 제한, 실패, 느려서 다음 후보에도 보내는 경우 모두 같은 규칙을 탄다. 할당량 조회 실패는 전환 사유가 아니다.
+- 비용: Free 호출은 $0, Paid 호출은 Gemini 가격표로 계산한다.
+- **이전**: 분리 전의 `gemini` 연결은 Vault를 처음 열 때 Gemini Free로 옮긴다(후보 `gemini:…` → `gemini-free:…`, 모델 목록, 검사 결과, 사용 기록; 키는 Keychain의 옛 항목을 지우지 않고 복사). 앱이 옮긴 사실을 알리고, 한 번에 Gemini Paid로 옮기는 버튼을 준다. 옛 `gemini:` 표기는 읽을 때 `gemini-free:`로 받아들인다. 이전 대시보드(Nidus Base)는 예전 그대로 `gemini` 하나를 쓴다.
+
+### 할당량 모듈 (Provider와 무관, `quota/quota.ts`)
+
+세 가지 수를 섞지 않는다.
+
+| 수 | 출처 | 성격 |
+|---|---|---|
+| 제한 | Cloud Quotas, 사용자 입력, 429 응답의 값 | 사용자 입력이 먼저 |
+| 이 Vault의 사용량 | `usage.sqlite`의 호출 기록 | Nidus가 이 Vault에서 보낸 것만. 재시작해도 남는다 |
+| Google 관측 | Cloud Monitoring | 몇 분 늦고, 프로젝트를 쓰는 모든 호출을 센다 |
+
+- 창: RPM·TPM은 최근 60초, RPD는 태평양 시간 자정부터(Google 문서: "RPD quotas reset at midnight Pacific time"). 서버에 가지 않은 호출(키 없음, 과금 위험으로 멈춤)은 세지 않고, 거절된 호출은 센다.
+- 상태: Limited(429로 쉬는 중이거나 이 Vault의 수가 알려진 제한에 닿음), Unknown(제한을 모름), Available.
+- 호출 전: Limited인 모델은 같은 칸에 다른 후보가 있으면 건너뛴다. 혼자뿐이면 그대로 보낸다. **서버의 답이 기준이다.**
+- 429: 응답의 구조화된 부분(`google.rpc.QuotaFailure`, `RetryInfo`)에서 형식이 맞는 이름과 수만 읽는다. 자유 문장은 버린다. 하루 할당량이면 다음 태평양 자정까지, 분 단위면 서버가 준 시간(없으면 60초)만큼 그 모델을 쉬게 한다. 재시도 횟수는 기존대로 정해져 있다.
+- 다른 Provider에 붙이려면: 하루가 시작되는 시각(`QuotaPolicy`)과 제한을 가져오는 방법만 주면 된다.
+
+### Google에서 조회 (`quota/google.ts`, `quota/google-auth.ts`)
+
+API 키로는 볼 수 없어 Cloud 로그인이 따로 필요하다. 모델 호출이 아닌 읽기 전용 GET이다.
+
+| 무엇 | API | 필요한 권한 |
+|---|---|---|
+| 모델별 제한 | Cloud Quotas `quotaInfos.list` (`generativelanguage.googleapis.com`) | `cloudquotas.quotas.get` |
+| Google이 센 사용량 | Cloud Monitoring `timeSeries.list` (`…/quota/<지표>/usage`, `/limit`) | `monitoring.timeSeries.list` |
+| 결제 연결 여부 | Cloud Billing `projects.getBillingInfo` | `resourcemanager.projects.get` |
+
+- 지표: 무료는 `generate_content_free_tier_requests`(분 → RPM, 일 → RPD), `generate_content_free_tier_input_token_count`(분 → TPM). 유료는 `generate_requests_per_model`, `generate_content_paid_tier_input_token_count`. 모델 이름은 정확히 같은 것만 잇는다. 다른 등급의 지표나 알아보지 못한 지표는 제한으로 쓰지 않는다(실제 프로젝트 테스트가 그 목록을 출력한다).
+- 권한: 역할 두 개로 충분하다. Cloud Quotas Viewer(`roles/cloudquotas.viewer`: `cloudquotas.quotas.get`, `resourcemanager.projects.get` 포함)와 Monitoring Viewer(`roles/monitoring.viewer`).
+- 로그인은 gcloud의 것 하나다(`quota/google-auth.ts`). 앱의 "설정…" 창이 처음 하는 사람 기준으로 안내한다: `brew install --cask gcloud-cli` → `gcloud auth application-default login`(브라우저에서 Gemini 키를 만든 계정으로) → 앱에서 "다시 확인". 읽는 순서는 Application Default Credentials 파일(`$GOOGLE_APPLICATION_CREDENTIALS` 또는 `~/.config/gcloud/application_default_credentials.json`; 사람의 refresh token이거나 서비스 계정 키) → `gcloud auth print-access-token`. 토큰은 메모리에만 두고, 비밀은 Google의 토큰 주소로만 보낸다. 서비스 계정 키 파일 고르기와 앱 안의 OAuth 로그인은 2026-11-16에 뺐다(사용자 결정: gcloud 하나가 깔끔하고, 키 만들기는 조직 정책 `iam.disableServiceAccountKeyCreation`으로 막혀 있었다).
+- 할당량 프로젝트(`x-goog-user-project`): 사람 계정으로 부를 때 Cloud Quotas는 이 헤더를 요구하고, Monitoring과 Billing은 요구하지 않는다. 그런데 헤더를 붙이면 Monitoring은 "결제 계정이 없는 프로젝트"라며 거절하고(무료 등급 프로젝트에서 2026-11-16 실측), Billing은 그 프로젝트에 Cloud Billing API를 켜라고 한다. 그래서 헤더는 Cloud Quotas에만 붙이고, 나머지는 Google이 "requires a quota project"라고 답할 때만 붙여 다시 부른다. 결과: 사용자가 Console에서 켤 것은 Cloud Quotas API 하나뿐이다.
+- 403의 이유: `google.rpc.ErrorInfo`의 `reason`과 `activationUrl`만 읽어(`http.ts` `errorInfo`, 자유 문장은 버림) 화면에 "이 프로젝트에서 Cloud Quotas API가 켜져 있지 않습니다. [Console에서 켜기](…)"처럼 보여 준다. `USER_PROJECT_DENIED`는 Service Usage 소비자 역할 안내, 그 밖은 필요한 권한 이름.
+- Monitoring의 `…/limit` 지표는 Google이 말하는 그 한도라서, Cloud Quotas가 값을 주지 않은 모델·종류의 제한으로 쓴다(출처 `cloud`). Cloud Quotas 값이 있으면 그것이 남는다.
+- 실패: 출처마다 따로 실패한다. 값을 추정하지 않고 Unknown과 이유(권한 없음, 로그인 만료, API 꺼짐)를 보여 준다. 제한은 직접 입력할 수 있다. 모델 호출은 그대로 된다.
+
+### 저장
+
+- `.nidus/local/providers.json`: Provider별 프로젝트 ID, 유료 fallback 허용, 직접 입력한 제한, 이전 기록.
+- `.nidus/local/quota.json`: 조회한 제한, Google 관측, 결제 상태, 429로 쉬는 모델, 등급 근거.
+
+### 확인한 것과 못 한 것
+
+- 자동 테스트(Google을 흉내 냄): `tests/gemini-quota.test.mjs` 14개(헤더 정책, API 꺼짐 403의 이유와 링크 포함).
+- 실제 키: 시험용 Vault에서 이전, Gemini Free 호출, 사용량 집계를 확인했다.
+- **실제로 확인함(2026-11-16, gcloud ADC 로그인, 무료 등급 프로젝트)**: Cloud Billing(`billingEnabled: false`)과 Cloud Monitoring(모델별 `…/limit`·`…/usage` 시계열, 예: RPM 한도 5·15, RPD 사용 9/20·8/500)이 실제 값으로 들어왔다. Cloud Quotas는 그 프로젝트에 API가 꺼져 있어 403이었고, 화면에 켜기 링크가 뜨는 것까지 확인했다.
+- **확인하지 못함**: Cloud Quotas API를 켠 뒤의 실제 `quotaInfos` 응답. 응답 형식은 공식 문서의 필드와 지표 이름에 맞췄지만, 모델 이름 표기나 유료 2·3등급 지표처럼 문서에 없는 부분은 실제 값으로 봐야 안다. 확인 방법: `NIDUS_LIVE=1 NIDUS_LIVE_GCP_PROJECT=<id> npm run test:live`. 실제 429 본문의 형식도 공식 문서에는 예시가 없어 공개된 사례에 맞췄다.
 
 ## `.nidus/` 배치
 

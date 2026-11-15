@@ -101,11 +101,13 @@ struct WelcomeView: View {
 }
 
 enum VaultSection: String, CaseIterable, Identifiable {
+    case main = "Main"
+    case work = "작업"
+    case library = "Library"
+    case staff = "직원"
     case assignment = "모델 배정"
     case providers = "Provider"
     case usage = "사용량"
-    case trial = "시험 호출"
-    case work = "작업"
 
     var id: String { rawValue }
     var icon: String {
@@ -113,14 +115,17 @@ enum VaultSection: String, CaseIterable, Identifiable {
         case .assignment: return "person.2"
         case .providers: return "key"
         case .usage: return "chart.bar"
-        case .trial: return "paperplane"
+        case .main: return "bubble.left.and.bubble.right"
         case .work: return "hammer"
+        case .library: return "books.vertical"
+        case .staff: return "person.3"
         }
     }
 }
 
 struct VaultView: View {
     @EnvironmentObject private var store: VaultStore
+    @EnvironmentObject private var session: WorkspaceSession
     /// The last opened section is remembered between launches.
     @AppStorage("section") private var storedSection = VaultSection.assignment.rawValue
     /// Whether the sidebar was closed is remembered too.
@@ -128,13 +133,27 @@ struct VaultView: View {
 
     private var vaultURL: URL { URL(fileURLWithPath: store.vault ?? "") }
 
+    /// How many things in a section wait for the user's decision: approvals and a result to review in
+    /// 작업, a plan or questions and note suggestions in Main, warnings on providers.
+    private func attention(_ section: VaultSection) -> Int {
+        switch section {
+        case .work: return session.approvals.count + (session.review != nil ? 1 : 0)
+        case .main: return (session.project?.status == "waiting_user" ? 1 : 0) + (session.curation != nil ? 1 : 0)
+        case .providers: return store.overview?.providers.filter { $0.notice != nil }.count ?? 0
+        default: return 0
+        }
+    }
+
     var body: some View {
         NavigationSplitView(columnVisibility: Binding(
             get: { sidebarHidden ? .detailOnly : .all },
             set: { sidebarHidden = $0 == .detailOnly }
         )) {
             List(VaultSection.allCases, selection: Binding(get: { VaultSection(rawValue: storedSection) }, set: { storedSection = ($0 ?? .assignment).rawValue })) { item in
-                Label(item.rawValue, systemImage: item.icon).tag(item)
+                // The badge counts things waiting for the user in a section they are not looking at.
+                Label(item.rawValue, systemImage: item.icon)
+                    .badge(attention(item))
+                    .tag(item)
             }
             // The open vault is named here and in each page header, not in the toolbar:
             // a toolbar title sits after the sidebar button and never lines up with the page.
@@ -151,12 +170,14 @@ struct VaultView: View {
             .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 260)
         } detail: {
             if let overview = store.overview {
-                switch VaultSection(rawValue: storedSection) ?? .assignment {
+                switch VaultSection(rawValue: storedSection) ?? .main {
                 case .assignment: AssignmentView(overview: overview)
                 case .providers: ProvidersView(overview: overview)
                 case .usage: UsageView(overview: overview)
-                case .trial: TrialView(overview: overview)
+                case .main: MainView(overview: overview)
                 case .work: WorkView(overview: overview)
+                case .library: LibraryView()
+                case .staff: StaffView()
                 }
             } else {
                 ProgressView("Vault를 읽는 중…").frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -164,6 +185,14 @@ struct VaultView: View {
         }
         .navigationTitle(vaultURL.lastPathComponent)
         .toolbarTitleHidden()
+        // A link to a file of the Vault (nidus://library/<path>), from Main's answers or a note, opens it here.
+        .environment(\.openURL, OpenURLAction { url in
+            guard url.scheme == "nidus", url.host == "library" else { return .systemAction }
+            let path = url.path.removingPercentEncoding ?? url.path
+            store.openInLibrary(String(path.drop(while: { $0 == "/" })))
+            return .handled
+        })
+        .onChange(of: store.libraryRequest) { request in if request != nil { storedSection = VaultSection.library.rawValue } }
         // The system draws the toolbar's own background a few points past the sidebar
         // edge. Without it the toolbar shares the page background and nothing overlaps.
         .toolbarBackground(.hidden, for: .windowToolbar)

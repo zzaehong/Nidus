@@ -46,7 +46,7 @@ export function classifyModel(model: Model): Classification {
   if (model.capabilities.chat === "supported") return result("text", "metadata", "Adapter reports text chat from provider API metadata/contract.");
   if (model.capabilities.chat !== "unsupported" && (
     (model.provider === "openai" && /^(gpt-|chatgpt-|o\d)/.test(id)) ||
-    (model.provider === "gemini" && /^(gemini-|gemma-)/.test(id) && methods.includes("generatecontent")) ||
+    (model.provider.startsWith("gemini") && /^(gemini-|gemma-)/.test(id) && methods.includes("generatecontent")) ||
     (model.provider === "deepseek" && id.startsWith("deepseek-"))
   )) return result("text", "inferred", "Text-family naming hint; text output and adapter endpoint compatibility require an opt-in probe.");
   return result("unknown", "unknown", "Insufficient metadata. Not automatically sent to a text endpoint.");

@@ -9,18 +9,27 @@
 import type { Message } from '../gateway/contract.js';
 import type { Difficulty } from '../gateway/assignment.js';
 import { sendWithRetry, type RetryPolicy, type WorkerGateway, type WorkerOutcome } from '../workspace/worker.js';
-import { BoardStore, projectId, readyTasks, unreachable, type BoardTask, type Project } from './board.js';
+import { BoardStore, managerFor, projectId, readyTasks, unreachable, workerFor, type BoardTask, type Project } from './board.js';
+import { identity, type HomeStore, type Staff } from './home.js';
+import type { DeskStore } from './desk.js';
+import { knowledgeRequest, parseKnowledge, recordProject, type Library } from './library.js';
 import { PlanError, answersMessage, briefRequest, finalRequest, parseBrief, parsePlan, parseReview, planRequest, reviewRequest, workerBrief } from './plan.js';
 import { mainSystem, managerSystem } from './roles.js';
 
 export type OfficeEvent =
   | { type: 'project'; project: Project }
-  | { type: 'message'; from: 'main' | 'manager'; taskId?: string; title: string; text: string; model?: string }
+  | { type: 'message'; from: 'main' | 'manager'; taskId?: string; title: string; text: string; /** "provider:model" of the call that produced this, for the user's judgement. */ model?: string; difficulty?: Difficulty; /** Main's final report of the project: it is also said in the conversation. */ final?: true }
   | { type: 'retry'; from: string; attempt: number; error: string };
 
 export interface OfficeDeps {
   gateway: WorkerGateway;
   store: BoardStore;
+  /** The Vault's standing staff (Home). Without it every team is made up for the request. */
+  home?: HomeStore;
+  /** Workers' Desks: a task that ends gets its final checkpoint. */
+  desk?: DeskStore;
+  /** The Library: Main sees what earlier projects taught, and a finished project is written into it. */
+  library?: Library;
   /** A short description of the Vault's repository for Main (file list, README). */
   repository(): Promise<string>;
   /**
@@ -69,7 +78,7 @@ export class Office {
         this.retry, (n, error) => this.deps.onEvent({ type: 'retry', from: role, attempt: n, error }));
       const text = result.response.content.filter(b => b.type === 'text').map(b => (b as { text: string }).text).join('\n');
       try {
-        return { value: parse(text), text, model: result.response.model };
+        return { value: parse(text), text, model: `${result.response.provider}:${result.response.model}` };
       } catch (error) {
         if (!(error instanceof PlanError) || attempt >= 1) throw new Error(`${role === 'main' ? 'Main' : 'Manager'}의 답을 읽지 못했습니다: ${(error as Error).message}`);
         conversation.push({ role: 'assistant', content: [{ type: 'text', text }] }, { role: 'user', content: [{ type: 'text', text: `That answer could not be used: ${(error as Error).message}. Answer again with the JSON object only.` }] });
@@ -81,7 +90,7 @@ export class Office {
 
   async plan(instruction: string, signal: AbortSignal): Promise<Project> {
     this.project = { id: projectId(), instruction, createdAt: new Date().toISOString(), status: 'planning', summary: '', roadmap: [], teams: [], tasks: [], questions: [], conversation: [] };
-    this.project.conversation.push({ role: 'user', content: [{ type: 'text', text: planRequest(instruction, await this.deps.repository()) }] });
+    this.project.conversation.push({ role: 'user', content: [{ type: 'text', text: planRequest(instruction, await this.deps.repository(), await this.deps.home?.staff(), await this.deps.library?.digest().catch(() => '')) }] });
     await this.publish();
     return this.revise(signal);
   }
@@ -99,9 +108,10 @@ export class Office {
   private async revise(signal: AbortSignal): Promise<Project> {
     const project = this.project!;
     try {
-      const { value: plan, text, model } = await this.ask('main', mainSystem(), project.conversation, parsePlan, signal);
+      const standing: Staff | undefined = await this.deps.home?.staff();
+      const { value: plan, text, model } = await this.ask('main', mainSystem(), project.conversation, answer => parsePlan(answer, standing), signal);
       project.conversation.push({ role: 'assistant', content: [{ type: 'text', text }] });
-      Object.assign(project, { summary: plan.summary, roadmap: plan.roadmap, teams: plan.teams, status: 'waiting_user' as const });
+      Object.assign(project, { summary: plan.summary, roadmap: plan.roadmap, teams: plan.teams, staff: plan.staff, status: 'waiting_user' as const });
       project.tasks = plan.tasks.map(t => ({ ...t, status: 'pending' as const, attempts: 0, reviews: [] }));
       // Answers given so far stay with the questions Main asks again.
       const previous = new Map(project.questions.map(q => [q.text, q.answer]));
@@ -126,6 +136,14 @@ export class Office {
   /** The user approved the plan: tasks run in order until all have ended, then Main reports. */
   async execute(signal: AbortSignal): Promise<Project> {
     const project = this.requireStatus('waiting_user', 'stopped');
+    // Approving the plan approves its proposals: permanent ones join the Vault's standing staff.
+    const groups = project.teams.filter(t => t.proposed && t.keep === 'permanent');
+    const people = (project.staff ?? []).filter(e => e.proposed && e.keep === 'permanent');
+    if (this.deps.home && (groups.length || people.length)) {
+      await this.deps.home.add(groups.map(({ id, name, focus }) => ({ id, name, focus })), people.map(({ proposed, keep, reason, ...employee }) => employee));
+      for (const item of [...groups, ...people]) item.proposed = false;
+      this.deps.onEvent({ type: 'message', from: 'main', title: '상설 직원 추가', text: [...groups.map(g => `팀 ${g.name}`), ...people.map(e => `${e.name} (${e.role})`)].join(', ') });
+    }
     project.status = 'running';
     project.error = undefined;
     // A task interrupted by a stop starts over.
@@ -161,7 +179,18 @@ export class Office {
       await this.publish();
       const result = await sendWithRetry(this.deps.gateway, { role: 'main', taskId: project.id }, { system: mainSystem(), messages: [{ role: 'user', content: [{ type: 'text', text: finalRequest(project) }] }] }, signal, this.retry);
       project.report = result.response.content.filter(b => b.type === 'text').map(b => (b as { text: string }).text).join('\n').trim();
-      this.deps.onEvent({ type: 'message', from: 'main', title: '최종 보고', text: project.report, model: result.response.model });
+      this.deps.onEvent({ type: 'message', from: 'main', title: '최종 보고', text: project.report, model: `${result.response.provider}:${result.response.model}`, final: true });
+      // Knowledge Integration (CONCEPT): the project is not over until what it taught is in the Library.
+      if (this.deps.library && project.tasks.some(t => t.status === 'done')) {
+        try {
+          const { value: knowledge } = await this.ask('main', mainSystem(), [{ role: 'user', content: [{ type: 'text', text: knowledgeRequest(project) }] }], parseKnowledge, signal);
+          project.knowledge = await recordProject(this.deps.library, project, knowledge);
+          this.deps.onEvent({ type: 'message', from: 'main', title: 'Library에 기록', text: project.knowledge.join('\n') });
+        } catch (error) {
+          if (signal.aborted) throw error;
+          this.deps.onEvent({ type: 'message', from: 'main', title: 'Library에 기록하지 못했습니다', text: String((error as Error).message ?? error) });
+        }
+      }
       project.status = 'done';
     } catch (error) {
       if (signal.aborted) project.status = 'stopped';
@@ -180,10 +209,16 @@ export class Office {
     task.status = 'in_progress';
     task.startedAt = new Date().toISOString();
     await this.publish();
-    const brief = await this.ask('manager', managerSystem(), [{ role: 'user', content: [{ type: 'text', text: briefRequest(project, task) }] }], parseBrief, signal, task.id);
+    const manager = managerFor(project, task), worker = workerFor(project, task);
+    const managerPrompt = managerSystem(manager ? identity(manager, project.teams.find(t => t.id === task.team)) : undefined);
+    const at = async (status: 'started' | 'working' | 'review' | 'done' | 'blocked') => {
+      await Promise.all([worker?.id, manager?.id].map(employee => this.deps.home?.setState({ employee: employee ?? '', project: project.id, task: task.id, status })));
+    };
+    await at('started');
+    const brief = await this.ask('manager', managerPrompt, [{ role: 'user', content: [{ type: 'text', text: briefRequest(project, task) }] }], parseBrief, signal, task.id);
     task.brief = brief.value.instructions;
     task.difficulty = brief.value.difficulty;
-    this.deps.onEvent({ type: 'message', from: 'manager', taskId: task.id, title: `${task.title} · Worker 지시 (난이도 ${brief.value.difficulty})`, text: brief.value.instructions, model: brief.model });
+    this.deps.onEvent({ type: 'message', from: 'manager', taskId: task.id, title: `${manager ? `${manager.name} → ${worker?.name ?? 'Worker'} · ` : ''}${task.title} · Worker 지시 (난이도 ${brief.value.difficulty})`, text: brief.value.instructions, model: brief.model, difficulty: brief.value.difficulty });
     await this.publish();
 
     let instruction = workerBrief(project, task);
@@ -191,6 +226,7 @@ export class Office {
       task.attempts = attempt;
       task.status = 'in_progress';
       await this.publish();
+      await at('working');
       const { outcome, evidence, output } = await this.deps.work(task, instruction, brief.value.difficulty, signal, attempt > 1);
       if (signal.aborted) throw new Error('stopped');
       if (output !== undefined) task.output = output.slice(0, 60000);
@@ -198,15 +234,18 @@ export class Office {
       await this.publish();
       const history = task.reviews.length ? `\nEarlier reviews:\n${task.reviews.map((r, i) => `${i + 1}. ${r.verdict}: ${r.feedback}`).join('\n')}\n` : '';
       const outcomeText = outcome.status === 'finished' ? `Worker's summary: ${outcome.summary}` : outcome.status === 'stopped' ? `The Worker stopped early: ${outcome.detail}` : `The Worker failed: ${outcome.error}`;
-      const review = await this.ask('manager', managerSystem(), [{ role: 'user', content: [{ type: 'text', text: reviewRequest(project, task, `${outcomeText}\n${history}\n${evidence}`, attempt, MAX_ATTEMPTS) }] }], parseReview, signal, task.id);
+      await at('review');
+      const review = await this.ask('manager', managerPrompt, [{ role: 'user', content: [{ type: 'text', text: reviewRequest(project, task, `${outcomeText}\n${history}\n${evidence}`, attempt, MAX_ATTEMPTS) }] }], parseReview, signal, task.id);
       let verdict = review.value.verdict;
       // No tries left: a task that still needs work is blocked, not quietly accepted.
       if (verdict === 'revise' && attempt >= MAX_ATTEMPTS) verdict = 'blocked';
       task.reviews.push({ verdict, feedback: review.value.feedback, at: new Date().toISOString() });
       const label = { accept: '통과', revise: '수정 요청', blocked: '진행 불가' }[verdict];
-      this.deps.onEvent({ type: 'message', from: 'manager', taskId: task.id, title: `${task.title} · 검토: ${label}`, text: verdict === 'accept' ? review.value.summary : review.value.feedback || review.value.summary, model: review.model });
+      this.deps.onEvent({ type: 'message', from: 'manager', taskId: task.id, title: `${manager ? `${manager.name} · ` : ''}${task.title} · 검토: ${label}`, text: verdict === 'accept' ? review.value.summary : review.value.feedback || review.value.summary, model: review.model, difficulty: task.difficulty });
       if (verdict !== 'revise') {
         task.status = verdict === 'accept' ? 'done' : 'blocked';
+        await at(task.status);
+        await this.deps.desk?.checkpoint(project.id, task.id, worker?.id ?? null, 'final', `${label}: ${review.value.summary}`).catch(() => {});
         task.result = { summary: review.value.summary, verification: review.value.verification };
         task.finishedAt = new Date().toISOString();
         await this.publish();

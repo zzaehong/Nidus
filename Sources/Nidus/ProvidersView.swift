@@ -51,7 +51,11 @@ struct ProvidersView: View {
                             .foregroundStyle(provider.connected ? .green : .secondary)
                         VStack(alignment: .leading) {
                             Text(provider.name).lineLimit(1)
-                            Text(provider.connected ? "모델 \(provider.models)개" : "키 없음").font(.caption).foregroundStyle(.secondary)
+                            if let notice = provider.notice {
+                                Text(notice).font(.caption).foregroundStyle(notice.contains("과금") ? .red : .blue).lineLimit(1)
+                            } else {
+                                Text(provider.connected ? "모델 \(provider.models)개" : "키 없음").font(.caption).foregroundStyle(.secondary)
+                            }
                         }
                     }
                     .tag(provider.id)
@@ -107,6 +111,8 @@ private struct ProviderDetail: View {
     @State private var search = ""
     @State private var checking: ModelChoice?
     @State private var askingBatch = false
+    /// Gemini providers have a second page: limits and use by model.
+    @State private var page = "models"
 
     /// Usable models first: tools passed, text passed, untested, then failed.
     private var visible: [ModelChoice] {
@@ -122,6 +128,13 @@ private struct ProviderDetail: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Text(provider.name).font(.headline).lineLimit(1)
+                    if provider.tier != nil {
+                        Picker("", selection: $page) {
+                            Text("모델").tag("models")
+                            Text("할당량").tag("quota")
+                        }
+                        .pickerStyle(.segmented).labelsHidden().fixedSize()
+                    }
                     Spacer()
                     if provider.connected {
                         Text("검사하지 않은 모델 \(untested.count)개").font(.caption).foregroundStyle(.secondary)
@@ -157,13 +170,20 @@ private struct ProviderDetail: View {
                         Text(batch.summary).font(.caption)
                     }
                 }
-                if provider.connected { TextField("모델 검색", text: $search) }
+                if provider.connected, page == "models" { TextField("모델 검색", text: $search) }
+                if provider.tier == "paid" {
+                    Text("유료 등급입니다. 이 Provider의 모든 호출은 과금됩니다. 무료 할당량이 없습니다.").font(.caption).foregroundStyle(.orange)
+                } else if provider.tier == "free" {
+                    Text("결제 계정이 연결되지 않은 프로젝트의 키를 등록하세요. 프로젝트가 과금되는 것으로 보이면 호출을 멈춥니다.").font(.caption).foregroundStyle(.secondary)
+                }
             }
             .padding(Layout.inset)
 
             Divider()
 
-            if provider.connected {
+            if provider.tier != nil, page == "quota" {
+                QuotaPane(provider: provider)
+            } else if provider.connected {
                 List(visible) { model in
                     HStack {
                         VStack(alignment: .leading) {
@@ -219,22 +239,43 @@ private struct ConnectSheet: View {
     let provider: ProviderInfo
     @State private var key = ""
     @State private var accountId = ""
+    /// A failure is shown here, in the sheet. The app's alert cannot appear over a sheet, so it would
+    /// otherwise wait until this sheet is closed.
+    @State private var problem: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("\(provider.name) API 키").font(.headline)
             APIKeyField(value: $key).frame(height: 22)
-            if provider.needsAccountId { TextField("Account ID (32자리 16진수)", text: $accountId) }
+            if provider.needsAccountId {
+                TextField("Account ID (32자리, \"Use REST API\" 화면에 표시)", text: $accountId)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Cloudflare는 토큰 외에 어느 계정의 Workers AI인지(Account ID)가 필요합니다. 둘 다 같은 화면에 있습니다: 대시보드 → Workers AI 페이지 → \"Use REST API\". 거기서 \"Create a Workers AI API Token\"으로 토큰을 만들고, 그 아래 Account ID를 복사해 적으세요. 대시보드 주소 dash.cloudflare.com/<여기>/… 에도 같은 값이 있습니다.")
+                    Text("비워 두면 토큰으로 계정을 조회해 봅니다. 다만 Workers AI 권한만 있는 토큰(위 템플릿)은 계정 목록을 볼 수 없어 자동 조회가 되지 않으니, 그때는 직접 적어 달라는 문구가 뜹니다.")
+                    if let url = URL(string: "https://dash.cloudflare.com/?to=/:account/ai/workers-ai") { Link("Workers AI 페이지 열기", destination: url) }
+                }
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
             Text("키로 모델 목록을 조회해 확인한 뒤 이 Mac의 Keychain에 저장합니다. Vault 폴더에는 저장하지 않습니다.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            if let problem {
+                Label(problem, systemImage: "exclamationmark.triangle").font(.callout).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+            }
             HStack {
                 if store.busy { ProgressView().controlSize(.small) }
                 Spacer()
                 Button("취소") { dismiss() }.keyboardShortcut(.cancelAction)
                 Button("확인 후 저장") {
                     Task {
-                        if await store.connect(provider, key: key, accountId: accountId) { dismiss() }
+                        problem = nil
+                        if let failure = await store.connect(provider, key: key, accountId: accountId) {
+                            // Shown here, in the sheet; the key stays typed so what was missing can be added and tried again.
+                            problem = failure
+                            return
+                        }
                         key = ""
+                        dismiss()
                     }
                 }
                 .keyboardShortcut(.defaultAction)

@@ -5,7 +5,7 @@ import { NidusError } from "./errors.js";
 import type { ProviderId } from "./types.js";
 
 export interface CredentialStore { get(provider: ProviderId): Promise<string | null>; set(provider: ProviderId, key: string): Promise<void>; delete(provider: ProviderId): Promise<void> }
-export const credentialEnvironment: Record<ProviderId, string> = { openai: "NIDUS_OPENAI_API_KEY", anthropic: "NIDUS_ANTHROPIC_API_KEY", gemini: "NIDUS_GEMINI_API_KEY", deepseek: "NIDUS_DEEPSEEK_API_KEY", nvidia:"NIDUS_NVIDIA_API_KEY", groq:"NIDUS_GROQ_API_KEY", mistral:"NIDUS_MISTRAL_API_KEY", cloudflare:"NIDUS_CLOUDFLARE_API_KEY" };
+export const credentialEnvironment: Record<ProviderId, string> = { openai: "NIDUS_OPENAI_API_KEY", anthropic: "NIDUS_ANTHROPIC_API_KEY", gemini: "NIDUS_GEMINI_API_KEY", "gemini-free": "NIDUS_GEMINI_FREE_API_KEY", "gemini-paid": "NIDUS_GEMINI_PAID_API_KEY", deepseek: "NIDUS_DEEPSEEK_API_KEY", nvidia:"NIDUS_NVIDIA_API_KEY", groq:"NIDUS_GROQ_API_KEY", mistral:"NIDUS_MISTRAL_API_KEY", cloudflare:"NIDUS_CLOUDFLARE_API_KEY" };
 
 export class KeychainStore implements CredentialStore {
   constructor(private readonly helper = fileURLToPath(new URL("./nidus-keychain", import.meta.url)), private readonly service = "com.nidus.connectivity") {}

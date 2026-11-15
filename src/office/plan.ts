@@ -2,7 +2,8 @@
 // They work in text only (no tools): Main plans and reports, Managers brief and review.
 // Who they are (their system prompts) is in roles.ts; this file holds what each request asks.
 import { difficulties, type Difficulty } from '../gateway/assignment.js';
-import { placeOf, type BoardTask, type CompletionContract, type Project, type Team } from './board.js';
+import { placeOf, workerFor, type BoardTask, type CompletionContract, type Keep, type Project, type ProjectEmployee, type Team } from './board.js';
+import { describeStaff, type Staff } from './home.js';
 
 export class PlanError extends Error {}
 
@@ -31,14 +32,47 @@ const id = (value: unknown, field: string) => {
   return value;
 };
 
-export interface Plan { summary: string; roadmap: string[]; teams: Team[]; tasks: Omit<BoardTask, 'status' | 'attempts' | 'reviews'>[]; questions: string[] }
+export interface Plan { summary: string; roadmap: string[]; teams: Team[]; staff: ProjectEmployee[]; tasks: Omit<BoardTask, 'status' | 'attempts' | 'reviews'>[]; questions: string[] }
 
-/** Reads and checks Main's plan: known teams, unique ids, existing dependencies, no cycles. */
-export function parsePlan(answer: string): Plan {
+const NO_STAFF: Staff = { version: 1, groups: [], employees: [] };
+const keepOf = (value: unknown): Keep => value === 'permanent' ? 'permanent' : 'temporary';
+
+/**
+ * Reads and checks Main's plan: known teams, unique ids, existing dependencies, no cycles.
+ * Teams named by the id of a standing Group are that Group with its people; other teams, and
+ * "hires", are proposals the user approves with the plan.
+ */
+export function parsePlan(answer: string, standing: Staff = NO_STAFF): Plan {
   const raw = extractJson(answer);
-  const teams = list(raw.teams, 'teams', 4).map((t: any) => ({ id: id(t?.id, 'team id'), name: text(t?.name, 'team name', 80), focus: text(t?.focus, 'team focus', 400) }));
+  const teams: Team[] = list(raw.teams, 'teams', 4).map((t: any) => {
+    const teamId = id(t?.id, 'team id');
+    const known = standing.groups.find(g => g.id === teamId);
+    if (known) return { ...known };
+    return { id: teamId, name: text(t?.name, 'team name', 80), focus: text(t?.focus, 'team focus', 400), proposed: true, keep: keepOf(t?.keep), ...(optionalText(t?.reason, 400) ? { reason: optionalText(t?.reason, 400) } : {}) };
+  });
   if (!teams.length) throw new PlanError('at least one team');
+  if (new Set(teams.map(t => t.id)).size !== teams.length) throw new PlanError('duplicate team id');
   const teamIds = new Set(teams.map(t => t.id));
+  const staff: ProjectEmployee[] = teams.flatMap(t => t.proposed ? [] : standing.employees.filter(e => e.group === t.id));
+  const taken = new Set([...standing.employees.map(e => e.id), ...staff.map(e => e.id)]);
+  const fresh = (wanted: string) => { let candidate = wanted.slice(0, 32), n = 2; while (taken.has(candidate)) candidate = `${wanted.slice(0, 28)}-${n++}`; taken.add(candidate); return candidate; };
+  for (const h of list(raw.hires ?? [], 'hires', 4) as any[]) {
+    const hireId = id(h?.id, 'hire id');
+    if (taken.has(hireId)) throw new PlanError(`hire ${hireId}: that id is already an employee`);
+    const team = teams.find(t => t.id === h?.team);
+    if (!team) throw new PlanError(`hire ${hireId}: unknown team ${h?.team}`);
+    taken.add(hireId);
+    staff.push({ id: hireId, name: text(h?.name, 'hire name', 80), group: team.id, kind: 'worker', role: text(h?.role, 'hire role', 80),
+      principles: list(h?.principles ?? [], 'principles', 6).map(p => text(p, 'principle', 500)), proposed: true,
+      // Nobody stays longer than their team.
+      keep: team.proposed && team.keep === 'temporary' ? 'temporary' : keepOf(h?.keep), ...(optionalText(h?.reason, 400) ? { reason: optionalText(h?.reason, 400) } : {}) });
+  }
+  // Every team works with one Manager and at least one Worker: what a proposal left out is filled in.
+  for (const team of teams) {
+    const keep = team.proposed ? team.keep : 'temporary';
+    if (!staff.some(e => e.group === team.id && e.kind === 'manager')) staff.push({ id: fresh(`${team.id.slice(0, 24)}-manager`), name: `${team.name} 팀장`, group: team.id, kind: 'manager', role: 'Manager', principles: [], proposed: true, keep });
+    if (!staff.some(e => e.group === team.id && e.kind === 'worker')) staff.push({ id: fresh(`${team.id.slice(0, 25)}-worker`), name: `${team.name} 담당`, group: team.id, kind: 'worker', role: 'Generalist', principles: [], proposed: true, keep });
+  }
   const tasks = list(raw.tasks, 'tasks', 12).map((t: any) => {
     const contract: CompletionContract = {
       goal: text(t?.goal, 'task goal', 2000), scope: optionalText(t?.scope, 2000), constraints: optionalText(t?.constraints, 2000),
@@ -50,7 +84,9 @@ export function parsePlan(answer: string): Plan {
     if (!teamIds.has(team)) throw new PlanError(`task ${t?.id}: unknown team ${team}`);
     // "desk" is what text tasks were called before 2026-11-13.
     if (t?.where !== undefined && t.where !== 'text' && t.where !== 'vm' && t.where !== 'desk') throw new PlanError(`task ${t?.id}: where must be "text" or "vm"`);
-    return { id: id(t?.id, 'task id'), team, title: text(t?.title, 'task title', 200), where: t?.where === 'text' || t?.where === 'desk' ? 'text' as const : 'vm' as const, contract, dependsOn: list(t?.dependsOn ?? [], 'dependsOn', 12).map(d => id(d, 'dependency')) };
+    const workers = staff.filter(e => e.group === team && e.kind === 'worker');
+    if (t?.assignee !== undefined && t.assignee !== null && !workers.some(w => w.id === t.assignee)) throw new PlanError(`task ${t?.id}: assignee ${t.assignee} is not a worker of team ${team}`);
+    return { id: id(t?.id, 'task id'), team, title: text(t?.title, 'task title', 200), assignee: (t?.assignee as string | undefined) ?? workers[0]!.id, where: t?.where === 'text' || t?.where === 'desk' ? 'text' as const : 'vm' as const, contract, dependsOn: list(t?.dependsOn ?? [], 'dependsOn', 12).map(d => id(d, 'dependency')) };
   });
   if (!tasks.length) throw new PlanError('at least one task');
   const ids = new Set<string>();
@@ -66,7 +102,7 @@ export function parsePlan(answer: string): Plan {
   return {
     summary: text(raw.summary, 'summary', 3000),
     roadmap: list(raw.roadmap ?? [], 'roadmap', 12).map(r => text(r, 'roadmap step', 400)),
-    teams, tasks,
+    teams, staff, tasks,
     questions: list(raw.questions ?? [], 'questions', 6).map(q => text(q, 'question', 600)),
   };
 }
@@ -90,16 +126,20 @@ export const PLAN_FORMAT = [
   'Make a plan for the request:',
   '- summary: what will be delivered.',
   '- roadmap: the main steps, in order (short phrases).',
-  '- teams: 1-4 teams this request needs (id, name, focus). Prefer fewer teams.',
-  '- tasks: 1-12 tasks. Each is a unit a Worker can finish and a Manager can check: id, team, title, where ("text" or "vm"), goal, scope, constraints, acceptance (observable criteria, a list), verification (how to check them), dependsOn (ids of tasks that must finish first).',
+  '- teams: 1-4 teams this request needs. Use the standing teams listed above by their id whenever one fits (give only {"id": "..."}). Only when none fits, propose a new team: {"id", "name", "focus", "keep", "reason"}. Prefer fewer teams.',
+  '- hires (optional, at most 4): a Worker with a role a team lacks for this request: {"id", "team", "name", "role", "keep", "reason"}. Do not hire for work a standing Worker can do.',
+  '- keep: "temporary" (only for this request; the default) or "permanent" (joins the standing staff; only when the need will clearly come back). The user approves proposals together with the plan.',
+  '- tasks: 1-12 tasks. Each is a unit a Worker can finish and a Manager can check: id, team, assignee (the id of a Worker of that team; leave out to give it to the first Worker of the team), title, where ("text" or "vm"), goal, scope, constraints, acceptance (observable criteria, a list), verification (how to check them), dependsOn (ids of tasks that must finish first).',
   '- where: "text" whenever the task only needs thinking and writing over the request, the user\'s answers, earlier results and the repository\'s files. "vm" only when it must run commands or code, create or change files in the repository, or use the internet or a browser. A request that needs no vm task never starts the VM. If the user wants a deliverable saved as a file in their repository, a vm task must write it.',
   '- questions: only what you truly need from the user before starting. Ask none if the request is clear.',
   'Ids are lowercase letters, digits and dashes. Answer with one JSON object only:',
-  '{"summary": "...", "roadmap": ["..."], "teams": [{"id": "research", "name": "...", "focus": "..."}], "tasks": [{"id": "t1", "team": "research", "title": "...", "where": "text", "goal": "...", "scope": "...", "constraints": "...", "acceptance": ["..."], "verification": "...", "dependsOn": []}], "questions": ["..."]}',
+  '{"summary": "...", "roadmap": ["..."], "teams": [{"id": "research"}], "hires": [], "tasks": [{"id": "t1", "team": "research", "assignee": "researcher", "title": "...", "where": "text", "goal": "...", "scope": "...", "constraints": "...", "acceptance": ["..."], "verification": "...", "dependsOn": []}], "questions": ["..."]}',
 ].join('\n');
 
-export function planRequest(instruction: string, repository: string): string {
-  return `User request:\n${instruction}\n\nThe user's repository (the Vault), for context:\n${repository}\n\n${PLAN_FORMAT}`;
+export function planRequest(instruction: string, repository: string, standing?: Staff, knowledge?: string): string {
+  const teams = standing ? `\n\nThe standing teams of this Vault (they keep their identity across requests):\n${describeStaff(standing)}` : '';
+  const learned = knowledge ? `\n\nFrom the Library, what earlier projects taught (apply what fits: put it into task constraints, or tell Workers which document to read with library_read):\n${knowledge}` : '';
+  return `User request:\n${instruction}\n\nThe user's repository (the Vault), for context:\n${repository}${teams}${learned}\n\n${PLAN_FORMAT}`;
 }
 
 export function answersMessage(project: Project, note: string): string {
@@ -115,6 +155,7 @@ function projectContext(project: Project, task: BoardTask): string {
     `Plan: ${project.summary}`,
     project.questions.length ? `User's answers:\n${project.questions.map(q => `- ${q.text} -> ${q.answer || '(none)'}`).join('\n')}` : '',
     `Your team: ${team?.name} (${team?.focus})`,
+    (() => { const worker = workerFor(project, task); return worker ? `The Worker on this task: ${worker.name} (${worker.role})${worker.principles.length ? `; their principles: ${worker.principles.join(' / ')}` : ''}` : ''; })(),
     `Other tasks:\n${others || '(none)'}`,
     '',
     `Task ${task.id}: ${task.title}`,
@@ -157,6 +198,23 @@ export function reviewRequest(project: Project, task: BoardTask, evidence: strin
     'summary: the task result for the record, in the user\'s language. verification: how the criteria were checked.',
     'Answer with one JSON object only: {"verdict": "accept|revise|blocked", "feedback": "...", "summary": "...", "verification": "..."}',
   ].join('\n');
+}
+
+/**
+ * The finished project as Main needs it to answer the user in the conversation: the request, each
+ * task's outcome and its text deliverable itself (not a pointer to it), and the team's report.
+ */
+export function concludeBrief(project: Project, budget = 60_000): string {
+  let left = budget;
+  const take = (text: string, max: number) => { const cut = text.slice(0, Math.max(0, Math.min(max, left))); left -= cut.length; return cut + (cut.length < text.length ? '\n  …(생략)' : ''); };
+  const tasks = project.tasks.map(t => {
+    const head = `- ${t.id} ${t.title} [${t.status}, ${placeOf(t)}]\n  ${t.result ? `${t.result.summary}\n  Verified: ${t.result.verification}` : t.reviews.at(-1)?.feedback ?? ''}`;
+    return head + (t.output ? `\n  Deliverable:\n${take(t.output, 20_000)}` : '');
+  }).join('\n');
+  const files = project.knowledge?.length
+    ? `\n\nFiles this project created in the Vault (vault-relative paths; the first is the project record, then each text deliverable as its own file). These are the ONLY files that were created — Nidus writes text deliverables only here, in its own Library folder; no task wrote anywhere else, whatever a task's text says:\n${project.knowledge.map(p => `- ${p}`).join('\n')}`
+    : '\n\nNo file was created in the Vault by this project.';
+  return `Request: ${project.instruction}\nPlan: ${project.summary}\nStatus: ${project.status}${project.error ? ` (${project.error})` : ''}\n\nTasks:\n${tasks}\n\nTeam's final report:\n${take(project.report ?? '(none)', 8000)}${files}`;
 }
 
 export function finalRequest(project: Project): string {

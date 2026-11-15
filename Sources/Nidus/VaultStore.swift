@@ -32,6 +32,8 @@ struct BatchProgress: Equatable {
 final class VaultStore: ObservableObject {
     @Published private(set) var vault: String?
     @Published private(set) var overview: Overview?
+    /// A file of the Vault to show in the Library tab (vault-relative path), asked for by a link.
+    @Published var libraryRequest: String?
     @Published private(set) var busy = false
     @Published var error: String?
     /// A chosen folder that has no .nidus yet; the user confirms before it is created.
@@ -119,6 +121,33 @@ final class VaultStore: ObservableObject {
         if let fresh: Overview = await run({ try await bridge.call("overview", arguments()) }) { overview = fresh }
     }
 
+    /// What auto-fill would do; with apply, it is done and the overview reloaded.
+    func autoFill(apply: Bool) async -> AutoFillPlan? {
+        let plan: AutoFillPlan? = await run { try await bridge.call("auto-fill", arguments(["apply": apply])) }
+        if apply, plan != nil { await reload() }
+        return plan
+    }
+
+    /// The user did not like a model's work: out of that slot, or out of the whole Vault, and remembered.
+    func excludeModel(_ judgement: ModelJudgement, scope: String, note: String) async -> Bool {
+        var extra: [String: Any] = ["ref": judgement.ref, "scope": scope, "role": judgement.role, "note": note]
+        if let difficulty = judgement.difficulty { extra["difficulty"] = difficulty }
+        if let taskId = judgement.taskId { extra["taskId"] = taskId }
+        if let fresh: Overview = await run({ try await bridge.call("exclude-model", arguments(extra)) }) { overview = fresh; return true }
+        return false
+    }
+
+    func restoreModel(_ ref: String) async {
+        if let fresh: Overview = await run({ try await bridge.call("restore-model", arguments(["ref": ref])) }) { overview = fresh }
+    }
+
+    /// A link (nidus://library/<path>) asked for a file: the Library tab opens it.
+    func openInLibrary(_ path: String) {
+        let clean = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty, !clean.contains(".."), !clean.hasPrefix("/") else { return }
+        libraryRequest = clean
+    }
+
     func setCandidates(_ slot: Slot, _ candidates: [String]) async {
         if let fresh: Overview = await run({ try await bridge.call("set-candidates", arguments(["slot": slot.id, "candidates": candidates])) }) {
             overview = fresh
@@ -131,13 +160,22 @@ final class VaultStore: ObservableObject {
         }
     }
 
-    /// Returns true when the key was accepted and stored.
-    func connect(_ provider: ProviderInfo, key: String, accountId: String) async -> Bool {
+    /// Nil when the key was accepted and stored; otherwise why not. The failure is returned, not published
+    /// as `error`: the caller is a sheet, and the app's alert cannot appear over a sheet (it would wait
+    /// until the sheet closes), so the sheet shows the words itself.
+    func connect(_ provider: ProviderInfo, key: String, accountId: String) async -> String? {
         var extra: [String: Any] = ["provider": provider.id, "key": key]
-        if provider.needsAccountId { extra["accountId"] = accountId }
-        let result: ConnectResult? = await run { try await bridge.call("connect", arguments(extra)) }
-        if result != nil { await reload() }
-        return result != nil
+        if provider.needsAccountId, !accountId.trimmingCharacters(in: .whitespaces).isEmpty { extra["accountId"] = accountId.trimmingCharacters(in: .whitespaces) }
+        pending += 1
+        updateBusy()
+        defer { pending -= 1; updateBusy() }
+        do {
+            let _: ConnectResult = try await bridge.call("connect", arguments(extra))
+        } catch {
+            return error.localizedDescription
+        }
+        await reload()
+        return nil
     }
 
     func refresh(_ provider: ProviderInfo) async {
@@ -148,6 +186,33 @@ final class VaultStore: ObservableObject {
     func disconnect(_ provider: ProviderInfo) async {
         let done: Acknowledgement? = await run { try await bridge.call("disconnect", arguments(["provider": provider.id])) }
         if done != nil { await reload() }
+    }
+
+    // --- Gemini quotas ---------------------------------------------------------------
+
+    /// What is known about a Gemini provider's limits and use. Reads local files only.
+    func quota(_ provider: String, all: Bool = false) async -> QuotaView? {
+        // Quiet: this is polled, and must not grey out the page or raise an alert each time.
+        try? await bridge.call("quota", arguments(["provider": provider, "all": all]))
+    }
+
+    /// Asks Google for the project's limits, its own usage count and billing state.
+    func refreshQuota(_ provider: String) async -> QuotaView? {
+        await run { try await bridge.call("quota-refresh", arguments(["provider": provider])) }
+    }
+
+    func setProviderSettings(_ provider: String, _ change: [String: Any]) async -> QuotaView? {
+        var extra = change
+        extra["provider"] = provider
+        return await run { try await bridge.call("provider-settings", arguments(extra)) }
+    }
+
+    func moveGemini(from: String, to: String) async {
+        if let fresh: Overview = await run({ try await bridge.call("gemini-move", arguments(["from": from, "to": to])) }) { overview = fresh }
+    }
+
+    func acknowledgeGeminiMigration() async {
+        if let fresh: Overview = await run({ try await bridge.call("gemini-acknowledge", arguments()) }) { overview = fresh }
     }
 
     func models(_ provider: String) async -> [ModelChoice] {

@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { HttpClient } from '../dist/http.js';
 import { CompatibleAdapter, CloudflareAdapter } from '../dist/adapters/index.js';
-import { cloudflareCredential } from '../dist/adapters/cloudflare.js';
+import { cloudflareCredential, resolveCloudflareCredential } from '../dist/adapters/cloudflare.js';
 import { expandedProviders, reviewedFreeModels } from '../dist/providers.js';
 import { ConnectivityEngine } from '../dist/engine.js';
 import { UsageLedger } from '../dist/ledger.js';
@@ -151,4 +151,30 @@ test('Cloudflare malformed stored credentials fail safely before network access'
  }
  assert.equal(f.calls.length,0);
  assert.deepEqual(JSON.parse(cloudflareCredential(` ${key} `,account)),{token:key,accountId:account});
+});
+
+test('cloudflare: an empty Account ID is looked up with the token; only one account is unambiguous; the token never leaks', async () => {
+  const seen = [];
+  const answer = { accounts: [{ id: account, name: 'Mine' }] };
+  const http = new HttpClient(async (url, init) => {
+    seen.push({ url: String(url), auth: init.headers.authorization });
+    if (answer.status) return new Response(JSON.stringify({ success: false, errors: [{ message: 'secret-echo' }] }), { status: answer.status });
+    return Response.json({ success: true, result: answer.accounts });
+  });
+  const one = await resolveCloudflareCredential(key, '', http, 'https://cf.invalid');
+  assert.deepEqual([one.accountId, one.discovered, JSON.parse(one.credential)], [account, true, { token: key, accountId: account }]);
+  assert.deepEqual(seen, [{ url: 'https://cf.invalid/accounts?per_page=50', auth: `Bearer ${key}` }]);
+  const typed = await resolveCloudflareCredential(key, ` ${account} `, http);
+  assert.deepEqual([typed.accountId, typed.discovered, seen.length], [account, false, 1], 'a typed ID is used as is, without asking Cloudflare');
+  await assert.rejects(resolveCloudflareCredential(key, 'not-hex', http), { code: 'invalid_request' });
+  answer.accounts = [{ id: account, name: 'Mine' }, { id: 'b'.repeat(32), name: 'Work' }];
+  const many = await resolveCloudflareCredential(key, undefined, http, 'https://cf.invalid').catch(e => e);
+  assert.match(many.message, /계정 2개.*Mine: a{32}.*Work: b{32}/);
+  answer.accounts = [];
+  await assert.rejects(resolveCloudflareCredential(key, '', http, 'https://cf.invalid'), /계정 목록을 볼 수 없어.*Use REST API/, 'a Workers AI-only token gets an empty list: the user is told where the ID is, not that there is no account');
+  answer.status = 403;
+  const denied = await resolveCloudflareCredential(key, '', http, 'https://cf.invalid').catch(e => e);
+  assert.equal(denied.code, 'permission');
+  assert.match(denied.message, /Account ID를 직접/);
+  assert.ok(!JSON.stringify(denied).includes('secret-echo') && !JSON.stringify(denied).includes(key));
 });

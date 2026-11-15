@@ -11,6 +11,26 @@ struct RunEntry: Identifiable {
     var isError = false
     var callId: String?
     var pending = false
+    /// Who produced this, when a model did: lets the user judge the model and take it out.
+    var judgement: ModelJudgement?
+}
+
+/// A model call seen from the user's side: which role and difficulty it served, and which model it was.
+struct ModelJudgement: Equatable {
+    let role: String
+    let difficulty: String?
+    /// "provider:model"
+    let ref: String
+    let taskId: String?
+
+    /// From the engine's fields; nil when they do not name a model.
+    init?(role: String?, difficulty: String?, ref: String?, taskId: String? = nil) {
+        guard let role, let ref, ref.contains(":") else { return nil }
+        self.role = role
+        self.difficulty = role == "worker" ? difficulty : nil
+        self.ref = ref
+        self.taskId = taskId
+    }
 }
 
 struct BrowserTab: Identifiable, Equatable {
@@ -44,7 +64,12 @@ struct WorkReview: Decodable {
 
 /// A request handled by Main, its teams and their tasks (the Task Board of one request).
 struct OfficeProject: Decodable {
-    struct Team: Decodable, Identifiable { let id: String; let name: String; let focus: String }
+    struct Team: Decodable, Identifiable { let id: String; let name: String; let focus: String; let proposed: Bool?; let keep: String?; let reason: String? }
+    /// An employee on the project: standing staff, or proposed by Main with the plan.
+    struct Employee: Decodable, Identifiable {
+        let id: String; let name: String; let group: String; let kind: String; let role: String
+        let proposed: Bool?; let keep: String?; let reason: String?
+    }
     struct Contract: Decodable { let goal: String; let scope: String; let constraints: String; let acceptance: [String]; let verification: String }
     struct Review: Decodable { let verdict: String; let feedback: String }
     struct Result: Decodable { let summary: String; let verification: String }
@@ -53,6 +78,7 @@ struct OfficeProject: Decodable {
         let status: String; let difficulty: String?; let attempts: Int; let reviews: [Review]; let result: Result?
         /// "text" (no VM) or "vm"; older boards say "desk" for text, or nothing, which means vm.
         let `where`: String?
+        let assignee: String?
         /// A text task's deliverable.
         let output: String?
         var isText: Bool { `where` == "text" || `where` == "desk" }
@@ -64,12 +90,54 @@ struct OfficeProject: Decodable {
     let summary: String
     let roadmap: [String]
     let teams: [Team]
+    let staff: [Employee]?
     let tasks: [Task]
     let questions: [Question]
     let report: String?
+    let knowledge: [String]?
     let error: String?
     let workspace: String?
     var needsVm: Bool { tasks.contains { !$0.isText } }
+    func manager(of team: String) -> Employee? { staff?.first { $0.group == team && $0.kind == "manager" } }
+    func worker(of task: Task) -> Employee? { staff?.first { $0.id == task.assignee } }
+    /// New teams and people Main proposes; approving the plan approves them.
+    var proposals: [String] {
+        let label = { (keep: String?) in keep == "permanent" ? "상설" : "이번 요청만" }
+        let newTeams = teams.filter { $0.proposed == true }
+        let teamLines = newTeams.map { "새 팀 \($0.name) · \(label($0.keep))\($0.reason.map { " — \($0)" } ?? "")" }
+        let hires = (staff ?? []).filter { e in e.proposed == true && e.kind == "worker" && !newTeams.contains { $0.id == e.group } }
+        return teamLines + hires.map { e in "새 직원 \(e.name) (\(e.role), \(teams.first { $0.id == e.group }?.name ?? e.group)) · \(label(e.keep))\(e.reason.map { " — \($0)" } ?? "")" }
+    }
+}
+
+/// A change to one of the user's notes that the Library Manager suggests: a link or a move.
+struct NoteSuggestion: Decodable, Identifiable, Equatable {
+    let id: String
+    let kind: String
+    let path: String
+    let target: String
+    let reason: String
+    let status: String
+    let error: String?
+}
+
+struct NoteCuration: Decodable, Equatable {
+    let at: String
+    let read: Int
+    let suggestions: [NoteSuggestion]
+}
+
+/// One message of the conversation with Main.
+struct ChatLine: Decodable, Identifiable, Equatable {
+    let role: String
+    let text: String
+    let at: String
+    let project: String?
+    let model: String?
+    let provider: String?
+    let isError: Bool?
+    var id: String { "\(at)-\(role)-\(text.count)" }
+    var judgement: ModelJudgement? { ModelJudgement(role: "main", difficulty: nil, ref: provider.flatMap { p in model.map { "\(p):\($0)" } }, taskId: "chat") }
 }
 
 /// The resident Workspace Service (dist/workspace/service.js) for the open Vault: the VM, its
@@ -92,6 +160,15 @@ final class WorkspaceSession: ObservableObject {
     @Published private(set) var entries: [RunEntry] = []
     @Published private(set) var review: WorkReview?
     @Published private(set) var project: OfficeProject?
+    /// The conversation with Main.
+    @Published private(set) var chat: [ChatLine] = []
+    @Published private(set) var chatBusy = false
+    /// A Dream Sequence (tidying the Library's lessons and decisions) is running.
+    @Published private(set) var dreaming = false
+    /// The Library Manager's suggestions waiting for the user, and whether it is making some now.
+    @Published private(set) var curation: NoteCuration?
+    @Published private(set) var curating = false
+    @Published private(set) var curatingProgress = ""
     @Published private(set) var git = "ready"
     @Published private(set) var costUSD = 0.0
     @Published private(set) var costUnknown = false
@@ -124,7 +201,7 @@ final class WorkspaceSession: ObservableObject {
 
     private func reset() {
         vm = "stopped"; detail = ""; task = nil; running = false; control = "ai"; controlReason = nil
-        frame = nil; tabs = []; approvals = []; entries = []; review = nil; project = nil; costUSD = 0; costUnknown = false; allowAll = false
+        frame = nil; tabs = []; approvals = []; entries = []; review = nil; project = nil; chat = []; chatBusy = false; dreaming = false; curation = nil; curating = false; costUSD = 0; costUnknown = false; allowAll = false
     }
 
     private func launch() throws {
@@ -245,6 +322,20 @@ final class WorkspaceSession: ObservableObject {
             }
         case "log":
             entries.append(RunEntry(kind: .note, title: m["text"] as? String ?? ""))
+        case "curation":
+            curating = m["running"] as? Bool ?? false
+            curatingProgress = curating ? (m["progress"] as? String ?? curatingProgress) : ""
+            if let value = m["curation"], !(value is NSNull), let data = try? JSONSerialization.data(withJSONObject: value) {
+                curation = try? JSONDecoder().decode(NoteCuration.self, from: data)
+            } else {
+                curation = nil
+            }
+        case "dream":
+            dreaming = m["running"] as? Bool ?? false
+        case "chat":
+            if let value = m["messages"], let data = try? JSONSerialization.data(withJSONObject: value) {
+                chat = (try? JSONDecoder().decode([ChatLine].self, from: data)) ?? chat
+            }
         case "project":
             if let value = m["project"], !(value is NSNull), let data = try? JSONSerialization.data(withJSONObject: value) {
                 project = try? JSONDecoder().decode(OfficeProject.self, from: data)
@@ -253,7 +344,8 @@ final class WorkspaceSession: ObservableObject {
             }
         case "office":
             let from = m["from"] as? String ?? "main"
-            entries.append(RunEntry(kind: from == "manager" ? .manager : .main, title: m["title"] as? String ?? "", detail: m["text"] as? String ?? "", isError: m["isError"] as? Bool ?? false))
+            entries.append(RunEntry(kind: from == "manager" ? .manager : .main, title: m["title"] as? String ?? "", detail: m["text"] as? String ?? "", isError: m["isError"] as? Bool ?? false,
+                                    judgement: ModelJudgement(role: from, difficulty: m["difficulty"] as? String, ref: m["model"] as? String, taskId: m["taskId"] as? String)))
         case "worker":
             worker(m)
         default:
@@ -271,7 +363,8 @@ final class WorkspaceSession: ObservableObject {
             if let cost = m["costUSD"] as? String, let value = Double(cost) { costUSD += value } else { costUnknown = true }
             let text = (m["text"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             let model = m["model"] as? String ?? ""
-            if !text.isEmpty { entries.append(RunEntry(kind: .model, title: tag + text, detail: model)) }
+            let ref = (m["provider"] as? String).map { "\($0):\(model)" }
+            if !text.isEmpty { entries.append(RunEntry(kind: .model, title: tag + text, detail: ref ?? model, judgement: ModelJudgement(role: "worker", difficulty: m["difficulty"] as? String, ref: ref, taskId: m["boardTask"] as? String))) }
         case "tool_call":
             entries.append(RunEntry(kind: .tool, title: tag + Self.describe(tool: m["name"] as? String ?? "", input: m["input"]), detail: "", callId: m["id"] as? String, pending: true))
         case "tool_result":
@@ -282,6 +375,9 @@ final class WorkspaceSession: ObservableObject {
             }
         case "retry":
             entries.append(RunEntry(kind: .retry, title: tag + "모델 호출 실패, 다시 시도합니다 (\(m["attempt"] as? Int ?? 0)회째)", detail: m["error"] as? String ?? "", isError: true))
+        case "desk":
+            let progress = m["progress"] as? String ?? "", next = m["next"] as? String ?? ""
+            entries.append(RunEntry(kind: .note, title: tag + "Desk 기록" + (next.isEmpty ? "" : " · 다음: \(next)"), detail: progress))
         case "compacted":
             let before = (m["beforeChars"] as? Int ?? 0) / 1000, after = (m["afterChars"] as? Int ?? 0) / 1000
             let how = m["how"] as? String == "summarized" ? "앞부분을 요약" : "오래된 도구 결과를 비움"
@@ -336,6 +432,26 @@ final class WorkspaceSession: ObservableObject {
     func cancel() { perform("cancel") }
     func plan(_ instruction: String) { perform("plan", ["instruction": instruction]) }
     func replyToPlan(answers: [String: String], note: String) { perform("planReply", ["answers": answers, "note": note]) }
+    /// Says something to Main; the answer arrives with the chat event.
+    func sendChat(_ text: String) {
+        chatBusy = true
+        Task {
+            do { try await send("chat", ["text": text]) } catch { self.error = error.localizedDescription }
+            chatBusy = false
+        }
+    }
+    func cancelChat() { perform("cancelChat") }
+    func clearChat() { perform("clearChat") }
+    /// Tidies the Library; the report arrives as a message from Main.
+    func tidyLibrary() { perform("dream") }
+    func cancelTidy() { perform("cancelDream") }
+    /// Has the Library Manager look over the notes; its suggestions arrive with the curation event.
+    func curate() { perform("curate") }
+    func cancelCurate() { perform("cancelCurate") }
+    func applyCuration(_ ids: [String]) { perform("applyCuration", ["ids": ids]) }
+    func discardCuration() { perform("discardCuration") }
+    func libraryRules() async -> String { ((try? await send("libraryRules"))?["rules"] as? String) ?? "" }
+    func setLibraryRules(_ rules: String) { perform("setLibraryRules", ["rules": rules]) }
     func approvePlan() { perform("approvePlan") }
     func closeProject() { perform("closeProject") }
     func takeOver() { perform("takeOver") }

@@ -183,7 +183,8 @@ test('a rate-limited model is passed over for another candidate at once; with no
   const table = parseTable({ version: 1, roles: { main: ['gemini:a', 'nvidia:b'], 'lead-manager': [], manager: [] }, worker: { simple: [], normal: [], complex: [] } });
   const model = { capabilities: { chat: 'supported', tools: 'supported' }, limits: { outputTokens: null } };
   const availability = { hasKey: async () => true, cachedModel: async () => model, toolsVerified: async () => true };
-  assert.equal((await assign(table, { role: 'main', avoid: ['gemini:a'] }, availability)).model, 'b');
-  assert.equal((await assign(table, { role: 'main', avoid: ['gemini:a', 'nvidia:b'] }, availability)).model, 'a', 'all avoided: usual order');
+  // A candidate written before Gemini was split is read as Gemini Free.
+  assert.equal((await assign(table, { role: 'main', avoid: ['gemini-free:a'] }, availability)).model, 'b');
+  assert.equal((await assign(table, { role: 'main', avoid: ['gemini-free:a', 'nvidia:b'] }, availability)).model, 'a', 'all avoided: usual order');
   assert.equal((await assign(table, { role: 'main' }, availability)).model, 'a');
 });
