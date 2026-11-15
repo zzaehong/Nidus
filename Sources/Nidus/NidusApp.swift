@@ -103,6 +103,7 @@ struct WelcomeView: View {
 enum VaultSection: String, CaseIterable, Identifiable {
     case main = "Main"
     case work = "작업"
+    case library = "Library"
     case staff = "직원"
     case assignment = "모델 배정"
     case providers = "Provider"
@@ -116,6 +117,7 @@ enum VaultSection: String, CaseIterable, Identifiable {
         case .usage: return "chart.bar"
         case .main: return "bubble.left.and.bubble.right"
         case .work: return "hammer"
+        case .library: return "books.vertical"
         case .staff: return "person.3"
         }
     }
@@ -159,6 +161,7 @@ struct VaultView: View {
                 case .usage: UsageView(overview: overview)
                 case .main: MainView(overview: overview)
                 case .work: WorkView(overview: overview)
+                case .library: LibraryView()
                 case .staff: StaffView()
                 }
             } else {
@@ -167,6 +170,14 @@ struct VaultView: View {
         }
         .navigationTitle(vaultURL.lastPathComponent)
         .toolbarTitleHidden()
+        // A link to a file of the Vault (nidus://library/<path>), from Main's answers or a note, opens it here.
+        .environment(\.openURL, OpenURLAction { url in
+            guard url.scheme == "nidus", url.host == "library" else { return .systemAction }
+            let path = url.path.removingPercentEncoding ?? url.path
+            store.openInLibrary(String(path.drop(while: { $0 == "/" })))
+            return .handled
+        })
+        .onChange(of: store.libraryRequest) { request in if request != nil { storedSection = VaultSection.library.rawValue } }
         // The system draws the toolbar's own background a few points past the sidebar
         // edge. Without it the toolbar shares the page background and nothing overlaps.
         .toolbarBackground(.hidden, for: .windowToolbar)

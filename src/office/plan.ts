@@ -211,7 +211,8 @@ export function concludeBrief(project: Project, budget = 60_000): string {
     const head = `- ${t.id} ${t.title} [${t.status}, ${placeOf(t)}]\n  ${t.result ? `${t.result.summary}\n  Verified: ${t.result.verification}` : t.reviews.at(-1)?.feedback ?? ''}`;
     return head + (t.output ? `\n  Deliverable:\n${take(t.output, 20_000)}` : '');
   }).join('\n');
-  return `Request: ${project.instruction}\nPlan: ${project.summary}\nStatus: ${project.status}${project.error ? ` (${project.error})` : ''}\n\nTasks:\n${tasks}\n\nTeam's final report:\n${take(project.report ?? '(none)', 8000)}`;
+  const files = project.knowledge?.length ? `\n\nFiles written in the Library (vault-relative paths; the first is the project record with the deliverables):\n${project.knowledge.map(p => `- ${p}`).join('\n')}` : '';
+  return `Request: ${project.instruction}\nPlan: ${project.summary}\nStatus: ${project.status}${project.error ? ` (${project.error})` : ''}\n\nTasks:\n${tasks}\n\nTeam's final report:\n${take(project.report ?? '(none)', 8000)}${files}`;
 }
 
 export function finalRequest(project: Project): string {

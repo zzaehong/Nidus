@@ -371,12 +371,7 @@ function officeEvent(e: OfficeEvent) {
   if (e.type === 'project') { publishProject(); return; }
   if (e.type === 'retry') { event('office', { from: e.from, title: `모델 호출 재시도 (${e.attempt}회째)`, text: e.error, isError: true }); return; }
   event('office', { from: e.from, taskId: e.taskId, title: e.title, text: e.text, model: e.model, difficulty: e.difficulty });
-  // The work was asked for in the conversation: Main answers there, from the results. The report itself stays here.
-  if (e.final && office?.project && chat) {
-    const project = office.project;
-    const until = AbortSignal.timeout(10 * 60_000);
-    void chat.conclude(concludeBrief(project), e.text, until).catch(() => chat!.note(e.text, false, e.model).catch(() => {}));
-  }
+
 }
 
 /** What Main sees of the Vault: tracked files and the README. */
@@ -595,6 +590,11 @@ async function executeProject() {
   void office.execute(controller.signal).then(async () => {
     running = undefined;
     status(office!.project?.status === 'done' ? '프로젝트 완료' : '프로젝트 중지');
+    // The work was asked for in the conversation: Main answers there, from the results and the Library record. The report itself stays in this tab.
+    if (project.status === 'done' && chat) {
+      const report = project.report ?? '';
+      void chat.conclude(concludeBrief(project), report, AbortSignal.timeout(10 * 60_000)).catch(() => chat!.note(report, false).catch(() => {}));
+    }
     // A project that did not reach its report still gets a word in the conversation.
     if (project.status === 'failed') void chat?.note(`프로젝트를 끝내지 못했습니다: ${project.error ?? '원인을 알 수 없습니다'}. 작업 탭에서 다시 시작하거나 닫을 수 있습니다.`, true).catch(() => {});
     else if (project.status === 'stopped') void chat?.note('프로젝트를 중지했습니다. 작업 탭에서 이어서 하거나 닫을 수 있습니다.').catch(() => {});
@@ -693,6 +693,7 @@ const commands: Record<string, (m: any) => Promise<unknown>> = {
     return {};
   },
   discardCuration: async () => { await curator!.discard(); return {}; },
+  librarySearch: async m => ({ hits: await library!.search(String(m.query ?? ''), 30) }),
   libraryRules: async () => ({ rules: await libraryRules(join(paths!.nidus, 'office', 'library.json')) }),
   setLibraryRules: async m => ({ rules: await setLibraryRules(join(paths!.nidus, 'office', 'library.json'), String(m.rules ?? '')) }),
   staff: async () => home!.staff(),

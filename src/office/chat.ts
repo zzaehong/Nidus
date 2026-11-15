@@ -145,7 +145,7 @@ export class MainChat {
     if (this.busy) return this.note(report, false);
     this.busy = true;
     try {
-      const closing = `[The project you started for the user has ended. This is not the user speaking.]\n${brief}\n\nNow answer the user's request yourself, in the conversation's language. Give the substance: the findings, the result, the deliverable's content when it is text (restate or quote it; never tell the user to look it up elsewhere). Say plainly what was not done or could not be verified. Do not start a project or a library action: "project": null, "library": null.`;
+      const closing = `[The project you started for the user has ended. This is not the user speaking.]\n${brief}\n\nNow answer the user's request yourself, in the conversation's language. Give the substance: the findings, the result, the deliverable's content when it is text (restate or quote it; never tell the user to look it up elsewhere). Say plainly what was not done or could not be verified. When a file listed under "Files written in the Library" holds the result, link it in Markdown as [title](nidus://library/<path with spaces as %20>) so the user can open it in the app with one click; link only paths from that list. Do not start a project or a library action: "project": null, "library": null.`;
       const conversation = await this.conversation(closing);
       let answer: ChatMessage;
       try {

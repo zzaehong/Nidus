@@ -32,6 +32,8 @@ struct BatchProgress: Equatable {
 final class VaultStore: ObservableObject {
     @Published private(set) var vault: String?
     @Published private(set) var overview: Overview?
+    /// A file of the Vault to show in the Library tab (vault-relative path), asked for by a link.
+    @Published var libraryRequest: String?
     @Published private(set) var busy = false
     @Published var error: String?
     /// A chosen folder that has no .nidus yet; the user confirms before it is created.
@@ -137,6 +139,13 @@ final class VaultStore: ObservableObject {
 
     func restoreModel(_ ref: String) async {
         if let fresh: Overview = await run({ try await bridge.call("restore-model", arguments(["ref": ref])) }) { overview = fresh }
+    }
+
+    /// A link (nidus://library/<path>) asked for a file: the Library tab opens it.
+    func openInLibrary(_ path: String) {
+        let clean = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty, !clean.contains(".."), !clean.hasPrefix("/") else { return }
+        libraryRequest = clean
     }
 
     func setCandidates(_ slot: Slot, _ candidates: [String]) async {
