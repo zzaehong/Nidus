@@ -119,6 +119,26 @@ final class VaultStore: ObservableObject {
         if let fresh: Overview = await run({ try await bridge.call("overview", arguments()) }) { overview = fresh }
     }
 
+    /// What auto-fill would do; with apply, it is done and the overview reloaded.
+    func autoFill(apply: Bool) async -> AutoFillPlan? {
+        let plan: AutoFillPlan? = await run { try await bridge.call("auto-fill", arguments(["apply": apply])) }
+        if apply, plan != nil { await reload() }
+        return plan
+    }
+
+    /// The user did not like a model's work: out of that slot, or out of the whole Vault, and remembered.
+    func excludeModel(_ judgement: ModelJudgement, scope: String, note: String) async -> Bool {
+        var extra: [String: Any] = ["ref": judgement.ref, "scope": scope, "role": judgement.role, "note": note]
+        if let difficulty = judgement.difficulty { extra["difficulty"] = difficulty }
+        if let taskId = judgement.taskId { extra["taskId"] = taskId }
+        if let fresh: Overview = await run({ try await bridge.call("exclude-model", arguments(extra)) }) { overview = fresh; return true }
+        return false
+    }
+
+    func restoreModel(_ ref: String) async {
+        if let fresh: Overview = await run({ try await bridge.call("restore-model", arguments(["ref": ref])) }) { overview = fresh }
+    }
+
     func setCandidates(_ slot: Slot, _ candidates: [String]) async {
         if let fresh: Overview = await run({ try await bridge.call("set-candidates", arguments(["slot": slot.id, "candidates": candidates])) }) {
             overview = fresh

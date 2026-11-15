@@ -152,6 +152,58 @@ struct Overview: Decodable, Equatable {
     let budgetWarning: String?
     /// How each model has done lately, by "provider:model".
     let health: [String: ModelHealth]?
+    /// Candidates auto-fill placed, by slot id.
+    let auto: [String: [String]]?
+    let excluded: [Exclusion]?
+}
+
+/// A model the user took out after seeing its work.
+struct Exclusion: Decodable, Identifiable, Equatable {
+    let ref: String
+    let at: String
+    let role: String
+    let difficulty: String?
+    let scope: String
+    let slot: String?
+    let note: String?
+    let taskId: String?
+    var id: String { "\(ref)|\(scope)|\(slot ?? "")" }
+}
+
+/// What auto-fill would do, slot by slot.
+struct AutoFillPlan: Decodable {
+    struct Added: Decodable, Identifiable, Equatable { let ref: String; let strength: String; let why: String; var id: String { ref } }
+    struct SlotPlan: Decodable, Identifiable { let slot: String; let role: String; let difficulty: String?; let kept: [String]; let added: [Added]; let excluded: [String]; var id: String { slot } }
+    let slots: [SlotPlan]
+    let untested: Int
+    let eligible: Int
+    let applied: Bool
+}
+
+/// Role and difficulty in the user's words.
+func roleName(_ role: String) -> String {
+    switch role {
+    case "main": return "Main"
+    case "lead-manager": return "Lead Manager"
+    case "manager": return "Manager"
+    case "worker": return "Worker"
+    default: return role
+    }
+}
+
+func difficultyName(_ difficulty: String?) -> String {
+    switch difficulty {
+    case "simple": return "쉬움"
+    case "normal": return "보통"
+    case "complex": return "복잡"
+    default: return "해당 없음"
+    }
+}
+
+func slotTitle(_ slot: String) -> String {
+    let parts = slot.split(separator: ".", maxSplits: 1).map(String.init)
+    guard parts.count == 2 else { return slot }
+    return parts[0] == "worker" ? "Worker · \(difficultyName(parts[1]))" : roleName(parts[1])
 }
 
 struct ModelHealth: Decodable, Equatable {

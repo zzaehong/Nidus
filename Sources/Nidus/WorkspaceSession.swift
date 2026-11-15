@@ -11,6 +11,26 @@ struct RunEntry: Identifiable {
     var isError = false
     var callId: String?
     var pending = false
+    /// Who produced this, when a model did: lets the user judge the model and take it out.
+    var judgement: ModelJudgement?
+}
+
+/// A model call seen from the user's side: which role and difficulty it served, and which model it was.
+struct ModelJudgement: Equatable {
+    let role: String
+    let difficulty: String?
+    /// "provider:model"
+    let ref: String
+    let taskId: String?
+
+    /// From the engine's fields; nil when they do not name a model.
+    init?(role: String?, difficulty: String?, ref: String?, taskId: String? = nil) {
+        guard let role, let ref, ref.contains(":") else { return nil }
+        self.role = role
+        self.difficulty = role == "worker" ? difficulty : nil
+        self.ref = ref
+        self.taskId = taskId
+    }
 }
 
 struct BrowserTab: Identifiable, Equatable {
@@ -114,8 +134,10 @@ struct ChatLine: Decodable, Identifiable, Equatable {
     let at: String
     let project: String?
     let model: String?
+    let provider: String?
     let isError: Bool?
     var id: String { "\(at)-\(role)-\(text.count)" }
+    var judgement: ModelJudgement? { ModelJudgement(role: "main", difficulty: nil, ref: provider.flatMap { p in model.map { "\(p):\($0)" } }, taskId: "chat") }
 }
 
 /// The resident Workspace Service (dist/workspace/service.js) for the open Vault: the VM, its
@@ -322,7 +344,8 @@ final class WorkspaceSession: ObservableObject {
             }
         case "office":
             let from = m["from"] as? String ?? "main"
-            entries.append(RunEntry(kind: from == "manager" ? .manager : .main, title: m["title"] as? String ?? "", detail: m["text"] as? String ?? "", isError: m["isError"] as? Bool ?? false))
+            entries.append(RunEntry(kind: from == "manager" ? .manager : .main, title: m["title"] as? String ?? "", detail: m["text"] as? String ?? "", isError: m["isError"] as? Bool ?? false,
+                                    judgement: ModelJudgement(role: from, difficulty: m["difficulty"] as? String, ref: m["model"] as? String, taskId: m["taskId"] as? String)))
         case "worker":
             worker(m)
         default:
@@ -340,7 +363,8 @@ final class WorkspaceSession: ObservableObject {
             if let cost = m["costUSD"] as? String, let value = Double(cost) { costUSD += value } else { costUnknown = true }
             let text = (m["text"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             let model = m["model"] as? String ?? ""
-            if !text.isEmpty { entries.append(RunEntry(kind: .model, title: tag + text, detail: model)) }
+            let ref = (m["provider"] as? String).map { "\($0):\(model)" }
+            if !text.isEmpty { entries.append(RunEntry(kind: .model, title: tag + text, detail: ref ?? model, judgement: ModelJudgement(role: "worker", difficulty: m["difficulty"] as? String, ref: ref, taskId: m["boardTask"] as? String))) }
         case "tool_call":
             entries.append(RunEntry(kind: .tool, title: tag + Self.describe(tool: m["name"] as? String ?? "", input: m["input"]), detail: "", callId: m["id"] as? String, pending: true))
         case "tool_result":

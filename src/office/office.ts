@@ -18,7 +18,7 @@ import { mainSystem, managerSystem } from './roles.js';
 
 export type OfficeEvent =
   | { type: 'project'; project: Project }
-  | { type: 'message'; from: 'main' | 'manager'; taskId?: string; title: string; text: string; model?: string }
+  | { type: 'message'; from: 'main' | 'manager'; taskId?: string; title: string; text: string; /** "provider:model" of the call that produced this, for the user's judgement. */ model?: string; difficulty?: Difficulty }
   | { type: 'retry'; from: string; attempt: number; error: string };
 
 export interface OfficeDeps {
@@ -78,7 +78,7 @@ export class Office {
         this.retry, (n, error) => this.deps.onEvent({ type: 'retry', from: role, attempt: n, error }));
       const text = result.response.content.filter(b => b.type === 'text').map(b => (b as { text: string }).text).join('\n');
       try {
-        return { value: parse(text), text, model: result.response.model };
+        return { value: parse(text), text, model: `${result.response.provider}:${result.response.model}` };
       } catch (error) {
         if (!(error instanceof PlanError) || attempt >= 1) throw new Error(`${role === 'main' ? 'Main' : 'Manager'}의 답을 읽지 못했습니다: ${(error as Error).message}`);
         conversation.push({ role: 'assistant', content: [{ type: 'text', text }] }, { role: 'user', content: [{ type: 'text', text: `That answer could not be used: ${(error as Error).message}. Answer again with the JSON object only.` }] });
@@ -218,7 +218,7 @@ export class Office {
     const brief = await this.ask('manager', managerPrompt, [{ role: 'user', content: [{ type: 'text', text: briefRequest(project, task) }] }], parseBrief, signal, task.id);
     task.brief = brief.value.instructions;
     task.difficulty = brief.value.difficulty;
-    this.deps.onEvent({ type: 'message', from: 'manager', taskId: task.id, title: `${manager ? `${manager.name} → ${worker?.name ?? 'Worker'} · ` : ''}${task.title} · Worker 지시 (난이도 ${brief.value.difficulty})`, text: brief.value.instructions, model: brief.model });
+    this.deps.onEvent({ type: 'message', from: 'manager', taskId: task.id, title: `${manager ? `${manager.name} → ${worker?.name ?? 'Worker'} · ` : ''}${task.title} · Worker 지시 (난이도 ${brief.value.difficulty})`, text: brief.value.instructions, model: brief.model, difficulty: brief.value.difficulty });
     await this.publish();
 
     let instruction = workerBrief(project, task);
@@ -241,7 +241,7 @@ export class Office {
       if (verdict === 'revise' && attempt >= MAX_ATTEMPTS) verdict = 'blocked';
       task.reviews.push({ verdict, feedback: review.value.feedback, at: new Date().toISOString() });
       const label = { accept: '통과', revise: '수정 요청', blocked: '진행 불가' }[verdict];
-      this.deps.onEvent({ type: 'message', from: 'manager', taskId: task.id, title: `${manager ? `${manager.name} · ` : ''}${task.title} · 검토: ${label}`, text: verdict === 'accept' ? review.value.summary : review.value.feedback || review.value.summary, model: review.model });
+      this.deps.onEvent({ type: 'message', from: 'manager', taskId: task.id, title: `${manager ? `${manager.name} · ` : ''}${task.title} · 검토: ${label}`, text: verdict === 'accept' ? review.value.summary : review.value.feedback || review.value.summary, model: review.model, difficulty: task.difficulty });
       if (verdict !== 'revise') {
         task.status = verdict === 'accept' ? 'done' : 'blocked';
         await at(task.status);

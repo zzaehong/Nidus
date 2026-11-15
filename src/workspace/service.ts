@@ -369,7 +369,7 @@ function publishProject() {
 function officeEvent(e: OfficeEvent) {
   if (e.type === 'project') { publishProject(); return; }
   if (e.type === 'retry') { event('office', { from: e.from, title: `모델 호출 재시도 (${e.attempt}회째)`, text: e.error, isError: true }); return; }
-  event('office', { from: e.from, taskId: e.taskId, title: e.title, text: e.text, model: e.model });
+  event('office', { from: e.from, taskId: e.taskId, title: e.title, text: e.text, model: e.model, difficulty: e.difficulty });
 }
 
 /** What Main sees of the Vault: tracked files and the README. */

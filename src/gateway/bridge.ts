@@ -78,6 +78,14 @@ export async function dispatch(input: unknown, dependencies: BridgeDependencies 
       case 'set-candidates':
         await gateway.setCandidates(text(request.slot, 'slot'), request.candidates);
         return await gateway.overview();
+      case 'auto-fill':
+        return await gateway.autoFill(request.apply === true);
+      case 'exclude-model':
+        await gateway.excludeModel({ ref: request.ref, scope: request.scope, role: request.role, difficulty: request.difficulty, note: request.note, taskId: request.taskId });
+        return await gateway.overview();
+      case 'restore-model':
+        await gateway.restoreModel(request.ref, request.slot);
+        return await gateway.overview();
       case 'set-budget':
         await gateway.setBudget(request.monthlyUSD === null || request.monthlyUSD === '' ? null : text(request.monthlyUSD, 'monthlyUSD'));
         return await gateway.overview();

@@ -8,7 +8,9 @@ import { dollars } from '../money.js';
 import { calculatedCost, priceFor } from '../pricing.js';
 import { FileModelStore, type ModelStore } from '../storage.js';
 import type { Model, ProviderId, RequestOptions } from '../types.js';
-import { assign, difficulties, loadTable, parseRef, refName, saveTable, type Assignment, type AssignTarget, type Availability, type Difficulty } from './assignment.js';
+import { assign, difficulties, loadTable, parseRef, refName, saveTable, type Assignment, type AssignTarget, type Availability, type Difficulty, slotId, excludedFrom, type Exclusion } from './assignment.js';
+import { planAutoFill, type AutoFillPlan, type RankedModel, type SlotInput } from './autofill.js';
+import type { ModelRef } from './assignment.js';
 import { DEFAULT_MAX_OUTPUT_TOKENS, textOf, toolCallsOf, userText, type Message, type ModelRequest, type ModelResponse, type StreamEvent, type ToolSpec } from './contract.js';
 import { ProviderClient } from './providers.js';
 import { budgetWarning, loadBudget, monthOf, saveBudget, UsageLog, type UsageSummary, type Warning } from './usage.js';
@@ -103,6 +105,9 @@ export interface VaultOverview {
   budgetWarning: string | null;
   /** How each model has done lately ("provider:model"): resting models are passed over. */
   health: Record<string, { streak: number; lastError: string | null; restUntil: string | null; medianMs: number | null }>;
+  /** Candidates auto-fill placed, per slot id. */
+  auto: Record<string, string[]>;
+  excluded: Exclusion[];
 }
 
 export type CheckOutcome = 'passed' | 'failed' | 'inconclusive';
@@ -657,6 +662,7 @@ export class ModelGateway implements Availability {
     const budget = await loadBudget(this.paths.budgetFile);
     return { vault: this.paths.root, slots, providers, usage, budgetUSD: budget === null ? null : dollars(budget),
       budgetWarning: budgetWarning(budget, this.usage.monthCost(usage.month), usage.month)?.message ?? null,
+      auto: table.auto, excluded: table.excluded,
       health: Object.fromEntries([...health].map(([ref, h]) => [ref, { streak: h.streak, lastError: h.lastError, restUntil: h.restUntil && h.restUntil > now ? h.restUntil.toISOString() : null, medianMs: h.medianMs }])) };
   }
 
@@ -671,7 +677,7 @@ export class ModelGateway implements Availability {
     });
   }
 
-  /** Replaces the ordered candidates of one slot ("roles.<role>" or "worker.<difficulty>"). */
+  /** Replaces the ordered candidates of one slot ("roles.<role>" or "worker.<difficulty>"). A model the user excluded from that slot is refused. */
   async setCandidates(slot: string, candidates: unknown): Promise<void> {
     await this.prepare();
     if (!Array.isArray(candidates)) throw new NidusError('invalid_request', 'Candidates must be an array.');
@@ -679,9 +685,105 @@ export class ModelGateway implements Availability {
     if (new Set(refs.map(refName)).size !== refs.length) throw new NidusError('invalid_request', 'A model can appear only once in a slot.');
     const table = await loadTable(this.paths.modelsFile);
     const [group, name] = [slot.slice(0, slot.indexOf('.')), slot.slice(slot.indexOf('.') + 1)];
+    for (const ref of refs) {
+      const banned = excludedFrom(table.excluded, refName(ref), slot);
+      if (banned) throw new NidusError('invalid_request', `${refName(ref)}은(는) 제외한 모델입니다. 모델 배정 탭의 "제외한 모델"에서 다시 허용한 뒤 추가하세요.`);
+    }
     if (group === 'worker' && difficulties.includes(name as Difficulty)) table.worker[name as Difficulty] = refs;
     else if (group === 'roles' && table.roles[name]) table.roles[name] = refs;
     else throw new NidusError('invalid_request', 'Unknown slot.');
+    // Auto-placed marks follow the list: a candidate the user removed is no longer "auto".
+    const now = refs.map(refName);
+    table.auto[slot] = (table.auto[slot] ?? []).filter(ref => now.includes(ref));
+    await saveTable(this.paths.modelsFile, table);
+  }
+
+  /** Every connected text model with the facts auto-fill ranks by. */
+  private async rankedModels(): Promise<RankedModel[]> {
+    const checks = await this.checks();
+    const health = this.health();
+    const out: RankedModel[] = [];
+    for (const provider of gatewayProviderIds) {
+      if (!await this.hasKey(provider)) continue;
+      const { models } = await this.cachedModels(provider);
+      for (const model of models) {
+        if (classifyModel(model).kind !== 'text' || model.capabilities.chat === 'unsupported') continue;
+        const ref = refName({ provider, model: model.id });
+        const check = checks[ref];
+        // The list price stands for the model's class; Gemini Free's models are the paid list's models at no charge.
+        const price = priceFor(provider === 'gemini-paid' || provider === 'gemini-free' ? 'gemini' : provider, model.id);
+        const rate = price.status === 'unknown' ? null : price.rates[0] ?? null;
+        const outputPrice = rate ? rate.output : null;
+        out.push({ provider, model: model.id, outputPrice, costPrice: provider === 'gemini-free' ? 0 : outputPrice,
+          contextTokens: model.limits.contextTokens ?? model.limits.inputTokens, medianMs: health.get(ref)?.medianMs ?? null,
+          textPassed: check?.text === 'passed', toolsPassed: check?.tools === 'passed', untested: !check?.text && !check?.tools });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Fills every slot from the connected, checked models (see autofill.ts). The user's own candidates
+   * stay first; what auto-fill placed before is replaced; excluded models are never used.
+   * With apply=false only the plan comes back.
+   */
+  async autoFill(apply: boolean): Promise<AutoFillPlan & { applied: boolean }> {
+    await this.prepare();
+    const table = await loadTable(this.paths.modelsFile);
+    const slots: SlotInput[] = [
+      ...Object.keys(table.roles).map(role => ({ role, difficulty: null, current: table.roles[role]!, auto: table.auto[slotId(role)] ?? [] })),
+      ...difficulties.map(difficulty => ({ role: 'worker', difficulty, current: table.worker[difficulty], auto: table.auto[slotId('worker', difficulty)] ?? [] })),
+    ];
+    const plan = planAutoFill(slots, await this.rankedModels(), table.excluded);
+    if (apply) {
+      for (const p of plan.slots) {
+        const refs = [...p.kept, ...p.added.map(a => a.ref)].map(parseRef);
+        if (p.role === 'worker') table.worker[p.difficulty!] = refs; else table.roles[p.role] = refs;
+        table.auto[p.slot] = p.added.map(a => a.ref);
+      }
+      await saveTable(this.paths.modelsFile, table);
+    }
+    return { ...plan, applied: apply };
+  }
+
+  /**
+   * The user did not like a model's work: it leaves the slot that did the work (scope "slot") or
+   * every slot (scope "vault"), and is remembered so auto-fill never brings it back. The provider's
+   * key, model list and check results are untouched.
+   */
+  async excludeModel(input: { ref: unknown; scope?: unknown; role: unknown; difficulty?: unknown; note?: unknown; taskId?: unknown }): Promise<Exclusion> {
+    await this.prepare();
+    const ref = refName(parseRef(input.ref));
+    const scope: Exclusion['scope'] = input.scope === 'vault' ? 'vault' : 'slot';
+    if (typeof input.role !== 'string' || !/^[a-z][a-z0-9-]{0,63}$/.test(input.role)) throw new NidusError('invalid_request', 'The role that did the work is required.');
+    const role = input.role;
+    const difficulty = difficulties.includes(input.difficulty as Difficulty) ? input.difficulty as Difficulty : null;
+    if (role === 'worker' && !difficulty) throw new NidusError('invalid_request', 'A worker exclusion needs the difficulty of the work.');
+    const slot = slotId(role, difficulty);
+    const table = await loadTable(this.paths.modelsFile);
+    const without = (list: ModelRef[]) => list.filter(r => refName(r) !== ref);
+    const touched = scope === 'vault' ? [...Object.keys(table.roles).map(r => slotId(r)), ...difficulties.map(d => slotId('worker', d))] : [slot];
+    for (const id of touched) {
+      const [group, name] = [id.slice(0, id.indexOf('.')), id.slice(id.indexOf('.') + 1)];
+      if (group === 'worker') table.worker[name as Difficulty] = without(table.worker[name as Difficulty]);
+      else if (table.roles[name]) table.roles[name] = without(table.roles[name]!);
+      table.auto[id] = (table.auto[id] ?? []).filter(x => x !== ref);
+    }
+    // One record per (model, place): a Vault-wide exclusion replaces that model's slot ones.
+    table.excluded = table.excluded.filter(x => x.ref !== ref || (scope === 'slot' && x.scope === 'slot' && x.slot !== slot));
+    const record: Exclusion = { ref, at: this.now().toISOString(), role, difficulty, scope, slot: scope === 'slot' ? slot : null,
+      note: typeof input.note === 'string' && input.note.trim() ? input.note.trim().slice(0, 500) : null, taskId: typeof input.taskId === 'string' ? input.taskId : null };
+    table.excluded.push(record);
+    await saveTable(this.paths.modelsFile, table);
+    return record;
+  }
+
+  /** Lets an excluded model be chosen again (by auto-fill or by hand). It is not put back into any slot by itself. */
+  async restoreModel(ref: unknown, slot?: unknown): Promise<void> {
+    await this.prepare();
+    const name = refName(parseRef(ref));
+    const table = await loadTable(this.paths.modelsFile);
+    table.excluded = table.excluded.filter(x => x.ref !== name || (typeof slot === 'string' && x.slot !== slot && x.scope === 'slot'));
     await saveTable(this.paths.modelsFile, table);
   }
 

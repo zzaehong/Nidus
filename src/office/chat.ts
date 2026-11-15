@@ -9,7 +9,7 @@ import { sendWithRetry, type RetryPolicy, type WorkerGateway } from '../workspac
 import { extractJson } from './plan.js';
 import { mainSystem } from './roles.js';
 
-export interface ChatMessage { role: 'user' | 'main'; text: string; at: string; /** Main started a project with this instruction. */ project?: string; model?: string; isError?: boolean }
+export interface ChatMessage { role: 'user' | 'main'; text: string; at: string; /** Main started a project with this instruction. */ project?: string; model?: string; /** With `model`, names the call ("provider:model") for the user's judgement. */ provider?: string; isError?: boolean }
 
 const KEEP = 200;
 /** Turns sent to the model with each message. */
@@ -137,7 +137,7 @@ export class MainChat {
         const result = await sendWithRetry(this.deps.gateway, { role: 'main', taskId: 'chat' }, { system: chatSystem(), messages: conversation }, signal, policy);
         const raw = result.response.content.filter(b => b.type === 'text').map(b => (b as { text: string }).text).join('\n');
         const { reply, project, library } = parseChat(raw);
-        answer = { role: 'main', text: reply, at: new Date().toISOString(), model: result.response.model };
+        answer = { role: 'main', text: reply, at: new Date().toISOString(), model: result.response.model, provider: result.response.provider };
         if (project) {
           const why = this.deps.blocked();
           if (why) answer.text = `${reply}\n\n(새 프로젝트를 시작하지 못했습니다: ${why})`;

@@ -295,6 +295,12 @@ private struct RunEntryRow: View {
             if entry.kind == .model, !entry.detail.isEmpty {
                 Text(entry.detail).font(.caption2).foregroundStyle(.tertiary)
             }
+            if let judgement = entry.judgement, !entry.isError {
+                HStack(spacing: 6) {
+                    if entry.kind != .model { Text(judgement.ref).font(.caption2).foregroundStyle(.tertiary) }
+                    ModelFeedbackLink(judgement: judgement)
+                }
+            }
         }
     }
 

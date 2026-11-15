@@ -26,7 +26,7 @@ export const DEFAULT_LIMITS: WorkerLimits = { modelCalls: 200, toolCalls: 600, m
 
 export type WorkerEvent =
   | { type: 'instruction'; text: string }
-  | { type: 'model'; text: string; provider: string; model: string; costUSD: string | null; inputTokens: number; outputTokens: number; warnings: string[] }
+  | { type: 'model'; text: string; provider: string; model: string; difficulty: Difficulty; costUSD: string | null; inputTokens: number; outputTokens: number; warnings: string[] }
   | { type: 'tool_call'; id: string; name: string; input: unknown }
   | { type: 'tool_result'; id: string; name: string; content: string; isError: boolean; ms: number }
   | { type: 'retry'; attempt: number; error: string; waitMs: number }
@@ -190,7 +190,7 @@ export class WorkerRun {
         const result = await this.call(signal);
         const { response } = result;
         const text = response.content.filter((b): b is Extract<ContentBlock, { type: 'text' }> => b.type === 'text').map(b => b.text).join('\n').trim();
-        this.emit({ type: 'model', text, provider: response.provider, model: response.model, costUSD: result.costUSD, inputTokens: response.usage.inputTokens ?? 0, outputTokens: response.usage.outputTokens ?? 0, warnings: result.warnings.map(w => w.message) });
+        this.emit({ type: 'model', text, provider: response.provider, model: response.model, difficulty: this.options.difficulty, costUSD: result.costUSD, inputTokens: response.usage.inputTokens ?? 0, outputTokens: response.usage.outputTokens ?? 0, warnings: result.warnings.map(w => w.message) });
         this.messages.push({ role: 'assistant', content: response.content });
         const calls = response.content.filter((b): b is ToolCallBlock => b.type === 'tool_call');
         if (!calls.length) {

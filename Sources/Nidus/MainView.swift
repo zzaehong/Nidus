@@ -132,7 +132,12 @@ private struct ChatBubble: View {
                 if let project = line.project {
                     Label("프로젝트를 시작했습니다: \(project)", systemImage: "list.bullet.clipboard").font(.caption).foregroundStyle(.secondary).lineLimit(3)
                 }
-                if !mine, let model = line.model { Text(model).font(.caption2).foregroundStyle(.tertiary) }
+                if !mine, let model = line.model {
+                    HStack(spacing: 6) {
+                        Text(line.provider.map { "\($0):\(model)" } ?? model).font(.caption2).foregroundStyle(.tertiary)
+                        if line.isError != true, let judgement = line.judgement { ModelFeedbackLink(judgement: judgement) }
+                    }
+                }
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
             .background(RoundedRectangle(cornerRadius: 12).fill(mine ? Color.accentColor.opacity(0.18) : (line.isError == true ? Color.red.opacity(0.12) : Color(nsColor: .controlBackgroundColor))))

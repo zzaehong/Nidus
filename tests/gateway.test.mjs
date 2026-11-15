@@ -283,3 +283,71 @@ test('app bridge: vault status, init, overview, candidate and budget edits, ask'
   await call('disconnect', { provider: 'deepseek' });
   assert.equal((await call('overview')).providers.some(p => p.connected), false);
 });
+
+test('auto-fill ranks by class and cost, mixes providers, keeps the user\'s own picks and never brings back an excluded model', async t => {
+  const { planAutoFill, strengths, preference, pickFor } = await import('../dist/gateway/autofill.js');
+  const m = (provider, model, outputPrice, extra = {}) => ({ provider, model, outputPrice, costPrice: provider === 'gemini-free' ? 0 : outputPrice, contextTokens: 100_000, medianMs: null, textPassed: true, toolsPassed: true, untested: false, ...extra });
+  const pool = [m('openai', 'big', 60), m('anthropic', 'big', 75), m('deepseek', 'mid', 2), m('groq', 'small', 0.5), m('gemini-free', 'pro', 10), m('mistral', 'tiny', 0.2)];
+  const ranked = strengths(pool);
+  assert.deepEqual([...ranked].filter(([, s]) => s === 'strong').map(([r]) => r), ['anthropic:big', 'openai:big']);
+  assert.deepEqual(preference('main', null), ['strong', 'middle', 'light']);
+  assert.deepEqual(preference('worker', 'simple'), ['light', 'middle', 'strong']);
+  const main = pickFor('main', null, pool, ranked, []);
+  assert.deepEqual(main.map(a => a.ref), ['anthropic:big', 'openai:big', 'gemini-free:pro'], 'strongest first; three candidates from three providers');
+  assert.match(main[2].why, /무료/);
+  const simple = pickFor('worker', 'simple', pool, ranked, ['mistral:tiny']);
+  assert.deepEqual(simple.map(a => a.ref), ['groq:small', 'gemini-free:pro'], 'the lightest class first (mistral:tiny is already there), then the middle class with the free one ahead of the paid one');
+  // The plan honours exclusions per slot and counts untested models.
+  const slots = [{ role: 'main', difficulty: null, current: [], auto: [] }, { role: 'worker', difficulty: 'simple', current: [{ provider: 'mistral', model: 'tiny' }], auto: [] }];
+  const plan = planAutoFill(slots, [...pool, m('groq', 'new', null, { textPassed: false, toolsPassed: false, untested: true })], [{ ref: 'gemini-free:pro', scope: 'slot', slot: 'worker.simple', at: '', role: 'worker', difficulty: 'simple', note: null, taskId: null }]);
+  assert.deepEqual([plan.untested, plan.eligible], [1, 6]);
+  assert.deepEqual(plan.slots[1].added.map(a => a.ref), ['groq:small', 'deepseek:mid']);
+  assert.deepEqual(plan.slots[1].excluded, ['gemini-free:pro']);
+  assert.deepEqual(plan.slots[0].added.map(a => a.ref), ['anthropic:big', 'openai:big', 'gemini-free:pro'], 'a slot exclusion does not reach other slots');
+
+  // Through the bridge, with a real table on disk.
+  const { dispatch } = await import('../dist/gateway/bridge.js');
+  const root = await mkdtemp(join(tmpdir(), 'nidus-gateway-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const credentials = new MemoryCredentials();
+  const { providers } = fakeProviders({ deepseek: ['deepseek-flash', 'deepseek-big'], anthropic: ['claude-big', 'claude-small'] }, () => completionText('pong'));
+  const call = (method, extra = {}) => dispatch({ method, vault: root, ...extra }, { credentials, providers });
+  await call('vault-init');
+  for (const [provider, key] of [['deepseek', 'kd'], ['anthropic', 'ka']]) await call('connect', { provider, key });
+  const checks = { 'anthropic:claude-big': { text: 'passed', tools: 'passed', detail: '', checkedAt: '2026-11-16T00:00:00Z' }, 'deepseek:deepseek-big': { text: 'passed', tools: 'passed', detail: '', checkedAt: '2026-11-16T00:00:00Z' }, 'deepseek:deepseek-flash': { text: 'passed', tools: 'failed', detail: '', checkedAt: '2026-11-16T00:00:00Z' } };
+  await writeFile(join(root, '.nidus', 'local', 'models', 'checks.json'), JSON.stringify(checks));
+  await call('set-candidates', { slot: 'roles.main', candidates: ['deepseek:deepseek-flash'] });
+  const preview = await call('auto-fill', { apply: false });
+  assert.equal(preview.applied, false);
+  assert.deepEqual([preview.untested, preview.eligible], [1, 3]);
+  const mainPlan = preview.slots.find(s => s.slot === 'roles.main');
+  assert.deepEqual([mainPlan.kept, mainPlan.added.map(a => a.ref)], [['deepseek:deepseek-flash'], ['anthropic:claude-big', 'deepseek:deepseek-big']], 'the user\'s pick stays first; another provider comes next');
+  assert.deepEqual(preview.slots.find(s => s.slot === 'worker.simple').added.map(a => a.ref), ['anthropic:claude-big', 'deepseek:deepseek-big'], 'workers need the tool check: deepseek-flash is out');
+  assert.deepEqual(JSON.parse(await readFile(join(root, '.nidus', 'models.json'), 'utf8')).roles.main, ['deepseek:deepseek-flash'], 'a preview changes nothing');
+  await call('auto-fill', { apply: true });
+  let overview = await call('overview');
+  assert.deepEqual(overview.slots.find(s => s.id === 'worker.complex').candidates, ['anthropic:claude-big', 'deepseek:deepseek-big']);
+  assert.deepEqual(overview.auto['roles.main'], ['anthropic:claude-big', 'deepseek:deepseek-big']);
+  assert.equal(overview.slots.find(s => s.id === 'worker.simple').resolved, 'anthropic:claude-big');
+
+  // "이 AI의 작업이 마음에 들지 않나요?": out of the slot that did the work; auto-fill does not bring it back.
+  overview = await call('exclude-model', { ref: 'anthropic:claude-big', scope: 'slot', role: 'worker', difficulty: 'simple', note: '답이 성의 없음', taskId: 't1' });
+  assert.deepEqual(overview.slots.find(s => s.id === 'worker.simple').candidates, ['deepseek:deepseek-big']);
+  assert.deepEqual(overview.slots.find(s => s.id === 'worker.normal').candidates, ['anthropic:claude-big', 'deepseek:deepseek-big'], 'other slots keep it');
+  assert.deepEqual(overview.excluded.map(x => [x.ref, x.scope, x.slot, x.role, x.difficulty, x.note, x.taskId]), [['anthropic:claude-big', 'slot', 'worker.simple', 'worker', 'simple', '답이 성의 없음', 't1']]);
+  await call('auto-fill', { apply: true });
+  overview = await call('overview');
+  assert.deepEqual(overview.slots.find(s => s.id === 'worker.simple').candidates, ['deepseek:deepseek-big']);
+  await assert.rejects(call('set-candidates', { slot: 'worker.simple', candidates: ['anthropic:claude-big'] }), /제외한 모델/);
+  await assert.rejects(call('exclude-model', { ref: 'anthropic:claude-big', scope: 'slot', role: 'worker' }), { code: 'invalid_request' });
+  // Vault-wide: gone from every slot, one record replaces the slot one; restore lets it be chosen again but puts nothing back.
+  overview = await call('exclude-model', { ref: 'anthropic:claude-big', scope: 'vault', role: 'main' });
+  assert.ok(overview.slots.every(s => !s.candidates.includes('anthropic:claude-big')));
+  assert.deepEqual(overview.excluded.map(x => [x.ref, x.scope]), [['anthropic:claude-big', 'vault']]);
+  overview = await call('restore-model', { ref: 'anthropic:claude-big' });
+  assert.deepEqual(overview.excluded, []);
+  assert.ok(overview.slots.every(s => !s.candidates.includes('anthropic:claude-big')));
+  const saved = JSON.parse(await readFile(join(root, '.nidus', 'models.json'), 'utf8'));
+  assert.equal(saved.excluded, undefined, 'an empty exclusion list is not written');
+  assert.deepEqual(parseTable(saved).excluded, []);
+});
