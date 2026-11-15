@@ -25,6 +25,8 @@ export const pricingSources: Record<ProviderId, string> = {
   openai: "https://developers.openai.com/api/docs/pricing",
   anthropic: "https://platform.claude.com/docs/en/about-claude/pricing",
   gemini: "https://ai.google.dev/gemini-api/docs/pricing",
+  "gemini-free": "https://ai.google.dev/gemini-api/docs/pricing",
+  "gemini-paid": "https://ai.google.dev/gemini-api/docs/pricing",
   deepseek: "https://api-docs.deepseek.com/quick_start/pricing/"
 };
 const checkedAt = "2026-10-24T06:00:00Z";

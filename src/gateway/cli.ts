@@ -1,6 +1,6 @@
 // "nidus gateway ..." commands. JSON on stdout, errors on stderr, like the rest of the CLI.
 import { parseArgs } from 'node:util';
-import { providerId } from '../adapters/index.js';
+import { providerId } from './gemini.js';
 import { cloudflareCredential } from '../adapters/cloudflare.js';
 import { credentialEnvironment, EnvironmentCredentials, KeychainStore, type CredentialStore } from '../credentials.js';
 import { NidusError } from '../errors.js';

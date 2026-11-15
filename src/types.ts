@@ -1,6 +1,16 @@
 import type { ToolModelRequest, ModelTurn } from './agent/model.js';
-export const providerIds = ["openai", "anthropic", "gemini", "deepseek", "nvidia", "groq", "mistral", "cloudflare"] as const;
-export type ProviderId = typeof providerIds[number];
+const everyProvider = ["openai", "anthropic", "gemini", "gemini-free", "gemini-paid", "deepseek", "nvidia", "groq", "mistral", "cloudflare"] as const;
+export type ProviderId = typeof everyProvider[number];
+/** The earlier provider dashboard: Gemini as one connection. */
+export const providerIds: readonly ProviderId[] = ["openai", "anthropic", "gemini", "deepseek", "nvidia", "groq", "mistral", "cloudflare"];
+/**
+ * The Vault gateway: Gemini as two providers, Free and Paid. The single "gemini" connection from
+ * before the split is moved to "gemini-free" (see gateway/gemini.ts) and is not offered here.
+ */
+export const gatewayProviderIds: readonly ProviderId[] = everyProvider.filter(id => id !== "gemini");
+/** The Gemini API under any of its connections: same endpoint and wire format, different key and project. */
+export type GeminiProvider = 'gemini' | 'gemini-free' | 'gemini-paid';
+export const isGemini = (provider: string): provider is GeminiProvider => provider === 'gemini' || provider === 'gemini-free' || provider === 'gemini-paid';
 export type Support = "supported" | "unsupported" | "unknown";
 export interface Model {
   provider: ProviderId;

@@ -3,7 +3,7 @@
 import { randomUUID } from 'node:crypto';
 import { readFile, rename, writeFile } from 'node:fs/promises';
 import { NidusError } from '../errors.js';
-import { providerIds, type Model, type ProviderId } from '../types.js';
+import { gatewayProviderIds, type Model, type ProviderId } from '../types.js';
 
 export const difficulties = ['simple', 'normal', 'complex'] as const;
 export type Difficulty = typeof difficulties[number];
@@ -44,6 +44,8 @@ export interface Availability {
   hasKey(provider: ProviderId): Promise<boolean>;
   cachedModel(provider: ProviderId, model: string): Promise<Model | null>;
   toolsVerified(provider: ProviderId, model: string): Promise<boolean>;
+  /** Why a candidate must not be used at this position of its slot, or null. For rules that are not about the model itself. */
+  refused?(ref: ModelRef, index: number): Promise<string | null>;
 }
 
 const rolePattern = /^[a-z][a-z0-9-]{0,63}$/;
@@ -60,7 +62,9 @@ export function parseRef(value: unknown): ModelRef {
   const split = value.indexOf(':');
   const provider = value.slice(0, split);
   const model = value.slice(split + 1);
-  if (split < 1 || !providerIds.includes(provider as ProviderId)) invalidTable(`unknown provider in "${value}".`);
+  // Candidates written before Gemini was split into Free and Paid.
+  if (provider === 'gemini') return parseRef(`gemini-free:${model}`);
+  if (split < 1 || !gatewayProviderIds.includes(provider as ProviderId)) invalidTable(`unknown provider in "${value}".`);
   if (!model || model.length > 512 || /[\r\n\0]/.test(model)) invalidTable(`missing model id in "${value}".`);
   return { provider: provider as ProviderId, model };
 }
@@ -163,6 +167,8 @@ async function pick(table: AssignmentTable, target: AssignTarget, availability: 
     const skip = (why: string) => skipped.push({ ref: refName(ref), why });
     if (passOver.includes(refName(ref))) { skip('passed over for now (failing or slow lately)'); continue; }
     if (!await availability.hasKey(ref.provider)) { skip('no API key connected'); continue; }
+    const refused = await availability.refused?.(ref, index);
+    if (refused) { skip(refused); continue; }
     const model = await availability.cachedModel(ref.provider, ref.model);
     if (!model) { skip('model not in the cached model list'); continue; }
     if (model.capabilities.chat === 'unsupported') { skip('model does not support chat'); continue; }

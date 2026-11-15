@@ -13,10 +13,14 @@ import { DEFAULT_MAX_OUTPUT_TOKENS, textOf, toolCallsOf, userText, type Message,
 import { ProviderClient } from './providers.js';
 import { budgetWarning, loadBudget, monthOf, saveBudget, UsageLog, type UsageSummary, type Warning } from './usage.js';
 import { providerMetadata } from '../providers.js';
-import { providerIds } from '../types.js';
+import { gatewayProviderIds } from '../types.js';
 import { classifyModel } from '../classification.js';
 import type { VaultPaths } from './vault.js';
 import { hedgeDelayMs, modelHealth, resting, type ModelHealth } from './health.js';
+import { geminiProviders, isSplitGemini, manualLimits, moveProviderData, ProviderSettingsStore, tierOf, type ManualLimits, type SplitGemini } from './gemini.js';
+import { GoogleAuth, serviceAccountEmail, type AuthSource } from './quota/google-auth.js';
+import { GoogleCloud, projectName, readCloud, cloudProblem, type CloudReader } from './quota/google.js';
+import { blockFrom, emptyQuota, localUsage, nextDayStart, pacificDay, quotaRow, QuotaStore, tierEvidence, type ProviderQuota, type QuotaRow } from './quota/quota.js';
 
 export interface CallTarget {
   role: string;
@@ -48,6 +52,36 @@ export interface GatewayDependencies {
    * answer wins (default: from the model's usual time, 20-60 s). null turns this off.
    */
   hedgeDelayMs?: ((medianMs: number | null) => number) | null;
+  /** Google Cloud sign-in and the management APIs, for reading quotas (not model calls). */
+  cloudAuth?: GoogleAuth;
+  cloud?: CloudReader;
+}
+
+/** What the quota screen of a Gemini provider shows. Limits, this Vault's own count and Google's delayed count stay apart. */
+export interface QuotaView {
+  provider: SplitGemini;
+  tier: 'free' | 'paid';
+  connected: boolean;
+  project: string | null;
+  /** Paid only: whether it may be used as a fallback. */
+  allowFallback: boolean;
+  rows: QuotaRow[];
+  /** Models with a known limit that are not shown because nothing here uses them. */
+  otherModels: number;
+  /** When Google's numbers were last read, and why a source gave nothing. */
+  fetchedAt: string | null;
+  errors: ProviderQuota['errors'];
+  auth: { source: AuthSource; account: string | null } | null;
+  billing: ProviderQuota['billing'];
+  tierEvidence: ProviderQuota['tier'];
+  /** Free only: why calls are refused (the project looks billed). */
+  risk: string | null;
+  warnings: string[];
+  /** When the daily quota starts over. */
+  resetAt: string;
+  manual: ManualLimits;
+  /** The connection from before the split was moved here and the user has not confirmed it yet. */
+  migrated: boolean;
 }
 
 export interface SlotView {
@@ -63,7 +97,7 @@ export interface SlotView {
 export interface VaultOverview {
   vault: string;
   slots: SlotView[];
-  providers: { id: ProviderId; name: string; keyURL: string; needsAccountId: boolean; connected: boolean; models: number; fetchedAt: string | null }[];
+  providers: { id: ProviderId; name: string; keyURL: string; needsAccountId: boolean; connected: boolean; models: number; fetchedAt: string | null; /** Gemini only: which tier this connection is for. */ tier: 'free' | 'paid' | null; /** A short warning to show beside the name. */ notice: string | null }[];
   usage: UsageSummary;
   budgetUSD: string | null;
   budgetWarning: string | null;
@@ -113,6 +147,11 @@ export class ModelGateway implements Availability {
   private readonly now: () => Date;
   private readonly hedgeDelay: ((medianMs: number | null) => number) | null;
   private readonly keys = new Map<ProviderId, string | null>();
+  private readonly settings: ProviderSettingsStore;
+  private readonly quotas: QuotaStore;
+  private readonly cloudAuth: GoogleAuth;
+  private readonly cloud: CloudReader;
+  private prepared: Promise<void> | null = null;
 
   constructor(private readonly paths: VaultPaths, dependencies: GatewayDependencies) {
     this.credentials = dependencies.credentials;
@@ -121,6 +160,25 @@ export class ModelGateway implements Availability {
     this.now = dependencies.now ?? (() => new Date());
     this.usage = dependencies.usage ?? new UsageLog(paths.usageDb, this.now);
     this.hedgeDelay = dependencies.hedgeDelayMs === undefined ? hedgeDelayMs : dependencies.hedgeDelayMs;
+    this.settings = new ProviderSettingsStore(paths.providerSettings);
+    this.quotas = new QuotaStore(paths.quotaFile);
+    this.cloudAuth = dependencies.cloudAuth ?? new GoogleAuth({ secret: async () => await this.credentials.cloudKey?.get() ?? null });
+    this.cloud = dependencies.cloud ?? new GoogleCloud();
+  }
+
+  /**
+   * Once per Vault: the Gemini connection from before the split into Free and Paid becomes
+   * Gemini Free (candidates, model list, check results, recorded calls). Nothing is lost; the
+   * user is shown where it went and can move it to Gemini Paid in one step.
+   */
+  private prepare(): Promise<void> {
+    return this.prepared ??= (async () => {
+      const settings = await this.settings.load();
+      if (settings.geminiMigration) return;
+      const found = await moveProviderData(this.paths, this.models, 'gemini', 'gemini-free');
+      if (found) this.usage.renameProvider('gemini', 'gemini-free');
+      await this.settings.change(s => { s.geminiMigration ??= { at: this.now().toISOString(), to: 'gemini-free', found, keyChecked: false, acknowledged: !found }; });
+    })();
   }
 
   close(): void {
@@ -131,11 +189,178 @@ export class ModelGateway implements Availability {
 
   /** Keys are read once per gateway instance; each Keychain read can prompt the user. */
   private async key(provider: ProviderId): Promise<string | null> {
-    if (!this.keys.has(provider)) this.keys.set(provider, await this.credentials.get(provider));
+    if (!this.keys.has(provider)) {
+      let key = await this.credentials.get(provider);
+      if (key === null && provider === 'gemini-free') key = await this.legacyGeminiKey();
+      this.keys.set(provider, key);
+    }
     return this.keys.get(provider) ?? null;
   }
 
+  /** The key from before the split, taken over once. The old entry stays for the earlier app. */
+  private async legacyGeminiKey(): Promise<string | null> {
+    await this.prepare();
+    const migration = (await this.settings.load()).geminiMigration;
+    if (!migration || migration.keyChecked || migration.to !== 'gemini-free') return null;
+    const key = await this.credentials.get('gemini');
+    if (key !== null) await this.credentials.set('gemini-free', key);
+    await this.settings.change(s => { if (s.geminiMigration) { s.geminiMigration.keyChecked = true; if (key !== null) { s.geminiMigration.found = true; s.geminiMigration.acknowledged = false; } } });
+    return key;
+  }
+
+  // --- Gemini Free / Paid ---------------------------------------------------
+
+  /** Why Gemini Free must not be called: there is evidence its project is billed. */
+  private async billingRisk(): Promise<string | null> {
+    const [quota, settings] = await Promise.all([this.quotas.get('gemini-free'), this.settings.load()]);
+    const free = settings.providers['gemini-free']?.project, paid = settings.providers['gemini-paid']?.project;
+    if (quota.billing?.enabled && quota.project === free) return 'Gemini Free의 프로젝트에 결제 계정이 연결돼 있습니다. 호출하면 과금될 수 있어 멈췄습니다.';
+    if (quota.tier?.evidence === 'paid') return `Google이 유료 등급 할당량(${quota.tier.quotaId})으로 답했습니다. Gemini Free의 키가 과금되는 프로젝트의 것으로 보여 멈췄습니다.`;
+    if (free && paid && free === paid) return 'Gemini Free와 Gemini Paid가 같은 프로젝트를 쓰고 있습니다. 결제가 연결된 프로젝트의 호출은 무료가 아니어서 멈췄습니다.';
+    return null;
+  }
+
+  /** Rules of the Gemini providers that are not about a model: no paid fallback unasked, no free calls on a billed project. */
+  async refused(ref: { provider: ProviderId; model: string }, index: number): Promise<string | null> {
+    if (ref.provider === 'gemini-paid' && index > 0 && !(await this.settings.load()).providers['gemini-paid']?.allowFallback) {
+      return 'paid provider is not used as an automatic fallback (allow it in the Gemini Paid settings)';
+    }
+    if (ref.provider === 'gemini-free' && await this.billingRisk()) return 'the project of Gemini Free looks billed: calls are stopped';
+    return null;
+  }
+
+  /** Models to pass over for now because of their rate limits: blocked by a 429, or at a known limit by this Vault's own count. */
+  private async rateLimited(): Promise<string[]> {
+    const now = this.now(), out: string[] = [];
+    const settings = await this.settings.load(), all = await this.quotas.load();
+    for (const provider of geminiProviders) {
+      const quota = all[provider];
+      const manual = settings.providers[provider]?.limits ?? {};
+      if (!quota && !Object.keys(manual).length) continue;
+      const local = localUsage(this.usage.callsSince(provider, pacificDay.dayStart(now)), now, pacificDay);
+      for (const model of new Set([...local.keys(), ...Object.keys(quota?.blocks ?? {})])) {
+        if (quotaRow(model, quota ?? emptyQuota(), local.get(model), manual, now).status === 'limited') out.push(`${provider}:${model}`);
+      }
+    }
+    return out;
+  }
+
+  /** A refused call: the model is left alone until the window the server named has passed, and what the refusal shows about the tier is kept. */
+  private async noteRefusal(provider: SplitGemini, model: string, error: NidusError): Promise<void> {
+    const now = this.now();
+    await this.quotas.update(provider, quota => {
+      const block = blockFrom(error.quota, error.retryAfter, now, pacificDay);
+      quota.blocks[model] = block;
+      // The server's own number is a limit worth knowing where nothing else gave one.
+      const value = error.quota?.violations.find(v => v.value !== null)?.value;
+      if (block.kind !== 'unknown' && value != null && value > 0 && quota.limits[model]?.[block.kind]?.source !== 'cloud') (quota.limits[model] ??= {})[block.kind] = { value, source: 'server' };
+      const evidence = tierEvidence(error.quota);
+      if (evidence) quota.tier = { ...evidence, at: now.toISOString() };
+      for (const [name, old] of Object.entries(quota.blocks)) if (Date.parse(old.until) <= now.getTime()) delete quota.blocks[name];
+    }).catch(() => {});
+  }
+
+  async quotaView(provider: SplitGemini, all = false): Promise<QuotaView> {
+    await this.prepare();
+    const now = this.now();
+    const [quota, settings, table] = await Promise.all([this.quotas.get(provider), this.settings.load(), loadTable(this.paths.modelsFile)]);
+    const own = settings.providers[provider] ?? {};
+    const manual = own.limits ?? {};
+    const local = localUsage(this.usage.callsSince(provider, pacificDay.dayStart(now)), now, pacificDay);
+    const candidates = [...Object.values(table.roles), ...Object.values(table.worker)].flat().filter(ref => ref.provider === provider).map(ref => ref.model);
+    const active = new Set([...candidates, ...local.keys(), ...Object.keys(quota.blocks).filter(m => Date.parse(quota.blocks[m]!.until) > now.getTime()), ...Object.keys(manual).filter(m => m !== '*')]);
+    const known = Object.keys(quota.limits).filter(m => m !== '*');
+    const models = [...new Set([...active, ...(all ? known : [])])].sort();
+    const warnings: string[] = [];
+    const other = settings.providers[provider === 'gemini-free' ? 'gemini-paid' : 'gemini-free']?.project;
+    if (own.project && other === own.project) warnings.push('Gemini Free와 Gemini Paid가 같은 프로젝트를 가리킵니다. 할당량은 프로젝트 단위라 둘의 사용량이 합쳐지고, 결제가 연결된 프로젝트에는 무료 할당량이 없습니다.');
+    if (quota.project && own.project && quota.project !== own.project) warnings.push(`표시된 Google 값은 이전 프로젝트(${quota.project})의 것입니다. 새로고침하세요.`);
+    if (provider === 'gemini-paid' && quota.tier?.evidence === 'free') warnings.push(`Google이 무료 등급 할당량(${quota.tier.quotaId})으로 답했습니다. 이 키의 프로젝트는 무료 등급으로 보입니다.`);
+    if (provider === 'gemini-paid' && quota.billing && !quota.billing.enabled) warnings.push('이 프로젝트에는 결제 계정이 연결돼 있지 않습니다. 유료 등급이 아닙니다.');
+    const migration = settings.geminiMigration;
+    return {
+      provider, tier: tierOf(provider), connected: await this.hasKey(provider), project: own.project ?? null, allowFallback: own.allowFallback === true,
+      rows: models.map(model => quotaRow(model, quota, local.get(model), manual, now)), otherModels: known.filter(m => !models.includes(m)).length,
+      fetchedAt: quota.fetchedAt, errors: quota.errors, auth: await this.cloudAuth.available().catch(() => null), billing: quota.billing, tierEvidence: quota.tier,
+      risk: provider === 'gemini-free' ? await this.billingRisk() : null, warnings, resetAt: nextDayStart(pacificDay, now).toISOString(), manual,
+      migrated: !!migration && migration.to === provider && migration.found && !migration.acknowledged,
+    };
+  }
+
+  /** Reads the project's limits, Google's own usage count and its billing state. Not a model call. */
+  async refreshQuota(provider: SplitGemini): Promise<QuotaView> {
+    await this.prepare();
+    const project = (await this.settings.load()).providers[provider]?.project;
+    if (!project) throw new NidusError('invalid_request', '먼저 이 Provider의 Google Cloud 프로젝트 ID를 입력하세요.');
+    const now = this.now();
+    try {
+      const token = await this.cloudAuth.token();
+      await this.quotas.update(provider, async quota => { await readCloud(quota, project, tierOf(provider), token, this.cloud, now, pacificDay); });
+    } catch (error) {
+      // No sign-in: what was read before is no longer shown as current, and calls go on as before.
+      await this.quotas.update(provider, quota => { quota.errors = { auth: cloudProblem(error, 'Google Cloud', '') }; quota.observed = {}; quota.fetchedAt = now.toISOString(); quota.project = project; });
+    }
+    return this.quotaView(provider);
+  }
+
+  async setProviderSettings(provider: SplitGemini, change: { project?: unknown; allowFallback?: unknown; limits?: unknown }): Promise<QuotaView> {
+    await this.prepare();
+    const project = change.project === undefined ? undefined : change.project === null || change.project === '' ? null : projectName(change.project);
+    const limits = change.limits === undefined ? undefined : manualLimits(change.limits);
+    await this.settings.change(settings => {
+      const own = settings.providers[provider] ??= {};
+      if (project !== undefined) { if (project === null) delete own.project; else own.project = project; }
+      if (limits !== undefined) own.limits = limits;
+      // Only the paid provider has this switch, and only an explicit true turns it on.
+      if (change.allowFallback !== undefined && provider === 'gemini-paid') own.allowFallback = change.allowFallback === true;
+    });
+    return this.quotaView(provider);
+  }
+
+  /** Stores the service account key used to read quotas, after checking that Google accepts it. */
+  async setCloudKey(json: string): Promise<{ account: string }> {
+    const slot = this.credentials.cloudKey;
+    if (!slot) throw new NidusError('unsupported', 'This credential store cannot keep a Google Cloud key.');
+    const account = serviceAccountEmail(json);
+    await new GoogleAuth({ secret: async () => json }).token();
+    await slot.set(json);
+    this.cloudAuth.reset();
+    return { account };
+  }
+
+  async clearCloudKey(): Promise<void> {
+    await this.credentials.cloudKey?.delete();
+    this.cloudAuth.reset();
+  }
+
+  /** Moves a Gemini connection to the other tier: key, model list, candidates, check results and settings. */
+  async moveGemini(from: SplitGemini, to: SplitGemini): Promise<void> {
+    await this.prepare();
+    if (from === to) throw new NidusError('invalid_request', 'Choose the other Gemini provider.');
+    const key = await this.key(from);
+    if (key === null) throw new NidusError('missing_key', `No API key connected for ${from}.`);
+    if (await this.key(to) !== null) throw new NidusError('invalid_request', `${providerMetadata[to].name}에 이미 다른 키가 연결돼 있습니다. 먼저 그 연결을 해제하세요.`);
+    await this.credentials.set(to, key);
+    await this.credentials.delete(from);
+    this.keys.set(to, key); this.keys.set(from, null);
+    await moveProviderData(this.paths, this.models, from, to);
+    await this.settings.change(settings => {
+      const moved = settings.providers[from];
+      if (moved) { settings.providers[to] = { ...moved, allowFallback: false }; delete settings.providers[from]; }
+      if (settings.geminiMigration) Object.assign(settings.geminiMigration, { to, acknowledged: true, keyChecked: true });
+    });
+    const quota = await this.quotas.get(from);
+    await this.quotas.update(to, target => { Object.assign(target, quota, { billing: null, tier: quota.tier }); });
+    await this.quotas.update(from, target => { Object.assign(target, emptyQuota()); });
+  }
+
+  /** The user has seen where the earlier Gemini connection went. */
+  async acknowledgeGeminiMigration(): Promise<void> {
+    await this.settings.change(settings => { if (settings.geminiMigration) settings.geminiMigration.acknowledged = true; });
+  }
+
   async hasKey(provider: ProviderId): Promise<boolean> {
+    await this.prepare();
     return await this.key(provider) !== null;
   }
 
@@ -160,6 +385,8 @@ export class ModelGateway implements Availability {
 
   /** Verifies the key by listing models, then stores the key and the model list. */
   async connect(provider: ProviderId, key: string, options: RequestOptions = {}): Promise<Model[]> {
+    await this.prepare();
+    if (provider === 'gemini') throw new NidusError('invalid_request', 'Connect the key to Gemini Free or Gemini Paid.');
     const models = await this.providers.listModels(provider, key, options);
     await this.credentials.set(provider, key);
     this.keys.set(provider, key);
@@ -168,6 +395,7 @@ export class ModelGateway implements Availability {
   }
 
   async refreshModels(provider: ProviderId, options: RequestOptions = {}): Promise<Model[]> {
+    await this.prepare();
     const key = await this.key(provider);
     if (!key) throw new NidusError('missing_key', `No API key connected for ${provider}.`);
     const models = await this.providers.listModels(provider, key, options);
@@ -183,6 +411,7 @@ export class ModelGateway implements Availability {
   // --- Calls ---------------------------------------------------------------
 
   async assign(target: AssignTarget): Promise<Assignment> {
+    await this.prepare();
     return assign(await loadTable(this.paths.modelsFile), target, this);
   }
 
@@ -199,8 +428,9 @@ export class ModelGateway implements Availability {
    * the first answer is used and the slower call is stopped and noted, so it moves back.
    */
   async send(target: CallTarget, request: GatewayRequest, options: RequestOptions = {}): Promise<GatewayResult> {
+    await this.prepare();
     const health = this.health();
-    const avoid = [...new Set([...(target.avoid ?? []), ...resting(health, this.now())])];
+    const avoid = [...new Set([...(target.avoid ?? []), ...resting(health, this.now()), ...await this.rateLimited()])];
     const needs = { tools: Boolean(request.tools?.length) };
     const first = await this.assign({ role: target.role, difficulty: target.difficulty, needs, avoid });
     const firstRef = refName(first);
@@ -261,6 +491,13 @@ export class ModelGateway implements Availability {
     const { provider, model } = assignment;
     const key = await this.key(provider);
     if (!key) throw new NidusError('missing_key', `No API key connected for ${provider}.`);
+    // The free provider never makes a call that may be charged, however the call was reached.
+    if (provider === 'gemini-free') {
+      const risk = await this.billingRisk();
+      if (risk) throw new NidusError('billing_risk', risk);
+    }
+    // The paid provider's prices are Gemini's; the free one's calls cost nothing.
+    const cost = (usage: ModelResponse['usage'] | null | undefined) => provider === 'gemini-free' ? (usage ? 0n : null) : calculatedCost(priceFor(provider === 'gemini-paid' ? 'gemini' : provider, model), usage);
 
     // Stay inside the model's own output limit when it is known.
     const wanted = request.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS;
@@ -279,11 +516,12 @@ export class ModelGateway implements Availability {
       // Stopped because another candidate answered first: noted as slow, which counts against it.
       const errorCode = lost.value ?? failure?.code ?? 'provider_error';
       this.usage.record({ ...record, status: failure?.code === 'cancelled' || lost.value ? 'cancelled' : 'failed', errorCode,
-        usage: failure?.usage ?? null, costNano: calculatedCost(priceFor(provider, model), failure?.usage), durationMs: Date.now() - started });
+        usage: failure?.usage ?? null, costNano: cost(failure?.usage), durationMs: Date.now() - started });
+      if (failure && isSplitGemini(provider) && (failure.code === 'rate_limit' || failure.code === 'quota')) await this.noteRefusal(provider, model, failure);
       throw error;
     }
 
-    const costNano = calculatedCost(priceFor(provider, model), response.usage);
+    const costNano = cost(response.usage);
     this.usage.record({ ...record, status: 'succeeded', stopReason: response.stopReason, usage: response.usage, costNano, durationMs: Date.now() - started });
 
     const warnings: Warning[] = [];
@@ -302,6 +540,7 @@ export class ModelGateway implements Availability {
    * inconclusive and leave any earlier result in place.
    */
   async checkModel(provider: ProviderId, model: string, options: RequestOptions = {}): Promise<ModelCheck> {
+    await this.prepare();
     const cached = await this.cachedModel(provider, model);
     const assignment: Assignment = { provider, model, role: 'probe', difficulty: null, candidateIndex: 0, reason: 'model check', skipped: [], outputTokenLimit: cached?.limits.outputTokens ?? null };
     const target: CallTarget = { role: 'probe' };
@@ -389,6 +628,7 @@ export class ModelGateway implements Availability {
 
   /** Everything the vault overview shows: each slot with the model it resolves to, providers, usage and budget. */
   async overview(): Promise<VaultOverview> {
+    await this.prepare();
     const table = await loadTable(this.paths.modelsFile);
     const targets: { id: string; target: AssignTarget; candidates: string[] }[] = [
       ...Object.entries(table.roles).map(([role, list]) => ({ id: `roles.${role}`, target: { role }, candidates: list.map(refName) })),
@@ -411,10 +651,16 @@ export class ModelGateway implements Availability {
       slots.push(view);
     }
 
-    const providers = await Promise.all(providerIds.map(async id => {
+    const settings = await this.settings.load();
+    const risk = await this.billingRisk();
+    // The connection from before the split is not offered any more: it became Gemini Free.
+    const providers = await Promise.all(gatewayProviderIds.map(async id => {
       const snapshot = await this.models.load(id);
+      const migrated = settings.geminiMigration && settings.geminiMigration.to === id && settings.geminiMigration.found && !settings.geminiMigration.acknowledged;
       return { id, name: providerMetadata[id].name, keyURL: providerMetadata[id].keyURL, needsAccountId: providerMetadata[id].accountId,
-        connected: await this.hasKey(id), models: snapshot?.models.length ?? 0, fetchedAt: snapshot?.fetchedAt ?? null };
+        connected: await this.hasKey(id), models: snapshot?.models.length ?? 0, fetchedAt: snapshot?.fetchedAt ?? null,
+        tier: isSplitGemini(id) ? tierOf(id) : null,
+        notice: id === 'gemini-free' && risk ? '과금 위험: 호출 멈춤' : migrated ? '이전 Gemini 연결을 옮김' : null };
     }));
 
     const usage = this.usage.summary();
@@ -426,6 +672,7 @@ export class ModelGateway implements Availability {
 
   /** Text models of a provider with their tool support, for choosing candidates. */
   async modelChoices(provider: ProviderId): Promise<ModelChoice[]> {
+    await this.prepare();
     const checks = await this.checks();
     const { models } = await this.cachedModels(provider);
     return models.filter(model => classifyModel(model).kind === 'text' && model.capabilities.chat !== 'unsupported').map(model => {
@@ -436,6 +683,7 @@ export class ModelGateway implements Availability {
 
   /** Replaces the ordered candidates of one slot ("roles.<role>" or "worker.<difficulty>"). */
   async setCandidates(slot: string, candidates: unknown): Promise<void> {
+    await this.prepare();
     if (!Array.isArray(candidates)) throw new NidusError('invalid_request', 'Candidates must be an array.');
     const refs = candidates.map(parseRef);
     if (new Set(refs.map(refName)).size !== refs.length) throw new NidusError('invalid_request', 'A model can appear only once in a slot.');

@@ -4,12 +4,14 @@ import { fileURLToPath } from "node:url";
 import { NidusError } from "./errors.js";
 import type { ProviderId } from "./types.js";
 
-export interface CredentialStore { get(provider: ProviderId): Promise<string | null>; set(provider: ProviderId, key: string): Promise<void>; delete(provider: ProviderId): Promise<void> }
-export const credentialEnvironment: Record<ProviderId, string> = { openai: "NIDUS_OPENAI_API_KEY", anthropic: "NIDUS_ANTHROPIC_API_KEY", gemini: "NIDUS_GEMINI_API_KEY", deepseek: "NIDUS_DEEPSEEK_API_KEY", nvidia:"NIDUS_NVIDIA_API_KEY", groq:"NIDUS_GROQ_API_KEY", mistral:"NIDUS_MISTRAL_API_KEY", cloudflare:"NIDUS_CLOUDFLARE_API_KEY" };
+/** A secret that is not a provider's API key: the Google Cloud service account key for reading quotas. */
+export interface SecretSlot { get(): Promise<string | null>; set(value: string): Promise<void>; delete(): Promise<void> }
+export interface CredentialStore { get(provider: ProviderId): Promise<string | null>; set(provider: ProviderId, key: string): Promise<void>; delete(provider: ProviderId): Promise<void>; cloudKey?: SecretSlot }
+export const credentialEnvironment: Record<ProviderId, string> = { openai: "NIDUS_OPENAI_API_KEY", anthropic: "NIDUS_ANTHROPIC_API_KEY", gemini: "NIDUS_GEMINI_API_KEY", "gemini-free": "NIDUS_GEMINI_FREE_API_KEY", "gemini-paid": "NIDUS_GEMINI_PAID_API_KEY", deepseek: "NIDUS_DEEPSEEK_API_KEY", nvidia:"NIDUS_NVIDIA_API_KEY", groq:"NIDUS_GROQ_API_KEY", mistral:"NIDUS_MISTRAL_API_KEY", cloudflare:"NIDUS_CLOUDFLARE_API_KEY" };
 
 export class KeychainStore implements CredentialStore {
   constructor(private readonly helper = fileURLToPath(new URL("./nidus-keychain", import.meta.url)), private readonly service = "com.nidus.connectivity") {}
-  private async call(action: string, provider: ProviderId, key?: string): Promise<string | null> {
+  private async call(action: string, provider: ProviderId | 'google-cloud', key?: string): Promise<string | null> {
     if (process.platform !== "darwin") throw new NidusError("unsupported", "Persistent credentials require macOS Keychain. Use an environment credential for session-only access on other platforms.");
     return new Promise((resolve, reject) => {
       // Secrets go only over a private pipe, never argv, shell commands or environment.
@@ -29,6 +31,8 @@ export class KeychainStore implements CredentialStore {
       child.stdin.end(JSON.stringify({ action, provider, key, service: this.service }));
     });
   }
+  /** Stored beside the API keys, under its own account name. */
+  readonly cloudKey: SecretSlot = { get: () => this.call("get", "google-cloud"), set: async value => { await this.call("set", "google-cloud", value); }, delete: async () => { await this.call("delete", "google-cloud"); } };
   get(provider: ProviderId) { return this.call("get", provider); }
   async set(provider: ProviderId, key: string) { await this.call("set", provider, key); }
   async delete(provider: ProviderId) { await this.call("delete", provider); }
@@ -36,6 +40,7 @@ export class KeychainStore implements CredentialStore {
 
 export class EnvironmentCredentials implements CredentialStore {
   constructor(private readonly persistent: CredentialStore, private readonly env: NodeJS.ProcessEnv = process.env) {}
+  get cloudKey() { return this.persistent.cloudKey; }
   async get(provider: ProviderId) { const key=this.env[credentialEnvironment[provider]]; return key ? provider==='cloudflare' ? cloudflareCredential(key,this.env.NIDUS_CLOUDFLARE_ACCOUNT_ID) : key : this.persistent.get(provider); }
   set(provider: ProviderId, key: string) { return this.persistent.set(provider, key); }
   delete(provider: ProviderId) { return this.persistent.delete(provider); }

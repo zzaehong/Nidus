@@ -1,4 +1,4 @@
-import { NidusError } from "./errors.js";
+import { NidusError, type QuotaDetail } from "./errors.js";
 import type { RequestOptions } from "./types.js";
 
 export function object(value: unknown): Record<string, unknown> {
@@ -46,17 +46,21 @@ export class HttpClient {
       if (!response.ok) {
         // Never expose raw provider errors: they can echo keys, headers or prompts.
         const status = response.status;
-        let quota = status === 402, invalidKey = status === 401;
+        let quota = status === 402, invalidKey = status === 401, detail: QuotaDetail | null = null;
         try {
           const raw = object(JSON.parse(await readBody(response, 1024 * 1024)));
           const e = optionalObject(raw.error);
           quota ||= e.code === "insufficient_quota" || e.type === "insufficient_quota";
+          detail = quotaDetail(e.details);
           invalidKey ||= Array.isArray(e.details) && e.details.some(detail => detail && typeof detail === "object" && (detail as Record<string, unknown>).reason === "API_KEY_INVALID");
         } catch { /* HTTP status remains sufficient when error JSON is absent or invalid. */ }
         signal.throwIfAborted();
         const code = invalidKey ? "authentication" : status === 403 ? "permission" : quota ? "quota" : status === 429 ? "rate_limit" : status === 404 ? "not_found" : status === 400 || status === 422 ? "invalid_request" : "provider_error";
         const retry = response.headers.get("retry-after");
-        throw new NidusError(code, `Provider request failed (HTTP ${status}, ${code}).`, status, retry && /^\d{1,9}$/.test(retry) ? retry : null);
+        const after = retry && /^\d{1,9}$/.test(retry) ? retry : detail?.retryDelaySec != null ? String(Math.ceil(detail.retryDelaySec)) : null;
+        const failure = new NidusError(code, `Provider request failed (HTTP ${status}, ${code}).`, status, after);
+        if (detail && (status === 429 || quota)) failure.quota = detail;
+        throw failure;
       }
       // Bound response memory, including chunked bodies. Timeout covers body reads too.
       const text = await readBody(response, 16 * 1024 * 1024);
@@ -77,6 +81,36 @@ export class HttpClient {
       throw new NidusError("network", "Provider network request failed.");
     }
   }
+}
+
+/**
+ * The structured quota details of a Google-style error (google.rpc.QuotaFailure and RetryInfo).
+ * Only fields of a fixed, harmless shape are kept: metric and quota names, a model id, numbers.
+ */
+export function quotaDetail(details: unknown): QuotaDetail | null {
+  if (!Array.isArray(details)) return null;
+  const out: QuotaDetail = { violations: [], retryDelaySec: null };
+  const name = (value: unknown, pattern: RegExp) => typeof value === 'string' && pattern.test(value) ? value : null;
+  for (const item of details.slice(0, 20)) {
+    if (!item || typeof item !== 'object') continue;
+    const entry = item as Record<string, unknown>;
+    const type = String(entry['@type'] ?? '');
+    if (type.endsWith('google.rpc.RetryInfo')) {
+      const delay = typeof entry.retryDelay === 'string' ? entry.retryDelay.match(/^(\d{1,7}(?:\.\d{1,9})?)s$/) : null;
+      if (delay) out.retryDelaySec = Number(delay[1]);
+    } else if (type.endsWith('google.rpc.QuotaFailure') && Array.isArray(entry.violations)) {
+      for (const v of entry.violations.slice(0, 20)) {
+        if (!v || typeof v !== 'object') continue;
+        const violation = v as Record<string, unknown>;
+        const metric = name(violation.quotaMetric, /^[\w.\/-]{1,200}$/), id = name(violation.quotaId, /^[\w.-]{1,200}$/);
+        if (!metric && !id) continue;
+        const dimensions = violation.quotaDimensions && typeof violation.quotaDimensions === 'object' ? violation.quotaDimensions as Record<string, unknown> : {};
+        const value = typeof violation.quotaValue === 'string' && /^\d{1,15}$/.test(violation.quotaValue) ? Number(violation.quotaValue) : typeof violation.quotaValue === 'number' && Number.isSafeInteger(violation.quotaValue) && violation.quotaValue >= 0 ? violation.quotaValue : null;
+        out.violations.push({ metric: metric ?? '', id: id ?? '', model: name(dimensions.model, /^[\w.\/:-]{1,200}$/), value });
+      }
+    }
+  }
+  return out.violations.length || out.retryDelaySec !== null ? out : null;
 }
 
 async function readBody(response: Response, limit: number): Promise<string> {

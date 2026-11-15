@@ -150,6 +150,43 @@ final class VaultStore: ObservableObject {
         if done != nil { await reload() }
     }
 
+    // --- Gemini quotas ---------------------------------------------------------------
+
+    /// What is known about a Gemini provider's limits and use. Reads local files only.
+    func quota(_ provider: String, all: Bool = false) async -> QuotaView? {
+        // Quiet: this is polled, and must not grey out the page or raise an alert each time.
+        try? await bridge.call("quota", arguments(["provider": provider, "all": all]))
+    }
+
+    /// Asks Google for the project's limits, its own usage count and billing state.
+    func refreshQuota(_ provider: String) async -> QuotaView? {
+        await run { try await bridge.call("quota-refresh", arguments(["provider": provider])) }
+    }
+
+    func setProviderSettings(_ provider: String, _ change: [String: Any]) async -> QuotaView? {
+        var extra = change
+        extra["provider"] = provider
+        return await run { try await bridge.call("provider-settings", arguments(extra)) }
+    }
+
+    /// Stores a service account key for reading quotas; returns the account's address when Google accepted it.
+    func setCloudKey(_ json: String) async -> String? {
+        let result: CloudKeyResult? = await run { try await bridge.call("cloud-key-set", arguments(["key": json])) }
+        return result?.account
+    }
+
+    func clearCloudKey() async {
+        let _: Acknowledgement? = await run { try await bridge.call("cloud-key-clear", arguments()) }
+    }
+
+    func moveGemini(from: String, to: String) async {
+        if let fresh: Overview = await run({ try await bridge.call("gemini-move", arguments(["from": from, "to": to])) }) { overview = fresh }
+    }
+
+    func acknowledgeGeminiMigration() async {
+        if let fresh: Overview = await run({ try await bridge.call("gemini-acknowledge", arguments()) }) { overview = fresh }
+    }
+
     func models(_ provider: String) async -> [ModelChoice] {
         await run { try await bridge.call("models", arguments(["provider": provider])) } ?? []
     }

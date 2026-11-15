@@ -51,7 +51,11 @@ struct ProvidersView: View {
                             .foregroundStyle(provider.connected ? .green : .secondary)
                         VStack(alignment: .leading) {
                             Text(provider.name).lineLimit(1)
-                            Text(provider.connected ? "모델 \(provider.models)개" : "키 없음").font(.caption).foregroundStyle(.secondary)
+                            if let notice = provider.notice {
+                                Text(notice).font(.caption).foregroundStyle(notice.contains("과금") ? .red : .blue).lineLimit(1)
+                            } else {
+                                Text(provider.connected ? "모델 \(provider.models)개" : "키 없음").font(.caption).foregroundStyle(.secondary)
+                            }
                         }
                     }
                     .tag(provider.id)
@@ -107,6 +111,8 @@ private struct ProviderDetail: View {
     @State private var search = ""
     @State private var checking: ModelChoice?
     @State private var askingBatch = false
+    /// Gemini providers have a second page: limits and use by model.
+    @State private var page = "models"
 
     /// Usable models first: tools passed, text passed, untested, then failed.
     private var visible: [ModelChoice] {
@@ -122,6 +128,13 @@ private struct ProviderDetail: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Text(provider.name).font(.headline).lineLimit(1)
+                    if provider.tier != nil {
+                        Picker("", selection: $page) {
+                            Text("모델").tag("models")
+                            Text("할당량").tag("quota")
+                        }
+                        .pickerStyle(.segmented).labelsHidden().fixedSize()
+                    }
                     Spacer()
                     if provider.connected {
                         Text("검사하지 않은 모델 \(untested.count)개").font(.caption).foregroundStyle(.secondary)
@@ -157,13 +170,20 @@ private struct ProviderDetail: View {
                         Text(batch.summary).font(.caption)
                     }
                 }
-                if provider.connected { TextField("모델 검색", text: $search) }
+                if provider.connected, page == "models" { TextField("모델 검색", text: $search) }
+                if provider.tier == "paid" {
+                    Text("유료 등급입니다. 이 Provider의 모든 호출은 과금됩니다. 무료 할당량이 없습니다.").font(.caption).foregroundStyle(.orange)
+                } else if provider.tier == "free" {
+                    Text("결제 계정이 연결되지 않은 프로젝트의 키를 등록하세요. 프로젝트가 과금되는 것으로 보이면 호출을 멈춥니다.").font(.caption).foregroundStyle(.secondary)
+                }
             }
             .padding(Layout.inset)
 
             Divider()
 
-            if provider.connected {
+            if provider.tier != nil, page == "quota" {
+                QuotaPane(provider: provider)
+            } else if provider.connected {
                 List(visible) { model in
                     HStack {
                         VStack(alignment: .leading) {

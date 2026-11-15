@@ -21,6 +21,10 @@ export interface VaultPaths {
   usageDb: string;
   modelCache: string;
   checksFile: string;
+  /** Per-provider settings of this machine: project, fallback permission, manual limits. */
+  providerSettings: string;
+  /** Limits fetched, observed usage and blocks. */
+  quotaFile: string;
 }
 
 export function vaultPaths(root: string): VaultPaths {
@@ -38,6 +42,8 @@ export function vaultPaths(root: string): VaultPaths {
     usageDb: join(local, 'usage.sqlite'),
     modelCache: join(local, 'models'),
     checksFile: join(local, 'models', 'checks.json'),
+    providerSettings: join(local, 'providers.json'),
+    quotaFile: join(local, 'quota.json'),
   };
 }
 

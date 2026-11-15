@@ -51,7 +51,73 @@ struct ProviderInfo: Decodable, Identifiable, Equatable {
     let connected: Bool
     let models: Int
     let fetchedAt: String?
+    /// Gemini only: "free" or "paid".
+    let tier: String?
+    /// A short warning shown beside the name.
+    let notice: String?
 }
+
+/// What Google's monitoring reported for one limit: delayed, and counting every caller of the project.
+struct QuotaObserved: Decodable, Equatable {
+    let usage: Double?
+    let limit: Double?
+    let at: String?
+}
+
+/// One limit of one model: this Vault's own count, the limit and where it came from, and Google's count.
+struct QuotaCell: Decodable, Equatable {
+    let local: Double
+    let limit: Double?
+    let source: String?
+    let observed: QuotaObserved?
+}
+
+struct QuotaRow: Decodable, Identifiable, Equatable {
+    let model: String
+    let rpm: QuotaCell
+    let tpm: QuotaCell
+    let rpd: QuotaCell
+    let status: String
+    let detail: String?
+    let blockedUntil: String?
+    var id: String { model }
+}
+
+struct QuotaErrors: Decodable, Equatable {
+    let auth: String?
+    let quotas: String?
+    let monitoring: String?
+    let billing: String?
+    var all: [(String, String)] {
+        [("Google Cloud 로그인", auth), ("제한 (Cloud Quotas)", quotas), ("사용량 (Cloud Monitoring)", monitoring), ("결제 상태 (Cloud Billing)", billing)].compactMap { name, text in text.map { (name, $0) } }
+    }
+}
+
+struct QuotaView: Decodable, Equatable {
+    struct Auth: Decodable, Equatable { let source: String; let account: String? }
+    struct Billing: Decodable, Equatable { let enabled: Bool; let checkedAt: String }
+    struct Evidence: Decodable, Equatable { let evidence: String; let quotaId: String; let at: String }
+    struct Manual: Decodable, Equatable { let rpm: Double?; let tpm: Double?; let rpd: Double? }
+    let provider: String
+    let tier: String
+    let connected: Bool
+    let project: String?
+    let allowFallback: Bool
+    let rows: [QuotaRow]
+    let otherModels: Int
+    let fetchedAt: String?
+    let errors: QuotaErrors
+    let auth: Auth?
+    let billing: Billing?
+    let tierEvidence: Evidence?
+    let risk: String?
+    let warnings: [String]
+    let resetAt: String
+    let manual: [String: Manual]
+    let migrated: Bool
+}
+
+struct CloudKeyResult: Decodable { let account: String }
 
 struct UsageGroup: Decodable, Identifiable, Equatable {
     let role: String

@@ -1,10 +1,9 @@
 import { BaseAdapter, baseModel, array, object, count, string, response, usage } from "./base.js";
 import { optionalObject, HttpClient } from "../http.js";
-import type { ChatRequest } from "../types.js";
+import type { ChatRequest, GeminiProvider } from "../types.js";
 
 export class GeminiAdapter extends BaseAdapter {
-  readonly id = "gemini" as const;
-  constructor(endpoint = "https://generativelanguage.googleapis.com/v1beta", http?: HttpClient) { super(endpoint, http); }
+  constructor(endpoint = "https://generativelanguage.googleapis.com/v1beta", http?: HttpClient, readonly id: GeminiProvider = "gemini") { super(endpoint, http); }
   protected headers(key: string) { return { "x-goog-api-key": key }; }
   protected page(raw: Record<string, unknown>) {
     return { items: raw.models === undefined ? [] : array(raw.models), next: raw.nextPageToken == null ? null : string(raw.nextPageToken), parameter: "pageToken" };

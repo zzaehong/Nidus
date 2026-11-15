@@ -2,13 +2,13 @@
 // Keys arrive only on stdin and are never written to stdout, stderr or argv.
 import { stat } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
-import { providerId } from '../adapters/index.js';
 import { cloudflareCredential } from '../adapters/cloudflare.js';
 import { KeychainStore, type CredentialStore } from '../credentials.js';
 import { NidusError, publicError } from '../errors.js';
 import { difficulties, type Difficulty } from './assignment.js';
 import { textOf, userText } from './contract.js';
 import { ModelGateway } from './gateway.js';
+import { isSplitGemini, providerId, type SplitGemini } from './gemini.js';
 import type { ProviderClient } from './providers.js';
 import { initVault, openVault, vaultPaths } from './vault.js';
 
@@ -28,6 +28,12 @@ async function isDirectory(path: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+function gemini(value: unknown): SplitGemini {
+  const provider = text(value, 'provider');
+  if (!isSplitGemini(provider)) throw new NidusError('invalid_request', 'Quotas are available for Gemini Free and Gemini Paid.');
+  return provider;
 }
 
 export async function dispatch(input: unknown, dependencies: BridgeDependencies = {}): Promise<unknown> {
@@ -76,6 +82,24 @@ export async function dispatch(input: unknown, dependencies: BridgeDependencies 
         const provider = providerId(text(request.provider, 'provider'));
         return await gateway.checkModel(provider, text(request.model, 'model'));
       }
+      case 'quota':
+        return await gateway.quotaView(gemini(request.provider), request.all === true);
+      case 'quota-refresh':
+        return await gateway.refreshQuota(gemini(request.provider));
+      case 'provider-settings':
+        return await gateway.setProviderSettings(gemini(request.provider), { project: request.project, allowFallback: request.allowFallback, limits: request.limits });
+      case 'cloud-key-set':
+        // The key arrives on stdin like an API key and goes to the Keychain; only the account's address comes back.
+        return await gateway.setCloudKey(text(request.key, 'key'));
+      case 'cloud-key-clear':
+        await gateway.clearCloudKey();
+        return { cleared: true };
+      case 'gemini-move':
+        await gateway.moveGemini(gemini(request.from), gemini(request.to));
+        return await gateway.overview();
+      case 'gemini-acknowledge':
+        await gateway.acknowledgeGeminiMigration();
+        return await gateway.overview();
       case 'ask': {
         const difficulty = request.difficulty === undefined || request.difficulty === null ? undefined : request.difficulty as Difficulty;
         if (difficulty !== undefined && !difficulties.includes(difficulty)) throw new NidusError('invalid_request', 'Invalid difficulty.');
