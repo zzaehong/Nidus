@@ -40,7 +40,8 @@ export async function resolveCloudflareCredential(key: string, accountId: unknow
     throw error;
   }
   if (accounts.length === 1) return { credential: cloudflareCredential(key, accounts[0]!.id), accountId: accounts[0]!.id, discovered: true };
-  if (accounts.length === 0) throw new NidusError('invalid_request', '이 토큰이 볼 수 있는 Cloudflare 계정이 없습니다. Workers AI 페이지의 "Use REST API"에서 만든 토큰인지, 그 화면의 Account ID를 직접 적어 주세요.');
+  // A token with only Workers AI permissions (the dashboard's template) gets an empty list here, not an error (seen 2026-11-16).
+  if (accounts.length === 0) throw new NidusError('invalid_request', '이 토큰은 계정 목록을 볼 수 없어 Account ID를 자동으로 알 수 없습니다(Workers AI 권한만 있는 토큰이면 정상입니다). Account ID를 함께 적어 주세요: Cloudflare 대시보드 → Workers AI → "Use REST API" 화면에 보입니다.');
   const names = accounts.slice(0, 5).map(a => `${a.name || '(이름 없음)'}: ${a.id}`).join(' / ');
   throw new NidusError('invalid_request', `이 토큰은 계정 ${accounts.length}개를 볼 수 있어 하나를 고를 수 없습니다. Account ID를 직접 적어 주세요 — ${names}`);
 }

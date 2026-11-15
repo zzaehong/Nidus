@@ -248,10 +248,10 @@ private struct ConnectSheet: View {
             Text("\(provider.name) API 키").font(.headline)
             APIKeyField(value: $key).frame(height: 22)
             if provider.needsAccountId {
-                TextField("Account ID — 비워 두면 토큰으로 자동 조회", text: $accountId)
+                TextField("Account ID (32자리, \"Use REST API\" 화면에 표시)", text: $accountId)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Cloudflare는 토큰 외에 어느 계정의 Workers AI인지(Account ID)가 필요합니다. 보통은 비워 두면 됩니다: 토큰이 볼 수 있는 계정이 하나면 그 ID를 자동으로 씁니다.")
-                    Text("직접 적어야 할 때(계정이 여럿이거나 토큰에 계정 조회 권한이 없을 때): 대시보드의 Workers AI 페이지 → \"Use REST API\" 화면에 Account ID가 보입니다. 32자리 영숫자이고, 대시보드 주소 dash.cloudflare.com/<여기>/… 에도 같은 값이 있습니다. 토큰은 같은 화면의 \"Create a Workers AI API Token\"으로 만드는 것이 가장 쉽습니다.")
+                    Text("Cloudflare는 토큰 외에 어느 계정의 Workers AI인지(Account ID)가 필요합니다. 둘 다 같은 화면에 있습니다: 대시보드 → Workers AI 페이지 → \"Use REST API\". 거기서 \"Create a Workers AI API Token\"으로 토큰을 만들고, 그 아래 Account ID를 복사해 적으세요. 대시보드 주소 dash.cloudflare.com/<여기>/… 에도 같은 값이 있습니다.")
+                    Text("비워 두면 토큰으로 계정을 조회해 봅니다. 다만 Workers AI 권한만 있는 토큰(위 템플릿)은 계정 목록을 볼 수 없어 자동 조회가 되지 않으니, 그때는 직접 적어 달라는 문구가 뜹니다.")
                     if let url = URL(string: "https://dash.cloudflare.com/?to=/:account/ai/workers-ai") { Link("Workers AI 페이지 열기", destination: url) }
                 }
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)

@@ -92,7 +92,7 @@ interface ModelResponse {
 | Gemini generateContent | Gemini |
 | Chat Completions 호환 | DeepSeek, Groq, Mistral, NVIDIA, Cloudflare |
 
-Cloudflare만 토큰 외에 Account ID가 필요하다(요청 주소 `/accounts/<id>/ai/…`에 들어간다). 앱에서 비워 두면 그 토큰으로 `GET /accounts`를 불러 계정이 정확히 하나일 때만 그 ID를 쓴다(`resolveCloudflareCredential`). 여럿이거나 토큰에 계정 조회 권한이 없으면 추측하지 않고, 대시보드 Workers AI 페이지의 "Use REST API" 화면에서 ID를 옮겨 적으라고 안내한다. 저장되는 것은 토큰과 ID를 함께 담은 하나의 Keychain 항목이다.
+Cloudflare만 토큰 외에 Account ID가 필요하다(요청 주소 `/accounts/<id>/ai/…`에 들어간다). 앱에서 비워 두면 그 토큰으로 `GET /accounts`를 불러 계정이 정확히 하나일 때만 그 ID를 쓴다(`resolveCloudflareCredential`). 여럿이거나 토큰이 계정 목록을 볼 수 없으면 추측하지 않고, 대시보드 Workers AI 페이지의 "Use REST API" 화면에서 ID를 옮겨 적으라고 안내한다. 실측(2026-11-16): 대시보드 템플릿으로 만든 Workers AI 전용 토큰은 `GET /accounts`에 오류가 아니라 **빈 목록**을 돌려주고, `/accounts/<id>`·`/memberships`·`/user`는 403이다. 그러므로 그 토큰으로는 자동 조회가 안 되고, 안내 문구와 연결 창의 설명이 ID를 직접 적는 쪽을 기본으로 삼는다. 저장되는 것은 토큰과 ID를 함께 담은 하나의 Keychain 항목이다.
 
 어떤 모델이 무엇을 할 수 있는지는 모델 ID 목록을 코드에 적지 않고 실제 호출로 검사한다(`nidus gateway verify`, 앱의 모델 검사). 검사는 두 가지를 따로 판정한다.
 

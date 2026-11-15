@@ -171,7 +171,7 @@ test('cloudflare: an empty Account ID is looked up with the token; only one acco
   const many = await resolveCloudflareCredential(key, undefined, http, 'https://cf.invalid').catch(e => e);
   assert.match(many.message, /계정 2개.*Mine: a{32}.*Work: b{32}/);
   answer.accounts = [];
-  await assert.rejects(resolveCloudflareCredential(key, '', http, 'https://cf.invalid'), /계정이 없습니다/);
+  await assert.rejects(resolveCloudflareCredential(key, '', http, 'https://cf.invalid'), /계정 목록을 볼 수 없어.*Use REST API/, 'a Workers AI-only token gets an empty list: the user is told where the ID is, not that there is no account');
   answer.status = 403;
   const denied = await resolveCloudflareCredential(key, '', http, 'https://cf.invalid').catch(e => e);
   assert.equal(denied.code, 'permission');
