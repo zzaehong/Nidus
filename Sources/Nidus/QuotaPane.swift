@@ -25,11 +25,7 @@ struct QuotaPane: View {
                 Divider()
                 header
                 if let view {
-                    ForEach(view.errors.all, id: \.0) { name, text in
-                        // The engine may put a Console link in the text, as Markdown; it opens in the browser.
-                        Label { Text(markdown("**\(name)**: \(text)")) } icon: { Image(systemName: "exclamationmark.triangle") }
-                            .font(.caption).foregroundStyle(.orange).tint(.orange).fixedSize(horizontal: false, vertical: true)
-                    }
+                    ForEach(view.errors.all, id: \.0) { name, text in ProblemLine(name: name, text: text) }
                     table(view)
                     Text("\"이 Vault\"는 Nidus가 이 Vault에서 보낸 호출만 센 값입니다. 할당량은 프로젝트 단위라, 같은 프로젝트를 쓰는 다른 앱·다른 키의 호출은 여기에 없습니다. \"Google 관측\"은 Cloud Monitoring이 프로젝트 전체에 대해 센 값이고 몇 분 늦습니다. 두 값은 더하지 않습니다. 실제로 호출이 허용되는지는 서버의 답이 기준입니다.")
                         .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
@@ -236,6 +232,37 @@ struct QuotaPane: View {
         }
         if !limits.isEmpty { all[model] = limits }
         if await store.setProviderSettings(provider.id, ["limits": all]) != nil { await load() }
+    }
+}
+
+/// One source's problem. When the engine put a Console link in the text (Markdown "[title](url)"), the link
+/// becomes a button beside the words, so the next step is one click.
+private struct ProblemLine: View {
+    let name: String
+    let text: String
+
+    /// The words, and the first Markdown link lifted out of them.
+    private var parts: (words: String, title: String?, url: URL?) {
+        guard let open = text.range(of: "["), let mid = text.range(of: "](", range: open.upperBound..<text.endIndex), let close = text.range(of: ")", range: mid.upperBound..<text.endIndex),
+              let url = URL(string: String(text[mid.upperBound..<close.lowerBound])), url.scheme == "https" else { return (text, nil, nil) }
+        let title = String(text[open.upperBound..<mid.lowerBound])
+        var words = text.replacingCharacters(in: open.lowerBound..<close.upperBound, with: "")
+        words = words.replacingOccurrences(of: "  ", with: " ").replacingOccurrences(of: " — ", with: " ").trimmingCharacters(in: .whitespaces)
+        return (words, title, url)
+    }
+
+    var body: some View {
+        let (words, title, url) = parts
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Label { Text(markdown("**\(name)**: \(words)")) } icon: { Image(systemName: "exclamationmark.triangle") }
+                .font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+            if let title, let url {
+                Button { NSWorkspace.shared.open(url) } label: { Label(title, systemImage: "arrow.up.right.square") }
+                    .buttonStyle(.borderedProminent).controlSize(.small).tint(.orange)
+                    .help(url.absoluteString)
+            }
+            Spacer(minLength: 0)
+        }
     }
 }
 
