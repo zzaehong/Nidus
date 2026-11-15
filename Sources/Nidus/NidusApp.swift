@@ -144,33 +144,16 @@ struct VaultView: View {
         }
     }
 
-    private func attentionHelp(_ section: VaultSection) -> String {
-        switch section {
-        case .work:
-            var parts: [String] = []
-            if !session.approvals.isEmpty { parts.append("네트워크 승인 \(session.approvals.count)건") }
-            if session.review != nil { parts.append("검토를 기다리는 결과") }
-            return parts.joined(separator: " · ")
-        case .main:
-            var parts: [String] = []
-            if session.project?.status == "waiting_user" { parts.append(session.project?.questions.isEmpty == false ? "Main의 질문" : "계획 승인 대기") }
-            if session.curation != nil { parts.append("문서 연결 제안") }
-            return parts.joined(separator: " · ")
-        case .providers: return "확인할 Provider 알림"
-        default: return ""
-        }
-    }
-
     var body: some View {
         NavigationSplitView(columnVisibility: Binding(
             get: { sidebarHidden ? .detailOnly : .all },
             set: { sidebarHidden = $0 == .detailOnly }
         )) {
             List(VaultSection.allCases, selection: Binding(get: { VaultSection(rawValue: storedSection) }, set: { storedSection = ($0 ?? .assignment).rawValue })) { item in
-                Label(item.rawValue, systemImage: item.icon).tag(item)
-                    // Things waiting for the user in a section they are not looking at.
+                // The badge counts things waiting for the user in a section they are not looking at.
+                Label(item.rawValue, systemImage: item.icon)
                     .badge(attention(item))
-                    .help(attentionHelp(item))
+                    .tag(item)
             }
             // The open vault is named here and in each page header, not in the toolbar:
             // a toolbar title sits after the sidebar button and never lines up with the page.

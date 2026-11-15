@@ -222,14 +222,17 @@ struct WebPreview: NSViewRepresentable {
 }
 
 /// The tree's rows. A folder opens and closes on a click anywhere in its row, not only on the
-/// triangle; a file row selects the file.
+/// triangle, and is never "selected"; a file row selects the file, and only files are highlighted.
+/// (The List's own selection is not used: it would highlight folders too.)
 private struct TreeRows: View {
     let nodes: [LibraryNode]
     @Binding var expanded: Set<URL>
+    let selected: URL?
     /// While a name filter is on, every folder with a match stays open.
     let forceOpen: Bool
     let aiFolder: String
     let icon: (LibraryNode) -> String
+    let onSelect: (LibraryNode) -> Void
 
     var body: some View {
         ForEach(nodes) { node in
@@ -238,14 +241,21 @@ private struct TreeRows: View {
                     get: { forceOpen || expanded.contains(node.url) },
                     set: { open in if open { expanded.insert(node.url) } else { expanded.remove(node.url) } }
                 )) {
-                    TreeRows(nodes: node.children ?? [], expanded: $expanded, forceOpen: forceOpen, aiFolder: aiFolder, icon: icon)
+                    TreeRows(nodes: node.children ?? [], expanded: $expanded, selected: selected, forceOpen: forceOpen, aiFolder: aiFolder, icon: icon, onSelect: onSelect)
                 } label: {
-                    label(node)
-                        .contentShape(Rectangle())
-                        .onTapGesture { if expanded.contains(node.url) { expanded.remove(node.url) } else { expanded.insert(node.url) } }
+                    Button { if expanded.contains(node.url) { expanded.remove(node.url) } else { expanded.insert(node.url) } } label: {
+                        label(node).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 }
             } else {
-                label(node).tag(node.url)
+                Button { onSelect(node) } label: {
+                    label(node).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+                        .padding(.horizontal, 6).padding(.vertical, 3)
+                        .background(RoundedRectangle(cornerRadius: 5).fill(selected == node.url ? Color.accentColor.opacity(0.22) : .clear))
+                        .padding(.horizontal, -6).padding(.vertical, -3)
+                }
+                .buttonStyle(.plain)
             }
         }
     }
@@ -275,7 +285,6 @@ struct LibraryView: View {
     @State private var allowActive = false
     @State private var rendered = ""
     @State private var renderTask: Task<Void, Never>?
-    @State private var selection: URL?
     /// Folders the user opened. A folder on the way to the open note is opened for them.
     @State private var expanded: Set<URL> = []
 
@@ -304,12 +313,8 @@ struct LibraryView: View {
             Task { await model.refresh(); model.select(path: requested) }
         }
         .onChange(of: session.project?.knowledge) { _ in Task { await model.refresh() } }
-        .onChange(of: selection) { url in
-            guard let url, url != model.selected?.url else { return }
-            model.select(find(url, in: model.tree) ?? LibraryNode(url: url, isDirectory: false, children: nil))
-        }
         .onChange(of: model.selected) { node in
-            selection = node?.url; allowActive = false; render(now: true)
+            allowActive = false; render(now: true)
             // The folders above the open note are opened, so it is visible in the tree.
             if let node, let root = model.root {
                 var folder = node.url.deletingLastPathComponent().standardizedFileURL
@@ -370,8 +375,10 @@ struct LibraryView: View {
                     }
                 }.listStyle(.sidebar)
             } else {
-                List(selection: $selection) {
-                    TreeRows(nodes: filtered(model.tree), expanded: $expanded, forceOpen: !filter.trimmingCharacters(in: .whitespaces).isEmpty, aiFolder: aiFolder, icon: icon)
+                List {
+                    TreeRows(nodes: filtered(model.tree), expanded: $expanded, selected: model.selected?.url, forceOpen: !filter.trimmingCharacters(in: .whitespaces).isEmpty, aiFolder: aiFolder, icon: icon) { node in
+                        model.select(node)
+                    }
                 }
                 .listStyle(.sidebar)
             }
