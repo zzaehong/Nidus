@@ -175,6 +175,14 @@ final class VaultStore: ObservableObject {
         return result?.account
     }
 
+    /// Signs in with a Google account in the browser. Without a client file, the earlier sign-in's client is reused.
+    func signInCloud(client: String?) async -> String?? {
+        var extra: [String: Any] = [:]
+        if let client { extra["client"] = client }
+        let result: CloudSignInResult? = await run { try await bridge.call("cloud-sign-in", arguments(extra)) }
+        return result.map { $0.account }
+    }
+
     func clearCloudKey() async {
         let _: Acknowledgement? = await run { try await bridge.call("cloud-key-clear", arguments()) }
     }

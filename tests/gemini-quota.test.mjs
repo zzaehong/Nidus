@@ -463,4 +463,70 @@ test('the app bridge: quota view, settings and the Cloud key never echo a secret
   assert.ok(!JSON.stringify(bad).includes('SECRET-PEM'));
   assert.equal(await credentials.cloudKey.get(), null, 'a key that cannot be used is not stored');
   assert.deepEqual(await call('cloud-key-clear'), { cleared: true });
+  // Signing in needs the OAuth client file the first time; a web client is refused before any browser opens.
+  await assert.rejects(call('cloud-sign-in'), /Choose the OAuth client file first/);
+  const web = await call('cloud-sign-in', { client: '{"web":{"client_id":"a.apps.googleusercontent.com","client_secret":"WEB-SECRET"}}' }).catch(e => e);
+  assert.equal(web.reason, 'oauth_client_web');
+  assert.ok(!JSON.stringify(web).includes('WEB-SECRET'));
+});
+
+test('signing in with a Google account: the browser comes back to 127.0.0.1 with a code, the code is exchanged at Google only, and the refresh token is what is stored', async t => {
+  const { signIn, parseOAuthClient, AUTH_URL, SIGN_IN_SCOPES } = await import('../dist/gateway/quota/google-login.js');
+  const { storedUser, GoogleAuth } = await import('../dist/gateway/quota/google-auth.js');
+  const consoleFile = JSON.stringify({ installed: { client_id: 'abc.apps.googleusercontent.com', client_secret: 'CLIENT-SECRET', redirect_uris: ['http://localhost'] } });
+  assert.deepEqual(parseOAuthClient(consoleFile), { clientId: 'abc.apps.googleusercontent.com', clientSecret: 'CLIENT-SECRET' });
+  assert.throws(() => parseOAuthClient(JSON.stringify({ web: { client_id: 'abc.apps.googleusercontent.com', client_secret: 's' } })), { reason: 'oauth_client_web' });
+  assert.throws(() => parseOAuthClient('{"type":"service_account"}'), { reason: 'oauth_client_invalid' });
+
+  const posts = [];
+  const idToken = `h.${Buffer.from(JSON.stringify({ email: 'me@example.com' })).toString('base64url')}.s`;
+  const fetcher = async (url, init) => { posts.push({ url: String(url), body: new URLSearchParams(init.body) }); return new Response(JSON.stringify({ access_token: 'ya29.x', refresh_token: 'REFRESH', id_token: idToken, expires_in: 3599 })); };
+  // The test plays the browser: it follows the sign-in URL's redirect_uri back with a code.
+  const browser = async url => {
+    const open = new URL(url);
+    assert.equal(open.origin + open.pathname, AUTH_URL);
+    assert.equal(open.searchParams.get('scope'), SIGN_IN_SCOPES.join(' '));
+    assert.equal(open.searchParams.get('code_challenge_method'), 'S256');
+    assert.equal(open.searchParams.get('prompt'), 'consent');
+    const back = new URL(open.searchParams.get('redirect_uri'));
+    assert.equal(back.hostname, '127.0.0.1');
+    back.searchParams.set('code', 'CODE-1');
+    back.searchParams.set('state', open.searchParams.get('state'));
+    const page = await fetch(back);
+    assert.equal(page.status, 200);
+    assert.match(await page.text(), /로그인됐습니다/);
+  };
+  const user = await signIn(parseOAuthClient(consoleFile), { open: browser, fetcher });
+  assert.deepEqual(user, { type: 'authorized_user', client_id: 'abc.apps.googleusercontent.com', client_secret: 'CLIENT-SECRET', refresh_token: 'REFRESH', account: 'me@example.com' });
+  assert.equal(posts.length, 1);
+  assert.equal(posts[0].url, TOKEN_URL);
+  assert.equal(posts[0].body.get('grant_type'), 'authorization_code');
+  assert.equal(posts[0].body.get('code'), 'CODE-1');
+  assert.ok(posts[0].body.get('code_verifier'));
+
+  // GoogleAuth then uses what was stored, and names the account.
+  const stored = JSON.stringify(user);
+  assert.deepEqual(storedUser(stored), { client_id: 'abc.apps.googleusercontent.com', client_secret: 'CLIENT-SECRET', account: 'me@example.com' });
+  const auth = new GoogleAuth({ env: {}, home: '/nonexistent', gcloud: async () => { throw new Error('no'); }, secret: async () => stored, fetcher: async () => new Response(JSON.stringify({ access_token: 'ya29.user' })) });
+  assert.deepEqual(await auth.available(), { source: 'user', account: 'me@example.com' });
+  assert.deepEqual(await auth.token(), { token: 'ya29.user', source: 'user', user: true, account: 'me@example.com' });
+
+  // Declined in the browser, or a reply with the wrong state: no exchange happens.
+  posts.length = 0;
+  const declined = signIn(parseOAuthClient(consoleFile), { fetcher, open: async url => {
+    const open = new URL(url);
+    const wrong = new URL(open.searchParams.get('redirect_uri')); wrong.searchParams.set('code', 'X'); wrong.searchParams.set('state', 'forged');
+    assert.equal((await fetch(wrong)).status, 400);
+    const back = new URL(open.searchParams.get('redirect_uri')); back.searchParams.set('error', 'access_denied'); back.searchParams.set('state', open.searchParams.get('state'));
+    await fetch(back);
+  } });
+  await assert.rejects(declined, { reason: 'sign_in_declined' });
+  assert.equal(posts.length, 0);
+  await assert.rejects(signIn(parseOAuthClient(consoleFile), { fetcher, open: async () => {}, timeoutMs: 50 }), { reason: 'sign_in_timeout' });
+  const refused = signIn(parseOAuthClient(consoleFile), { fetcher: async () => new Response(JSON.stringify({ error: 'invalid_grant' }), { status: 400 }), open: async url => {
+    const open = new URL(url); const back = new URL(open.searchParams.get('redirect_uri')); back.searchParams.set('code', 'C'); back.searchParams.set('state', open.searchParams.get('state')); await fetch(back);
+  } });
+  const error = await refused.catch(e => e);
+  assert.equal(error.reason, 'sign_in_failed');
+  assert.ok(!JSON.stringify(error).includes('CLIENT-SECRET'));
 });

@@ -118,6 +118,7 @@ struct QuotaView: Decodable, Equatable {
 }
 
 struct CloudKeyResult: Decodable { let account: String }
+struct CloudSignInResult: Decodable { let account: String? }
 
 struct UsageGroup: Decodable, Identifiable, Equatable {
     let role: String

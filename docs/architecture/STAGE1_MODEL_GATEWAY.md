@@ -192,8 +192,11 @@ API 키로는 볼 수 없어 Cloud 로그인이 따로 필요하다. 모델 호�
 
 - 지표: 무료는 `generate_content_free_tier_requests`(분 → RPM, 일 → RPD), `generate_content_free_tier_input_token_count`(분 → TPM). 유료는 `generate_requests_per_model`, `generate_content_paid_tier_input_token_count`. 모델 이름은 정확히 같은 것만 잇는다. 다른 등급의 지표나 알아보지 못한 지표는 제한으로 쓰지 않는다(실제 프로젝트 테스트가 그 목록을 출력한다).
 - 권한: 역할 두 개로 충분하다. Cloud Quotas Viewer(`roles/cloudquotas.viewer`: `cloudquotas.quotas.get`, `resourcemanager.projects.get` 포함)와 Monitoring Viewer(`roles/monitoring.viewer`).
-- 터미널 없이: Cloud Console에서 서비스 계정을 만들고 JSON 키를 받아, 앱의 "키 파일 고르기…"로 고른다(gcloud가 없는 Mac 기준, 2026-11-15 사용자 환경).
-- 로그인(순서대로): Keychain에 저장한 서비스 계정 키 → Application Default Credentials(`gcloud auth application-default login`) → `gcloud` CLI. 토큰은 메모리에만 두고, 서비스 계정 키는 Google의 토큰 주소로만 보낸다.
+- 로그인 방법 세 가지(앱의 "설정…" 창이 처음 하는 사람 기준으로 안내한다; 하나면 된다):
+  1. **Google 계정 로그인** (`quota/google-login.ts`, 권장): 데스크톱 앱용 OAuth 2.0(RFC 8252). Cloud Console의 Google Auth Platform에서 동의 화면을 만들고 "데스크톱 앱" 클라이언트의 JSON을 받아 앱에서 고르면, 브라우저가 열리고 Google이 `127.0.0.1`의 일회용 서버로 코드를 돌려준다. PKCE(S256)와 state를 쓰고, 코드는 Google의 토큰 주소로만 보낸다. 결과는 gcloud의 ADC 파일과 같은 `authorized_user` 형식(+ 표시용 `account`)으로 Keychain에 저장되어 `GoogleAuth`가 그대로 읽는다. 범위는 `cloud-platform`과 계정 표시용 `openid email`. 키를 만들지 않으므로 조직 정책 `iam.disableServiceAccountKeyCreation`과 무관하다(2026-11-15 사용자 환경: 키 만들기가 조직 정책으로 막힘, gcloud 없음). 동의 화면이 "외부"+테스트 상태면 로그인이 7일마다 만료되어 "다시 로그인"이 필요하고(저장된 클라이언트를 재사용), "내부"(Workspace)는 만료되지 않는다. 사람 계정으로 조회하므로 요청에 `x-goog-user-project`가 붙고, 그 계정에 `serviceusage.services.use`(소유자·편집자·Service Usage 소비자)가 있어야 한다.
+  2. **서비스 계정 키 파일**: Console에서 서비스 계정을 만들고 JSON 키를 받아 "키 파일 고르기…"로 고른다. 키 만들기가 막혀 있으면("Key creation is not allowed on this service account") 1번으로 안내한다.
+  3. **gcloud**: `brew install --cask gcloud-cli` 후 `gcloud auth application-default login`. 자동으로 인식한다.
+- 로그인 순서: Keychain에 저장한 것(서비스 계정 키 또는 Google 계정의 refresh token) → Application Default Credentials → `gcloud` CLI. 토큰은 메모리에만 두고, 비밀은 Google의 토큰 주소로만 보낸다.
 - 실패: 출처마다 따로 실패한다. 값을 추정하지 않고 Unknown과 이유(권한 없음, 로그인 만료, API 꺼짐)를 보여 준다. 제한은 직접 입력할 수 있다. 모델 호출은 그대로 된다.
 
 ### 저장
@@ -203,9 +206,9 @@ API 키로는 볼 수 없어 Cloud 로그인이 따로 필요하다. 모델 호�
 
 ### 확인한 것과 못 한 것
 
-- 자동 테스트(Google을 흉내 냄): `tests/gemini-quota.test.mjs` 14개.
+- 자동 테스트(Google을 흉내 냄): `tests/gemini-quota.test.mjs` 15개. 브라우저 로그인은 테스트가 브라우저 역할을 해서(루프백 주소로 코드를 돌려줌) 교환·거부·state 불일치·시간 초과를 확인한다.
 - 실제 키: 시험용 Vault에서 이전, Gemini Free 호출, 사용량 집계를 확인했다.
-- **확인하지 못함**: 실제 Cloud Quotas·Monitoring·Billing 응답(이 Mac에 Google Cloud 로그인과 프로젝트 ID가 없었다). 응답 형식은 공식 문서의 필드와 지표 이름에 맞췄지만, 모델 이름 표기나 유료 2·3등급 지표처럼 문서에 없는 부분은 실제 값으로 봐야 안다. 확인 방법: `NIDUS_LIVE=1 NIDUS_LIVE_GCP_PROJECT=<id> npm run test:live`. 실제 429 본문의 형식도 공식 문서에는 예시가 없어 공개된 사례에 맞췄다.
+- **확인하지 못함**: 실제 Google 계정 로그인(실제 OAuth 클라이언트가 없어 브라우저 왕복은 흉내로만 확인), 실제 Cloud Quotas·Monitoring·Billing 응답(이 Mac에 Google Cloud 로그인과 프로젝트 ID가 없었다). 응답 형식은 공식 문서의 필드와 지표 이름에 맞췄지만, 모델 이름 표기나 유료 2·3등급 지표처럼 문서에 없는 부분은 실제 값으로 봐야 안다. 확인 방법: `NIDUS_LIVE=1 NIDUS_LIVE_GCP_PROJECT=<id> npm run test:live`. 실제 429 본문의 형식도 공식 문서에는 예시가 없어 공개된 사례에 맞췄다.
 
 ## `.nidus/` 배치
 
