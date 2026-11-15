@@ -101,3 +101,24 @@ test('asked to tidy the Library, Main starts a Dream Sequence after its answer; 
   await linking.c.send('내 노트들 서로 연결해 줘', signal());
   assert.equal(connected, 1);
 });
+
+test('when the project ends, Main answers the user from the results in the conversation; the report is the fallback', async t => {
+  const { c, requests } = await chat(t, ['{"reply": "계획을 세우겠습니다.", "project": "vault 문서 구조 조사"}', '{"reply": "문서는 세 폴더에 나뉘어 있습니다.", "project": null}']);
+  await c.send('vault 문서가 어떻게 저장돼 있는지 살펴봐 줘', signal());
+  const answer = await c.conclude('Request: 문서 구조\nTasks:\n- t1 done\n  Deliverable:\n세 폴더', '팀 보고 원문', signal());
+  assert.equal(answer.text, '문서는 세 폴더에 나뉘어 있습니다.');
+  assert.deepEqual([answer.model, answer.provider], ['main-model', 'p']);
+  const sent = requests[1].request.messages;
+  assert.deepEqual(sent.map(m => m.role), ['user', 'assistant', 'user'], 'the results come in a user turn, after the conversation so far');
+  assert.equal(sent[0].content[0].text, 'vault 문서가 어떻게 저장돼 있는지 살펴봐 줘', 'the context moves to the closing turn');
+  assert.match(sent[2].content[0].text, /^\[Context now, not from the user\]\nNo project is open\.\n\n\[The project you started for the user has ended\. This is not the user speaking\.\]\nRequest: 문서 구조/);
+  assert.match(sent[2].content[0].text, /Deliverable:\n세 폴더/);
+  assert.match(sent[2].content[0].text, /never tell the user to look it up elsewhere/);
+  assert.deepEqual(c.messages.map(m => m.role), ['user', 'main', 'main']);
+  // Main cannot answer: the team's report is passed on as it is, and said to be that.
+  const failing = await chat(t, ['{"reply": "네", "project": "x"}', Object.assign(new Error('boom'), { code: 'provider_error' })]);
+  await failing.c.send('해 줘', signal());
+  const fallback = await failing.c.conclude('brief', '보고 원문', signal());
+  assert.match(fallback.text, /팀의 보고를 그대로 전합니다\.\n\n보고 원문$/);
+  assert.equal(fallback.isError, undefined);
+});

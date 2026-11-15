@@ -23,6 +23,7 @@ import { WorkspaceBrowser } from './browser.js';
 import { WorkerTools } from './tools.js';
 import { WorkerRun, type WorkerEvent, type WorkerOutcome, type WorkerToolSet } from './worker.js';
 import { Office, type OfficeEvent } from '../office/office.js';
+import { concludeBrief } from '../office/plan.js';
 import { BoardStore, placeOf, workerFor, type BoardTask, type Project } from '../office/board.js';
 import { HomeStore, identity } from '../office/home.js';
 import { DeskStore, deskHasContext, recoveryBrief, renderDesk, withDesk } from '../office/desk.js';
@@ -370,8 +371,12 @@ function officeEvent(e: OfficeEvent) {
   if (e.type === 'project') { publishProject(); return; }
   if (e.type === 'retry') { event('office', { from: e.from, title: `모델 호출 재시도 (${e.attempt}회째)`, text: e.error, isError: true }); return; }
   event('office', { from: e.from, taskId: e.taskId, title: e.title, text: e.text, model: e.model, difficulty: e.difficulty });
-  // Main's final report is also said to the user in the conversation, where the work was asked for.
-  if (e.final) void chat?.note(e.text, false, e.model).catch(() => {});
+  // The work was asked for in the conversation: Main answers there, from the results. The report itself stays here.
+  if (e.final && office?.project && chat) {
+    const project = office.project;
+    const until = AbortSignal.timeout(10 * 60_000);
+    void chat.conclude(concludeBrief(project), e.text, until).catch(() => chat!.note(e.text, false, e.model).catch(() => {}));
+  }
 }
 
 /** What Main sees of the Vault: tracked files and the README. */

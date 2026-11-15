@@ -200,6 +200,20 @@ export function reviewRequest(project: Project, task: BoardTask, evidence: strin
   ].join('\n');
 }
 
+/**
+ * The finished project as Main needs it to answer the user in the conversation: the request, each
+ * task's outcome and its text deliverable itself (not a pointer to it), and the team's report.
+ */
+export function concludeBrief(project: Project, budget = 60_000): string {
+  let left = budget;
+  const take = (text: string, max: number) => { const cut = text.slice(0, Math.max(0, Math.min(max, left))); left -= cut.length; return cut + (cut.length < text.length ? '\n  …(생략)' : ''); };
+  const tasks = project.tasks.map(t => {
+    const head = `- ${t.id} ${t.title} [${t.status}, ${placeOf(t)}]\n  ${t.result ? `${t.result.summary}\n  Verified: ${t.result.verification}` : t.reviews.at(-1)?.feedback ?? ''}`;
+    return head + (t.output ? `\n  Deliverable:\n${take(t.output, 20_000)}` : '');
+  }).join('\n');
+  return `Request: ${project.instruction}\nPlan: ${project.summary}\nStatus: ${project.status}${project.error ? ` (${project.error})` : ''}\n\nTasks:\n${tasks}\n\nTeam's final report:\n${take(project.report ?? '(none)', 8000)}`;
+}
+
 export function finalRequest(project: Project): string {
   const tasks = project.tasks.map(t => {
     const output = t.output ? `\n  Deliverable (${placeOf(t)}):\n${t.output.slice(0, 6000)}${t.output.length > 6000 ? '\n  …' : ''}` : '';

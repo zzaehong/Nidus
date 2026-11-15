@@ -95,16 +95,69 @@ export class MainChat {
   }
 
   /** Something Main says on its own: the report of work that ran beside the conversation. `by` names the model that wrote it, as "provider:model". */
-  async note(text: string, isError = false, by?: string): Promise<void> {
+  async note(text: string, isError = false, by?: string): Promise<ChatMessage> {
     const split = by?.indexOf(':') ?? -1;
     const who = by && split > 0 ? { provider: by.slice(0, split), model: by.slice(split + 1) } : {};
-    await this.push({ role: 'main', text, at: new Date().toISOString(), ...who, ...(isError ? { isError } : {}) });
+    const message: ChatMessage = { role: 'main', text, at: new Date().toISOString(), ...who, ...(isError ? { isError } : {}) };
+    await this.push(message);
+    return message;
   }
 
   async clear(): Promise<void> {
     this.messages = [];
     await this.deps.store.save(this.messages).catch(() => {});
     this.deps.onChange(this.messages);
+  }
+
+  /** The conversation as the model sees it: Main's consecutive messages as one turn, the context with the latest user message only. */
+  private async conversation(closing?: string): Promise<Message[]> {
+    // What Main said in a row (an answer, then a report of its own) is one turn for the model.
+    const recent: ChatMessage[] = [];
+    for (const m of this.messages.filter(m => !m.isError).slice(-WINDOW)) {
+      const before = recent[recent.length - 1];
+      if (m.role === 'main' && before?.role === 'main') recent[recent.length - 1] = { ...before, text: `${before.text}\n\n${m.text}`, project: before.project ?? m.project };
+      else recent.push(m);
+    }
+    const context = await this.deps.context().catch(() => '');
+    const conversation: Message[] = recent.map((m, i) => ({
+      role: m.role === 'user' ? 'user' as const : 'assistant' as const,
+      content: [{ type: 'text' as const, text: m.role === 'main'
+        ? JSON.stringify({ reply: m.text, project: m.project ?? null, library: null })
+        // The context goes with the latest message only: it is what is true now.
+        : i === recent.length - 1 && !closing && context ? `[Context now, not from the user]\n${context}\n\n[The user says]\n${m.text}` : m.text }],
+    }));
+    // Something that happened, told to Main in the user's turn but not by the user.
+    if (closing) conversation.push({ role: 'user', content: [{ type: 'text', text: `${context ? `[Context now, not from the user]\n${context}\n\n` : ''}${closing}` }] });
+    // A conversation must start with the user.
+    while (conversation.length && conversation[0]!.role !== 'user') conversation.shift();
+    return conversation;
+  }
+
+  private get policy(): RetryPolicy { return this.deps.retryWaits ? { waits: this.deps.retryWaits, rateLimitWaits: this.deps.retryWaits } : {}; }
+
+  /**
+   * The project Main started for the user has ended: Main answers the user's request in the
+   * conversation, from the results — the findings themselves, not a pointer to the task list.
+   * Waits for a turn in progress; when Main cannot answer, the team's report is said as it is.
+   */
+  async conclude(brief: string, report: string, signal: AbortSignal): Promise<ChatMessage> {
+    for (let waited = 0; this.busy && waited < 120_000 && !signal.aborted; waited += 500) await new Promise(r => setTimeout(r, 500));
+    if (this.busy) return this.note(report, false);
+    this.busy = true;
+    try {
+      const closing = `[The project you started for the user has ended. This is not the user speaking.]\n${brief}\n\nNow answer the user's request yourself, in the conversation's language. Give the substance: the findings, the result, the deliverable's content when it is text (restate or quote it; never tell the user to look it up elsewhere). Say plainly what was not done or could not be verified. Do not start a project or a library action: "project": null, "library": null.`;
+      const conversation = await this.conversation(closing);
+      let answer: ChatMessage;
+      try {
+        const result = await sendWithRetry(this.deps.gateway, { role: 'main', taskId: 'chat' }, { system: chatSystem(), messages: conversation }, signal, this.policy);
+        const raw = result.response.content.filter(b => b.type === 'text').map(b => (b as { text: string }).text).join('\n');
+        answer = { role: 'main', text: parseChat(raw).reply, at: new Date().toISOString(), model: result.response.model, provider: result.response.provider };
+      } catch (error: any) {
+        answer = { role: 'main', text: `결과를 정리해 답하지 못했습니다 (${String(error?.message ?? error)}). 팀의 보고를 그대로 전합니다.\n\n${report}`, at: new Date().toISOString() };
+      }
+      await this.push(answer);
+      return answer;
+    } finally { this.busy = false; }
   }
 
   /** The user says something; Main answers, and may start a project. */
@@ -115,24 +168,8 @@ export class MainChat {
     this.busy = true;
     try {
       await this.push({ role: 'user', text: said, at: new Date().toISOString() });
-      // What Main said in a row (an answer, then a report of its own) is one turn for the model.
-      const recent: ChatMessage[] = [];
-      for (const m of this.messages.filter(m => !m.isError).slice(-WINDOW)) {
-        const before = recent[recent.length - 1];
-        if (m.role === 'main' && before?.role === 'main') recent[recent.length - 1] = { ...before, text: `${before.text}\n\n${m.text}`, project: before.project ?? m.project };
-        else recent.push(m);
-      }
-      const context = await this.deps.context().catch(() => '');
-      const conversation: Message[] = recent.map((m, i) => ({
-        role: m.role === 'user' ? 'user' as const : 'assistant' as const,
-        content: [{ type: 'text' as const, text: m.role === 'main'
-          ? JSON.stringify({ reply: m.text, project: m.project ?? null, library: null })
-          // The context goes with the latest message only: it is what is true now.
-          : i === recent.length - 1 && context ? `[Context now, not from the user]\n${context}\n\n[The user says]\n${m.text}` : m.text }],
-      }));
-      // A conversation must start with the user.
-      while (conversation.length && conversation[0]!.role !== 'user') conversation.shift();
-      const policy: RetryPolicy = this.deps.retryWaits ? { waits: this.deps.retryWaits, rateLimitWaits: this.deps.retryWaits } : {};
+      const conversation = await this.conversation();
+      const policy = this.policy;
       let answer: ChatMessage;
       let wants: 'tidy' | 'connect' | null = null;
       try {
