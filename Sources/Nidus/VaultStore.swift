@@ -134,7 +134,7 @@ final class VaultStore: ObservableObject {
     /// Returns true when the key was accepted and stored.
     func connect(_ provider: ProviderInfo, key: String, accountId: String) async -> Bool {
         var extra: [String: Any] = ["provider": provider.id, "key": key]
-        if provider.needsAccountId { extra["accountId"] = accountId }
+        if provider.needsAccountId, !accountId.trimmingCharacters(in: .whitespaces).isEmpty { extra["accountId"] = accountId.trimmingCharacters(in: .whitespaces) }
         let result: ConnectResult? = await run { try await bridge.call("connect", arguments(extra)) }
         if result != nil { await reload() }
         return result != nil

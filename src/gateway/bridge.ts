@@ -2,7 +2,6 @@
 // Keys arrive only on stdin and are never written to stdout, stderr or argv.
 import { stat } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
-import { cloudflareCredential } from '../adapters/cloudflare.js';
 import { KeychainStore, type CredentialStore } from '../credentials.js';
 import { NidusError, publicError } from '../errors.js';
 import { difficulties, type Difficulty } from './assignment.js';
@@ -62,7 +61,11 @@ export async function dispatch(input: unknown, dependencies: BridgeDependencies 
       case 'connect': {
         const provider = providerId(text(request.provider, 'provider'));
         const secret = text(request.key, 'key');
-        const models = await gateway.connect(provider, provider === 'cloudflare' ? cloudflareCredential(secret, request.accountId) : secret);
+        if (provider === 'cloudflare') {
+          const { models, accountId, discovered } = await gateway.connectCloudflare(secret, request.accountId);
+          return { provider, models: models.length, accountId, discovered };
+        }
+        const models = await gateway.connect(provider, secret);
         return { provider, models: models.length };
       }
       case 'refresh': {

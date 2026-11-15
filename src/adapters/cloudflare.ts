@@ -13,6 +13,37 @@ function validatedCredential(key: string, accountId: unknown) {
 export function cloudflareCredential(key: string, accountId: unknown): string {
   return JSON.stringify(validatedCredential(key, accountId));
 }
+
+export const CLOUDFLARE_ENDPOINT = 'https://api.cloudflare.com/client/v4';
+
+/** The accounts an API token can see (GET /accounts). Workers AI lives under one of them. */
+export async function listCloudflareAccounts(token: string, http: HttpClient, endpoint = CLOUDFLARE_ENDPOINT, options: RequestOptions = {}): Promise<{ id: string; name: string }[]> {
+  return bounded(options, async signal => {
+    const raw = await http.json(`${endpoint}/accounts?per_page=50`, { authorization: `Bearer ${keyValue(token)}` }, signal);
+    if (raw.success !== true) throw new NidusError('provider_error', 'Cloudflare did not list the accounts of this token.');
+    return array(raw.result).map(item => { const r = object(item); return { id: string(r.id), name: typeof r.name === 'string' ? r.name : '' }; }).filter(a => /^[a-fA-F0-9]{32}$/.test(a.id));
+  });
+}
+
+/**
+ * The stored credential for Cloudflare: the token plus the Account ID. When the user left the ID empty,
+ * it is looked up with the token; only an unambiguous answer (exactly one account) is used.
+ */
+export async function resolveCloudflareCredential(key: string, accountId: unknown, http: HttpClient, endpoint = CLOUDFLARE_ENDPOINT, options: RequestOptions = {}): Promise<{ credential: string; accountId: string; discovered: boolean }> {
+  const typed = typeof accountId === 'string' ? accountId.trim() : '';
+  if (typed) return { credential: cloudflareCredential(key, typed), accountId: typed, discovered: false };
+  let accounts: { id: string; name: string }[];
+  try { accounts = await listCloudflareAccounts(key, http, endpoint, options); }
+  catch (error) {
+    const code = error instanceof NidusError ? error.code : 'provider_error';
+    if (code === 'authentication' || code === 'permission') throw new NidusError(code, '이 토큰으로는 계정 목록을 볼 수 없습니다. Cloudflare 대시보드의 Workers AI 페이지 → "Use REST API"에 보이는 Account ID를 직접 적어 주세요. (토큰이 틀렸을 수도 있습니다.)');
+    throw error;
+  }
+  if (accounts.length === 1) return { credential: cloudflareCredential(key, accounts[0]!.id), accountId: accounts[0]!.id, discovered: true };
+  if (accounts.length === 0) throw new NidusError('invalid_request', '이 토큰이 볼 수 있는 Cloudflare 계정이 없습니다. Workers AI 페이지의 "Use REST API"에서 만든 토큰인지, 그 화면의 Account ID를 직접 적어 주세요.');
+  const names = accounts.slice(0, 5).map(a => `${a.name || '(이름 없음)'}: ${a.id}`).join(' / ');
+  throw new NidusError('invalid_request', `이 토큰은 계정 ${accounts.length}개를 볼 수 있어 하나를 고를 수 없습니다. Account ID를 직접 적어 주세요 — ${names}`);
+}
 function unpack(key: string) {
   try {
     const raw = object(JSON.parse(key));

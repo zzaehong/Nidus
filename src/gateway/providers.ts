@@ -1,4 +1,5 @@
 // Per-provider endpoint, authentication and wire format.
+import { resolveCloudflareCredential } from '../adapters/cloudflare.js';
 import { AnthropicAdapter, CloudflareAdapter, CompatibleAdapter, DeepSeekAdapter, GeminiAdapter, OpenAIAdapter } from '../adapters/index.js';
 import { NidusError } from '../errors.js';
 import { bounded, HttpClient, keyValue } from '../http.js';
@@ -82,6 +83,11 @@ export class ProviderClient {
     this.http = options.http ?? new HttpClient();
     this.endpoints = { ...defaultEndpoints, ...options.endpoints };
     this.discovery = discoveryFor(this.endpoints, this.http);
+  }
+
+  /** Cloudflare's stored credential, with the Account ID looked up from the token when none was typed. */
+  cloudflareCredential(secret: string, accountId: unknown, options: RequestOptions = {}) {
+    return resolveCloudflareCredential(secret, accountId, this.http, this.endpoints.cloudflare, options);
   }
 
   listModels(provider: ProviderId, key: string, options: RequestOptions = {}): Promise<Model[]> {

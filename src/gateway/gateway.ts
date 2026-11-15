@@ -368,6 +368,12 @@ export class ModelGateway implements Availability {
   // --- Credentials and model discovery -------------------------------------
 
   /** Verifies the key by listing models, then stores the key and the model list. */
+  /** Cloudflare needs the Account ID beside the token; an empty one is looked up with the token. */
+  async connectCloudflare(secret: string, accountId: unknown, options: RequestOptions = {}): Promise<{ models: Model[]; accountId: string; discovered: boolean }> {
+    const resolved = await this.providers.cloudflareCredential(secret, accountId, options);
+    return { models: await this.connect('cloudflare', resolved.credential, options), accountId: resolved.accountId, discovered: resolved.discovered };
+  }
+
   async connect(provider: ProviderId, key: string, options: RequestOptions = {}): Promise<Model[]> {
     await this.prepare();
     if (provider === 'gemini') throw new NidusError('invalid_request', 'Connect the key to Gemini Free or Gemini Paid.');

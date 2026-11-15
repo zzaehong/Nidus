@@ -1,7 +1,6 @@
 // "nidus gateway ..." commands. JSON on stdout, errors on stderr, like the rest of the CLI.
 import { parseArgs } from 'node:util';
 import { providerId } from './gemini.js';
-import { cloudflareCredential } from '../adapters/cloudflare.js';
 import { credentialEnvironment, EnvironmentCredentials, KeychainStore, type CredentialStore } from '../credentials.js';
 import { NidusError } from '../errors.js';
 import { chatPrompt, secretPrompt } from '../prompt.js';
@@ -13,7 +12,7 @@ import { initVault, openVault } from './vault.js';
 
 export const gatewayHelp = `Nidus Model Gateway
   nidus gateway init
-  nidus gateway connect <provider> [--env] [--account-id <cloudflare-account-id>]
+  nidus gateway connect <provider> [--env] [--account-id <cloudflare-account-id>]   (Cloudflare: omitted, the ID is looked up with the token)
   nidus gateway models <provider> [--refresh]
   nidus gateway assign --role <role> [--difficulty simple|normal|complex] [--tools]
   nidus gateway ask --role <role> [--difficulty simple|normal|complex] [--system <text>] [--max-output-tokens <n>]
@@ -95,8 +94,12 @@ export async function gatewayMain(argv: string[], dependencies: GatewayCliDepend
         return;
       }
       const secret = await (dependencies.readSecret ?? secretPrompt)();
-      const key = provider === 'cloudflare' ? cloudflareCredential(secret, values['account-id']) : secret;
-      const models = await gateway.connect(provider, key, options);
+      if (provider === 'cloudflare') {
+        const { models, accountId, discovered } = await gateway.connectCloudflare(secret, values['account-id'], options);
+        print({ provider, stored: true, models: models.length, accountId, discovered });
+        return;
+      }
+      const models = await gateway.connect(provider, secret, options);
       print({ provider, stored: true, models: models.length });
     } else if (command === 'models') {
       const provider = providerId(rest[0]!);
