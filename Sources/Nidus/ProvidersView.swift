@@ -239,6 +239,9 @@ private struct ConnectSheet: View {
     let provider: ProviderInfo
     @State private var key = ""
     @State private var accountId = ""
+    /// A failure is shown here, in the sheet. The app's alert cannot appear over a sheet, so it would
+    /// otherwise wait until this sheet is closed.
+    @State private var problem: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -255,14 +258,21 @@ private struct ConnectSheet: View {
             }
             Text("키로 모델 목록을 조회해 확인한 뒤 이 Mac의 Keychain에 저장합니다. Vault 폴더에는 저장하지 않습니다.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            if let problem {
+                Label(problem, systemImage: "exclamationmark.triangle").font(.callout).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+            }
             HStack {
                 if store.busy { ProgressView().controlSize(.small) }
                 Spacer()
                 Button("취소") { dismiss() }.keyboardShortcut(.cancelAction)
                 Button("확인 후 저장") {
                     Task {
-                        if await store.connect(provider, key: key, accountId: accountId) { dismiss() }
-                        key = ""
+                        problem = nil
+                        if await store.connect(provider, key: key, accountId: accountId) { key = ""; dismiss(); return }
+                        // Keep the key typed so the user can add what was missing and try again.
+                        problem = store.error ?? "연결하지 못했습니다."
+                        store.error = nil
                     }
                 }
                 .keyboardShortcut(.defaultAction)
