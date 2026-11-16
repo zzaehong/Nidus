@@ -761,6 +761,9 @@ export class ModelGateway implements Availability {
     if (role === 'worker' && !difficulty) throw new NidusError('invalid_request', 'A worker exclusion needs the difficulty of the work.');
     const slot = slotId(role, difficulty);
     const table = await loadTable(this.paths.modelsFile);
+    // A Vault-wide exclusion stands: a later "out of this slot" (an old message's sheet) does not narrow it.
+    const wide = table.excluded.find(x => x.ref === ref && x.scope === 'vault');
+    if (scope === 'slot' && wide) return wide;
     const without = (list: ModelRef[]) => list.filter(r => refName(r) !== ref);
     const touched = scope === 'vault' ? [...Object.keys(table.roles).map(r => slotId(r)), ...difficulties.map(d => slotId('worker', d))] : [slot];
     for (const id of touched) {

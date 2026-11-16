@@ -37,6 +37,7 @@ import { TextTools, gitSource } from '../office/text-work.js';
 import { workerSystem } from '../office/roles.js';
 import { workerBrief } from '../office/plan.js';
 import { snapshot, receive, approve, discard, pending, type Review } from './sync.js';
+import { approvalGate, vmTurns } from './turns.js';
 
 type VMState = 'stopped' | 'starting' | 'running' | 'stopping' | 'failed';
 interface Saved { vaultId: string; task?: string; base?: string }
@@ -75,17 +76,9 @@ const taskRuns = new Map<string, TaskRun>();
 /** "Allow every site" as the user set it; it holds for the task about to run or running. */
 let allowAll = false;
 const approvals = new Map<string, (answer: EgressAnswer) => void>();
-const approvalWaiters: (() => void)[] = [];
+const gate = approvalGate(() => approvals.size);
+const turns = vmTurns();
 const services = new Map<string, string>(); // name -> VM session id
-function approvalsSettled() { if (!approvals.size) for (const wake of approvalWaiters.splice(0)) wake(); }
-/** Waits until no network approval is pending; true if there was one to wait for. */
-function waitForApprovals(signal?: AbortSignal): Promise<boolean> {
-  if (!approvals.size) return Promise.resolve(false);
-  return new Promise(resolve => {
-    approvalWaiters.push(() => resolve(true));
-    signal?.addEventListener('abort', () => resolve(true), { once: true });
-  });
-}
 const ENVIRONMENT = '00000000-0000-4000-8000-00000000e2e0';
 
 /**
@@ -129,7 +122,7 @@ async function open(vault: string) {
     approve: (request, signal) => new Promise(resolve => {
       const id = randomUUID();
       approvals.set(id, resolve);
-      signal.addEventListener('abort', () => { if (approvals.delete(id)) { event('approvalDone', { id }); resolve('deny'); approvalsSettled(); } }, { once: true });
+      signal.addEventListener('abort', () => { if (approvals.delete(id)) { event('approvalDone', { id }); resolve('deny'); gate.settled(); } }, { once: true });
       event('approval', { id, ...request });
     }),
     onEvent: e => event('network', e),
@@ -297,31 +290,7 @@ async function run(instruction: string, difficulty: Difficulty, fresh: boolean) 
   }
   const task = saved!.task!;
   const backendNow = backend;
-  worker ??= new WorkerRun(gateway!, new WorkerTools({
-    shell: async (command, seconds, signal) => {
-      const id = randomUUID();
-      const cancel = () => { try { backendNow.cancel(id); } catch {} };
-      signal?.addEventListener('abort', cancel, { once: true });
-      try { return await backendNow.execute(id, command, seconds, { profile: 'shell' }); }
-      finally { signal?.removeEventListener('abort', cancel); }
-    },
-    browser: ensureBrowser,
-    startService: async (name, command) => {
-      if (services.has(name)) await backendNow.stopService(services.get(name)!).catch(() => {});
-      const id = randomUUID();
-      await backendNow.startService(id, command);
-      services.set(name, id);
-    },
-    stopService: async name => {
-      const id = services.get(name);
-      if (!id) return false;
-      services.delete(name);
-      await backendNow.stopService(id);
-      return true;
-    },
-    services: () => [...services.keys()].filter(name => backendNow.runningServices.includes(services.get(name)!)),
-    waitForApprovals,
-  }), { task, difficulty, onEvent: (e: WorkerEvent) => event('worker', { task, ...clipEvent(e) }) });
+  worker ??= new WorkerRun(gateway!, new WorkerTools(workerRuntime(backendNow)), { task, difficulty, onEvent: (e: WorkerEvent) => event('worker', { task, ...clipEvent(e) }) });
   running = new AbortController();
   status('작업 중');
   const controller = running;
@@ -405,7 +374,7 @@ function workerRuntime(backendNow: AppleOfflineBackend) {
       return true;
     },
     services: () => [...services.keys()].filter(name => backendNow.runningServices.includes(services.get(name)!)),
-    waitForApprovals,
+    waitForApprovals: gate.wait,
   };
 }
 
@@ -419,21 +388,8 @@ async function inspect(command: string): Promise<string> {
 async function work(task: BoardTask, instruction: string, difficulty: Difficulty, signal: AbortSignal, revision: boolean) {
   if (placeOf(task) === 'text') return textWork(task, instruction, difficulty, signal, revision);
   // vm tasks take the shared workspace and browser in turn; Managers and text tasks go on meanwhile.
-  if (vmHolder) log(`${task.id}: ${vmHolder}이(가) VM을 쓰는 중이라 차례를 기다립니다`);
-  return withVm(task.id, signal, () => vmWork(task, instruction, difficulty, signal, revision));
-}
-
-/** Who holds the VM now (a board task id), and the queue of those waiting. */
-let vmHolder: string | null = null;
-let vmQueue: Promise<unknown> = Promise.resolve();
-function withVm<T>(holder: string, signal: AbortSignal, action: () => Promise<T>): Promise<T> {
-  const turn = vmQueue.then(async () => {
-    if (signal.aborted) throw new Error('stopped');
-    vmHolder = holder;
-    try { return await action(); } finally { vmHolder = null; }
-  });
-  vmQueue = turn.catch(() => {});
-  return turn;
+  if (turns.holder) log(`${task.id}: ${turns.holder}이(가) VM을 쓰는 중이라 차례를 기다립니다`);
+  return turns.take(task.id, signal, () => vmWork(task, instruction, difficulty, signal, revision));
 }
 
 /**
@@ -596,7 +552,7 @@ async function executeProject() {
       const root = paths!.root;
       const inVault = async (relative: string) => {
         const target = resolve(root, relative);
-        if (!target.startsWith(root + '/') || relative.includes('\0')) return false;
+        if (!target.startsWith(root + '/')) return false;
         return stat(target).then(s => s.isFile(), () => false);
       };
       void chat.conclude(concludeBrief(project), report, AbortSignal.timeout(10 * 60_000), project.knowledge ?? [], inVault).catch(() => chat!.note(report, false).catch(() => {}));
@@ -730,7 +686,7 @@ const commands: Record<string, (m: any) => Promise<unknown>> = {
   input: async m => { await (await ensureBrowser()).input(m.input); return {}; },
   answer: async m => {
     const resolve = approvals.get(String(m.approval));
-    if (resolve && ['once', 'always', 'deny'].includes(m.answer)) { approvals.delete(String(m.approval)); resolve(m.answer); event('approvalDone', { id: m.approval }); approvalsSettled(); }
+    if (resolve && ['once', 'always', 'deny'].includes(m.answer)) { approvals.delete(String(m.approval)); resolve(m.answer); event('approvalDone', { id: m.approval }); gate.settled(); }
     return {};
   },
   allowAll: async m => { allowAll = !!m.enabled; proxy?.setAllowAll(allowAll); event('allowAll', { enabled: allowAll }); return {}; },

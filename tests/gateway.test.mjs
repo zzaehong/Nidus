@@ -344,6 +344,9 @@ test('auto-fill ranks by class and cost, mixes providers, keeps the user\'s own 
   overview = await call('exclude-model', { ref: 'anthropic:claude-big', scope: 'vault', role: 'main' });
   assert.ok(overview.slots.every(s => !s.candidates.includes('anthropic:claude-big')));
   assert.deepEqual(overview.excluded.map(x => [x.ref, x.scope]), [['anthropic:claude-big', 'vault']]);
+  // A slot exclusion after the Vault-wide one (the sheet of an old message) does not narrow it.
+  overview = await call('exclude-model', { ref: 'anthropic:claude-big', scope: 'slot', role: 'worker', difficulty: 'normal' });
+  assert.deepEqual(overview.excluded.map(x => [x.ref, x.scope]), [['anthropic:claude-big', 'vault']]);
   overview = await call('restore-model', { ref: 'anthropic:claude-big' });
   assert.deepEqual(overview.excluded, []);
   assert.ok(overview.slots.every(s => !s.candidates.includes('anthropic:claude-big')));

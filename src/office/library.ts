@@ -68,7 +68,7 @@ export interface LibraryHit { path: string; matched: number; line: string }
 
 export class Library {
   /** root: the Vault. folder: the AI's own folder inside it. */
-  constructor(private readonly root: string, readonly folder: string = DEFAULT_FOLDER) {}
+  constructor(readonly root: string, readonly folder: string = DEFAULT_FOLDER) {}
 
   private git(args: string[]): Promise<{ code: number; stdout: string }> {
     return new Promise((resolvePromise, reject) => {

@@ -9,7 +9,7 @@
 //
 // Everything from the VM is untrusted: hooks are off for every git call, objects are checked,
 // the branch must continue from the commit the task started at, and sizes are bounded.
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -48,6 +48,18 @@ async function git(vault: string, args: string[], maxBuffer = 16 * 1024 * 1024):
   } catch (error: any) {
     throw new SyncError('git_failed', `${args[0]}: ${String(error.stderr ?? error.message).trim().slice(0, 300)}`);
   }
+}
+
+/** The first `limit` bytes of a git command's output; the rest is never read. `more` says it was cut. */
+function headOf(vault: string, args: string[], limit: number): Promise<{ text: string; more: boolean }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('git', ['-C', vault, '-c', 'core.hooksPath=/dev/null', ...args], { stdio: ['ignore', 'pipe', 'ignore'], env: { ...process.env, GIT_TERMINAL_PROMPT: '0', LC_ALL: 'C' } });
+    const chunks: Buffer[] = [];
+    let size = 0, more = false;
+    child.stdout.on('data', (chunk: Buffer) => { if (more) return; chunks.push(chunk); size += chunk.length; if (size > limit) { more = true; child.kill(); } });
+    child.on('error', reject);
+    child.on('close', code => code === 0 || more ? resolve({ text: Buffer.concat(chunks).toString('utf8').slice(0, limit), more }) : reject(new SyncError('git_failed', `${args[0]}: exit ${code}`)));
+  });
 }
 
 function checkTask(task: string): void {
@@ -105,11 +117,11 @@ async function review(vault: string, task: string, base: string, head: string): 
     const [added, removed, ...rest] = entry.split('\t');
     files.push({ path: rest.join('\t'), added: added === '-' ? null : Number(added), removed: removed === '-' ? null : Number(removed) });
   }
-  const full = await git(vault, ['diff', '--no-color', '--no-ext-diff', base, head], 64 * 1024 * 1024);
+  const diff = await headOf(vault, ['diff', '--no-color', '--no-ext-diff', base, head], MAX_DIFF);
   return {
     task, base, head, commits, files,
-    diff: full.length > MAX_DIFF ? full.slice(0, MAX_DIFF) : full,
-    diffTruncated: full.length > MAX_DIFF,
+    diff: diff.text,
+    diffTruncated: diff.more,
     sensitive: files.map(f => f.path).filter(path => path === '.nidus' || path.startsWith('.nidus/')),
   };
 }

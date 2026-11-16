@@ -207,6 +207,8 @@ export function reviewRequest(project: Project, task: BoardTask, evidence: strin
 export function concludeBrief(project: Project, budget = 60_000): string {
   let left = budget;
   const take = (text: string, max: number) => { const cut = text.slice(0, Math.max(0, Math.min(max, left))); left -= cut.length; return cut + (cut.length < text.length ? '\n  …(생략)' : ''); };
+  // The report first: it is the conclusion, and three long deliverables must not leave it no room.
+  const report = take(project.report ?? '(none)', 8000);
   const tasks = project.tasks.map(t => {
     const head = `- ${t.id} ${t.title} [${t.status}, ${placeOf(t)}]\n  ${t.result ? `${t.result.summary}\n  Verified: ${t.result.verification}` : t.reviews.at(-1)?.feedback ?? ''}`;
     return head + (t.output ? `\n  Deliverable:\n${take(t.output, 20_000)}` : '');
@@ -214,7 +216,7 @@ export function concludeBrief(project: Project, budget = 60_000): string {
   const files = project.knowledge?.length
     ? `\n\nFiles this project created in the Vault (vault-relative paths; the first is the project record, then each text deliverable as its own file). These are the ONLY files that were created — Nidus writes text deliverables only here, in its own Library folder; no task wrote anywhere else, whatever a task's text says:\n${project.knowledge.map(p => `- ${p}`).join('\n')}`
     : '\n\nNo file was created in the Vault by this project.';
-  return `Request: ${project.instruction}\nPlan: ${project.summary}\nStatus: ${project.status}${project.error ? ` (${project.error})` : ''}\n\nTasks:\n${tasks}\n\nTeam's final report:\n${take(project.report ?? '(none)', 8000)}${files}`;
+  return `Request: ${project.instruction}\nPlan: ${project.summary}\nStatus: ${project.status}${project.error ? ` (${project.error})` : ''}\n\nTasks:\n${tasks}\n\nTeam's final report:\n${report}${files}`;
 }
 
 export function finalRequest(project: Project): string {

@@ -144,7 +144,7 @@ final class VaultStore: ObservableObject {
     /// A link (nidus://library/<path>) asked for a file: the Library tab opens it.
     func openInLibrary(_ path: String) {
         let clean = path.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !clean.isEmpty, !clean.contains(".."), !clean.hasPrefix("/") else { return }
+        guard !clean.isEmpty, !clean.hasPrefix("/") else { return }
         libraryRequest = clean
     }
 

@@ -27,7 +27,7 @@ const LINK = /\[([^\]\n]*)\]\(\s*nidus:\/\/library\/((?:[^()\n]|\([^()\n]*\))+?)
  * When the files that do exist are not linked at all, they are listed at the end.
  */
 export async function checkedLinks(text: string, files: string[], exists: (path: string) => Promise<boolean>): Promise<string> {
-  const known = new Map(files.map(f => [f, true]));
+  const known = new Set(files);
   const byName = new Map<string, string>();
   for (const f of files) { const base = f.slice(f.lastIndexOf('/') + 1); byName.set(base, f); byName.set(base.replace(/\.md$/i, ''), f); }
   const linked = new Set<string>();
@@ -47,8 +47,7 @@ export async function checkedLinks(text: string, files: string[], exists: (path:
     if (found) linked.add(found);
     out = out.slice(0, m.index!) + replacement + out.slice(m.index! + m[0].length);
   }
-  const unlinked = files.filter(f => !linked.has(f));
-  if (files.length && linked.size === 0) out += `\n\n결과 파일 (Library):\n${unlinked.map(f => `- [${f.slice(f.lastIndexOf('/') + 1).replace(/\.md$/i, '')}](${libraryLink(f)})`).join('\n')}`;
+  if (files.length && linked.size === 0) out += `\n\n결과 파일 (Library):\n${files.map(f => `- [${f.slice(f.lastIndexOf('/') + 1).replace(/\.md$/i, '')}](${libraryLink(f)})`).join('\n')}`;
   return out;
 }
 
@@ -188,7 +187,9 @@ export class MainChat {
       try {
         const result = await sendWithRetry(this.deps.gateway, { role: 'main', taskId: 'chat' }, { system: chatSystem(), messages: conversation }, signal, this.policy);
         const raw = result.response.content.filter(b => b.type === 'text').map(b => (b as { text: string }).text).join('\n');
-        answer = { role: 'main', text: await checkedLinks(parseChat(raw).reply, files, exists), at: new Date().toISOString(), model: result.response.model, provider: result.response.provider };
+        const parsed = parseChat(raw);
+        // A project here is not an answer (none is started now): the team's report stands in.
+        answer = { role: 'main', text: await checkedLinks(parsed.project ? report : parsed.reply, files, exists), at: new Date().toISOString(), model: result.response.model, provider: result.response.provider };
       } catch (error: any) {
         answer = { role: 'main', text: await checkedLinks(`결과를 정리해 답하지 못했습니다 (${String(error?.message ?? error)}). 팀의 보고를 그대로 전합니다.\n\n${report}`, files, exists), at: new Date().toISOString() };
       }

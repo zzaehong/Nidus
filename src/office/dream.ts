@@ -8,11 +8,11 @@
 // Nothing is deleted and the user's documents are never touched. Each dream leaves a record:
 //   <folder>/Dream/<date> Library 정리.md
 //   .nidus/local/dream.json   { "at": when the last dream ran }
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
 import { sendWithRetry, type RetryPolicy, type WorkerGateway } from '../workspace/worker.js';
 import { extractJson, PlanError } from './plan.js';
-import type { Library } from './library.js';
+import { fileTitle, type Library } from './library.js';
 
 type Kind = 'lesson' | 'decision';
 const FOLDER: Record<Kind, string> = { lesson: 'Lessons', decision: 'Decisions' };
@@ -133,14 +133,17 @@ export async function applyDream(library: Library, notes: DreamNote[], plan: Dre
     const sources = m.sources.map(id => known.get(id)!);
     const kind = sources[0]!.kind;
     const from = [...new Set(sources.flatMap(s => s.sources))];
-    // The sources leave first, so the merged note may take the name of one of them.
-    for (const s of sources) await library.archive(s.path, `"${m.title}"(으)로 합쳐짐 (${date})`);
-    const path = await library.write(FOLDER[kind], m.title, [
+    // The merged note is written first, so a dream cut off here loses nothing.
+    let path = await library.write(FOLDER[kind], m.title, [
       '---', `type: ${kind}`, `date: ${date}`, `merged: ${sources.length}`, 'author: Nidus', '---',
       `# ${m.title}`, '', m.text, '',
       ...(from.length ? [`출처: ${from.map(f => `[[${f}]]`).join(', ')}`] : []),
       `합친 문서: ${sources.map(s => s.title).join(' · ')}`,
     ].join('\n'));
+    for (const s of sources) await library.archive(s.path, `"${m.title}"(으)로 합쳐짐 (${date})`);
+    // A source held the merged note's name: now that it has left, the note takes the name.
+    const wanted = `${library.folder}/${FOLDER[kind]}/${fileTitle(m.title)}.md`;
+    if (path !== wanted && await stat(resolve(library.root, wanted)).then(() => false, () => true)) { await rename(resolve(library.root, path), resolve(library.root, wanted)); path = wanted; }
     report.merged.push({ path, title: m.title, from: sources.map(s => s.title) });
   }
   for (const r of plan.retire) {

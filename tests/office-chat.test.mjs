@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MainChat, ChatStore, parseChat, chatSystem } from '../dist/office/chat.js';
 import { resetCooling } from '../dist/workspace/worker.js';
+import { concludeBrief } from '../dist/office/plan.js';
 
 const usage = { inputTokens: 1, outputTokens: 1 };
 async function chat(t, answers, extra = {}) {
@@ -121,6 +122,22 @@ test('when the project ends, Main answers the user from the results in the conve
   const fallback = await failing.c.conclude('brief', '보고 원문', signal());
   assert.match(fallback.text, /팀의 보고를 그대로 전합니다\.\n\n보고 원문$/);
   assert.equal(fallback.isError, undefined);
+});
+
+test('a "project" in the closing answer is no answer: the team\'s report stands in, and nothing starts', async t => {
+  const { c, started } = await chat(t, ['{"reply": "네", "project": "x"}', '{"reply": "", "project": "다시 조사해 보겠습니다"}']);
+  await c.send('해 줘', signal());
+  const answer = await c.conclude('brief', '보고 원문', signal());
+  assert.equal(answer.text, '보고 원문');
+  assert.deepEqual(started, ['x'], 'the closing answer starts no project');
+});
+
+test('the brief for the closing answer keeps the team\'s report even when the deliverables fill the budget', () => {
+  const task = (id, output) => ({ id, title: id, status: 'done', where: 'text', attempts: 1, reviews: [], output, result: { summary: 's', verification: 'v' } });
+  const project = { id: 'p', instruction: 'i', summary: 'plan', status: 'done', tasks: [task('t1', 'a'.repeat(30000)), task('t2', 'b'.repeat(30000)), task('t3', 'c'.repeat(30000))], report: 'RESULT: three parts', knowledge: [] };
+  const brief = concludeBrief(project);
+  assert.match(brief, /Team's final report:\nRESULT: three parts\n/);
+  assert.ok(brief.length < 70000, `the budget still holds (${brief.length})`);
 });
 
 test('links in Main\'s answer are made true: wrong folders are corrected by name, missing files are said to be missing, and the files that exist are always offered', async () => {
