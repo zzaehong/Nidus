@@ -23,14 +23,17 @@ npm run build:nidus
 open dist/Nidus.app
 ```
 
-폴더 하나를 Agent Vault로 열고, 그 Vault의 모델 배정·Provider 연결·사용량을 관리합니다. 개발 중에는 `npm run build && npm run build:keychain && swift run Nidus`로도 실행할 수 있습니다.
+폴더 하나(Obsidian Vault 같은 문서 폴더나 Git 저장소)를 Agent Vault로 열면, 그 Vault를 위한 AI 팀이 생깁니다. 개발 중에는 `npm run build && npm run build:keychain && swift run Nidus`로도 실행할 수 있습니다. 버전 0.2.0의 범위는 [CHANGELOG.md](CHANGELOG.md)에 있습니다.
 
-- **모델 배정**: Main, Lead Manager, Manager와 Worker 난이도(단순·보통·복잡)마다 모델 후보를 우선순위 순서로 정합니다. 설정은 Vault의 `.nidus/models.json`에 저장됩니다. 후보로는 검사를 통과한 모델만 고를 수 있습니다. Main과 Manager 칸은 텍스트 검사, Worker 칸은 도구 호출 검사까지 통과한 모델이 대상입니다.
-- **Provider**: API 키를 등록하고 모델 목록을 조회합니다. 키는 이 Mac의 Keychain에 저장되며 모든 Vault가 함께 씁니다. **검사**와 **일괄 검사**는 모델마다 실제 API를 호출해 텍스트 응답과 도구 호출을 확인하므로 요금이 발생할 수 있습니다.
+- **Main**: AI 팀의 리더와 직접 대화합니다. 묻는 말에는 바로 답하고, 일을 맡기면 팀을 짜고 계획을 세워 보여 줍니다. 계획을 승인하면 팀이 일하고, 끝나면 Main이 결과를 바탕으로 답하며 결과 파일 링크를 붙입니다. "Library 정리"(Dream Sequence)와 "문서 연결 제안"도 여기서 시작합니다.
+- **작업**: 진행 기록, Worker의 브라우저(화면을 보고 넘겨받을 수 있음), 네트워크 승인, 결과(브랜치) 검토. VM이 필요한 Task만 VM을 켭니다.
+- **Library**: Vault의 문서를 읽기 전용으로 봅니다(Markdown·HTML 미리보기, 내용 검색). AI 팀이 쓴 문서는 `Nidus/` 폴더에 모입니다. 고치기는 Obsidian에서.
+- **직원**: Vault의 상설 팀과 직원(Home). Main이 제안한 직원을 승인해 둡니다.
+- **모델 배정**: 역할(Main·Lead Manager·Manager)과 Worker 난이도(단순·보통·복잡)마다 모델 후보를 우선순위 순서로 정합니다. "자동 채우기"가 검사 통과 모델로 채워 주고, 마음에 안 드는 모델은 작업 기록에서 바로 뺄 수 있습니다. 설정은 `.nidus/models.json`에 저장됩니다.
+- **Provider**: API 키를 등록하고 모델 목록을 조회·검사합니다(실제 호출이라 요금이 들 수 있음). 키는 이 Mac의 Keychain에 저장되며 모든 Vault가 함께 씁니다. Gemini는 Free와 Paid가 별개 Provider이고, 모델별 할당량을 볼 수 있습니다.
 - **사용량**: 이번 달 호출을 역할·난이도·모델별로 집계합니다. 기록은 `.nidus/local/usage.sqlite`에 있고 Git에서 제외됩니다. 월 예산을 넘어도 호출을 막지 않고 경고만 합니다.
-- **시험 호출**: 역할을 골라 메시지를 한 번 보내 배정된 모델이 응답하는지 확인합니다. 요금이 발생할 수 있습니다.
 
-설계는 [1단계 설계 문서](docs/architecture/STAGE1_MODEL_GATEWAY.md)를 참고하세요. 로컬 개발용 서명 없는 번들이며 배포용 서명·공증은 하지 않았습니다. 아래의 기존 대시보드는 **Nidus Base**라는 별도 앱으로 남아 있습니다.
+설계는 [docs/architecture/](docs/architecture/)의 CONCEPT와 STAGE1·2·3 문서를 참고하세요. 로컬 개발용 서명 없는 번들이며 배포용 서명·공증은 하지 않았습니다. 아래의 기존 대시보드는 **Nidus Base**라는 별도 앱으로 남아 있습니다.
 
 ## macOS 대시보드
 
