@@ -1,0 +1,8 @@
+{
+  "license": "SIL Open Font License 1.1 (https://github.com/notofonts/noto-cjk/blob/Sans2.004/Sans/LICENSE)",
+  "why": "The guest has only Open Sans; without a CJK font the workspace browser draws Korean, Japanese and Chinese text as blanks.",
+  "fonts": [
+    {"name": "NotoSansCJK-Regular.ttc", "url": "https://github.com/notofonts/noto-cjk/raw/Sans2.004/Sans/OTC/NotoSansCJK-Regular.ttc", "bytes": 19484784, "sha256": "b76b0433203017ca80401b2ee0dd69350349871c4b19d504c34dbdd80541690a"},
+    {"name": "NotoSansCJK-Bold.ttc", "url": "https://github.com/notofonts/noto-cjk/raw/Sans2.004/Sans/OTC/NotoSansCJK-Bold.ttc", "bytes": 20050760, "sha256": "faa5f3656a78b2e2d450d27fe8382c778bc2b6bb5ea29c986664a6a435056ceb"}
+  ]
+}

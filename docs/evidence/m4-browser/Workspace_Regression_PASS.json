@@ -1,0 +1,49 @@
+{
+  "scope": "Synthetic Vault, real Apple VM, programmatic test approval (not user approval)",
+  "results": [
+    {
+      "sessionId": "1ed4067a-1a8e-46db-85bc-6a546c65af7e",
+      "vmInstanceId": "db7cc8c9-8328-418f-84ca-d4b6aade7f36",
+      "generation": 1,
+      "workspaceStatus": "complete",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 8912896,
+      "stdout": "1\n",
+      "stderr": "",
+      "workspaceReview": [
+        {
+          "path": "main.py",
+          "kind": "modify",
+          "conflict": false,
+          "diff": "--- main.py\n+++ main.py\n-print(1)\n-\n+print(2)\n+",
+          "hostApplyEnabled": false
+        }
+      ]
+    },
+    {
+      "sessionId": "ef579371-0af0-4a88-b630-ec9f6dcfebdc",
+      "vmInstanceId": "db7cc8c9-8328-418f-84ca-d4b6aade7f36",
+      "generation": 1,
+      "workspaceStatus": "complete",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 7811072,
+      "stdout": "1\n",
+      "stderr": "",
+      "workspaceReview": [
+        {
+          "path": "main.py",
+          "kind": "modify",
+          "conflict": false,
+          "diff": "--- main.py\n+++ main.py\n-print(1)\n-\n+print(2)\n+",
+          "hostApplyEnabled": false
+        }
+      ]
+    }
+  ],
+  "status": "PASS",
+  "stop": "STOP_CONFIRMED"
+}

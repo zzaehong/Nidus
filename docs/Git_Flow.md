@@ -32,14 +32,20 @@ latest develop
 ↓
 feature/*
 ↓
-구현 / 테스트
+관련 범위 구현 / 검증
 ↓
-commit
+논리 단위로 여러 commit
+↓
+변경 요약과 검증 결과 보고
+↓
+사용자의 명시적 병합 승인 대기
 ↓
 develop --no-ff merge
 ↓
 전체 회귀 테스트
 ```
+
+작은 수정이나 커밋 한두 개마다 `develop`에 병합하지 않는다. 관련 작업을 feature 브랜치에 모아 하나의 완결된 변경으로 마무리한다. `develop` 병합은 사용자가 현재 feature의 병합을 명시적으로 승인한 경우에만 수행한다. 테스트 완료, 작업 종료, 일반적인 긍정 답변은 병합 승인으로 간주하지 않는다.
 
 `main`, `release/*`, `hotfix/*`는 사용자의 명시적 요청 없이 수정하지 않는다.
 
@@ -98,7 +104,7 @@ Branch 수를 늘리는 것이 목적은 아니다.
 
 서로 독립적으로 구현·검증할 가치가 있는 기능만 분리한다.
 
-다음 Feature가 이전 Feature에 의존한다면 반드시 이전 Feature를 `develop`에 병합한 뒤 최신 `develop`에서 시작한다.
+다음 변경이 진행 중인 feature에 의존한다면 같은 feature 브랜치에서 이어서 작업하거나, 별도 통합이 필요한 경우 현재 feature의 병합 승인을 기다린다. 승인 전 변경을 우회해 `develop`에 넣지 않는다.
 
 ---
 
@@ -156,13 +162,24 @@ Branch 수를 늘리는 것이 목적은 아니다.
 한글 commit
 ```
 
-Feature 완료 후 관련 테스트를 통과하면 `develop`에 통합한다.
+Feature 범위가 구현되고 관련 검증을 마치면 먼저 변경 요약과 검증 결과를 사용자에게 보고한다. 해당 feature의 현재 커밋을 `develop`에 병합해도 된다는 **명시적 승인**을 받은 뒤에만 통합한다. 사용자가 승인을 보류하거나 응답하지 않으면 feature 브랜치를 유지하고 작업을 멈춘다.
+
+승인 요청 전에 준비할 내용:
+
+- feature 브랜치와 포함된 주요 커밋
+- 변경 범위와 알려진 제한
+- 실행한 검증의 PASS / FAIL / NOT RUN 결과
+- 병합 대상 `develop` HEAD와 작업 트리 상태
+
+승인받은 뒤:
 
 ```bash
 git checkout develop
 git merge --no-ff feature/<name> \
   -m "병합: <기능명>을 develop에 통합"
 ```
+
+승인은 요청 당시 확인한 feature 내용에만 적용된다. 승인 이후 feature 커밋이나 병합 대상이 바뀌면 새 상태를 다시 보고하고 승인을 받는다.
 
 Feature branch에서 테스트가 성공했더라도 merge 후 `develop`에서 회귀 테스트를 다시 실행한다.
 
@@ -196,13 +213,17 @@ Runtime DB, 임시 파일, Secret, 테스트 실행 상태 등이 소스 저장�
 
 ## 7. main / Remote
 
-사용자의 별도 요청이 없다면 작업 완료 범위는 다음까지다.
+병합 승인을 받기 전 작업 완료 범위는 다음까지다.
 
 ```text
 feature/*
 ↓
-local develop merge
+검증 완료 및 커밋
+↓
+사용자 승인 대기
 ```
+
+명시적 승인을 받은 뒤에만 로컬 `develop` 병합과 병합 후 검증을 수행한다.
 
 기본적으로 수행하지 않는다.
 
@@ -225,9 +246,9 @@ history rewrite
 완료 전에 확인한다.
 
 ```text
-관련 테스트 PASS
-develop merge 완료
-develop 회귀 테스트 PASS
+관련 테스트 결과 정확히 기록
+명시적 승인 전에는 feature 브랜치 보존 및 병합 대기
+승인받아 병합한 경우에만 develop 회귀 테스트 PASS
 의도하지 않은 파일/Secret 없음
 main 변경 없음
 working tree 상태 확인
@@ -243,6 +264,9 @@ Starting develop HEAD
 주요 한글 commits
 
 develop merge commit
+
+병합 승인 상태
+- 승인 대기 / 승인 후 병합 완료
 
 실행한 테스트
 - PASS
@@ -278,7 +302,9 @@ Commit hash와 테스트 결과는 실제 Git 상태에서 확인한 값만 보�
 
 커밋 메시지는 한글로 작성한다.
 
-검증 후 --no-ff로 develop에 병합한다.
+검증 결과를 보고한 뒤 사용자의 명시적 승인을 받는다.
+
+승인된 feature만 --no-ff로 develop에 병합한다.
 
 병합 후 전체 회귀 테스트를 수행한다.
 

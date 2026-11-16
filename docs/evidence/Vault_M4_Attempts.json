@@ -1,0 +1,168 @@
+{
+  "attempts": [
+    {
+      "name": "initial-harness-and-BusyBox",
+      "status": "FAIL",
+      "evidence": {
+        "scope": "Real Apple Virtualization offline guest. No user data. Diagnostic only.",
+        "events": [
+          {
+            "event": "starting",
+            "frameworkState": 0,
+            "time": "2026-11-02T22:45:05Z"
+          },
+          {
+            "event": "running",
+            "frameworkState": 1,
+            "time": "2026-11-02T22:45:05Z"
+          },
+          {
+            "event": "guest",
+            "frameworkState": 1,
+            "line": "NIDUS_READY cgroup2",
+            "time": "2026-11-02T22:45:06Z"
+          },
+          {
+            "event": "ready",
+            "frameworkState": 1,
+            "time": "2026-11-02T22:45:06Z"
+          },
+          {
+            "event": "guest",
+            "frameworkState": 1,
+            "line": "NIDUS_SESSION simple started",
+            "time": "2026-11-02T22:45:06Z"
+          },
+          {
+            "event": "guest",
+            "frameworkState": 1,
+            "line": "NIDUS_RESULT simple 1 1 completed 524288 - Y2hyb290OiBjYW4ndCBjaGFuZ2Ugcm9vdCBkaXJlY3RvcnkgdG8gJy11JzogTm8gc3VjaCBmaWxlIG9yIGRpcmVjdG9yeQo=",
+            "time": "2026-11-02T22:45:06Z"
+          },
+          {
+            "event": "stop_requested",
+            "frameworkState": 1,
+            "reason": "user",
+            "time": "2026-11-02T22:45:06Z"
+          },
+          {
+            "event": "STOP_CONFIRMED",
+            "frameworkState": 0,
+            "time": "2026-11-02T22:45:06Z"
+          }
+        ],
+        "cases": [
+          {
+            "error": "list index out of range"
+          }
+        ],
+        "managerExit": 0,
+        "stderr": ""
+      },
+      "note": "Cleanup true did not imply workload execution; unsupported chroot -u. Corrected before final validation."
+    },
+    {
+      "name": "unsupported-chroot-flag",
+      "status": "FAIL",
+      "cases": [
+        {
+          "name": "simple",
+          "exitCode": 1,
+          "cleanupConfirmed": true,
+          "reason": "completed",
+          "memoryPeakBytes": "524288",
+          "stdout": "",
+          "stderr": "chroot: can't change root directory to '-u': No such file or directory\n"
+        },
+        {
+          "name": "setsid",
+          "exitCode": 1,
+          "cleanupConfirmed": true,
+          "reason": "completed",
+          "memoryPeakBytes": "524288",
+          "stdout": "",
+          "stderr": "chroot: can't change root directory to '-u': No such file or directory\n"
+        },
+        {
+          "name": "double-fork",
+          "exitCode": 1,
+          "cleanupConfirmed": true,
+          "reason": "completed",
+          "memoryPeakBytes": "524288",
+          "stdout": "",
+          "stderr": "chroot: can't change root directory to '-u': No such file or directory\n"
+        },
+        {
+          "name": "infinite",
+          "exitCode": 1,
+          "cleanupConfirmed": true,
+          "reason": "completed",
+          "memoryPeakBytes": "262144",
+          "stdout": "",
+          "stderr": "chroot: can't change root directory to '-u': No such file or directory\n"
+        },
+        {
+          "name": "ignore-term",
+          "exitCode": 1,
+          "cleanupConfirmed": true,
+          "reason": "completed",
+          "memoryPeakBytes": "524288",
+          "stdout": "",
+          "stderr": "chroot: can't change root directory to '-u': No such file or directory\n"
+        },
+        {
+          "name": "background",
+          "exitCode": 1,
+          "cleanupConfirmed": true,
+          "reason": "completed",
+          "memoryPeakBytes": "524288",
+          "stdout": "",
+          "stderr": "chroot: can't change root directory to '-u': No such file or directory\n"
+        },
+        {
+          "name": "state-write",
+          "exitCode": 1,
+          "cleanupConfirmed": true,
+          "reason": "completed",
+          "memoryPeakBytes": "524288",
+          "stdout": "",
+          "stderr": "chroot: can't change root directory to '-u': No such file or directory\n"
+        },
+        {
+          "name": "state-clean",
+          "exitCode": 1,
+          "cleanupConfirmed": true,
+          "reason": "completed",
+          "memoryPeakBytes": "524288",
+          "stdout": "",
+          "stderr": "chroot: can't change root directory to '-u': No such file or directory\n"
+        },
+        {
+          "name": "no-host-network",
+          "exitCode": 1,
+          "cleanupConfirmed": true,
+          "reason": "completed",
+          "memoryPeakBytes": "262144",
+          "stdout": "",
+          "stderr": "chroot: can't change root directory to '-u': No such file or directory\n"
+        }
+      ]
+    },
+    {
+      "name": "socket-path-too-long",
+      "status": "FAIL",
+      "checks": [
+        {
+          "name": "integration",
+          "status": "FAIL",
+          "error": "Error: service startup"
+        }
+      ]
+    },
+    {
+      "name": "native-UI-automation",
+      "status": "NOT_RUN",
+      "reason": "Sky Computer Use native pipe startup failed on two attempts. No user clicks or screenshots verified."
+    }
+  ]
+}

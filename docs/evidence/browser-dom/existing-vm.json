@@ -1,0 +1,312 @@
+{
+  "scope": "Real VM/Chromium; deterministic synthetic broker responses; not live Internet or Provider",
+  "requests": [
+    {
+      "url": "https://example.com/",
+      "method": "GET",
+      "body": ""
+    },
+    {
+      "url": "https://example.com/app.js",
+      "method": "GET",
+      "body": ""
+    },
+    {
+      "url": "https://example.com/favicon.ico",
+      "method": "GET",
+      "body": ""
+    },
+    {
+      "url": "https://example.com/search?q=Mac+mini",
+      "method": "GET",
+      "body": ""
+    },
+    {
+      "url": "https://example.com/favicon.ico",
+      "method": "GET",
+      "body": ""
+    },
+    {
+      "url": "https://example.com/search?q=Mac+mini",
+      "method": "GET",
+      "body": ""
+    },
+    {
+      "url": "https://example.com/favicon.ico",
+      "method": "GET",
+      "body": ""
+    },
+    {
+      "url": "https://example.com/submit",
+      "method": "POST",
+      "body": "message=synthetic"
+    },
+    {
+      "url": "https://example.com/favicon.ico",
+      "method": "GET",
+      "body": ""
+    }
+  ],
+  "approvals": [
+    {
+      "scope": "network-sensitive",
+      "hash": "a70de4a61f50038143d62f4098210a52099e76d08d3b45d2bf146b427eeb2198"
+    },
+    {
+      "scope": "network-sensitive",
+      "hash": "b2c6e8cea886244024cb44f8b81d65163d24e1aeda3ee16e705384d1c098b121"
+    }
+  ],
+  "initial": {
+    "url": "https://example.com/",
+    "title": "Live fixture",
+    "text": "Search now\nChange\nExternal script loaded",
+    "textTruncated": false,
+    "language": "ko-KR",
+    "languages": [
+      "ko-KR",
+      "ko",
+      "en-US",
+      "en",
+      "ja",
+      "zh-CN"
+    ],
+    "frames": [],
+    "challengeVisible": false,
+    "snapshotId": "7811af84-ea9e-448d-8de5-bbe18e91f10a",
+    "sandboxVerified": true,
+    "untrusted": true,
+    "settled": true,
+    "ready": true,
+    "textLength": 40,
+    "elementsOmitted": 0,
+    "textOffset": 0,
+    "nextOffset": null,
+    "elements": [
+      {
+        "tag": "INPUT",
+        "type": "text",
+        "role": "textbox",
+        "name": "Search",
+        "value": "",
+        "editable": false,
+        "disabled": false,
+        "readonly": false,
+        "checked": false,
+        "expanded": null,
+        "required": false,
+        "href": "",
+        "target": "",
+        "formAction": "https://example.com/search",
+        "formMethod": "get",
+        "frameUrl": "https://example.com/",
+        "visible": true,
+        "hit": true,
+        "x": 100,
+        "y": 20,
+        "id": "1"
+      },
+      {
+        "tag": "BUTTON",
+        "type": "submit",
+        "role": "button",
+        "name": "Search now",
+        "value": "",
+        "editable": false,
+        "disabled": false,
+        "readonly": false,
+        "checked": null,
+        "expanded": null,
+        "required": false,
+        "href": "",
+        "target": "",
+        "formAction": "https://example.com/search",
+        "formMethod": "get",
+        "frameUrl": "https://example.com/",
+        "visible": true,
+        "hit": true,
+        "x": 234,
+        "y": 20,
+        "id": "2"
+      },
+      {
+        "tag": "BUTTON",
+        "type": "submit",
+        "role": "button",
+        "name": "Change",
+        "value": "",
+        "editable": false,
+        "disabled": false,
+        "readonly": false,
+        "checked": null,
+        "expanded": null,
+        "required": false,
+        "href": "",
+        "target": "",
+        "formAction": "",
+        "formMethod": "",
+        "frameUrl": "https://example.com/",
+        "visible": true,
+        "hit": true,
+        "x": 39,
+        "y": 60,
+        "id": "3"
+      }
+    ],
+    "retrievedAt": "2026-11-05T17:05:16.454Z",
+    "networkResponses": 3,
+    "networkBlocked": 1,
+    "mode": "interactive-browser"
+  },
+  "frame": {
+    "format": "jpeg",
+    "initialBytes": 5619,
+    "changed": true
+  },
+  "search": {
+    "url": "https://example.com/search?q=Mac+mini",
+    "title": "Results",
+    "text": "Mac mini result\nOpen detail\nSubmit",
+    "textTruncated": false,
+    "language": "ko-KR",
+    "languages": [
+      "ko-KR",
+      "ko",
+      "en-US",
+      "en",
+      "ja",
+      "zh-CN"
+    ],
+    "frames": [],
+    "challengeVisible": false,
+    "snapshotId": "ab9e4f32-84b5-40b0-b525-a3a277aeefe8",
+    "sandboxVerified": true,
+    "untrusted": true,
+    "settled": true,
+    "ready": true,
+    "textLength": 34,
+    "elementsOmitted": 0,
+    "textOffset": 0,
+    "nextOffset": null,
+    "elements": [
+      {
+        "tag": "INPUT",
+        "type": "text",
+        "role": "textbox",
+        "name": "Message",
+        "value": "",
+        "editable": false,
+        "disabled": false,
+        "readonly": false,
+        "checked": false,
+        "expanded": null,
+        "required": false,
+        "href": "",
+        "target": "",
+        "formAction": "https://example.com/submit",
+        "formMethod": "post",
+        "frameUrl": "https://example.com/search?q=Mac+mini",
+        "visible": true,
+        "hit": true,
+        "x": 100,
+        "y": 106,
+        "id": "1"
+      },
+      {
+        "tag": "BUTTON",
+        "type": "submit",
+        "role": "button",
+        "name": "Submit",
+        "value": "",
+        "editable": false,
+        "disabled": false,
+        "readonly": false,
+        "checked": null,
+        "expanded": null,
+        "required": false,
+        "href": "",
+        "target": "",
+        "formAction": "https://example.com/submit",
+        "formMethod": "post",
+        "frameUrl": "https://example.com/search?q=Mac+mini",
+        "visible": true,
+        "hit": true,
+        "x": 221,
+        "y": 106,
+        "id": "2"
+      },
+      {
+        "tag": "A",
+        "type": "",
+        "role": "link",
+        "name": "Open detail",
+        "value": "",
+        "editable": false,
+        "disabled": false,
+        "readonly": false,
+        "checked": null,
+        "expanded": null,
+        "required": false,
+        "href": "/detail",
+        "target": "",
+        "formAction": "",
+        "formMethod": "",
+        "frameUrl": "https://example.com/search?q=Mac+mini",
+        "visible": true,
+        "hit": true,
+        "x": 52,
+        "y": 83,
+        "id": "3"
+      }
+    ],
+    "actionResult": {
+      "operation": "click",
+      "status": "dispatched",
+      "note": "Input dispatched; page observation is not proof of business outcome."
+    },
+    "retrievedAt": "2026-11-05T17:05:19.137Z",
+    "networkResponses": 5,
+    "networkBlocked": 1,
+    "mode": "interactive-browser"
+  },
+  "deniedPost": true,
+  "submitted": {
+    "url": "https://example.com/submit",
+    "title": "Submitted",
+    "text": "Submission received",
+    "textTruncated": false,
+    "language": "ko-KR",
+    "languages": [
+      "ko-KR",
+      "ko",
+      "en-US",
+      "en",
+      "ja",
+      "zh-CN"
+    ],
+    "frames": [],
+    "challengeVisible": false,
+    "snapshotId": "eef278b6-29ae-4b1f-b92a-1e16ed619341",
+    "sandboxVerified": true,
+    "untrusted": true,
+    "settled": true,
+    "ready": true,
+    "textLength": 19,
+    "elementsOmitted": 0,
+    "textOffset": 0,
+    "nextOffset": null,
+    "elements": [],
+    "actionResult": {
+      "operation": "click",
+      "status": "dispatched",
+      "note": "Input dispatched; page observation is not proof of business outcome."
+    },
+    "retrievedAt": "2026-11-05T17:05:21.791Z",
+    "networkResponses": 9,
+    "networkBlocked": 2,
+    "mode": "interactive-browser"
+  },
+  "status": "PASS",
+  "cleanup": "CONFIRMED",
+  "stop": "STOP_CONFIRMED"
+}

@@ -1,0 +1,10 @@
+{
+  "scope": "Real public Python official documentation through browser_open; no Provider",
+  "approvals": [
+    "session"
+  ],
+  "url": "https://www.python.org/doc/",
+  "title": "Our Documentation | Python.org",
+  "status": "PASS",
+  "cleanup": "confirmed"
+}

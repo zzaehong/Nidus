@@ -1,0 +1,185 @@
+{
+  "scope": "Real Linux ARM64 development VM, no network devices or Host mounts",
+  "cases": [
+    {
+      "name": "versions",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 28553216,
+      "stdout": "Python 3.14.10\npip 26.1.2 from /usr/lib/python3.14/site-packages/pip (python 3.14)\nv24.22.1\n11.12.1\ngit version 2.54.0\nGNU bash, version 5.3.9(1)-release (aarch64-alpine-linux-musl)\ncurl 8.23.0 (aarch64-alpine-linux-musl) libcurl/8.23.0 OpenSSL/3.5.9 zlib/1.3.2 brotli/1.2.1 zstd/1.5.7 c-ares/1.34.9 libidn2/2.3.8 libpsl/0.21.5 nghttp2/1.70.0\ngcc (Alpine 15.2.0) 15.2.0\n",
+      "stderr": ""
+    },
+    {
+      "name": "python-json",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 7704576,
+      "stdout": "python-ok\n",
+      "stderr": ""
+    },
+    {
+      "name": "node-json",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 11292672,
+      "stdout": "node-ok\n",
+      "stderr": ""
+    },
+    {
+      "name": "python-test",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 15298560,
+      "stdout": "",
+      "stderr": "test_sum (test_example.Test.test_sum) ... ok\n\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nOK\n"
+    },
+    {
+      "name": "node-test",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 29016064,
+      "stdout": "\u2714 math (2.91175ms)\n\u2139 tests 1\n\u2139 suites 0\n\u2139 pass 1\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 199.642917\n",
+      "stderr": ""
+    },
+    {
+      "name": "git-build",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 8204288,
+      "stdout": "build-ok\n",
+      "stderr": ""
+    },
+    {
+      "name": "cleanup",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 7516160,
+      "stdout": "background\n",
+      "stderr": ""
+    },
+    {
+      "name": "isolation",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 7659520,
+      "stdout": "uid=1000(nidus) gid=1000(nidus)\nclean\n",
+      "stderr": ""
+    },
+    {
+      "name": "chromium-offline-dom",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 188833792,
+      "stdout": "<html><head><title>Nidus synthetic</title></head><body><h1>DOM verified</h1></body></html>\n",
+      "stderr": "Fontconfig error: Cannot load default config file: No such file: (null)\n[13:29:1103/130305.745837:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory\n[13:29:1103/130305.748140:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are \"tcp\" and on UNIX \"unix\")\n[13:29:1103/130305.748391:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory\n[13:29:1103/130305.748444:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory\n[13:29:1103/130305.748469:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory\n[13:29:1103/130305.748488:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are \"tcp\" and on UNIX \"unix\")\n[13:29:1103/130305.748501:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are \"tcp\" and on UNIX \"unix\")\n[13:29:1103/130305.759097:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are \"tcp\" and on UNIX \"unix\")\n[13:29:1103/130305.976200:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are \"tcp\" and on UNIX \"unix\")\n\n(process:13): GLib-GIO-CRITICAL **: 13:03:06.073: g_settings_schema_source_lookup: assertion 'source != NULL' failed\n[13:13:1103/130306.277431:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: \n[13:13:1103/130306.277487:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: \n[13:29:1103/130306.277498:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are \"tcp\" and on UNIX \"unix\")\n[13:29:1103/130306.277508:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are \"tcp\" and on UNIX \"unix\")\n[13:13:1103/130306.277782:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: \n[13:13:1103/130306.294142:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: \n[13:29:1103/130306.294701:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are \"tcp\" and on UNIX \"unix\")\n[13:13:1103/130306.501731:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: \n[13:29:1103/130306.501775:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory\n[13:29:1103/130306.501858:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory\n[13:13:1103/130306.505990:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: \n[13:29:1103/130306.507426:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are \"tcp\" and on UNIX \"unix\")\n[13:13:1103/130306.510095:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: \n[13:13:1103/130306.537712:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.Properties.GetAll: object_path= /org/freedesktop/UPower/devices/DisplayDevice: unknown error type: \n[13:13:1103/130306.539767:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: \n[13:29:1103/130306.540109:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are \"tcp\" and on UNIX \"unix\")\n[13:13:1103/130306.555046:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: \n[13:29:1103/130306.555204:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are \"tcp\" and on UNIX \"unix\")\n[13:13:1103/130306.570256:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: \n"
+    }
+  ],
+  "events": [
+    {
+      "event": "starting",
+      "frameworkState": 0,
+      "time": "2026-11-03T13:02:46Z"
+    },
+    {
+      "event": "running",
+      "frameworkState": 1,
+      "time": "2026-11-03T13:02:46Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_DEVELOPMENT ready",
+      "time": "2026-11-03T13:02:54Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_READY cgroup2",
+      "time": "2026-11-03T13:02:54Z"
+    },
+    {
+      "event": "ready",
+      "frameworkState": 1,
+      "time": "2026-11-03T13:02:54Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 68a90c33-82f0-41d7-bfb1-b41e204cc5ea 0 1 completed 28553216 UHl0aG9uIDMuMTQuMTAKcGlwIDI2LjEuMiBmcm9tIC91c3IvbGliL3B5dGhvbjMuMTQvc2l0ZS1wYWNrYWdlcy9waXAgKHB5dGhvbiAzLjE0KQp2MjQuMjIuMQoxMS4xMi4xCmdpdCB2ZXJzaW9uIDIuNTQuMApHTlUgYmFzaCwgdmVyc2lvbiA1LjMuOSgxKS1yZWxlYXNlIChhYXJjaDY0LWFscGluZS1saW51eC1tdXNsKQpjdXJsIDguMjMuMCAoYWFyY2g2NC1hbHBpbmUtbGludXgtbXVzbCkgbGliY3VybC84LjIzLjAgT3BlblNTTC8zLjUuOSB6bGliLzEuMy4yIGJyb3RsaS8xLjIuMSB6c3RkLzEuNS43IGMtYXJlcy8xLjM0LjkgbGliaWRuMi8yLjMuOCBsaWJwc2wvMC4yMS41IG5naHR0cDIvMS43MC4wCmdjYyAoQWxwaW5lIDE1LjIuMCkgMTUuMi4wCg== -",
+      "time": "2026-11-03T13:03:03Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 4d6351b7-0863-4a70-9853-6a53f1e7f500 0 1 completed 7704576 cHl0aG9uLW9rCg== -",
+      "time": "2026-11-03T13:03:03Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT ff56bb89-9aa4-4f44-99e7-0f7d9de576d7 0 1 completed 11292672 bm9kZS1vawo= -",
+      "time": "2026-11-03T13:03:04Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 1cf083a2-30e8-4394-ae1c-ea5a17077ff7 0 1 completed 15298560 - dGVzdF9zdW0gKHRlc3RfZXhhbXBsZS5UZXN0LnRlc3Rfc3VtKSAuLi4gb2sKCi0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0KUmFuIDEgdGVzdCBpbiAwLjAwMHMKCk9LCg==",
+      "time": "2026-11-03T13:03:04Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 6cd15461-cf17-4384-9e3a-a999a272ae88 0 1 completed 29016064 4pyUIG1hdGggKDIuOTExNzVtcykK4oS5IHRlc3RzIDEK4oS5IHN1aXRlcyAwCuKEuSBwYXNzIDEK4oS5IGZhaWwgMArihLkgY2FuY2VsbGVkIDAK4oS5IHNraXBwZWQgMArihLkgdG9kbyAwCuKEuSBkdXJhdGlvbl9tcyAxOTkuNjQyOTE3Cg== -",
+      "time": "2026-11-03T13:03:05Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT b0e5a86c-0947-4a8a-a150-67d862e14506 0 1 completed 8204288 YnVpbGQtb2sK -",
+      "time": "2026-11-03T13:03:05Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT fca58c8a-7319-4b91-84ad-0f88c5984d01 0 1 completed 7516160 YmFja2dyb3VuZAo= -",
+      "time": "2026-11-03T13:03:05Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT eb3e5878-47c0-4f9a-8699-6717459e8995 0 1 completed 7659520 dWlkPTEwMDAobmlkdXMpIGdpZD0xMDAwKG5pZHVzKQpjbGVhbgo= -",
+      "time": "2026-11-03T13:03:05Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 0cadfb48-1380-49fb-96e0-f17c45f3246d 0 1 completed 188833792 PGh0bWw+PGhlYWQ+PHRpdGxlPk5pZHVzIHN5bnRoZXRpYzwvdGl0bGU+PC9oZWFkPjxib2R5PjxoMT5ET00gdmVyaWZpZWQ8L2gxPjwvYm9keT48L2h0bWw+Cg== Rm9udGNvbmZpZyBlcnJvcjogQ2Fubm90IGxvYWQgZGVmYXVsdCBjb25maWcgZmlsZTogTm8gc3VjaCBmaWxlOiAobnVsbCkKWzEzOjI5OjExMDMvMTMwMzA1Ljc0NTgzNzpFUlJPUjpkYnVzL2J1cy5jYzo0MDVdIEZhaWxlZCB0byBjb25uZWN0IHRvIHRoZSBidXM6IEZhaWxlZCB0byBjb25uZWN0IHRvIHNvY2tldCAvcnVuL2RidXMvc3lzdGVtX2J1c19zb2NrZXQ6IE5vIHN1Y2ggZmlsZSBvciBkaXJlY3RvcnkKWzEzOjI5OjExMDMvMTMwMzA1Ljc0ODE0MDpFUlJPUjpkYnVzL2J1cy5jYzo0MDVdIEZhaWxlZCB0byBjb25uZWN0IHRvIHRoZSBidXM6IENvdWxkIG5vdCBwYXJzZSBzZXJ2ZXIgYWRkcmVzczogVW5rbm93biBhZGRyZXNzIHR5cGUgKGV4YW1wbGVzIG9mIHZhbGlkIHR5cGVzIGFyZSAidGNwIiBhbmQgb24gVU5JWCAidW5peCIpClsxMzoyOToxMTAzLzEzMDMwNS43NDgzOTE6RVJST1I6ZGJ1cy9idXMuY2M6NDA1XSBGYWlsZWQgdG8gY29ubmVjdCB0byB0aGUgYnVzOiBGYWlsZWQgdG8gY29ubmVjdCB0byBzb2NrZXQgL3J1bi9kYnVzL3N5c3RlbV9idXNfc29ja2V0OiBObyBzdWNoIGZpbGUgb3IgZGlyZWN0b3J5ClsxMzoyOToxMTAzLzEzMDMwNS43NDg0NDQ6RVJST1I6ZGJ1cy9idXMuY2M6NDA1XSBGYWlsZWQgdG8gY29ubmVjdCB0byB0aGUgYnVzOiBGYWlsZWQgdG8gY29ubmVjdCB0byBzb2NrZXQgL3J1bi9kYnVzL3N5c3RlbV9idXNfc29ja2V0OiBObyBzdWNoIGZpbGUgb3IgZGlyZWN0b3J5ClsxMzoyOToxMTAzLzEzMDMwNS43NDg0Njk6RVJST1I6ZGJ1cy9idXMuY2M6NDA1XSBGYWlsZWQgdG8gY29ubmVjdCB0byB0aGUgYnVzOiBGYWlsZWQgdG8gY29ubmVjdCB0byBzb2NrZXQgL3J1bi9kYnVzL3N5c3RlbV9idXNfc29ja2V0OiBObyBzdWNoIGZpbGUgb3IgZGlyZWN0b3J5ClsxMzoyOToxMTAzLzEzMDMwNS43NDg0ODg6RVJST1I6ZGJ1cy9idXMuY2M6NDA1XSBGYWlsZWQgdG8gY29ubmVjdCB0byB0aGUgYnVzOiBDb3VsZCBub3QgcGFyc2Ugc2VydmVyIGFkZHJlc3M6IFVua25vd24gYWRkcmVzcyB0eXBlIChleGFtcGxlcyBvZiB2YWxpZCB0eXBlcyBhcmUgInRjcCIgYW5kIG9uIFVOSVggInVuaXgiKQpbMTM6Mjk6MTEwMy8xMzAzMDUuNzQ4NTAxOkVSUk9SOmRidXMvYnVzLmNjOjQwNV0gRmFpbGVkIHRvIGNvbm5lY3QgdG8gdGhlIGJ1czogQ291bGQgbm90IHBhcnNlIHNlcnZlciBhZGRyZXNzOiBVbmtub3duIGFkZHJlc3MgdHlwZSAoZXhhbXBsZXMgb2YgdmFsaWQgdHlwZXMgYXJlICJ0Y3AiIGFuZCBvbiBVTklYICJ1bml4IikKWzEzOjI5OjExMDMvMTMwMzA1Ljc1OTA5NzpFUlJPUjpkYnVzL2J1cy5jYzo0MDVdIEZhaWxlZCB0byBjb25uZWN0IHRvIHRoZSBidXM6IENvdWxkIG5vdCBwYXJzZSBzZXJ2ZXIgYWRkcmVzczogVW5rbm93biBhZGRyZXNzIHR5cGUgKGV4YW1wbGVzIG9mIHZhbGlkIHR5cGVzIGFyZSAidGNwIiBhbmQgb24gVU5JWCAidW5peCIpClsxMzoyOToxMTAzLzEzMDMwNS45NzYyMDA6RVJST1I6ZGJ1cy9idXMuY2M6NDA1XSBGYWlsZWQgdG8gY29ubmVjdCB0byB0aGUgYnVzOiBDb3VsZCBub3QgcGFyc2Ugc2VydmVyIGFkZHJlc3M6IFVua25vd24gYWRkcmVzcyB0eXBlIChleGFtcGxlcyBvZiB2YWxpZCB0eXBlcyBhcmUgInRjcCIgYW5kIG9uIFVOSVggInVuaXgiKQoKKHByb2Nlc3M6MTMpOiBHTGliLUdJTy1DUklUSUNBTCAqKjogMTM6MDM6MDYuMDczOiBnX3NldHRpbmdzX3NjaGVtYV9zb3VyY2VfbG9va3VwOiBhc3NlcnRpb24gJ3NvdXJjZSAhPSBOVUxMJyBmYWlsZWQKWzEzOjEzOjExMDMvMTMwMzA2LjI3NzQzMTpFUlJPUjpkYnVzL29iamVjdF9wcm94eS5jYzo1NzJdIEZhaWxlZCB0byBjYWxsIG1ldGhvZDogb3JnLmZyZWVkZXNrdG9wLkRCdXMuTmFtZUhhc093bmVyOiBvYmplY3RfcGF0aD0gL29yZy9mcmVlZGVza3RvcC9EQnVzOiB1bmtub3duIGVycm9yIHR5cGU6IApbMTM6MTM6MTEwMy8xMzAzMDYuMjc3NDg3OkVSUk9SOmRidXMvb2JqZWN0X3Byb3h5LmNjOjU3Ml0gRmFpbGVkIHRvIGNhbGwgbWV0aG9kOiBvcmcuZnJlZWRlc2t0b3AuREJ1cy5OYW1lSGFzT3duZXI6IG9iamVjdF9wYXRoPSAvb3JnL2ZyZWVkZXNrdG9wL0RCdXM6IHVua25vd24gZXJyb3IgdHlwZTogClsxMzoyOToxMTAzLzEzMDMwNi4yNzc0OTg6RVJST1I6ZGJ1cy9idXMuY2M6NDA1XSBGYWlsZWQgdG8gY29ubmVjdCB0byB0aGUgYnVzOiBDb3VsZCBub3QgcGFyc2Ugc2VydmVyIGFkZHJlc3M6IFVua25vd24gYWRkcmVzcyB0eXBlIChleGFtcGxlcyBvZiB2YWxpZCB0eXBlcyBhcmUgInRjcCIgYW5kIG9uIFVOSVggInVuaXgiKQpbMTM6Mjk6MTEwMy8xMzAzMDYuMjc3NTA4OkVSUk9SOmRidXMvYnVzLmNjOjQwNV0gRmFpbGVkIHRvIGNvbm5lY3QgdG8gdGhlIGJ1czogQ291bGQgbm90IHBhcnNlIHNlcnZlciBhZGRyZXNzOiBVbmtub3duIGFkZHJlc3MgdHlwZSAoZXhhbXBsZXMgb2YgdmFsaWQgdHlwZXMgYXJlICJ0Y3AiIGFuZCBvbiBVTklYICJ1bml4IikKWzEzOjEzOjExMDMvMTMwMzA2LjI3Nzc4MjpFUlJPUjpkYnVzL29iamVjdF9wcm94eS5jYzo1NzJdIEZhaWxlZCB0byBjYWxsIG1ldGhvZDogb3JnLmZyZWVkZXNrdG9wLkRCdXMuTmFtZUhhc093bmVyOiBvYmplY3RfcGF0aD0gL29yZy9mcmVlZGVza3RvcC9EQnVzOiB1bmtub3duIGVycm9yIHR5cGU6IApbMTM6MTM6MTEwMy8xMzAzMDYuMjk0MTQyOkVSUk9SOmRidXMvb2JqZWN0X3Byb3h5LmNjOjU3Ml0gRmFpbGVkIHRvIGNhbGwgbWV0aG9kOiBvcmcuZnJlZWRlc2t0b3AuREJ1cy5OYW1lSGFzT3duZXI6IG9iamVjdF9wYXRoPSAvb3JnL2ZyZWVkZXNrdG9wL0RCdXM6IHVua25vd24gZXJyb3IgdHlwZTogClsxMzoyOToxMTAzLzEzMDMwNi4yOTQ3MDE6RVJST1I6ZGJ1cy9idXMuY2M6NDA1XSBGYWlsZWQgdG8gY29ubmVjdCB0byB0aGUgYnVzOiBDb3VsZCBub3QgcGFyc2Ugc2VydmVyIGFkZHJlc3M6IFVua25vd24gYWRkcmVzcyB0eXBlIChleGFtcGxlcyBvZiB2YWxpZCB0eXBlcyBhcmUgInRjcCIgYW5kIG9uIFVOSVggInVuaXgiKQpbMTM6MTM6MTEwMy8xMzAzMDYuNTAxNzMxOkVSUk9SOmRidXMvb2JqZWN0X3Byb3h5LmNjOjU3Ml0gRmFpbGVkIHRvIGNhbGwgbWV0aG9kOiBvcmcuZnJlZWRlc2t0b3AuREJ1cy5OYW1lSGFzT3duZXI6IG9iamVjdF9wYXRoPSAvb3JnL2ZyZWVkZXNrdG9wL0RCdXM6IHVua25vd24gZXJyb3IgdHlwZTogClsxMzoyOToxMTAzLzEzMDMwNi41MDE3NzU6RVJST1I6ZGJ1cy9idXMuY2M6NDA1XSBGYWlsZWQgdG8gY29ubmVjdCB0byB0aGUgYnVzOiBGYWlsZWQgdG8gY29ubmVjdCB0byBzb2NrZXQgL3J1bi9kYnVzL3N5c3RlbV9idXNfc29ja2V0OiBObyBzdWNoIGZpbGUgb3IgZGlyZWN0b3J5ClsxMzoyOToxMTAzLzEzMDMwNi41MDE4NTg6RVJST1I6ZGJ1cy9idXMuY2M6NDA1XSBGYWlsZWQgdG8gY29ubmVjdCB0byB0aGUgYnVzOiBGYWlsZWQgdG8gY29ubmVjdCB0byBzb2NrZXQgL3J1bi9kYnVzL3N5c3RlbV9idXNfc29ja2V0OiBObyBzdWNoIGZpbGUgb3IgZGlyZWN0b3J5ClsxMzoxMzoxMTAzLzEzMDMwNi41MDU5OTA6RVJST1I6ZGJ1cy9vYmplY3RfcHJveHkuY2M6NTcyXSBGYWlsZWQgdG8gY2FsbCBtZXRob2Q6IG9yZy5mcmVlZGVza3RvcC5EQnVzLk5hbWVIYXNPd25lcjogb2JqZWN0X3BhdGg9IC9vcmcvZnJlZWRlc2t0b3AvREJ1czogdW5rbm93biBlcnJvciB0eXBlOiAKWzEzOjI5OjExMDMvMTMwMzA2LjUwNzQyNjpFUlJPUjpkYnVzL2J1cy5jYzo0MDVdIEZhaWxlZCB0byBjb25uZWN0IHRvIHRoZSBidXM6IENvdWxkIG5vdCBwYXJzZSBzZXJ2ZXIgYWRkcmVzczogVW5rbm93biBhZGRyZXNzIHR5cGUgKGV4YW1wbGVzIG9mIHZhbGlkIHR5cGVzIGFyZSAidGNwIiBhbmQgb24gVU5JWCAidW5peCIpClsxMzoxMzoxMTAzLzEzMDMwNi41MTAwOTU6RVJST1I6ZGJ1cy9vYmplY3RfcHJveHkuY2M6NTcyXSBGYWlsZWQgdG8gY2FsbCBtZXRob2Q6IG9yZy5mcmVlZGVza3RvcC5EQnVzLk5hbWVIYXNPd25lcjogb2JqZWN0X3BhdGg9IC9vcmcvZnJlZWRlc2t0b3AvREJ1czogdW5rbm93biBlcnJvciB0eXBlOiAKWzEzOjEzOjExMDMvMTMwMzA2LjUzNzcxMjpFUlJPUjpkYnVzL29iamVjdF9wcm94eS5jYzo1NzJdIEZhaWxlZCB0byBjYWxsIG1ldGhvZDogb3JnLmZyZWVkZXNrdG9wLkRCdXMuUHJvcGVydGllcy5HZXRBbGw6IG9iamVjdF9wYXRoPSAvb3JnL2ZyZWVkZXNrdG9wL1VQb3dlci9kZXZpY2VzL0Rpc3BsYXlEZXZpY2U6IHVua25vd24gZXJyb3IgdHlwZTogClsxMzoxMzoxMTAzLzEzMDMwNi41Mzk3Njc6RVJST1I6ZGJ1cy9vYmplY3RfcHJveHkuY2M6NTcyXSBGYWlsZWQgdG8gY2FsbCBtZXRob2Q6IG9yZy5mcmVlZGVza3RvcC5EQnVzLk5hbWVIYXNPd25lcjogb2JqZWN0X3BhdGg9IC9vcmcvZnJlZWRlc2t0b3AvREJ1czogdW5rbm93biBlcnJvciB0eXBlOiAKWzEzOjI5OjExMDMvMTMwMzA2LjU0MDEwOTpFUlJPUjpkYnVzL2J1cy5jYzo0MDVdIEZhaWxlZCB0byBjb25uZWN0IHRvIHRoZSBidXM6IENvdWxkIG5vdCBwYXJzZSBzZXJ2ZXIgYWRkcmVzczogVW5rbm93biBhZGRyZXNzIHR5cGUgKGV4YW1wbGVzIG9mIHZhbGlkIHR5cGVzIGFyZSAidGNwIiBhbmQgb24gVU5JWCAidW5peCIpClsxMzoxMzoxMTAzLzEzMDMwNi41NTUwNDY6RVJST1I6ZGJ1cy9vYmplY3RfcHJveHkuY2M6NTcyXSBGYWlsZWQgdG8gY2FsbCBtZXRob2Q6IG9yZy5mcmVlZGVza3RvcC5EQnVzLk5hbWVIYXNPd25lcjogb2JqZWN0X3BhdGg9IC9vcmcvZnJlZWRlc2t0b3AvREJ1czogdW5rbm93biBlcnJvciB0eXBlOiAKWzEzOjI5OjExMDMvMTMwMzA2LjU1NTIwNDpFUlJPUjpkYnVzL2J1cy5jYzo0MDVdIEZhaWxlZCB0byBjb25uZWN0IHRvIHRoZSBidXM6IENvdWxkIG5vdCBwYXJzZSBzZXJ2ZXIgYWRkcmVzczogVW5rbm93biBhZGRyZXNzIHR5cGUgKGV4YW1wbGVzIG9mIHZhbGlkIHR5cGVzIGFyZSAidGNwIiBhbmQgb24gVU5JWCAidW5peCIpClsxMzoxMzoxMTAzLzEzMDMwNi41NzAyNTY6RVJST1I6ZGJ1cy9vYmplY3RfcHJveHkuY2M6NTcyXSBGYWlsZWQgdG8gY2FsbCBtZXRob2Q6IG9yZy5mcmVlZGVza3RvcC5EQnVzLk5hbWVIYXNPd25lcjogb2JqZWN0X3BhdGg9IC9vcmcvZnJlZWRlc2t0b3AvREJ1czogdW5rbm93biBlcnJvciB0eXBlOiAK",
+      "time": "2026-11-03T13:03:07Z"
+    },
+    {
+      "event": "stop_requested",
+      "frameworkState": 1,
+      "reason": "user",
+      "time": "2026-11-03T13:03:07Z"
+    },
+    {
+      "event": "STOP_CONFIRMED",
+      "frameworkState": 0,
+      "time": "2026-11-03T13:03:07Z"
+    }
+  ],
+  "managerExit": 0,
+  "assets": {
+    "Image": "256d5fff4bb892edcb9218c1e6353e388bc3646e65f76c2bc9d958b635d1b00e",
+    "initrd": "c27873d9f36493f4750b0e3771e1a38f6a2bd82122d064de699a7bb1023f1abb"
+  }
+}

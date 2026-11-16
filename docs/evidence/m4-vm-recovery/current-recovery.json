@@ -1,0 +1,12 @@
+{
+  "previousState": "STOP_UNCONFIRMED",
+  "previousActiveSession": null,
+  "recovered": true,
+  "archivePath": "USER_VAULT_REGISTRY/vm-runtime-archive-cd50b80c-357c-479a-b473-48a4e74eea8f",
+  "startState": "RUNNING",
+  "stopState": "STOP_CONFIRMED",
+  "shutdown": {
+    "shutdownConfirmed": true
+  },
+  "status": "PASS"
+}

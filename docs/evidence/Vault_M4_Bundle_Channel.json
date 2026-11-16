@@ -1,0 +1,26 @@
+{
+  "scope": "Actual bundle Node/helper/images and Host NDJSON. Programmatic fixture decisions, not human UI approval. No Provider call.",
+  "records": [
+    {
+      "name": "denied-before-VM-boot",
+      "status": "PASS"
+    },
+    {
+      "name": "bundle-NDJSON-approval-real-Shell",
+      "status": "PASS",
+      "result": {
+        "callId": "59b5a0e5-eb7f-4fec-90fe-28ea3379d81b",
+        "status": "succeeded",
+        "code": "ok",
+        "content": {
+          "text": "{\"sessionId\":\"0c4a96da-1431-45ba-bf2f-5d6a84413413\",\"vmInstanceId\":\"fafd6e7a-5c4a-4c52-afcc-be9da63a36fd\",\"generation\":1,\"exitCode\":0,\"cleanupConfirmed\":true,\"reason\":\"completed\",\"memoryPeakBytes\":761856,\"stdout\":\"app-bundle\\nuid=1000(nidus) gid=1000(nidus) groups=1000(nidus)\\n\",\"stderr\":\"\"}"
+        },
+        "untrusted": true
+      }
+    },
+    {
+      "name": "bundle-manager-stop",
+      "status": "PASS"
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "scope": "Real offline Apple VM + separate Node manager + OS clients. Synthetic approval fixtures, NOT actual user approval. No paid API.",
+  "checks": [
+    {
+      "name": "boot-and-reuse",
+      "status": "PASS",
+      "instance": "306efd80-3d4d-4204-81a8-44b09e3419d9",
+      "generation": 1
+    },
+    {
+      "name": "two-OS-clients-shared-VM-FIFO",
+      "status": "PASS",
+      "results": [
+        {
+          "sessionId": "35a91134-3c4b-475f-89b7-9459213290ba",
+          "vmInstanceId": "306efd80-3d4d-4204-81a8-44b09e3419d9",
+          "generation": 1,
+          "exitCode": 0,
+          "cleanupConfirmed": true,
+          "reason": "completed",
+          "memoryPeakBytes": 8802304,
+          "stdout": "first\n",
+          "stderr": ""
+        },
+        {
+          "sessionId": "6268c582-2934-432e-bb9c-69304b9d6868",
+          "vmInstanceId": "306efd80-3d4d-4204-81a8-44b09e3419d9",
+          "generation": 1,
+          "exitCode": 0,
+          "cleanupConfirmed": true,
+          "reason": "completed",
+          "memoryPeakBytes": 7577600,
+          "stdout": "second\n",
+          "stderr": ""
+        }
+      ]
+    },
+    {
+      "name": "integration",
+      "status": "FAIL",
+      "error": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n+ actual - expected\n\n+ 'completed'\n- 'cancelled'\n"
+    }
+  ],
+  "startedAt": "2026-11-03T13:07:29.279Z",
+  "retainedTemporaryJournal": "/private/tmp/nidus-m4-live-KeLW21"
+}

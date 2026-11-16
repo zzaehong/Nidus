@@ -1,0 +1,314 @@
+{
+  "scope": "Real Apple VM, public HTTPS and synthetic malicious HTML; programmatic approvals only",
+  "events": [
+    {
+      "event": "starting",
+      "frameworkState": 0,
+      "time": "2026-11-04T05:42:49Z"
+    },
+    {
+      "event": "running",
+      "frameworkState": 1,
+      "time": "2026-11-04T05:42:49Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_DEVELOPMENT ready",
+      "time": "2026-11-04T05:42:52Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_READY cgroup2",
+      "time": "2026-11-04T05:42:52Z"
+    },
+    {
+      "event": "ready",
+      "frameworkState": 1,
+      "time": "2026-11-04T05:42:52Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_WORKSPACE_ACK 2862048a-378d-4f64-8860-c576dec3cb0d begin",
+      "time": "2026-11-04T05:42:54Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_WORKSPACE_ACK 2862048a-378d-4f64-8860-c576dec3cb0d chunk",
+      "time": "2026-11-04T05:42:54Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_WORKSPACE_ACK 2862048a-378d-4f64-8860-c576dec3cb0d seal",
+      "time": "2026-11-04T05:42:54Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 1dc7229e-a075-428b-9e3c-2aa11f8465a6 0 1 completed 250937344 eyJ0aXRsZSI6IkV4YW1wbGUgRG9tYWluIiwidGV4dCI6IlRoaXMgZG9tYWluIGlzIGZvciB1c2UgaW4gZG9jdW1lbnRhdGlvbiBleGFtcGxlcyB3aXRob3V0IG5lZWRpbmcgcGVybWlzc2lvbi4gVGhpcyBpcyBub3QgYSBzZXJ2aWNlOyBhdm9pZCByZWx5aW5nIG9uIGl0IGZvciB0ZXN0aW5nIGFuZCBtb25pdG9yaW5nIHB1cnBvc2VzLiIsImxpbmtzIjpbXSwic2FuZGJveFZlcmlmaWVkIjp0cnVlfQo= -",
+      "time": "2026-11-04T05:42:55Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_WORKSPACE_ACK 06ce948d-98ca-4f1e-bc54-6580c9f33df4 begin",
+      "time": "2026-11-04T05:42:55Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_WORKSPACE_ACK 06ce948d-98ca-4f1e-bc54-6580c9f33df4 chunk",
+      "time": "2026-11-04T05:42:55Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_WORKSPACE_ACK 06ce948d-98ca-4f1e-bc54-6580c9f33df4 seal",
+      "time": "2026-11-04T05:42:55Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT cba6b01d-de96-4db5-bfb6-c15299198326 0 1 completed 251531264 eyJ0aXRsZSI6IlN5bnRoZXRpYyIsInRleHQiOiJTYWZlIHZpc2libGUgdGV4dFxucHVibGljIGxpbmtkZW5pZWQgbGlua2Rvd25sb2FkIiwibGlua3MiOlt7InRleHQiOiJwdWJsaWMgbGluayIsInVybCI6Imh0dHBzOi8vZXhhbXBsZS5vcmcvIn0seyJ0ZXh0IjoiZGVuaWVkIGxpbmsiLCJ1cmwiOiJmaWxlOi8vL2V0Yy9wYXNzd2QifSx7InRleHQiOiJkb3dubG9hZCIsInVybCI6ImRhdGE6dGV4dC9wbGFpbixzZWNyZXQifV0sInNhbmRib3hWZXJpZmllZCI6dHJ1ZX0K -",
+      "time": "2026-11-04T05:42:55Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 1518ba0f-5d21-485d-ad4e-135d1e7b2186 0 1 completed 7860224 aXNvbGF0ZWQ= -",
+      "time": "2026-11-04T05:42:55Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 62b7f059-a6ec-4a5e-9429-4a74b20b718d 0 1 completed 7806976 c2hlbGwtb2ZmbGluZQo= dW5zaGFyZTogdW5zaGFyZSgweDEwMDAwMDAwKTogTm8gc3BhY2UgbGVmdCBvbiBkZXZpY2UK",
+      "time": "2026-11-04T05:42:56Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_WORKSPACE_ACK 142b2db8-6bd2-4f00-a84a-d413c6e962ca begin",
+      "time": "2026-11-04T05:42:56Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_WORKSPACE_ACK 142b2db8-6bd2-4f00-a84a-d413c6e962ca chunk",
+      "time": "2026-11-04T05:42:56Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_WORKSPACE_ACK 142b2db8-6bd2-4f00-a84a-d413c6e962ca chunk",
+      "time": "2026-11-04T05:42:56Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_WORKSPACE_ACK 142b2db8-6bd2-4f00-a84a-d413c6e962ca chunk",
+      "time": "2026-11-04T05:42:56Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_WORKSPACE_ACK 142b2db8-6bd2-4f00-a84a-d413c6e962ca chunk",
+      "time": "2026-11-04T05:42:56Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_WORKSPACE_ACK 142b2db8-6bd2-4f00-a84a-d413c6e962ca chunk",
+      "time": "2026-11-04T05:42:56Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_WORKSPACE_ACK 142b2db8-6bd2-4f00-a84a-d413c6e962ca chunk",
+      "time": "2026-11-04T05:42:56Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_WORKSPACE_ACK 142b2db8-6bd2-4f00-a84a-d413c6e962ca chunk",
+      "time": "2026-11-04T05:42:56Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_WORKSPACE_ACK 142b2db8-6bd2-4f00-a84a-d413c6e962ca chunk",
+      "time": "2026-11-04T05:42:56Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_WORKSPACE_ACK 142b2db8-6bd2-4f00-a84a-d413c6e962ca chunk",
+      "time": "2026-11-04T05:42:56Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_WORKSPACE_ACK 142b2db8-6bd2-4f00-a84a-d413c6e962ca chunk",
+      "time": "2026-11-04T05:42:56Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_WORKSPACE_ACK 142b2db8-6bd2-4f00-a84a-d413c6e962ca chunk",
+      "time": "2026-11-04T05:42:56Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_WORKSPACE_ACK 142b2db8-6bd2-4f00-a84a-d413c6e962ca chunk",
+      "time": "2026-11-04T05:42:56Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_WORKSPACE_ACK 142b2db8-6bd2-4f00-a84a-d413c6e962ca seal",
+      "time": "2026-11-04T05:42:56Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 4774ef7e-0465-4559-b05c-2c0d5ace9760 0 1 completed 251138048 eyJ0aXRsZSI6IkFwcGxlIFZpcnR1YWxpemF0aW9uIGZyYW1ld29yayAtIFNlYXJjaCIsInRleHQiOiJhcHBsZS5jb21cbmh0dHBzOi8vd3d3LmFwcGxlLmNvbVxuQXBwbGVcblxuRGlzY292ZXIgdGhlIGlubm92YXRpdmUgd29ybGQgb2YgQXBwbGUgYW5kIHNob3AgZXZlcnl0aGluZyBpUGhvbmUsIGlQYWQsIEFwcGxlIFdhdGNoLCBNYWMsIGFuZCBBcHBsZSBUViwgcGx1cyBleHBsb3JlIOKAplxuXG7CoFxuYXBwbGUuY29tXG5odHRwczovL3d3dy5hcHBsZS5jb20g4oC6IHN0b3JlXG5BcHBsZSBTdG9yZSBPbmxpbmVcblxuU2hvcCB0aGUgbGF0ZXN0IEFwcGxlIHByb2R1Y3RzLCBhY2Nlc3NvcmllcyBhbmQgb2ZmZXJzLiBDb21wYXJlIG1vZGVscywgZ2V0IGV4cGVydCBzaG9wcGluZyBoZWxwLCBwbHVzIGZsZXhpYmxlIHBheW1lbnQgYW5kIOKAplxuXG5hcHBsZS5jb21cbmh0dHBzOi8vYWNjb3VudC5hcHBsZS5jb20g4oC6IHNpZ24taW5cbmFjY291bnQuYXBwbGUuY29tXG5cbmFjY291bnQuYXBwbGUuY29tXG5cbmFwcGxlLmNvbVxuaHR0cHM6Ly9hc3cuYXBwbGUuY29tIOKAuiBob21lXG5TaWduIEluIC0gQXBwbGVcblxuU2lnbiBpbiB0byB5b3VyIEFwcGxlIGFjY291bnQgdG8gYWNjZXNzIGFuZCBtYW5hZ2UgeW91ciBBcHBsZSBzZXJ2aWNlcyBzZWN1cmVseSBvbiB0aGlzIHBsYXRmb3JtLlxuXG5hcHBsZS5jb21cbmh0dHBzOi8vYWNjb3VudC5hcHBsZS5jb21cbk1hbmFnZSB5b3VyIEFwcGxlIEFjY291bnRcblxuWW91ciBBcHBsZSBBY2NvdW50IGlzIHRoZSBhY2NvdW50IHlvdSB1c2UgZm9yIGFsbCBBcHBsZSBzZXJ2aWNlcy5cblxuYXBwbGUuY29tXG5odHRwczovL3N1cHBvcnQuYXBwbGUuY29tXG5PZmZpY2lhbCBBcHBsZSBTdXBwb3J0XG5cbkhhbmRsZWQgd2l0aCBBcHBsZUNhcmUgRXZlcnkgQXBwbGVDYXJlIHBsYW4gcHJvdmlkZXMgb25lLXN0b3Agc2VydmljZSBmb3IgeW91ciBBcHBsZSBwcm9kdWN0cywgd2l0aCBxdWljayBhbmQgZWFzeSByZXBhaXJzIGZvciDigKZcblxud2lraXBlZGlhLm9yZ1xuaHR0cHM6Ly9lbi53aWtpcGVkaWEub3JnIOKAuiB3aWtpIOKAuiBBcHBsZV9JbmMuXG5BcHBsZSBJbmMuIC0gV2lraXBlZGlhXG5cblRoZSBjb21wYW55IGFsc28gcHJvdmlkZXMgZGlnaXRhbCBjb250ZW50IHNlcnZpY2VzLCBpbmNsdWRpbmcgQXBwbGUgQm9va3MsIEFwcGxlIEZpdG5lc3MrLCBBcHBsZSBNdXNpYywgQXBwbGUgTmV3cywgQXBwbGUgVFYsIOKAplxuXG5QYWdpbmF0aW9uXG4xXG4yXG4zXG40XG5OZXh0IiwibGlua3MiOlt7InRleHQiOiJBcHBsZSIsInVybCI6Imh0dHBzOi8vd3d3LmJpbmcuY29tL2NrL2E/ISYmcD1hNzNhOWUxYWJmZmFmYmY1MzNhMGQ1Y2MwNTFiZjU2YzEyOTVlOGYyYWRiZDEzOWYyMjM3NmFhZGY5MjAzMjI0Sm1sdGRITTlNVGM1TXpZMk5EQXdNQSZwdG49MyZ2ZXI9MiZoc2g9NCZmY2xpZD0xNGZmZmZiMi1iOWI2LTYzMzEtMzg4OS1lN2I1Yjg3NzYyN2EmdT1hMWFIUjBjSE02THk5M2QzY3VZWEJ3YkdVdVkyOXRMdyZudGI9MSJ9LHsidGV4dCI6IkFwcGxlIFN0b3JlIE9ubGluZSIsInVybCI6Imh0dHBzOi8vd3d3LmJpbmcuY29tL2NrL2E/ISYmcD0zZTQxZGZiNjMxYWQ2OGM2YWI5NDJhZTNlMGI4OWNmMGI3MjYyMGI1MWFiYzU5NTA0ZTk2Yzk4ZjEwNGNmNzg2Sm1sdGRITTlNVGM1TXpZMk5EQXdNQSZwdG49MyZ2ZXI9MiZoc2g9NCZmY2xpZD0xNGZmZmZiMi1iOWI2LTYzMzEtMzg4OS1lN2I1Yjg3NzYyN2EmdT1hMWFIUjBjSE02THk5M2QzY3VZWEJ3YkdVdVkyOXRMM04wYjNKbCZudGI9MSJ9LHsidGV4dCI6ImFjY291bnQuYXBwbGUuY29tIiwidXJsIjoiaHR0cHM6Ly93d3cuYmluZy5jb20vY2svYT8hJiZwPWVjYmY1MzdiYzA5ZDUzMDQ3YzM0Yzg0NjMyYTRiZGU2NTZmNTg4NTY0ZGJjMTQxZDgwZjliNWI2ODI1NTdmOTlKbWx0ZEhNOU1UYzVNelkyTkRBd01BJnB0bj0zJnZlcj0yJmhzaD00JmZjbGlkPTE0ZmZmZmIyLWI5YjYtNjMzMS0zODg5LWU3YjViODc3NjI3YSZ1PWExYUhSMGNITTZMeTloWTJOdmRXNTBMbUZ3Y0d4bExtTnZiUzl6YVdkdUxXbHUmbnRiPTEifSx7InRleHQiOiJTaWduIEluIC0gQXBwbGUiLCJ1cmwiOiJodHRwczovL3d3dy5iaW5nLmNvbS9jay9hPyEmJnA9ZGE1Yzk2ZmEzNDdmYTQ3Njc5NTQ3MGVkODc2Zjg5NzJiOWRlOGQyMWRmMDIxNjgzYjJlNWI3NWJiOTU3MTRjY0ptbHRkSE05TVRjNU16WTJOREF3TUEmcHRuPTMmdmVyPTImaHNoPTQmZmNsaWQ9MTRmZmZmYjItYjliNi02MzMxLTM4ODktZTdiNWI4Nzc2MjdhJnU9YTFhSFIwY0hNNkx5OWhjM2N1WVhCd2JHVXVZMjl0TDJodmJXVSZudGI9MSJ9LHsidGV4dCI6Ik1hbmFnZSB5b3VyIEFwcGxlIEFjY291bnQiLCJ1cmwiOiJodHRwczovL3d3dy5iaW5nLmNvbS9jay9hPyEmJnA9ODgyZGZjNjBkMjdjZDNiNjExYzg1ZjRhODhmMzRhMzYzYmJmNGJmNjNkY2NiYzhhOWQ4YmUwYTlkOWE3MjViOEptbHRkSE05TVRjNU16WTJOREF3TUEmcHRuPTMmdmVyPTImaHNoPTQmZmNsaWQ9MTRmZmZmYjItYjliNi02MzMxLTM4ODktZTdiNWI4Nzc2MjdhJnU9YTFhSFIwY0hNNkx5OWhZMk52ZFc1MExtRndjR3hsTG1OdmJTOCZudGI9MSJ9LHsidGV4dCI6Ik9mZmljaWFsIEFwcGxlIFN1cHBvcnQiLCJ1cmwiOiJodHRwczovL3d3dy5iaW5nLmNvbS9jay9hPyEmJnA9YmJkZGQ1MmNhMTI5NTViZWUzMDM1ZGQ0OWNlYTdhYWRlZDY1M2FkZGMyZjI5ZWJjZDE3YTQyMzRiY2ZkYTU0NEptbHRkSE05TVRjNU16WTJOREF3TUEmcHRuPTMmdmVyPTImaHNoPTQmZmNsaWQ9MTRmZmZmYjItYjliNi02MzMxLTM4ODktZTdiNWI4Nzc2MjdhJnU9YTFhSFIwY0hNNkx5OXpkWEJ3YjNKMExtRndjR3hsTG1OdmJTOCZudGI9MSJ9LHsidGV4dCI6IkFwcGxlIEluYy4gLSBXaWtpcGVkaWEiLCJ1cmwiOiJodHRwczovL3d3dy5iaW5nLmNvbS9jay9hPyEmJnA9ODdjYWNlMzk4NmUwMWY3MTBhMDE3MmZjNmE4N2ViMzg1MjRlZjJlZTdkNDZhZGY0MDVmNDg1ZDY2ZGYxNWExY0ptbHRkSE05TVRjNU16WTJOREF3TUEmcHRuPTMmdmVyPTImaHNoPTQmZmNsaWQ9MTRmZmZmYjItYjliNi02MzMxLTM4ODktZTdiNWI4Nzc2MjdhJnU9YTFhSFIwY0hNNkx5OWxiaTUzYVd0cGNHVmthV0V1YjNKbkwzZHBhMmt2UVhCd2JHVmZTVzVqTGcmbnRiPTEifV0sInNhbmRib3hWZXJpZmllZCI6dHJ1ZX0K -",
+      "time": "2026-11-04T05:42:57Z"
+    },
+    {
+      "event": "stop_requested",
+      "frameworkState": 1,
+      "reason": "user",
+      "time": "2026-11-04T05:42:57Z"
+    },
+    {
+      "event": "STOP_CONFIRMED",
+      "frameworkState": 0,
+      "time": "2026-11-04T05:42:57Z"
+    },
+    {
+      "event": "closed"
+    }
+  ],
+  "approval": {
+    "approvalId": "d46ced93-07ea-482f-9f1d-51f3f7c45f29",
+    "vaultId": "5af438ed-2e3d-4846-99cb-77666d7213a7",
+    "executionId": "live",
+    "callId": "page",
+    "command": "HTTPS GET https://example.com/",
+    "commandHash": "e2c4044e8fc95d492081fbbc18cae253a9e2d068a8c031425a4090e54b5c648e",
+    "policyRevision": 1,
+    "expiresAt": 1793771029655,
+    "environmentId": "de829437-0f1d-47da-a043-21f6ce0eeffd",
+    "tool": "browser_navigate",
+    "version": "1",
+    "requestedAt": 1793770969655,
+    "cachePersistent": false,
+    "browser": {
+      "kind": "navigate",
+      "url": "https://example.com/"
+    }
+  },
+  "live": {
+    "sessionId": "1dc7229e-a075-428b-9e3c-2aa11f8465a6",
+    "vmInstanceId": "e7410205-7cd8-4fd0-864d-01b79e634cf7",
+    "generation": 1,
+    "exitCode": 0,
+    "cleanupConfirmed": true,
+    "reason": "completed",
+    "memoryPeakBytes": 250937344,
+    "stdout": "",
+    "stderr": "",
+    "browser": {
+      "url": "https://example.com/",
+      "title": "Example Domain",
+      "text": "This domain is for use in documentation examples without needing permission. This is not a service; avoid relying on it for testing and monitoring purposes.",
+      "links": [],
+      "retrievedAt": "2026-11-04T05:42:55.148Z",
+      "untrusted": true,
+      "mode": "read-only-snapshot"
+    }
+  },
+  "synthetic": {
+    "workspaceStatus": "complete",
+    "exitCode": 0,
+    "cleanupConfirmed": true,
+    "reason": "completed",
+    "memoryPeakBytes": 251531264,
+    "stdout": "{\"title\":\"Synthetic\",\"text\":\"Safe visible text\\npublic linkdenied linkdownload\",\"links\":[{\"text\":\"public link\",\"url\":\"https://example.org/\"},{\"text\":\"denied link\",\"url\":\"file:///etc/passwd\"},{\"text\":\"download\",\"url\":\"data:text/plain,secret\"}],\"sandboxVerified\":true}\n",
+    "stderr": ""
+  },
+  "boundaries": {
+    "exitCode": 0,
+    "cleanupConfirmed": true,
+    "reason": "completed",
+    "memoryPeakBytes": 7860224,
+    "stdout": "isolated",
+    "stderr": ""
+  },
+  "shell": {
+    "sessionId": "62b7f059-a6ec-4a5e-9429-4a74b20b718d",
+    "vmInstanceId": "e7410205-7cd8-4fd0-864d-01b79e634cf7",
+    "generation": 1,
+    "exitCode": 0,
+    "cleanupConfirmed": true,
+    "reason": "completed",
+    "memoryPeakBytes": 7806976,
+    "stdout": "shell-offline\n",
+    "stderr": "unshare: unshare(0x10000000): No space left on device\n"
+  },
+  "search": {
+    "sessionId": "4774ef7e-0465-4559-b05c-2c0d5ace9760",
+    "vmInstanceId": "e7410205-7cd8-4fd0-864d-01b79e634cf7",
+    "generation": 1,
+    "exitCode": 0,
+    "cleanupConfirmed": true,
+    "reason": "completed",
+    "memoryPeakBytes": 251138048,
+    "stdout": "",
+    "stderr": "",
+    "browser": {
+      "url": "https://www.bing.com/search?q=Apple%20Virtualization%20framework&setlang=en&cc=US",
+      "title": "Apple Virtualization framework - Search",
+      "text": "apple.com\nhttps://www.apple.com\nApple\n\nDiscover the innovative world of Apple and shop everything iPhone, iPad, Apple Watch, Mac, and Apple TV, plus explore …\n\n \napple.com\nhttps://www.apple.com › store\nApple Store Online\n\nShop the latest Apple products, accessories and offers. Compare models, get expert shopping help, plus flexible payment and …\n\napple.com\nhttps://account.apple.com › sign-in\naccount.apple.com\n\naccount.apple.com\n\napple.com\nhttps://asw.apple.com › home\nSign In - Apple\n\nSign in to your Apple account to access and manage your Apple services securely on this platform.\n\napple.com\nhttps://account.apple.com\nManage your Apple Account\n\nYour Apple Account is the account you use for all Apple services.\n\napple.com\nhttps://support.apple.com\nOfficial Apple Support\n\nHandled with AppleCare Every AppleCare plan provides one-stop service for your Apple products, with quick and easy repairs for …\n\nwikipedia.org\nhttps://en.wikipedia.org › wiki › Apple_Inc.\nApple Inc. - Wikipedia\n\nThe company also provides digital content services, including Apple Books, Apple Fitness+, Apple Music, Apple News, Apple TV, …\n\nPagination\n1\n2\n3\n4\nNext",
+      "links": [
+        {
+          "text": "Apple",
+          "url": "https://www.apple.com/"
+        },
+        {
+          "text": "Apple Store Online",
+          "url": "https://www.apple.com/store"
+        },
+        {
+          "text": "account.apple.com",
+          "url": "https://account.apple.com/sign-in"
+        },
+        {
+          "text": "Sign In - Apple",
+          "url": "https://asw.apple.com/home"
+        },
+        {
+          "text": "Manage your Apple Account",
+          "url": "https://account.apple.com/"
+        },
+        {
+          "text": "Official Apple Support",
+          "url": "https://support.apple.com/"
+        },
+        {
+          "text": "Apple Inc. - Wikipedia",
+          "url": "https://en.wikipedia.org/wiki/Apple_Inc."
+        }
+      ],
+      "retrievedAt": "2026-11-04T05:42:57.520Z",
+      "untrusted": true,
+      "mode": "read-only-snapshot"
+    }
+  },
+  "status": "PASS",
+  "stop": "STOP_CONFIRMED"
+}

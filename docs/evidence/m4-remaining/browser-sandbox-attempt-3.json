@@ -1,0 +1,294 @@
+{
+  "scope": "Real Linux ARM64 development VM, no network devices or Host mounts",
+  "cases": [
+    {
+      "name": "versions",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 28532736,
+      "stdout": "Python 3.14.10\npip 26.1.2 from /usr/lib/python3.14/site-packages/pip (python 3.14)\nv24.22.1\n11.12.1\ngit version 2.54.0\nGNU bash, version 5.3.9(1)-release (aarch64-alpine-linux-musl)\ncurl 8.23.0 (aarch64-alpine-linux-musl) libcurl/8.23.0 OpenSSL/3.5.9 zlib/1.3.2 brotli/1.2.1 zstd/1.5.7 c-ares/1.34.9 libidn2/2.3.8 libpsl/0.21.5 nghttp2/1.70.0\ngcc (Alpine 15.2.0) 15.2.0\n",
+      "stderr": ""
+    },
+    {
+      "name": "python-json",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 7987200,
+      "stdout": "python-ok\n",
+      "stderr": ""
+    },
+    {
+      "name": "node-json",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 11247616,
+      "stdout": "node-ok\n",
+      "stderr": ""
+    },
+    {
+      "name": "python-test",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 15331328,
+      "stdout": "",
+      "stderr": "test_sum (test_example.Test.test_sum) ... ok\n\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nOK\n"
+    },
+    {
+      "name": "node-test",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 27156480,
+      "stdout": "\u2714 math (0.950584ms)\n\u2139 tests 1\n\u2139 suites 0\n\u2139 pass 1\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 54.449959\n",
+      "stderr": ""
+    },
+    {
+      "name": "git-build",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 8089600,
+      "stdout": "build-ok\n",
+      "stderr": ""
+    },
+    {
+      "name": "cleanup",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 7942144,
+      "stdout": "background\n",
+      "stderr": ""
+    },
+    {
+      "name": "isolation",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 7749632,
+      "stdout": "uid=1000(nidus) gid=1000(nidus)\nclean\n",
+      "stderr": ""
+    },
+    {
+      "name": "double-fork",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 7970816,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "boundaries",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 7802880,
+      "stdout": "isolated\n",
+      "stderr": "unshare: unshare(0x10000000): No space left on device\ncurl: (7) Failed to connect to 169.254.169.254:80 after 0 ms: Could not connect to server\ncurl: (7) Failed to connect to 127.0.0.1:80 after 0 ms: Could not connect to server\n"
+    },
+    {
+      "name": "cancel",
+      "exitCode": 137,
+      "cleanupConfirmed": true,
+      "reason": "cancelled",
+      "memoryPeakBytes": 7946240,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "timeout",
+      "exitCode": 137,
+      "cleanupConfirmed": true,
+      "reason": "timeout",
+      "memoryPeakBytes": 7884800,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "workspace",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 7852032,
+      "stdout": "snapshot-ok\n",
+      "stderr": ""
+    },
+    {
+      "name": "chromium-offline-dom",
+      "exitCode": 134,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 22224896,
+      "stdout": "",
+      "stderr": "[15:15:1103/192810.253155:FATAL:sandbox/linux/suid/client/setuid_sandbox_host.cc:172] The SUID sandbox helper binary was found, but is not configured correctly. Rather than run without sandboxing I'm aborting now. You need to make sure that /usr/lib/chromium/chrome-sandbox is owned by root and has mode 4755.\n[1103/192810.256588:WARNING:third_party/crashpad/crashpad/snapshot/linux/process_reader_linux.cc:95] sched_getscheduler: Function not implemented (38)\n[1103/192810.256640:WARNING:third_party/crashpad/crashpad/snapshot/linux/process_reader_linux.cc:95] sched_getscheduler: Function not implemented (38)\n[1103/192810.256737:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq: No such file or directory (2)\n[1103/192810.256746:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq: No such file or directory (2)\n/task.sh: line 2:    15 Aborted                    /usr/lib/chromium/chromium --headless --disable-gpu --disable-software-rasterizer --disable-dev-shm-usage --disable-background-networking --user-data-dir=/tmp/profile --dump-dom file:///work/page.html\n"
+    },
+    {
+      "status": "FAIL",
+      "error": "{'name': 'chromium-offline-dom', 'exitCode': 134, 'cleanupConfirmed': True, 'reason': 'completed', 'memoryPeakBytes': 22224896, 'stdout': '', 'stderr': \"[15:15:1103/192810.253155:FATAL:sandbox/linux/suid/client/setuid_sandbox_host.cc:172] The SUID sandbox helper binary was found, but is not configured correctly. Rather than run without sandboxing I'm aborting now. You need to make sure that /usr/lib/chromium/chrome-sandbox is owned by root and has mode 4755.\\n[1103/192810.256588:WARNING:third_party/crashpad/crashpad/snapshot/linux/process_reader_linux.cc:95] sched_getscheduler: Function not implemented (38)\\n[1103/192810.256640:WARNING:third_party/crashpad/crashpad/snapshot/linux/process_reader_linux.cc:95] sched_getscheduler: Function not implemented (38)\\n[1103/192810.256737:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq: No such file or directory (2)\\n[1103/192810.256746:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq: No such file or directory (2)\\n/task.sh: line 2:    15 Aborted                    /usr/lib/chromium/chromium --headless --disable-gpu --disable-software-rasterizer --disable-dev-shm-usage --disable-background-networking --user-data-dir=/tmp/profile --dump-dom file:///work/page.html\\n\"}"
+    }
+  ],
+  "events": [
+    {
+      "event": "starting",
+      "frameworkState": 0,
+      "time": "2026-11-03T19:28:03Z"
+    },
+    {
+      "event": "running",
+      "frameworkState": 1,
+      "time": "2026-11-03T19:28:03Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_DEVELOPMENT ready",
+      "time": "2026-11-03T19:28:06Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_READY cgroup2",
+      "time": "2026-11-03T19:28:06Z"
+    },
+    {
+      "event": "ready",
+      "frameworkState": 1,
+      "time": "2026-11-03T19:28:06Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT d4a039d7-e810-4129-a445-3a82f402cfe4 0 1 completed 28532736 UHl0aG9uIDMuMTQuMTAKcGlwIDI2LjEuMiBmcm9tIC91c3IvbGliL3B5dGhvbjMuMTQvc2l0ZS1wYWNrYWdlcy9waXAgKHB5dGhvbiAzLjE0KQp2MjQuMjIuMQoxMS4xMi4xCmdpdCB2ZXJzaW9uIDIuNTQuMApHTlUgYmFzaCwgdmVyc2lvbiA1LjMuOSgxKS1yZWxlYXNlIChhYXJjaDY0LWFscGluZS1saW51eC1tdXNsKQpjdXJsIDguMjMuMCAoYWFyY2g2NC1hbHBpbmUtbGludXgtbXVzbCkgbGliY3VybC84LjIzLjAgT3BlblNTTC8zLjUuOSB6bGliLzEuMy4yIGJyb3RsaS8xLjIuMSB6c3RkLzEuNS43IGMtYXJlcy8xLjM0LjkgbGliaWRuMi8yLjMuOCBsaWJwc2wvMC4yMS41IG5naHR0cDIvMS43MC4wCmdjYyAoQWxwaW5lIDE1LjIuMCkgMTUuMi4wCg== -",
+      "time": "2026-11-03T19:28:08Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT b0e1c91c-93e4-4f18-9888-ccfc86795a25 0 1 completed 7987200 cHl0aG9uLW9rCg== -",
+      "time": "2026-11-03T19:28:08Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 3d7cca53-f7b3-4df4-9547-60523d0099a2 0 1 completed 11247616 bm9kZS1vawo= -",
+      "time": "2026-11-03T19:28:08Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 4ca26415-7afb-4592-a1ac-8405dd204169 0 1 completed 15331328 - dGVzdF9zdW0gKHRlc3RfZXhhbXBsZS5UZXN0LnRlc3Rfc3VtKSAuLi4gb2sKCi0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0KUmFuIDEgdGVzdCBpbiAwLjAwMHMKCk9LCg==",
+      "time": "2026-11-03T19:28:08Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 09bba995-8eac-4a8e-99d4-d967f76aed26 0 1 completed 27156480 4pyUIG1hdGggKDAuOTUwNTg0bXMpCuKEuSB0ZXN0cyAxCuKEuSBzdWl0ZXMgMArihLkgcGFzcyAxCuKEuSBmYWlsIDAK4oS5IGNhbmNlbGxlZCAwCuKEuSBza2lwcGVkIDAK4oS5IHRvZG8gMArihLkgZHVyYXRpb25fbXMgNTQuNDQ5OTU5Cg== -",
+      "time": "2026-11-03T19:28:08Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 928dc084-0e3b-418e-a503-90c627c95996 0 1 completed 8089600 YnVpbGQtb2sK -",
+      "time": "2026-11-03T19:28:08Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 5116d0bc-7cae-49b4-89bb-72892f4c8d11 0 1 completed 7942144 YmFja2dyb3VuZAo= -",
+      "time": "2026-11-03T19:28:08Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 908bf36b-f42a-48a9-9455-642e93dd670c 0 1 completed 7749632 dWlkPTEwMDAobmlkdXMpIGdpZD0xMDAwKG5pZHVzKQpjbGVhbgo= -",
+      "time": "2026-11-03T19:28:08Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 1722a4f7-bcae-4cc4-94cf-e534151e8d54 0 1 completed 7970816 - -",
+      "time": "2026-11-03T19:28:08Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 5a7cc675-f775-44b8-9072-6f1354614385 0 1 completed 7802880 aXNvbGF0ZWQK dW5zaGFyZTogdW5zaGFyZSgweDEwMDAwMDAwKTogTm8gc3BhY2UgbGVmdCBvbiBkZXZpY2UKY3VybDogKDcpIEZhaWxlZCB0byBjb25uZWN0IHRvIDE2OS4yNTQuMTY5LjI1NDo4MCBhZnRlciAwIG1zOiBDb3VsZCBub3QgY29ubmVjdCB0byBzZXJ2ZXIKY3VybDogKDcpIEZhaWxlZCB0byBjb25uZWN0IHRvIDEyNy4wLjAuMTo4MCBhZnRlciAwIG1zOiBDb3VsZCBub3QgY29ubmVjdCB0byBzZXJ2ZXIK",
+      "time": "2026-11-03T19:28:08Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT faa4490b-4c4a-4d44-8a0b-7f220e05341b 137 1 cancelled 7946240 - -",
+      "time": "2026-11-03T19:28:09Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 4660344b-4d07-4ce1-bedc-6a8baecb7429 137 1 timeout 7884800 - -",
+      "time": "2026-11-03T19:28:10Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_WORKSPACE_ACK 67de5757-9fbe-43df-ab34-a744fe4f3c81 begin",
+      "time": "2026-11-03T19:28:10Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_WORKSPACE_ACK 67de5757-9fbe-43df-ab34-a744fe4f3c81 chunk",
+      "time": "2026-11-03T19:28:10Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_WORKSPACE_ACK 67de5757-9fbe-43df-ab34-a744fe4f3c81 seal",
+      "time": "2026-11-03T19:28:10Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_WORKSPACE_RESULT f0b5ade3-e3bc-4839-bf19-63f05259ba81 0 W3sicGF0aCI6ICJtYWluLnB5IiwgImNvbnRlbnQiOiAicHJpbnQoMikifV0=",
+      "time": "2026-11-03T19:28:10Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_WORKSPACE_END f0b5ade3-e3bc-4839-bf19-63f05259ba81 4aed66e4cfe1f9f04b760dcd642be6d647d5a3189e29b0dc493dfb7600cb9bcc",
+      "time": "2026-11-03T19:28:10Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT f0b5ade3-e3bc-4839-bf19-63f05259ba81 0 1 completed 7852032 c25hcHNob3Qtb2sK -",
+      "time": "2026-11-03T19:28:10Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 7e24ea36-d241-433f-8b53-326020bff01d 134 1 completed 22224896 - WzE1OjE1OjExMDMvMTkyODEwLjI1MzE1NTpGQVRBTDpzYW5kYm94L2xpbnV4L3N1aWQvY2xpZW50L3NldHVpZF9zYW5kYm94X2hvc3QuY2M6MTcyXSBUaGUgU1VJRCBzYW5kYm94IGhlbHBlciBiaW5hcnkgd2FzIGZvdW5kLCBidXQgaXMgbm90IGNvbmZpZ3VyZWQgY29ycmVjdGx5LiBSYXRoZXIgdGhhbiBydW4gd2l0aG91dCBzYW5kYm94aW5nIEknbSBhYm9ydGluZyBub3cuIFlvdSBuZWVkIHRvIG1ha2Ugc3VyZSB0aGF0IC91c3IvbGliL2Nocm9taXVtL2Nocm9tZS1zYW5kYm94IGlzIG93bmVkIGJ5IHJvb3QgYW5kIGhhcyBtb2RlIDQ3NTUuClsxMTAzLzE5MjgxMC4yNTY1ODg6V0FSTklORzp0aGlyZF9wYXJ0eS9jcmFzaHBhZC9jcmFzaHBhZC9zbmFwc2hvdC9saW51eC9wcm9jZXNzX3JlYWRlcl9saW51eC5jYzo5NV0gc2NoZWRfZ2V0c2NoZWR1bGVyOiBGdW5jdGlvbiBub3QgaW1wbGVtZW50ZWQgKDM4KQpbMTEwMy8xOTI4MTAuMjU2NjQwOldBUk5JTkc6dGhpcmRfcGFydHkvY3Jhc2hwYWQvY3Jhc2hwYWQvc25hcHNob3QvbGludXgvcHJvY2Vzc19yZWFkZXJfbGludXguY2M6OTVdIHNjaGVkX2dldHNjaGVkdWxlcjogRnVuY3Rpb24gbm90IGltcGxlbWVudGVkICgzOCkKWzExMDMvMTkyODEwLjI1NjczNzpFUlJPUjp0aGlyZF9wYXJ0eS9jcmFzaHBhZC9jcmFzaHBhZC91dGlsL2ZpbGUvZmlsZV9pb19wb3NpeC5jYzoxNDVdIG9wZW4gL3N5cy9kZXZpY2VzL3N5c3RlbS9jcHUvY3B1MC9jcHVmcmVxL3NjYWxpbmdfY3VyX2ZyZXE6IE5vIHN1Y2ggZmlsZSBvciBkaXJlY3RvcnkgKDIpClsxMTAzLzE5MjgxMC4yNTY3NDY6RVJST1I6dGhpcmRfcGFydHkvY3Jhc2hwYWQvY3Jhc2hwYWQvdXRpbC9maWxlL2ZpbGVfaW9fcG9zaXguY2M6MTQ1XSBvcGVuIC9zeXMvZGV2aWNlcy9zeXN0ZW0vY3B1L2NwdTAvY3B1ZnJlcS9zY2FsaW5nX21heF9mcmVxOiBObyBzdWNoIGZpbGUgb3IgZGlyZWN0b3J5ICgyKQovdGFzay5zaDogbGluZSAyOiAgICAxNSBBYm9ydGVkICAgICAgICAgICAgICAgICAgICAvdXNyL2xpYi9jaHJvbWl1bS9jaHJvbWl1bSAtLWhlYWRsZXNzIC0tZGlzYWJsZS1ncHUgLS1kaXNhYmxlLXNvZnR3YXJlLXJhc3Rlcml6ZXIgLS1kaXNhYmxlLWRldi1zaG0tdXNhZ2UgLS1kaXNhYmxlLWJhY2tncm91bmQtbmV0d29ya2luZyAtLXVzZXItZGF0YS1kaXI9L3RtcC9wcm9maWxlIC0tZHVtcC1kb20gZmlsZTovLy93b3JrL3BhZ2UuaHRtbAo=",
+      "time": "2026-11-03T19:28:10Z"
+    },
+    {
+      "event": "stop_requested",
+      "frameworkState": 1,
+      "reason": "user",
+      "time": "2026-11-03T19:28:10Z"
+    },
+    {
+      "event": "STOP_CONFIRMED",
+      "frameworkState": 0,
+      "time": "2026-11-03T19:28:10Z"
+    }
+  ],
+  "managerExit": 0,
+  "assets": {
+    "Image": "256d5fff4bb892edcb9218c1e6353e388bc3646e65f76c2bc9d958b635d1b00e",
+    "initrd": "bc5f2b2fea7e01cea6cca22f786603def5946e3f8590ead9b1e82f88557e1ba7"
+  }
+}

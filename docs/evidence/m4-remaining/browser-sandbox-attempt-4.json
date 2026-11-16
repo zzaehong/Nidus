@@ -1,0 +1,294 @@
+{
+  "scope": "Real Linux ARM64 development VM, no network devices or Host mounts",
+  "cases": [
+    {
+      "name": "versions",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 28532736,
+      "stdout": "Python 3.14.10\npip 26.1.2 from /usr/lib/python3.14/site-packages/pip (python 3.14)\nv24.22.1\n11.12.1\ngit version 2.54.0\nGNU bash, version 5.3.9(1)-release (aarch64-alpine-linux-musl)\ncurl 8.23.0 (aarch64-alpine-linux-musl) libcurl/8.23.0 OpenSSL/3.5.9 zlib/1.3.2 brotli/1.2.1 zstd/1.5.7 c-ares/1.34.9 libidn2/2.3.8 libpsl/0.21.5 nghttp2/1.70.0\ngcc (Alpine 15.2.0) 15.2.0\n",
+      "stderr": ""
+    },
+    {
+      "name": "python-json",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 7864320,
+      "stdout": "python-ok\n",
+      "stderr": ""
+    },
+    {
+      "name": "node-json",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 11067392,
+      "stdout": "node-ok\n",
+      "stderr": ""
+    },
+    {
+      "name": "python-test",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 15331328,
+      "stdout": "",
+      "stderr": "test_sum (test_example.Test.test_sum) ... ok\n\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nOK\n"
+    },
+    {
+      "name": "node-test",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 28897280,
+      "stdout": "\u2714 math (1.073958ms)\n\u2139 tests 1\n\u2139 suites 0\n\u2139 pass 1\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 57.163625\n",
+      "stderr": ""
+    },
+    {
+      "name": "git-build",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 8065024,
+      "stdout": "build-ok\n",
+      "stderr": ""
+    },
+    {
+      "name": "cleanup",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 7933952,
+      "stdout": "background\n",
+      "stderr": ""
+    },
+    {
+      "name": "isolation",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 7884800,
+      "stdout": "uid=1000(nidus) gid=1000(nidus)\nclean\n",
+      "stderr": ""
+    },
+    {
+      "name": "double-fork",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 7974912,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "boundaries",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 7913472,
+      "stdout": "isolated\n",
+      "stderr": "unshare: unshare(0x10000000): No space left on device\ncurl: (7) Failed to connect to 169.254.169.254:80 after 0 ms: Could not connect to server\ncurl: (7) Failed to connect to 127.0.0.1:80 after 0 ms: Could not connect to server\n"
+    },
+    {
+      "name": "cancel",
+      "exitCode": 137,
+      "cleanupConfirmed": true,
+      "reason": "cancelled",
+      "memoryPeakBytes": 7942144,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "timeout",
+      "exitCode": 137,
+      "cleanupConfirmed": true,
+      "reason": "timeout",
+      "memoryPeakBytes": 7946240,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "workspace",
+      "exitCode": 0,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 7872512,
+      "stdout": "snapshot-ok\n",
+      "stderr": ""
+    },
+    {
+      "name": "chromium-offline-dom",
+      "exitCode": 134,
+      "cleanupConfirmed": true,
+      "reason": "completed",
+      "memoryPeakBytes": 20254720,
+      "stdout": "",
+      "stderr": "[15:15:1103/192840.203497:FATAL:content/browser/zygote_host/zygote_host_impl_linux.cc:130] No usable sandbox! If you are running on Ubuntu 23.10+ or another Linux distro that has disabled unprivileged user namespaces with AppArmor, see https://chromium.googlesource.com/chromium/src/+/main/docs/security/apparmor-userns-restrictions.md. Otherwise see https://chromium.googlesource.com/chromium/src/+/main/docs/linux/suid_sandbox_development.md for more information on developing with the (older) SUID sandbox. If you want to live dangerously and need an immediate workaround, you can try using --no-sandbox.\n[1103/192840.206635:WARNING:third_party/crashpad/crashpad/snapshot/linux/process_reader_linux.cc:95] sched_getscheduler: Function not implemented (38)\n[1103/192840.206698:WARNING:third_party/crashpad/crashpad/snapshot/linux/process_reader_linux.cc:95] sched_getscheduler: Function not implemented (38)\n[1103/192840.206802:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq: No such file or directory (2)\n[1103/192840.206811:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq: No such file or directory (2)\n/task.sh: line 2:    15 Aborted                    /usr/lib/chromium/chromium --headless --disable-setuid-sandbox --disable-gpu --disable-software-rasterizer --disable-dev-shm-usage --disable-background-networking --user-data-dir=/tmp/profile --dump-dom file:///work/page.html\n"
+    },
+    {
+      "status": "FAIL",
+      "error": "{'name': 'chromium-offline-dom', 'exitCode': 134, 'cleanupConfirmed': True, 'reason': 'completed', 'memoryPeakBytes': 20254720, 'stdout': '', 'stderr': '[15:15:1103/192840.203497:FATAL:content/browser/zygote_host/zygote_host_impl_linux.cc:130] No usable sandbox! If you are running on Ubuntu 23.10+ or another Linux distro that has disabled unprivileged user namespaces with AppArmor, see https://chromium.googlesource.com/chromium/src/+/main/docs/security/apparmor-userns-restrictions.md. Otherwise see https://chromium.googlesource.com/chromium/src/+/main/docs/linux/suid_sandbox_development.md for more information on developing with the (older) SUID sandbox. If you want to live dangerously and need an immediate workaround, you can try using --no-sandbox.\\n[1103/192840.206635:WARNING:third_party/crashpad/crashpad/snapshot/linux/process_reader_linux.cc:95] sched_getscheduler: Function not implemented (38)\\n[1103/192840.206698:WARNING:third_party/crashpad/crashpad/snapshot/linux/process_reader_linux.cc:95] sched_getscheduler: Function not implemented (38)\\n[1103/192840.206802:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq: No such file or directory (2)\\n[1103/192840.206811:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq: No such file or directory (2)\\n/task.sh: line 2:    15 Aborted                    /usr/lib/chromium/chromium --headless --disable-setuid-sandbox --disable-gpu --disable-software-rasterizer --disable-dev-shm-usage --disable-background-networking --user-data-dir=/tmp/profile --dump-dom file:///work/page.html\\n'}"
+    }
+  ],
+  "events": [
+    {
+      "event": "starting",
+      "frameworkState": 0,
+      "time": "2026-11-03T19:28:32Z"
+    },
+    {
+      "event": "running",
+      "frameworkState": 1,
+      "time": "2026-11-03T19:28:32Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_DEVELOPMENT ready",
+      "time": "2026-11-03T19:28:35Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_READY cgroup2",
+      "time": "2026-11-03T19:28:35Z"
+    },
+    {
+      "event": "ready",
+      "frameworkState": 1,
+      "time": "2026-11-03T19:28:35Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 76fbfc25-c036-4162-be6b-83f2fe1c2fbd 0 1 completed 28532736 UHl0aG9uIDMuMTQuMTAKcGlwIDI2LjEuMiBmcm9tIC91c3IvbGliL3B5dGhvbjMuMTQvc2l0ZS1wYWNrYWdlcy9waXAgKHB5dGhvbiAzLjE0KQp2MjQuMjIuMQoxMS4xMi4xCmdpdCB2ZXJzaW9uIDIuNTQuMApHTlUgYmFzaCwgdmVyc2lvbiA1LjMuOSgxKS1yZWxlYXNlIChhYXJjaDY0LWFscGluZS1saW51eC1tdXNsKQpjdXJsIDguMjMuMCAoYWFyY2g2NC1hbHBpbmUtbGludXgtbXVzbCkgbGliY3VybC84LjIzLjAgT3BlblNTTC8zLjUuOSB6bGliLzEuMy4yIGJyb3RsaS8xLjIuMSB6c3RkLzEuNS43IGMtYXJlcy8xLjM0LjkgbGliaWRuMi8yLjMuOCBsaWJwc2wvMC4yMS41IG5naHR0cDIvMS43MC4wCmdjYyAoQWxwaW5lIDE1LjIuMCkgMTUuMi4wCg== -",
+      "time": "2026-11-03T19:28:37Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT b3531004-498c-4570-97b7-ba6b4aea0fb2 0 1 completed 7864320 cHl0aG9uLW9rCg== -",
+      "time": "2026-11-03T19:28:37Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT a2d91f9a-6b56-44fc-b59b-ed5deb47d292 0 1 completed 11067392 bm9kZS1vawo= -",
+      "time": "2026-11-03T19:28:37Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 15cb4483-1eee-4cde-8996-2fe234ed9b9a 0 1 completed 15331328 - dGVzdF9zdW0gKHRlc3RfZXhhbXBsZS5UZXN0LnRlc3Rfc3VtKSAuLi4gb2sKCi0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0KUmFuIDEgdGVzdCBpbiAwLjAwMHMKCk9LCg==",
+      "time": "2026-11-03T19:28:37Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 49d4ba9b-c9fe-4261-8775-bc627248129e 0 1 completed 28897280 4pyUIG1hdGggKDEuMDczOTU4bXMpCuKEuSB0ZXN0cyAxCuKEuSBzdWl0ZXMgMArihLkgcGFzcyAxCuKEuSBmYWlsIDAK4oS5IGNhbmNlbGxlZCAwCuKEuSBza2lwcGVkIDAK4oS5IHRvZG8gMArihLkgZHVyYXRpb25fbXMgNTcuMTYzNjI1Cg== -",
+      "time": "2026-11-03T19:28:38Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT ace3e12f-b82d-419b-9d25-252c959acdb2 0 1 completed 8065024 YnVpbGQtb2sK -",
+      "time": "2026-11-03T19:28:38Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT bb6958f5-c778-496c-8645-7cec828dea13 0 1 completed 7933952 YmFja2dyb3VuZAo= -",
+      "time": "2026-11-03T19:28:38Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT bcec80bd-e111-4c49-b35f-4d0e0abea1c6 0 1 completed 7884800 dWlkPTEwMDAobmlkdXMpIGdpZD0xMDAwKG5pZHVzKQpjbGVhbgo= -",
+      "time": "2026-11-03T19:28:38Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 2b7f36f1-5284-4f10-aeb7-260de0eead83 0 1 completed 7974912 - -",
+      "time": "2026-11-03T19:28:38Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT b3f9cd40-aadb-47b3-b22f-8859250abe40 0 1 completed 7913472 aXNvbGF0ZWQK dW5zaGFyZTogdW5zaGFyZSgweDEwMDAwMDAwKTogTm8gc3BhY2UgbGVmdCBvbiBkZXZpY2UKY3VybDogKDcpIEZhaWxlZCB0byBjb25uZWN0IHRvIDE2OS4yNTQuMTY5LjI1NDo4MCBhZnRlciAwIG1zOiBDb3VsZCBub3QgY29ubmVjdCB0byBzZXJ2ZXIKY3VybDogKDcpIEZhaWxlZCB0byBjb25uZWN0IHRvIDEyNy4wLjAuMTo4MCBhZnRlciAwIG1zOiBDb3VsZCBub3QgY29ubmVjdCB0byBzZXJ2ZXIK",
+      "time": "2026-11-03T19:28:38Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 84bba4d0-e339-464b-88d5-2fd9a73b2f04 137 1 cancelled 7942144 - -",
+      "time": "2026-11-03T19:28:38Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT d5abd09b-354c-4796-b33e-624d96b18e34 137 1 timeout 7946240 - -",
+      "time": "2026-11-03T19:28:39Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_WORKSPACE_ACK ec38879c-1cbe-4c6a-8887-9b32528925fb begin",
+      "time": "2026-11-03T19:28:39Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_WORKSPACE_ACK ec38879c-1cbe-4c6a-8887-9b32528925fb chunk",
+      "time": "2026-11-03T19:28:39Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_WORKSPACE_ACK ec38879c-1cbe-4c6a-8887-9b32528925fb seal",
+      "time": "2026-11-03T19:28:39Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_WORKSPACE_RESULT 8e2f60e8-3b68-4111-a5d8-8fdd5c2e2921 0 W3sicGF0aCI6ICJtYWluLnB5IiwgImNvbnRlbnQiOiAicHJpbnQoMikifV0=",
+      "time": "2026-11-03T19:28:39Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_WORKSPACE_END 8e2f60e8-3b68-4111-a5d8-8fdd5c2e2921 4aed66e4cfe1f9f04b760dcd642be6d647d5a3189e29b0dc493dfb7600cb9bcc",
+      "time": "2026-11-03T19:28:39Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 8e2f60e8-3b68-4111-a5d8-8fdd5c2e2921 0 1 completed 7872512 c25hcHNob3Qtb2sK -",
+      "time": "2026-11-03T19:28:39Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 5e1b48f9-e8d5-4794-9574-e7f9fdac34c7 134 1 completed 20254720 - WzE1OjE1OjExMDMvMTkyODQwLjIwMzQ5NzpGQVRBTDpjb250ZW50L2Jyb3dzZXIvenlnb3RlX2hvc3Qvenlnb3RlX2hvc3RfaW1wbF9saW51eC5jYzoxMzBdIE5vIHVzYWJsZSBzYW5kYm94ISBJZiB5b3UgYXJlIHJ1bm5pbmcgb24gVWJ1bnR1IDIzLjEwKyBvciBhbm90aGVyIExpbnV4IGRpc3RybyB0aGF0IGhhcyBkaXNhYmxlZCB1bnByaXZpbGVnZWQgdXNlciBuYW1lc3BhY2VzIHdpdGggQXBwQXJtb3IsIHNlZSBodHRwczovL2Nocm9taXVtLmdvb2dsZXNvdXJjZS5jb20vY2hyb21pdW0vc3JjLysvbWFpbi9kb2NzL3NlY3VyaXR5L2FwcGFybW9yLXVzZXJucy1yZXN0cmljdGlvbnMubWQuIE90aGVyd2lzZSBzZWUgaHR0cHM6Ly9jaHJvbWl1bS5nb29nbGVzb3VyY2UuY29tL2Nocm9taXVtL3NyYy8rL21haW4vZG9jcy9saW51eC9zdWlkX3NhbmRib3hfZGV2ZWxvcG1lbnQubWQgZm9yIG1vcmUgaW5mb3JtYXRpb24gb24gZGV2ZWxvcGluZyB3aXRoIHRoZSAob2xkZXIpIFNVSUQgc2FuZGJveC4gSWYgeW91IHdhbnQgdG8gbGl2ZSBkYW5nZXJvdXNseSBhbmQgbmVlZCBhbiBpbW1lZGlhdGUgd29ya2Fyb3VuZCwgeW91IGNhbiB0cnkgdXNpbmcgLS1uby1zYW5kYm94LgpbMTEwMy8xOTI4NDAuMjA2NjM1OldBUk5JTkc6dGhpcmRfcGFydHkvY3Jhc2hwYWQvY3Jhc2hwYWQvc25hcHNob3QvbGludXgvcHJvY2Vzc19yZWFkZXJfbGludXguY2M6OTVdIHNjaGVkX2dldHNjaGVkdWxlcjogRnVuY3Rpb24gbm90IGltcGxlbWVudGVkICgzOCkKWzExMDMvMTkyODQwLjIwNjY5ODpXQVJOSU5HOnRoaXJkX3BhcnR5L2NyYXNocGFkL2NyYXNocGFkL3NuYXBzaG90L2xpbnV4L3Byb2Nlc3NfcmVhZGVyX2xpbnV4LmNjOjk1XSBzY2hlZF9nZXRzY2hlZHVsZXI6IEZ1bmN0aW9uIG5vdCBpbXBsZW1lbnRlZCAoMzgpClsxMTAzLzE5Mjg0MC4yMDY4MDI6RVJST1I6dGhpcmRfcGFydHkvY3Jhc2hwYWQvY3Jhc2hwYWQvdXRpbC9maWxlL2ZpbGVfaW9fcG9zaXguY2M6MTQ1XSBvcGVuIC9zeXMvZGV2aWNlcy9zeXN0ZW0vY3B1L2NwdTAvY3B1ZnJlcS9zY2FsaW5nX2N1cl9mcmVxOiBObyBzdWNoIGZpbGUgb3IgZGlyZWN0b3J5ICgyKQpbMTEwMy8xOTI4NDAuMjA2ODExOkVSUk9SOnRoaXJkX3BhcnR5L2NyYXNocGFkL2NyYXNocGFkL3V0aWwvZmlsZS9maWxlX2lvX3Bvc2l4LmNjOjE0NV0gb3BlbiAvc3lzL2RldmljZXMvc3lzdGVtL2NwdS9jcHUwL2NwdWZyZXEvc2NhbGluZ19tYXhfZnJlcTogTm8gc3VjaCBmaWxlIG9yIGRpcmVjdG9yeSAoMikKL3Rhc2suc2g6IGxpbmUgMjogICAgMTUgQWJvcnRlZCAgICAgICAgICAgICAgICAgICAgL3Vzci9saWIvY2hyb21pdW0vY2hyb21pdW0gLS1oZWFkbGVzcyAtLWRpc2FibGUtc2V0dWlkLXNhbmRib3ggLS1kaXNhYmxlLWdwdSAtLWRpc2FibGUtc29mdHdhcmUtcmFzdGVyaXplciAtLWRpc2FibGUtZGV2LXNobS11c2FnZSAtLWRpc2FibGUtYmFja2dyb3VuZC1uZXR3b3JraW5nIC0tdXNlci1kYXRhLWRpcj0vdG1wL3Byb2ZpbGUgLS1kdW1wLWRvbSBmaWxlOi8vL3dvcmsvcGFnZS5odG1sCg==",
+      "time": "2026-11-03T19:28:39Z"
+    },
+    {
+      "event": "stop_requested",
+      "frameworkState": 1,
+      "reason": "user",
+      "time": "2026-11-03T19:28:39Z"
+    },
+    {
+      "event": "STOP_CONFIRMED",
+      "frameworkState": 0,
+      "time": "2026-11-03T19:28:39Z"
+    }
+  ],
+  "managerExit": 0,
+  "assets": {
+    "Image": "256d5fff4bb892edcb9218c1e6353e388bc3646e65f76c2bc9d958b635d1b00e",
+    "initrd": "bc5f2b2fea7e01cea6cca22f786603def5946e3f8590ead9b1e82f88557e1ba7"
+  }
+}

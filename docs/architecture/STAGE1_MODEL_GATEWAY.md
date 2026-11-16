@@ -1,0 +1,309 @@
+# 1단계 설계 — Model Gateway와 Model Assignment
+
+상태: **구현됨** (2026-11-11), 실제 API 검증 전이다. 코드는 `src/gateway/`에 있다.
+
+[CONCEPT.md](CONCEPT.md)를 구현하기 위한 첫 단계다. 여러 Provider의 API를 하나의 계약으로 묶고, 역할과 작업 난이도에 따라 모델을 배정하며, 사용량을 Vault별로 기록한다. 2단계(격리 작업 공간)와 3단계(AI Office)는 이 계층 위에 올라간다.
+
+## 범위
+
+포함한다.
+
+- Provider 공통 요청·응답 계약 (텍스트, 도구 호출, 스트리밍)
+- Provider별 어댑터와 도구 호출 정규화
+- 역할·난이도 기반 Model Assignment
+- Vault별 사용량 기록과 예산
+- 위 기능을 확인하는 CLI
+
+포함하지 않는다.
+
+- 도구의 실제 실행(파일, Shell, 브라우저)과 권한 판단: 2단계
+- Agent의 정체성, 맥락 복구, Task 관리: 3단계
+- Vault 등록·무결성 검사: 1단계는 `.nidus/` 디렉터리 경로만 받는다
+- 이미지·음성·임베딩 모델 호출
+
+## 용어
+
+### 역할
+
+Agent 계층은 넷이다. Main은 CONCEPT의 Lead Manager 위에 놓인다.
+
+| 역할 | 책임 | 모델 |
+|---|---|---|
+| `main` | 사용자와 직접 소통한다. Manager에게 목표를 전달하고 최종 결과물을 검토한다 | 고성능 |
+| `lead-manager` | 여러 팀이 협업하거나 작업을 넘겨야 할 때 팀 사이를 조정한다 | 고성능 |
+| `manager` | 팀장. 작업을 작은 실행 단위로 나눠 Worker에게 맡기고 결과를 검토한다 | 고성능 |
+| `worker` | Manager의 지시를 받아 실제 작업을 수행한다 | 난이도에 따라 |
+
+역할 목록은 코드에 고정하지 않고 배정표의 키로 둔다. 역할이 늘어도 계약은 바뀌지 않는다.
+
+### 난이도
+
+난이도는 **Worker가 수행하는 작업**의 난이도이며 `simple`, `normal`, `complex` 세 값이다. 작업을 지시하는 쪽(Manager 또는 Main)이 지시할 때 지정한다. Gateway는 요청 내용을 보고 난이도를 추측하지 않는다.
+
+Worker가 스스로 더 높은 모델로 올라가지 않는다. 더 높은 모델이 필요하면 지시자가 난이도를 올려 다시 지시한다.
+
+## 공통 계약
+
+메시지 본문은 블록의 배열이다. 기존 계약은 문자열 하나였기 때문에 도구 호출을 담을 수 없었다.
+
+```ts
+type ContentBlock =
+  | { type: 'text'; text: string }
+  | { type: 'tool_call'; id: string; name: string; input: unknown; inputError?: string }
+  | { type: 'tool_result'; callId: string; content: string; isError: boolean }
+  | { type: 'provider_state'; provider: ProviderId; data: unknown };
+
+interface Message { role: 'user' | 'assistant'; content: ContentBlock[] }
+
+interface ToolSpec { name: string; description: string; inputSchema: JsonSchema }
+
+interface ModelRequest {
+  model: string;
+  system?: string;
+  messages: Message[];
+  tools?: ToolSpec[];
+  toolChoice?: 'auto' | 'required' | 'none';
+  maxOutputTokens?: number;
+}
+
+interface ModelResponse {
+  provider: ProviderId;
+  model: string;
+  content: ContentBlock[];
+  stopReason: 'end' | 'tool_call' | 'max_tokens' | 'refusal' | 'other';
+  usage: Usage;
+}
+```
+
+- `provider_state`는 Provider가 다음 요청에 그대로 돌려받아야 하는 불투명 데이터(추론 블록, 서명 등)를 담는다. 같은 Provider로 이어갈 때만 되돌려 보내고, 모델이 다른 Provider로 바뀌면 버린다. 이 규칙이 있어야 한 대화 안에서 모델을 바꿀 수 있다.
+- `tool_call.input`은 어댑터가 `inputSchema`로 검증한다. 모르는 도구이거나 입력이 스키마에 맞지 않으면 응답을 버리지 않고 그 블록에 `inputError`를 붙여 반환한다. 이미 토큰을 쓴 응답이므로, 호출자는 실행하지 않고 오류 `tool_result`로 답해 모델이 고치게 한다.
+- 도구 결과는 신뢰하지 않는 입력이다. Gateway는 결과를 모델에 전달만 하고 해석하지 않는다.
+- 스트리밍은 `text_delta`, `tool_call`, `done` 세 이벤트로 통일한다. 현재는 네 형식 모두 응답을 한 번에 받아 이 이벤트로 내보낸다. 토큰 단위 스트리밍은 아직 구현하지 않았다.
+- `toolChoice: 'required'`는 Anthropic에서 `auto`로 보낸다. 최신 Claude 모델이 강제 도구 호출을 거부하기 때문이다. 반드시 호출해야 하면 프롬프트에 적는다.
+
+## 어댑터
+
+도구 호출 형식은 네 갈래로 정규화한다.
+
+| 구현 | 대상 Provider |
+|---|---|
+| Anthropic Messages | Anthropic |
+| OpenAI Responses | OpenAI |
+| Gemini generateContent | Gemini |
+| Chat Completions 호환 | DeepSeek, Groq, Mistral, NVIDIA, Cloudflare |
+
+Cloudflare만 토큰 외에 Account ID가 필요하다(요청 주소 `/accounts/<id>/ai/…`에 들어간다). 앱에서 비워 두면 그 토큰으로 `GET /accounts`를 불러 계정이 정확히 하나일 때만 그 ID를 쓴다(`resolveCloudflareCredential`). 여럿이거나 토큰이 계정 목록을 볼 수 없으면 추측하지 않고, 대시보드 Workers AI 페이지의 "Use REST API" 화면에서 ID를 옮겨 적으라고 안내한다. 실측(2026-11-16): 대시보드 템플릿으로 만든 Workers AI 전용 토큰은 `GET /accounts`에 오류가 아니라 **빈 목록**을 돌려주고, `/accounts/<id>`·`/memberships`·`/user`는 403이다. 그러므로 그 토큰으로는 자동 조회가 안 되고, 안내 문구와 연결 창의 설명이 ID를 직접 적는 쪽을 기본으로 삼는다. 저장되는 것은 토큰과 ID를 함께 담은 하나의 Keychain 항목이다.
+
+어떤 모델이 무엇을 할 수 있는지는 모델 ID 목록을 코드에 적지 않고 실제 호출로 검사한다(`nidus gateway verify`, 앱의 모델 검사). 검사는 두 가지를 따로 판정한다.
+
+- **텍스트**: 일반 메시지에 텍스트로 답하는가.
+- **도구**: 도구 호출 → 결과 전달 → 최종 답의 왕복이 되는가. 통과하면 텍스트도 통과로 본다.
+
+통과와 실패는 `.nidus/local/models/checks.json`에 기록한다. 속도 제한, 시간 초과, 서버 오류처럼 모델 탓이라고 단정할 수 없는 결과는 기록하지 않고 미검사로 둔다.
+
+역할에 따라 필요한 능력이 다르다. Main, Lead Manager, Manager는 계획·지시·검토를 텍스트로 하므로 텍스트 검사를 통과하면 된다. Worker는 실제 작업을 하므로 도구 검사까지 통과해야 한다. 앱의 후보 추가 화면은 이 기준을 통과한 모델만 보여 준다.
+
+배정 자체는 검사 기록을 강제하지 않는다. `models.json`을 직접 고쳐 넣은 미검사 모델도 선택되며, 도구가 필요한 호출이면 선택 이유에 `tools unverified`로 표시한다. Models API가 미지원이라고 명시한 모델만 제외한다.
+
+## Model Assignment
+
+입력은 역할, 난이도(Worker일 때), 필요한 기능이다. 출력은 모델 하나와 선택 이유다.
+
+```ts
+assign({ role: 'worker', difficulty: 'simple', needs: { tools: true } })
+// → { provider, model, reason }
+```
+
+배정표는 Vault의 `.nidus/models.json`에 둔다. 각 칸은 우선순위 순서의 후보 목록이다.
+
+```json
+{
+  "version": 1,
+  "roles": {
+    "main": ["<provider>:<model>"],
+    "lead-manager": ["<provider>:<model>"],
+    "manager": ["<provider>:<model>", "<provider>:<model>"]
+  },
+  "worker": {
+    "simple": ["<provider>:<model>", "<provider>:<model>"],
+    "normal": ["<provider>:<model>"],
+    "complex": ["<provider>:<model>"]
+  }
+}
+```
+
+선택 규칙은 다음과 같다.
+
+1. 해당 칸의 후보를 순서대로 본다.
+2. 키가 연결되어 있고, 모델이 캐시에 있으며, 필요한 기능을 지원하는 첫 후보를 고른다.
+3. 첫 후보가 아닌 모델이 선택되면 그 이유를 사용량 기록에 남긴다.
+4. 쓸 수 있는 후보가 없으면 실패한다. 다른 칸의 모델을 대신 쓰지 않는다.
+
+Agent의 Home에는 모델을 기록하지 않는다(CONCEPT의 Home 항목). 모델은 호출할 때마다 이 배정표에서 정한다.
+
+### 모델 상태와 동시 시도 (2026-11-12 추가)
+
+무료 Provider는 같은 모델이 몇 분씩 답하지 않거나 계속 실패한다. 실제 사용 기록(하루 53건)에서 1순위 모델이 성공해도 평균 88초가 걸렸고, 시간 초과로 Main 호출마다 5분을 버렸고, 이름이 잘못된 모델(`not_found`)은 Worker를 바로 실패시켰다. 그래서 Gateway가 모델의 최근 상태를 보고 고른다.
+
+- **상태는 사용 기록에서 읽는다**(`usage.sqlite`, 최근 24시간). 앱을 다시 켜도 이어진다. 모델마다 연속 실패 수, 마지막 오류, 최근 성공 10건의 중간 응답 시간.
+- **쉬게 하기**: 모델에 관한 실패(시간 초과, 서버 오류, 속도 제한, 네트워크, 느림, 할당량, 모델 없음)가 이어지면 1·3·9·27·81분, 최대 2시간 쉰다. 모델이 없거나 지원하지 않으면 하루, 할당량 소진은 1시간. 성공하면 기록이 끝난다. 사용자가 멈춘 호출과 요청 자체의 잘못(`invalid_request`)은 세지 않는다. 쉬는 모델은 같은 칸에 다른 후보가 있는 동안 건너뛴다. 모두 쉬고 있으면 원래 순서대로 쓴다.
+- **동시 시도(hedging)**: 호출이 평소 시간의 2.5배(20~60초, 모르면 45초) 안에 답하지 않으면 같은 칸의 다음 후보에게도 보내고, 먼저 온 답을 쓴다. 늦은 첫 모델은 '느림'으로 기록되어 뒤로 밀리고, 쓰지 않은 보조 호출은 기록에 불리하게 남지 않는다. 다른 후보가 없으면 그냥 기다린다. 결과에는 `hedged` 경고가 붙는다.
+- **모델 오류에서 후보 바꾸기**: `not_found`·`unsupported`·`quota`·`invalid_response`는 기다려도 낫지 않으므로, 호출하는 쪽(`sendWithRetry`)이 같은 칸의 다른 후보로 바로 바꾼다.
+- **앱**: 모델 배정 화면의 후보마다 평소 응답 시간, 또는 쉬는 이유와 남은 시간을 보여 준다. "선택됨"은 쉬는 모델을 뺀 실제 선택이다.
+
+확인: 사용자의 배정(모두 NVIDIA, deepseek 1순위)을 복사한 Vault에서 같은 종류의 요청이 계획부터 최종 보고까지 3분 4초에 끝났다. deepseek의 서버 오류 뒤 Worker는 deepseek를 건너뛰었고, `not_found` 모델은 다음 후보로 넘어갔고, 45초 동안 답하지 않은 deepseek 대신 nemotron의 8초짜리 답을 썼다.
+
+### 자동 채우기와 제외 (2026-11-16 추가)
+
+사용자 결정: 처음엔 자동으로 채우고, 쓰면서 마음에 안 드는 모델을 걷어낸다. 자동 배정은 버튼을 누를 때만 일어난다(지속 갱신 없음 — 모델이 조용히 바뀌면 "어제까진 괜찮았는데"의 원인을 찾기 어렵다).
+
+- **자동 채우기** (`gateway/autofill.ts`, 앱 배정 탭 "자동 채우기…"): 연결된 Provider의 텍스트 모델 중 그 칸의 검사를 통과한 것(Main·Manager는 텍스트, Worker는 도구 호출)만 후보로 쓴다. 순서는 추측이 아니라 가진 사실로 정한다 — Provider 가격표의 출력 단가를 모델의 "급"으로 보고(가격 순 상·중·하 3등분; Gemini Free는 유료 가격표의 급이되 비용은 0), 같은 급 안에서는 여기서의 비용·중간 응답 시간·문맥 크기 순. Main·Manager·복잡 칸은 상위 급부터, 보통 칸은 중간 급부터, 쉬움 칸은 가벼운 급부터. 한 칸에 최대 3개, 2·3번째는 가능하면 다른 Provider(무료 Provider의 429 때문). 사용자가 직접 넣은 후보는 그대로 앞에 두고, 자동이 넣은 것만 `models.json`의 `auto`에 표시해 다시 누르면 그것만 갈아 끼운다. 적용 전에 계획을 먼저 보여 주고(검사 안 한 모델 수 포함), 가격표에 없는 모델은 중간 급으로 둔다.
+- **제외** ("이 AI의 작업이 마음에 들지 않나요?"): 작업 탭의 각 메시지(Main 계획·보고, Manager 지시·검토, Worker 응답)와 Main 대화 말풍선에 붙는다. 이를 위해 사무실 이벤트와 대화 기록은 그 호출의 **역할·난이도·`provider:model`** 을 함께 싣는다(사용자 요구: 어느 역할·어떤 난이도의 일이었는지 보고 판단해야 한다). 창은 역할·난이도·모델·배정 칸을 보여 주고 "그 칸에서만 빼기" 또는 "Vault 전체에서 빼기"를 고르게 한다. 기록은 `models.json`의 `excluded`(모델, 범위, 칸, 계기가 된 역할·난이도·Task, 메모, 시각)에 남고, 자동 채우기는 그 모델을 다시 넣지 않으며 직접 추가도 막는다(`setCandidates`). Provider 연결·모델 목록·검사 결과는 건드리지 않는다. 배정 탭의 "제외한 모델"에서 다시 허용할 수 있고, 허용해도 칸에 저절로 들어가지는 않는다.
+
+## Gemini Free / Gemini Paid와 할당량 (2026-11-15 추가)
+
+목적: 무료 할당량을 최대한 쓰고, 모르는 사이에 유료 호출이 나가지 않게 한다. 구현은 `src/gateway/gemini.ts`, `src/gateway/quota/`.
+
+### 두 Provider
+
+- `gemini-free`(Gemini Free)와 `gemini-paid`(Gemini Paid). 엔드포인트와 변환기는 같고 키, 프로젝트, 모델 목록, 검사 결과, 사용량, 할당량 기록이 따로다. Keychain 계정도 따로다.
+- **등급은 키 문자열이나 모델 이름으로 판정하지 않는다.** 사용자가 키를 어느 쪽에 등록했는지가 출발점이고, Google이 알려 주는 것으로 확인하거나 반박한다: 프로젝트의 결제 연결 여부(Cloud Billing), 거절된 호출이 가리킨 할당량 이름(`…FreeTier` / `…PaidTier…`). 근거가 없으면 "확인하지 못함"이라고 표시한다.
+- **Gemini Free는 과금 근거가 생기면 호출을 멈춘다**(오류 코드 `billing_risk`, 요청은 나가지 않는다): 프로젝트에 결제 계정이 연결됨, 서버가 유료 등급 할당량으로 답함, Free와 Paid가 같은 프로젝트를 가리킴.
+- **Gemini Paid로 자동으로 넘어가지 않는다.** Paid 모델은 배정 칸의 첫 번째 후보일 때만 쓰인다. 뒤 후보일 때는 사용자가 "넘어가도 됩니다"를 켠 경우에만 쓰인다(기본 꺼짐). 속도 제한, 실패, 느려서 다음 후보에도 보내는 경우 모두 같은 규칙을 탄다. 할당량 조회 실패는 전환 사유가 아니다.
+- 비용: Free 호출은 $0, Paid 호출은 Gemini 가격표로 계산한다.
+- **이전**: 분리 전의 `gemini` 연결은 Vault를 처음 열 때 Gemini Free로 옮긴다(후보 `gemini:…` → `gemini-free:…`, 모델 목록, 검사 결과, 사용 기록; 키는 Keychain의 옛 항목을 지우지 않고 복사). 앱이 옮긴 사실을 알리고, 한 번에 Gemini Paid로 옮기는 버튼을 준다. 옛 `gemini:` 표기는 읽을 때 `gemini-free:`로 받아들인다. 이전 대시보드(Nidus Base)는 예전 그대로 `gemini` 하나를 쓴다.
+
+### 할당량 모듈 (Provider와 무관, `quota/quota.ts`)
+
+세 가지 수를 섞지 않는다.
+
+| 수 | 출처 | 성격 |
+|---|---|---|
+| 제한 | Cloud Quotas, 사용자 입력, 429 응답의 값 | 사용자 입력이 먼저 |
+| 이 Vault의 사용량 | `usage.sqlite`의 호출 기록 | Nidus가 이 Vault에서 보낸 것만. 재시작해도 남는다 |
+| Google 관측 | Cloud Monitoring | 몇 분 늦고, 프로젝트를 쓰는 모든 호출을 센다 |
+
+- 창: RPM·TPM은 최근 60초, RPD는 태평양 시간 자정부터(Google 문서: "RPD quotas reset at midnight Pacific time"). 서버에 가지 않은 호출(키 없음, 과금 위험으로 멈춤)은 세지 않고, 거절된 호출은 센다.
+- 상태: Limited(429로 쉬는 중이거나 이 Vault의 수가 알려진 제한에 닿음), Unknown(제한을 모름), Available.
+- 호출 전: Limited인 모델은 같은 칸에 다른 후보가 있으면 건너뛴다. 혼자뿐이면 그대로 보낸다. **서버의 답이 기준이다.**
+- 429: 응답의 구조화된 부분(`google.rpc.QuotaFailure`, `RetryInfo`)에서 형식이 맞는 이름과 수만 읽는다. 자유 문장은 버린다. 하루 할당량이면 다음 태평양 자정까지, 분 단위면 서버가 준 시간(없으면 60초)만큼 그 모델을 쉬게 한다. 재시도 횟수는 기존대로 정해져 있다.
+- 다른 Provider에 붙이려면: 하루가 시작되는 시각(`QuotaPolicy`)과 제한을 가져오는 방법만 주면 된다.
+
+### Google에서 조회 (`quota/google.ts`, `quota/google-auth.ts`)
+
+API 키로는 볼 수 없어 Cloud 로그인이 따로 필요하다. 모델 호출이 아닌 읽기 전용 GET이다.
+
+| 무엇 | API | 필요한 권한 |
+|---|---|---|
+| 모델별 제한 | Cloud Quotas `quotaInfos.list` (`generativelanguage.googleapis.com`) | `cloudquotas.quotas.get` |
+| Google이 센 사용량 | Cloud Monitoring `timeSeries.list` (`…/quota/<지표>/usage`, `/limit`) | `monitoring.timeSeries.list` |
+| 결제 연결 여부 | Cloud Billing `projects.getBillingInfo` | `resourcemanager.projects.get` |
+
+- 지표: 무료는 `generate_content_free_tier_requests`(분 → RPM, 일 → RPD), `generate_content_free_tier_input_token_count`(분 → TPM). 유료는 `generate_requests_per_model`, `generate_content_paid_tier_input_token_count`. 모델 이름은 정확히 같은 것만 잇는다. 다른 등급의 지표나 알아보지 못한 지표는 제한으로 쓰지 않는다(실제 프로젝트 테스트가 그 목록을 출력한다).
+- 권한: 역할 두 개로 충분하다. Cloud Quotas Viewer(`roles/cloudquotas.viewer`: `cloudquotas.quotas.get`, `resourcemanager.projects.get` 포함)와 Monitoring Viewer(`roles/monitoring.viewer`).
+- 로그인은 gcloud의 것 하나다(`quota/google-auth.ts`). 앱의 "설정…" 창이 처음 하는 사람 기준으로 안내한다: `brew install --cask gcloud-cli` → `gcloud auth application-default login`(브라우저에서 Gemini 키를 만든 계정으로) → 앱에서 "다시 확인". 읽는 순서는 Application Default Credentials 파일(`$GOOGLE_APPLICATION_CREDENTIALS` 또는 `~/.config/gcloud/application_default_credentials.json`; 사람의 refresh token이거나 서비스 계정 키) → `gcloud auth print-access-token`. 토큰은 메모리에만 두고, 비밀은 Google의 토큰 주소로만 보낸다. 서비스 계정 키 파일 고르기와 앱 안의 OAuth 로그인은 2026-11-16에 뺐다(사용자 결정: gcloud 하나가 깔끔하고, 키 만들기는 조직 정책 `iam.disableServiceAccountKeyCreation`으로 막혀 있었다).
+- 할당량 프로젝트(`x-goog-user-project`): 사람 계정으로 부를 때 Cloud Quotas는 이 헤더를 요구하고, Monitoring과 Billing은 요구하지 않는다. 그런데 헤더를 붙이면 Monitoring은 "결제 계정이 없는 프로젝트"라며 거절하고(무료 등급 프로젝트에서 2026-11-16 실측), Billing은 그 프로젝트에 Cloud Billing API를 켜라고 한다. 그래서 헤더는 Cloud Quotas에만 붙이고, 나머지는 Google이 "requires a quota project"라고 답할 때만 붙여 다시 부른다. 결과: 사용자가 Console에서 켤 것은 Cloud Quotas API 하나뿐이다.
+- 403의 이유: `google.rpc.ErrorInfo`의 `reason`과 `activationUrl`만 읽어(`http.ts` `errorInfo`, 자유 문장은 버림) 화면에 "이 프로젝트에서 Cloud Quotas API가 켜져 있지 않습니다. [Console에서 켜기](…)"처럼 보여 준다. `USER_PROJECT_DENIED`는 Service Usage 소비자 역할 안내, 그 밖은 필요한 권한 이름.
+- Monitoring의 `…/limit` 지표는 Google이 말하는 그 한도라서, Cloud Quotas가 값을 주지 않은 모델·종류의 제한으로 쓴다(출처 `cloud`). Cloud Quotas 값이 있으면 그것이 남는다.
+- 실패: 출처마다 따로 실패한다. 값을 추정하지 않고 Unknown과 이유(권한 없음, 로그인 만료, API 꺼짐)를 보여 준다. 제한은 직접 입력할 수 있다. 모델 호출은 그대로 된다.
+
+### 저장
+
+- `.nidus/local/providers.json`: Provider별 프로젝트 ID, 유료 fallback 허용, 직접 입력한 제한, 이전 기록.
+- `.nidus/local/quota.json`: 조회한 제한, Google 관측, 결제 상태, 429로 쉬는 모델, 등급 근거.
+
+### 확인한 것과 못 한 것
+
+- 자동 테스트(Google을 흉내 냄): `tests/gemini-quota.test.mjs` 14개(헤더 정책, API 꺼짐 403의 이유와 링크 포함).
+- 실제 키: 시험용 Vault에서 이전, Gemini Free 호출, 사용량 집계를 확인했다.
+- **실제로 확인함(2026-11-16, gcloud ADC 로그인, 무료 등급 프로젝트)**: Cloud Billing(`billingEnabled: false`)과 Cloud Monitoring(모델별 `…/limit`·`…/usage` 시계열, 예: RPM 한도 5·15, RPD 사용 9/20·8/500)이 실제 값으로 들어왔다. Cloud Quotas는 그 프로젝트에 API가 꺼져 있어 403이었고, 화면에 켜기 링크가 뜨는 것까지 확인했다.
+- **확인하지 못함**: Cloud Quotas API를 켠 뒤의 실제 `quotaInfos` 응답. 응답 형식은 공식 문서의 필드와 지표 이름에 맞췄지만, 모델 이름 표기나 유료 2·3등급 지표처럼 문서에 없는 부분은 실제 값으로 봐야 안다. 확인 방법: `NIDUS_LIVE=1 NIDUS_LIVE_GCP_PROJECT=<id> npm run test:live`. 실제 429 본문의 형식도 공식 문서에는 예시가 없어 공개된 사례에 맞췄다.
+
+## `.nidus/` 배치
+
+```text
+.nidus/
+├─ models.json          배정표 (Git 추적)
+├─ budget.json          Vault 예산 (Git 추적)
+├─ .gitignore           local/ 을 제외
+└─ local/               Git 제외
+   ├─ usage.sqlite      사용량 기록
+   └─ models/           Provider별 모델 캐시, 도구 호출 검사 결과
+```
+
+- Git은 AI가 잘못한 작업을 되돌리기 위한 수단이다. 설정 파일은 추적해서 되돌릴 수 있게 하고, 바이너리 DB와 캐시는 `local/`에 모아 제외한다.
+- `local/`은 Git에는 없지만 Vault 디렉터리를 통째로 옮기면 따라간다.
+- API 키는 Vault에 두지 않는다. macOS Keychain에 기기 단위로 저장하고 여러 Vault가 함께 쓴다.
+
+## 사용량과 예산
+
+호출 한 번마다 한 줄을 기록한다.
+
+| 항목 | 내용 |
+|---|---|
+| 시각, 결과 | 성공, 실패, 취소 |
+| 역할, 난이도 | 배정 입력 |
+| Agent, Task | 2·3단계에서 채운다. 1단계는 비워 둘 수 있다 |
+| Provider, 모델, 선택 이유 | 배정 출력 |
+| 토큰 | 입력, 출력, 캐시 읽기, 캐시 쓰기, 추론 |
+| 비용 | 가격을 모르면 0이 아니라 비워 둔다 |
+
+이 기록으로 역할별·난이도별 토큰과 비용을 집계한다. 난이도 배정이 실제로 비용을 줄였는지는 이 집계로 확인한다.
+
+예산은 Vault 단위다. 예산을 넘으면 경고만 하고 호출은 계속한다. 같은 API 키를 여러 Vault가 쓸 때의 키 전체 상한은 두지 않는다.
+
+## 기존 코드 재사용
+
+| 대상 | 처리 |
+|---|---|
+| `src/http.ts`, `src/errors.ts` | 그대로 가져온다 |
+| `src/adapters/`의 모델 조회, 인증, 사용량 정규화 | 가져오고, 요청·응답 변환은 새 계약에 맞춰 다시 쓴다 |
+| `src/credentials.ts`, `native/keychain.swift` | 그대로 가져온다 |
+| `src/pricing.ts`, `src/money.ts` | 그대로 가져온다 |
+| `src/ledger.ts` | SQLite 접근 방식만 가져오고 스키마는 새로 만든다 |
+| `src/router.ts`, `src/routing-context.ts` | 쓰지 않는다. 배정표로 대체한다 |
+| `src/engine.ts` | 쓰지 않는다. Gateway로 대체한다 |
+
+가져오는 파일은 한 줄에 여러 문장이 압축된 부분을 풀어 쓴다.
+
+## 완료 기준
+
+- 네 갈래 어댑터 각각에서 도구 호출 왕복(호출 → 결과 전달 → 최종 답)이 실제 API로 성공한다.
+- 한 대화 도중 Provider를 바꿔도 이어서 응답한다.
+- 역할과 난이도를 바꿔 호출하면 배정표대로 모델이 선택되고, 후보가 없으면 실패한다.
+- 호출 기록이 `.nidus/local/usage.sqlite`에 남고 역할별·난이도별 집계가 나온다.
+- 단위 테스트는 HTTP를 주입해 외부 계정 없이 통과한다.
+
+## 결정 사항
+
+- **예산을 넘으면 경고만 한다.** 호출을 막지 않는다. 경고는 호출 결과와 사용량 집계에 함께 표시한다.
+- **과금 동의·무료 플랜 승인 절차는 1단계에 넣지 않는다.** 기존 엔진의 Provider별 과금 유형 확인과 무료 모델 승인은 가져오지 않는다. 필요해지면 Security Office 정책으로 다시 설계한다.
+
+## 명령
+
+```sh
+nidus gateway init                                   # .nidus/ 생성
+nidus gateway connect <provider>                     # 키 등록, 모델 목록 조회
+nidus gateway models <provider> [--refresh]
+nidus gateway assign --role worker --difficulty simple --tools
+nidus gateway ask --role manager                     # 배정된 모델에 한 번 질의 (과금 가능)
+nidus gateway verify <provider> <model-id>           # 텍스트·도구 호출 검사 (과금 가능)
+nidus gateway usage [--month YYYY-MM]
+```
+
+모든 명령은 `--vault <dir>`를 받는다. 생략하면 현재 디렉터리를 Vault로 본다.
+
+## 앱
+
+`Nidus.app`(`com.nidus.app`, Swift 타깃 `Nidus`)이 이 Gateway의 화면이다. 요청마다 Node 프로세스를 하나 띄워 `dist/gateway/bridge.js`에 JSON 요청을 stdin으로 보내고 결과를 stdout으로 받는다. API 키도 stdin으로만 전달한다.
+
+기존 Provider 대시보드는 `Nidus Base.app`(`com.nidus.base`)으로 이름을 바꿔 따로 유지한다. 두 앱은 Keychain의 키를 함께 쓴다.
+
+2단계에서 에이전트 실행과 격리 환경 모니터링을 붙이려면 요청마다 프로세스를 띄우는 방식 대신 계속 연결된 양방향 통로가 필요하다.
+
+## 알려진 제한
+
+- 토큰 단위 스트리밍이 없다.
+- 배정된 모델 호출이 실패해도 다음 후보로 자동 전환하지 않는다. 후보 전환은 키, 모델 목록, 기능 지원 여부로만 정한다.
+- 가격표(`src/pricing.ts`)에 없는 모델은 비용을 모른다. 이 호출은 예산 집계에서 빠지고 `cost_unknown` 경고가 붙는다.
+- 텍스트와 도구 호출만 다룬다. 이미지 입력은 계약에 없다.

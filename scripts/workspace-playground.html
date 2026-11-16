@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nidus 작업 공간 테스트</title>
+<style>
+:root { --bg:#f5f5f4; --panel:#fff; --line:#e2e2df; --text:#1c1c1a; --muted:#6b6b66; --accent:#2f6fde; --warn:#c2410c; --ok:#15803d; --user:#b45309; }
+@media (prefers-color-scheme: dark) { :root { --bg:#161615; --panel:#1f1f1d; --line:#33332f; --text:#ececea; --muted:#9b9b95; --accent:#6b9cf0; --warn:#f08a4b; --ok:#4ade80; --user:#f5b14c; } }
+* { box-sizing:border-box; }
+body { margin:0; font:14px/1.45 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif; background:var(--bg); color:var(--text); }
+header { display:flex; align-items:center; gap:12px; padding:10px 16px; border-bottom:1px solid var(--line); background:var(--panel); }
+header h1 { font-size:15px; margin:0; font-weight:600; }
+#status { color:var(--muted); font-size:13px; }
+main { display:grid; grid-template-columns:minmax(0,1fr) 380px; gap:14px; padding:14px; }
+@media (max-width: 1100px) { main { grid-template-columns:1fr; } }
+.panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px; }
+.panel h2 { font-size:13px; margin:0 0 8px; color:var(--muted); font-weight:600; }
+.side { display:flex; flex-direction:column; gap:14px; min-width:0; }
+.row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+button { font:inherit; padding:5px 10px; border-radius:6px; border:1px solid var(--line); background:var(--panel); color:var(--text); cursor:pointer; }
+button:hover:not(:disabled) { border-color:var(--accent); }
+button:disabled { opacity:.45; cursor:default; }
+button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+input[type=text], textarea { font:inherit; padding:5px 8px; border-radius:6px; border:1px solid var(--line); background:var(--bg); color:var(--text); min-width:0; }
+textarea { width:100%; font:12px ui-monospace, Menlo, monospace; }
+#url { flex:1; }
+#badge { padding:3px 10px; border-radius:999px; font-size:12px; font-weight:600; border:1px solid currentColor; }
+#badge.ai { color:var(--accent); } #badge.user { color:var(--user); }
+#screenWrap { position:relative; margin-top:10px; border:2px solid var(--line); border-radius:6px; overflow:hidden; background:#000; aspect-ratio:1280/800; }
+#screenWrap.user { border-color:var(--user); }
+#screen { display:block; width:100%; height:100%; object-fit:contain; user-select:none; -webkit-user-drag:none; }
+#screenWrap.user #screen { cursor:default; }
+#screenWrap.ai #screen { cursor:not-allowed; }
+#keys { position:absolute; left:0; top:0; width:1px; height:1px; opacity:0; border:0; padding:0; resize:none; }
+#reason { color:var(--user); font-size:13px; }
+#tabs { display:flex; gap:4px; margin-top:8px; flex-wrap:wrap; }
+#tabs button { max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; }
+#tabs button.active { border-color:var(--accent); color:var(--accent); }
+#fps { color:var(--muted); font-size:12px; margin-left:auto; }
+.approval { border:1px solid var(--warn); border-radius:6px; padding:8px; margin-bottom:6px; }
+.approval b { word-break:break-all; }
+#elements { max-height:220px; overflow:auto; font-size:12px; margin-top:8px; }
+#elements div { display:flex; gap:6px; align-items:center; padding:3px 0; border-bottom:1px solid var(--line); }
+#elements span { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+pre { margin:8px 0 0; max-height:200px; overflow:auto; font:11px/1.4 ui-monospace, Menlo, monospace; white-space:pre-wrap; word-break:break-all; background:var(--bg); padding:6px; border-radius:6px; }
+#log { max-height:180px; }
+.empty { color:var(--muted); font-size:12px; }
+.hint { color:var(--muted); font-size:12px; margin-top:6px; }
+</style>
+</head>
+<body>
+<header><h1>Nidus 작업 공간 테스트</h1><span id="status">연결 중…</span></header>
+<main>
+  <section class="panel">
+    <div class="row">
+      <span id="badge" class="ai">AI 조작 중</span>
+      <button id="control" class="primary">개입</button>
+      <span id="reason"></span>
+      <span id="fps"></span>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button data-history="back" title="뒤로">←</button>
+      <button data-history="forward" title="앞으로">→</button>
+      <button id="reload" title="새로고침">↻</button>
+      <input id="url" type="text" placeholder="주소 (개입 중일 때 사용자가 이동)">
+      <button id="go">이동</button>
+    </div>
+    <div id="tabs"></div>
+    <div id="screenWrap" class="ai">
+      <img id="screen" alt="VM 브라우저 화면">
+      <textarea id="keys" autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
+    </div>
+    <p class="hint">개입 상태에서 화면을 클릭하면 키보드 입력도 VM 브라우저로 갑니다. ⌘ 단축키는 Ctrl로 바뀌어 전달됩니다(⌘A, ⌘C, ⌘V 등).</p>
+  </section>
+  <div class="side">
+    <section class="panel">
+      <h2>네트워크 승인</h2>
+      <div id="approvals"><p class="empty">대기 중인 요청이 없습니다.</p></div>
+      <label class="row" style="margin-top:6px"><input type="checkbox" id="allowAll"> 이번 실행 동안 모두 허용 (Mac 포트 제외)</label>
+    </section>
+    <section class="panel">
+      <h2>AI 조작 흉내</h2>
+      <div class="row">
+        <button data-act="observe">관찰</button>
+        <button id="aiGo">URL 열기</button>
+        <button data-act="back">뒤로</button>
+        <button id="askUser">사용자에게 요청</button>
+      </div>
+      <div id="elements"></div>
+      <textarea id="actJson" rows="3" style="margin-top:8px">{"op":"navigate","url":"https://example.com/"}</textarea>
+      <div class="row" style="margin-top:6px"><button id="sendAct">JSON 보내기</button><span class="empty">사용자 개입 중에는 AI 조작이 대기합니다</span></div>
+      <pre id="actResult" hidden></pre>
+    </section>
+    <section class="panel">
+      <h2>작업 공간 (Git)</h2>
+      <div class="row"><input id="vault" type="text" style="flex:1" placeholder="Vault 경로 (예: ~/Developer/my-project)"><button id="wsImport">Vault 가져오기</button></div>
+      <p class="hint" id="wsState">커밋된 상태만 VM의 /workspace로 갑니다. 커밋하지 않은 변경과 무시된 파일은 가지 않습니다.</p>
+      <div class="row"><button id="wsExport" disabled>결과 가져오기</button></div>
+      <div id="review" hidden>
+        <p id="sensitive" class="approval" hidden></p>
+        <div id="commits" class="hint"></div>
+        <div id="files" class="hint"></div>
+        <pre id="diff"></pre>
+        <div class="row" style="margin-top:6px"><button id="wsApprove" class="primary">승인 (브랜치 만들기)</button><button id="wsDiscard">버리기</button></div>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>VM Shell</h2>
+      <div class="row"><input id="cmd" type="text" style="flex:1" value="python3 -m http.server 8000 --bind 127.0.0.1 & sleep 90"><button id="run">실행</button></div>
+      <p class="hint">명령마다 새 세션(최대 120초)입니다. 위 예시를 실행한 뒤 주소창에 http://localhost:8000 을 열어 보세요.</p>
+      <pre id="shellOut" hidden></pre>
+    </section>
+    <section class="panel">
+      <h2>기록</h2>
+      <pre id="log"></pre>
+    </section>
+  </div>
+</main>
+<script>
+const TOKEN = '__TOKEN__';
+const $ = id => document.getElementById(id);
+let control = 'ai', frameSize = { width: 1280, height: 800 }, observation = null, frames = 0;
+
+async function post(path, body = {}) {
+  const res = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json', 'x-token': TOKEN }, body: JSON.stringify(body) });
+  const value = await res.json();
+  if (!res.ok) throw new Error(value.error);
+  return value;
+}
+function addLog(text) { const log = $('log'); log.textContent = `${text}\n${log.textContent}`.slice(0, 20000); }
+
+// Input goes out one event at a time, in order.
+let inputs = Promise.resolve();
+function input(event) {
+  if (control !== 'user') return;
+  inputs = inputs.then(() => post('/input', event)).catch(error => addLog(`입력 실패: ${error.message}`));
+}
+
+// --- events from the server -----------------------------------------------
+const events = new EventSource(`/events?token=${TOKEN}`);
+events.addEventListener('frame', e => { const f = JSON.parse(e.data); frameSize = f; $('screen').src = `data:image/jpeg;base64,${f.data}`; frames++; });
+setInterval(() => { $('fps').textContent = `${frames} fps`; frames = 0; }, 1000);
+events.addEventListener('status', e => { const s = JSON.parse(e.data); $('status').textContent = s.text; });
+events.addEventListener('log', e => { const l = JSON.parse(e.data); addLog(`${l.at}  ${l.text}`); });
+events.addEventListener('network', e => { const n = JSON.parse(e.data); addLog(`네트워크 ${n.outcome} ${n.host}:${n.port} (${n.reason})`); });
+events.addEventListener('control', e => {
+  const c = JSON.parse(e.data); control = c.control;
+  $('badge').textContent = control === 'user' ? '사용자 조작 중' : 'AI 조작 중';
+  $('badge').className = control; $('screenWrap').className = control;
+  $('control').textContent = control === 'user' ? 'AI에게 돌려주기' : '개입';
+  $('reason').textContent = control === 'user' && c.reason ? `이유: ${c.reason}` : '';
+  for (const b of document.querySelectorAll('[data-history], #reload, #go')) b.disabled = control !== 'user';
+});
+events.addEventListener('tabs', e => {
+  const tabs = JSON.parse(e.data), box = $('tabs'); box.textContent = '';
+  for (const t of tabs) {
+    const b = document.createElement('button'); b.textContent = t.title || t.url || '(빈 탭)'; b.title = t.url;
+    if (t.active) { b.className = 'active'; if (document.activeElement !== $('url')) $('url').value = t.url; }
+    b.onclick = () => control === 'user' ? input({ type: 'tab', tabId: t.id }) : act({ op: 'switchTab', tabId: t.id });
+    box.append(b);
+  }
+});
+events.addEventListener('approval', e => {
+  const a = JSON.parse(e.data), box = $('approvals'); box.querySelector('.empty')?.remove();
+  const card = document.createElement('div'); card.className = 'approval'; card.id = `ap-${a.id}`;
+  const label = a.target === 'mac' ? `Mac의 포트 ${a.port} (host.nidus)` : a.site;
+  card.innerHTML = `<div>VM이 <b></b> 에 연결하려 합니다.</div><div class="hint"></div><div class="row" style="margin-top:6px"><button data-a="once">이번 작업만</button><button data-a="always">항상 허용</button><button data-a="deny">거부</button></div>`;
+  card.querySelector('b').textContent = label;
+  card.querySelector('.hint').textContent = a.target === 'mac' ? '' : `요청한 주소: ${a.host} · 승인하면 ${a.site}의 모든 하위 주소에 적용됩니다`;
+  card.querySelectorAll('button').forEach(b => b.onclick = () => post('/answer', { id: a.id, answer: b.dataset.a }));
+  box.append(card);
+});
+events.addEventListener('approval-done', e => { $(`ap-${JSON.parse(e.data).id}`)?.remove(); if (!$('approvals').children.length) $('approvals').innerHTML = '<p class="empty">대기 중인 요청이 없습니다.</p>'; });
+events.onerror = () => { $('status').textContent = '서버 연결 끊김'; };
+
+// --- control --------------------------------------------------------------
+$('control').onclick = () => post(control === 'user' ? '/handBack' : '/takeOver').catch(e => addLog(e.message));
+$('allowAll').onchange = e => post('/allowAll', { enabled: e.target.checked });
+for (const b of document.querySelectorAll('[data-history]')) b.onclick = () => input({ type: 'history', direction: b.dataset.history });
+$('reload').onclick = () => input({ type: 'reload' });
+const normalize = value => /^[a-z]+:/i.test(value) ? value : `http://${value}`;
+$('go').onclick = () => input({ type: 'navigate', url: normalize($('url').value.trim()) });
+$('url').onkeydown = e => { if (e.key === 'Enter' && !e.isComposing) control === 'user' ? $('go').click() : addLog('주소 이동은 개입 중에 사용자가 하거나, 오른쪽 "URL 열기"로 AI가 합니다.'); };
+
+// --- mouse and keyboard on the screen --------------------------------------
+const screen = $('screen'), keys = $('keys');
+function point(e) {
+  const r = screen.getBoundingClientRect(), scale = Math.min(r.width / frameSize.width, r.height / frameSize.height);
+  const w = frameSize.width * scale, h = frameSize.height * scale, left = r.left + (r.width - w) / 2, top = r.top + (r.height - h) / 2;
+  return { x: Math.max(0, Math.min(frameSize.width, (e.clientX - left) / scale)), y: Math.max(0, Math.min(frameSize.height, (e.clientY - top) / scale)) };
+}
+const mods = e => (e.altKey ? 1 : 0) | (e.ctrlKey || e.metaKey ? 2 : 0) | (e.shiftKey ? 8 : 0);
+const button = e => ['left', 'middle', 'right'][e.button] ?? 'left';
+screen.addEventListener('mousedown', e => { e.preventDefault(); if (control !== 'user') return; keys.focus(); input({ type: 'mouse', action: 'down', ...point(e), button: button(e), clickCount: e.detail || 1, modifiers: mods(e) }); });
+screen.addEventListener('mouseup', e => input({ type: 'mouse', action: 'up', ...point(e), button: button(e), clickCount: e.detail || 1, modifiers: mods(e) }));
+let lastMove = 0;
+screen.addEventListener('mousemove', e => { if (control !== 'user' || Date.now() - lastMove < 40) return; lastMove = Date.now(); input({ type: 'mouse', action: 'move', ...point(e), modifiers: mods(e) }); });
+screen.addEventListener('wheel', e => { if (control !== 'user') return; e.preventDefault(); input({ type: 'wheel', ...point(e), deltaX: Math.max(-5000, Math.min(5000, e.deltaX)), deltaY: Math.max(-5000, Math.min(5000, e.deltaY)) }); }, { passive: false });
+screen.addEventListener('contextmenu', e => e.preventDefault());
+
+// Plain keys go as key events. While an input method composes (Korean), nothing is sent;
+// the finished text goes as one text input.
+keys.addEventListener('keydown', e => {
+  if (control !== 'user' || e.isComposing || e.keyCode === 229) return;
+  e.preventDefault();
+  const printable = e.key.length === 1 && !e.ctrlKey && !e.metaKey;
+  input({ type: 'key', action: 'down', key: e.key, code: e.code, ...(printable ? { text: e.key } : {}), modifiers: mods(e) });
+});
+keys.addEventListener('keyup', e => { if (control !== 'user' || e.isComposing || e.keyCode === 229) return; input({ type: 'key', action: 'up', key: e.key, code: e.code, modifiers: mods(e) }); });
+keys.addEventListener('compositionend', e => { if (e.data) input({ type: 'text', text: e.data }); keys.value = ''; });
+keys.addEventListener('paste', e => { e.preventDefault(); const text = e.clipboardData.getData('text'); if (text) input({ type: 'text', text: text.slice(0, 4096) }); });
+let composing = false;
+// The hidden field only collects input-method text; anything else left in it is dropped.
+keys.addEventListener('input', () => { if (!composing) keys.value = ''; });
+keys.addEventListener('compositionstart', () => { composing = true; });
+keys.addEventListener('compositionend', () => { composing = false; });
+
+// --- AI actions by hand -----------------------------------------------------
+async function act(action) {
+  $('actResult').hidden = false; $('actResult').textContent = `${action.op} 실행 중…${control === 'user' ? ' (사용자 개입 중이라 대기)' : ''}`;
+  try {
+    const page = await post('/act', action);
+    if (page.elements) { observation = page; showElements(page); }
+    const { elements, ...rest } = page;
+    $('actResult').textContent = JSON.stringify({ ...rest, text: rest.text?.slice(0, 600) }, null, 1);
+  } catch (error) { $('actResult').textContent = `실패: ${error.message}`; }
+}
+function showElements(page) {
+  const box = $('elements'); box.textContent = '';
+  if (!page.elements.length) { box.innerHTML = '<p class="empty">조작할 수 있는 요소가 없습니다.</p>'; return; }
+  for (const el of page.elements) {
+    const row = document.createElement('div'), name = document.createElement('span');
+    name.textContent = `#${el.id} ${el.role || el.tag} ${el.name || el.href || ''}`; name.title = name.textContent;
+    const click = document.createElement('button'); click.textContent = '클릭';
+    click.onclick = () => act({ op: 'click', snapshotId: page.snapshotId, targetId: el.id });
+    row.append(name, click);
+    if (el.role === 'textbox' || el.role === 'searchbox' || el.tag === 'TEXTAREA') {
+      const type = document.createElement('button'); type.textContent = '입력';
+      type.onclick = () => { const text = prompt('입력할 내용'); if (text !== null) act({ op: 'type', snapshotId: page.snapshotId, targetId: el.id, text }); };
+      row.append(type);
+    }
+    box.append(row);
+  }
+}
+for (const b of document.querySelectorAll('[data-act]')) b.onclick = () => act({ op: b.dataset.act });
+$('aiGo').onclick = () => { const url = prompt('AI가 열 주소', 'https://example.com/'); if (url) act({ op: 'navigate', url: normalize(url.trim()) }); };
+$('askUser').onclick = () => act({ op: 'askUser', reason: '로그인이 필요합니다 (테스트)' });
+$('sendAct').onclick = () => { try { act(JSON.parse($('actJson').value)); } catch { $('actResult').hidden = false; $('actResult').textContent = 'JSON 형식이 아닙니다'; } };
+
+// --- workspace ----------------------------------------------------------------
+let review = null;
+events.addEventListener('workspace', e => {
+  const w = JSON.parse(e.data);
+  $('wsExport').disabled = !w;
+  if (w) { $('vault').value = w.vault; $('wsState').textContent = `작업 ${w.task} · 기준 커밋 ${w.base.slice(0, 8)} · VM 안 /workspace (브랜치 nidus/${w.task})`; }
+});
+$('wsImport').onclick = async () => {
+  $('wsImport').disabled = true; $('wsState').textContent = '가져오는 중…';
+  try { await post('/workspaceImport', { vault: $('vault').value }); $('cmd').value = 'git status -sb && git log --oneline | head -5 && ls'; }
+  catch (error) { $('wsState').textContent = `실패: ${error.message}`; }
+  finally { $('wsImport').disabled = false; }
+};
+$('wsExport').onclick = async () => {
+  $('review').hidden = true;
+  try {
+    review = await post('/workspaceExport');
+    if (review.empty) { $('wsState').textContent = '바뀐 내용이 없습니다.'; return; }
+    $('review').hidden = false;
+    $('sensitive').hidden = !review.sensitive.length;
+    $('sensitive').textContent = `주의: Nidus 설정을 바꿉니다 (${review.sensitive.join(', ')}). 네트워크 허용 목록 같은 설정이 들어 있을 수 있습니다.`;
+    $('commits').textContent = `커밋 ${review.commits.length}개: ` + review.commits.map(c => `${c.hash.slice(0, 7)} ${c.subject} (${c.author})`).join(' · ');
+    $('files').textContent = `파일 ${review.files.length}개: ` + review.files.map(f => `${f.path} +${f.added ?? '?'} -${f.removed ?? '?'}`).join(' · ');
+    $('diff').textContent = review.diff + (review.diffTruncated ? '\n… (일부만 표시)' : '');
+  } catch (error) { $('wsState').textContent = `실패: ${error.message}`; }
+};
+$('wsApprove').onclick = async () => {
+  try { const r = await post('/workspaceApprove', { head: review.head }); $('review').hidden = true; $('wsState').textContent = `브랜치 ${r.branch}을(를) 만들었습니다. 사용자의 현재 브랜치와 작업 디렉터리는 그대로입니다.`; }
+  catch (error) { $('wsState').textContent = `실패: ${error.message}`; }
+};
+$('wsDiscard').onclick = async () => { await post('/workspaceDiscard'); $('review').hidden = true; $('wsState').textContent = '버렸습니다.'; };
+
+// --- Shell ------------------------------------------------------------------
+$('run').onclick = async () => {
+  const out = $('shellOut'); out.hidden = false; out.textContent = '실행 중…'; $('run').disabled = true;
+  try { const r = await post('/shell', { command: $('cmd').value, seconds: 120 }); out.textContent = `종료 코드 ${r.exitCode} (${r.reason})\n${r.stdout}${r.stderr ? `\n[stderr]\n${r.stderr}` : ''}`; }
+  catch (error) { out.textContent = `실패: ${error.message}`; }
+  finally { $('run').disabled = false; }
+};
+</script>
+</body>
+</html>

@@ -1,0 +1,36 @@
+{
+  "date": "2026-11-05",
+  "initialFailure": "root_replaced: unchanged inode/birthtime, changed device numbers in both registered Vaults",
+  "followupFailure": "cache_disk_changed during first real VM start after registry repair",
+  "nodeTests": {
+    "passed": 375,
+    "failed": 0
+  },
+  "appBuild": "PASS",
+  "legacyRepair": {
+    "registryBackup": true,
+    "descriptorBytesPreserved": true,
+    "cleanCacheMetadataBackup": true,
+    "cacheDiskStatPreservedDuringRepair": true
+  },
+  "realVM": [
+    {
+      "vault": "local",
+      "start": "RUNNING",
+      "ready": true,
+      "stop": "STOP_CONFIRMED"
+    },
+    {
+      "vault": "iCloud",
+      "start": "RUNNING",
+      "ready": true,
+      "stop": "STOP_CONFIRMED"
+    }
+  ],
+  "serviceShutdown": "PASS",
+  "notRun": [
+    "actual reboot E2E",
+    "GUI click",
+    "Provider API"
+  ]
+}

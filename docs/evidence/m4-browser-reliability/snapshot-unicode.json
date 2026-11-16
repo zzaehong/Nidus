@@ -1,0 +1,23 @@
+{
+  "scope": "Real VM read-only Google DOM fixtures, no live search",
+  "cases": [
+    {
+      "query": "맥 미니 사양",
+      "status": "PASS"
+    },
+    {
+      "query": "Mac mini specs",
+      "status": "PASS"
+    },
+    {
+      "query": "日本語 仕様",
+      "status": "PASS"
+    },
+    {
+      "query": "中文 规格",
+      "status": "PASS"
+    }
+  ],
+  "status": "PASS",
+  "stop": "confirmed"
+}

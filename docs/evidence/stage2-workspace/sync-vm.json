@@ -1,0 +1,93 @@
+{
+  "at": "2026-11-11T16:16:58.312Z",
+  "scope": "real Apple Virtualization VM; throwaway Vault repository; AI work simulated by Shell commands",
+  "checks": [
+    {
+      "name": "the Vault's committed state goes into the VM",
+      "bundleBytes": 439,
+      "pass": true,
+      "ms": 96
+    },
+    {
+      "name": "the Shell works in /workspace on the task branch; uncommitted and ignored files stayed out",
+      "output": [
+        "/workspace",
+        "nidus/readme-update",
+        "# 테스트 Vault",
+        "no-local",
+        "1",
+        "1000"
+      ],
+      "pass": true,
+      "ms": 74
+    },
+    {
+      "name": "the AI changes, commits, runs a script from the workspace and leaves one change uncommitted",
+      "output": [
+        "script ran",
+        "?? notes.txt"
+      ],
+      "pass": true,
+      "ms": 67
+    },
+    {
+      "name": "the browser opens workspace files read-only",
+      "title": "Workspace page",
+      "pass": true,
+      "ms": 1156
+    },
+    {
+      "name": "the workspace survives a VM restart and is selected again",
+      "selected": true,
+      "pass": true,
+      "ms": 4991
+    },
+    {
+      "name": "the work comes back to a hidden ref with uncommitted changes committed; nothing is a branch yet",
+      "commits": [
+        "작업 중 남은 변경 (Nidus가 커밋)",
+        "README 보강, 도구 추가"
+      ],
+      "files": [
+        {
+          "path": "README.md",
+          "added": 1,
+          "removed": 0
+        },
+        {
+          "path": "notes.txt",
+          "added": 1,
+          "removed": 0
+        },
+        {
+          "path": "tool.sh",
+          "added": 2,
+          "removed": 0
+        }
+      ],
+      "bundleBytes": 859,
+      "pass": true,
+      "ms": 125
+    },
+    {
+      "name": "approval makes the branch nidus/<task>; the user's branch and edits are untouched",
+      "branch": "nidus/readme-update",
+      "currentBranch": "main",
+      "pass": true,
+      "ms": 39
+    },
+    {
+      "name": "a task without changes brings nothing back",
+      "pass": true,
+      "ms": 86
+    },
+    {
+      "name": "a second import with the same task name is refused (work is never overwritten)",
+      "refused": "Vault operation blocked: workspace_transfer_failed (workspace exists)",
+      "pass": true,
+      "ms": 40
+    }
+  ],
+  "stopped": "STOP_CONFIRMED",
+  "pass": true
+}

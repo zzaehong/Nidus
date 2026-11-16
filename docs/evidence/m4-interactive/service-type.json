@@ -1,0 +1,85 @@
+{
+  "scope": "Real local service, gateway, VM and Bing; no Provider",
+  "approvals": [
+    "session",
+    "network-sensitive",
+    "network-sensitive",
+    "network-sensitive",
+    "network-sensitive",
+    "network-sensitive",
+    "interaction"
+  ],
+  "open": {
+    "callId": "open",
+    "status": "succeeded",
+    "code": "ok",
+    "content": {
+      "text": "{\"url\":\"https://www.bing.com/\",\"title\":\"검색 - Microsoft Bing\",\"text\":\" \\n이미지동영상지도뉴스\\n \\nEnglish\\n로그인\\nRewards\\n \\nImage Creator\\n텍스트 작성자\\nPeople rowing among colourful bald cypress, Xuancheng, Anhui, China\\n© Jackal Pan/Getty Images\\nInfo\\n의견\\n© 2026 Microsoft\\n개인정보 보호정책 및 쿠키\\n법적 고지사항\\n광고\\n광고 정보\\n도움말\\n의견\\n \\n \",\"snapshotId\":\"ee92fb05-2cc0-40df-ae04-efd0c707a060\",\"elements\":[{\"tag\":\"A\",\"role\":\"\",\"type\":\"\",\"name\":\"이미지\",\"value\":\"\",\"href\":\"/images?FORM=Z9LH\",\"x\":132,\"y\":33,\"id\":\"1\"},{\"tag\":\"A\",\"role\":\"\",\"type\":\"\",\"name\":\"동영상\",\"value\":\"\",\"href\":\"/videos?FORM=Z9LH1\",\"x\":192,\"y\":33,\"id\":\"2\"},{\"tag\":\"A\",\"role\":\"\",\"type\":\"\",\"name\":\"지도\",\"value\":\"\",\"href\":\"/maps?FORM=Z9LH2\",\"x\":248,\"y\":33,\"id\":\"3\"},{\"tag\":\"A\",\"role\":\"\",\"type\":\"\",\"name\":\"뉴스\",\"value\":\"\",\"href\":\"/news/search?q=%ec%a3%bc%ec%9a%94+%ea%b8%b0%ec%82%ac&nvaug=%5bNewsVertical+Category%3d%22rt_MaxClass%22%5d&FORM=Z9LH3\",\"x\":300,\"y\":33,\"id\":\"4\"},{\"tag\":\"DIV\",\"role\":\"button\",\"type\":\"\",\"name\":\"더 보기\",\"value\":\"\",\"href\":\"\",\"x\":353,\"y\":31,\"id\":\"5\"},{\"tag\":\"A\",\"role\":\"\",\"type\":\"\",\"name\":\"English\",\"value\":\"\",\"href\":\"/?setlang=en&cc=kr&cc=KR\",\"x\":950,\"y\":34,\"id\":\"6\"},{\"tag\":\"A\",\"role\":\"\",\"type\":\"\",\"name\":\"로그인\",\"value\":\"\",\"href\":\"javascript:void(0)\",\"x\":1031,\"y\":34,\"id\":\"7\"},{\"tag\":\"A\",\"role\":\"button\",\"type\":\"\",\"name\":\"Microsoft Rewards\",\"value\":\"\",\"href\":\"javascript:void(0)\",\"x\":1130,\"y\":34,\"id\":\"8\"},{\"tag\":\"A\",\"role\":\"button\",\"type\":\"\",\"name\":\"설정 및 빠른 링크\",\"value\":\"\",\"href\":\"javascript:void(0)\",\"x\":1215,\"y\":34,\"id\":\"9\"},{\"tag\":\"INPUT\",\"role\":\"combobox\",\"type\":\"search\",\"name\":\"검색어를 입력하세요.\",\"value\":\"\",\"href\":\"\",\"x\":498,\"y\":206,\"id\":\"10\"},{\"tag\":\"DIV\",\"role\":\"button\",\"type\":\"\",\"name\":\"화상 키보드를 사용하여 검색하세요.\",\"value\":\"\",\"href\":\"\",\"x\":889,\"y\":206,\"id\":\"11\"},{\"tag\":\"A\",\"role\":\"\",\"type\":\"\",\"name\":\"Image Creator\",\"value\":\"\",\"href\":\"/images/create/ai-image-generator?bicsource=hp&FORM=bicbhp\",\"x\":329,\"y\":277,\"id\":\"12\"},{\"tag\":\"A\",\"role\":\"\",\"type\":\"\",\"name\":\"텍스트 작성자\",\"value\":\"\",\"href\":\"/search?q=bing ai 글쓰기&FORM=btcbhp\",\"x\":481,\"y\":277,\"id\":\"13\"},{\"tag\":\"A\",\"role\":\"\",\"type\":\"\",\"name\":\"Info\",\"value\":\"\",\"href\":\"/search?q=bald+cypress&form=hpcapt&filters=HpDate:\\\"20261104_0800\\\"+mgzv3configlist:\\\"BingQA_Encyclopedia_Layout\\\"\",\"x\":1130,\"y\":873,\"id\":\"14\"},{\"tag\":\"A\",\"role\":\"button\",\"type\":\"\",\"name\":\"이전 이미지\",\"value\":\"\",\"href\":\"#\",\"x\":1195,\"y\":873,\"id\":\"15\"},{\"tag\":\"A\",\"role\":\"button\",\"type\":\"\",\"name\":\"다음 이미지\",\"value\":\"\",\"href\":\"#\",\"x\":1239,\"y\":873,\"id\":\"16\"},{\"tag\":\"BUTTON\",\"role\":\"button\",\"type\":\"submit\",\"name\":\"의견\",\"value\":\"\",\"href\":\"\",\"x\":1231,\"y\":880,\"id\":\"17\"}],\"sandboxVerified\":true,\"untrusted\":true,\"retrievedAt\":\"2026-11-04T23:33:39.659Z\",\"networkResponses\":166,\"networkBlocked\":6,\"mode\":\"interactive-browser\"}"
+    },
+    "untrusted": true
+  },
+  "observe": {
+    "callId": "observe",
+    "status": "succeeded",
+    "code": "ok",
+    "content": {
+      "text": "{\"url\":\"https://www.bing.com/\",\"title\":\"검색 - Microsoft Bing\",\"text\":\" \\n이미지동영상지도뉴스\\n \\nEnglish\\n로그인\\nRewards\\n \\nImage Creator\\n텍스트 작성자\\nPeople rowing among colourful bald cypress, Xuancheng, Anhui, China\\n© Jackal Pan/Getty Images\\nInfo\\n의견\\n© 2026 Microsoft\\n개인정보 보호정책 및 쿠키\\n법적 고지사항\\n광고\\n광고 정보\\n도움말\\n의견\\n \\n \",\"snapshotId\":\"305ab486-e07f-4fbf-92da-2b8ab2b3fe9e\",\"elements\":[{\"tag\":\"A\",\"role\":\"\",\"type\":\"\",\"name\":\"이미지\",\"value\":\"\",\"href\":\"/images?FORM=Z9LH\",\"x\":132,\"y\":33,\"id\":\"1\"},{\"tag\":\"A\",\"role\":\"\",\"type\":\"\",\"name\":\"동영상\",\"value\":\"\",\"href\":\"/videos?FORM=Z9LH1\",\"x\":192,\"y\":33,\"id\":\"2\"},{\"tag\":\"A\",\"role\":\"\",\"type\":\"\",\"name\":\"지도\",\"value\":\"\",\"href\":\"/maps?FORM=Z9LH2\",\"x\":248,\"y\":33,\"id\":\"3\"},{\"tag\":\"A\",\"role\":\"\",\"type\":\"\",\"name\":\"뉴스\",\"value\":\"\",\"href\":\"/news/search?q=%ec%a3%bc%ec%9a%94+%ea%b8%b0%ec%82%ac&nvaug=%5bNewsVertical+Category%3d%22rt_MaxClass%22%5d&FORM=Z9LH3\",\"x\":300,\"y\":33,\"id\":\"4\"},{\"tag\":\"DIV\",\"role\":\"button\",\"type\":\"\",\"name\":\"더 보기\",\"value\":\"\",\"href\":\"\",\"x\":353,\"y\":31,\"id\":\"5\"},{\"tag\":\"A\",\"role\":\"\",\"type\":\"\",\"name\":\"English\",\"value\":\"\",\"href\":\"/?setlang=en&cc=kr&cc=KR\",\"x\":950,\"y\":34,\"id\":\"6\"},{\"tag\":\"A\",\"role\":\"\",\"type\":\"\",\"name\":\"로그인\",\"value\":\"\",\"href\":\"javascript:void(0)\",\"x\":1031,\"y\":34,\"id\":\"7\"},{\"tag\":\"A\",\"role\":\"button\",\"type\":\"\",\"name\":\"Microsoft Rewards\",\"value\":\"\",\"href\":\"javascript:void(0)\",\"x\":1130,\"y\":34,\"id\":\"8\"},{\"tag\":\"A\",\"role\":\"button\",\"type\":\"\",\"name\":\"설정 및 빠른 링크\",\"value\":\"\",\"href\":\"javascript:void(0)\",\"x\":1215,\"y\":34,\"id\":\"9\"},{\"tag\":\"INPUT\",\"role\":\"combobox\",\"type\":\"search\",\"name\":\"검색어를 입력하세요.\",\"value\":\"\",\"href\":\"\",\"x\":498,\"y\":206,\"id\":\"10\"},{\"tag\":\"DIV\",\"role\":\"button\",\"type\":\"\",\"name\":\"화상 키보드를 사용하여 검색하세요.\",\"value\":\"\",\"href\":\"\",\"x\":889,\"y\":206,\"id\":\"11\"},{\"tag\":\"A\",\"role\":\"\",\"type\":\"\",\"name\":\"Image Creator\",\"value\":\"\",\"href\":\"/images/create/ai-image-generator?bicsource=hp&FORM=bicbhp\",\"x\":329,\"y\":277,\"id\":\"12\"},{\"tag\":\"A\",\"role\":\"\",\"type\":\"\",\"name\":\"텍스트 작성자\",\"value\":\"\",\"href\":\"/search?q=bing ai 글쓰기&FORM=btcbhp\",\"x\":481,\"y\":277,\"id\":\"13\"},{\"tag\":\"A\",\"role\":\"\",\"type\":\"\",\"name\":\"Info\",\"value\":\"\",\"href\":\"/search?q=bald+cypress&form=hpcapt&filters=HpDate:\\\"20261104_0800\\\"+mgzv3configlist:\\\"BingQA_Encyclopedia_Layout\\\"\",\"x\":1130,\"y\":873,\"id\":\"14\"},{\"tag\":\"A\",\"role\":\"button\",\"type\":\"\",\"name\":\"이전 이미지\",\"value\":\"\",\"href\":\"#\",\"x\":1195,\"y\":873,\"id\":\"15\"},{\"tag\":\"A\",\"role\":\"button\",\"type\":\"\",\"name\":\"다음 이미지\",\"value\":\"\",\"href\":\"#\",\"x\":1239,\"y\":873,\"id\":\"16\"},{\"tag\":\"BUTTON\",\"role\":\"button\",\"type\":\"submit\",\"name\":\"의견\",\"value\":\"\",\"href\":\"\",\"x\":1231,\"y\":880,\"id\":\"17\"}],\"sandboxVerified\":true,\"untrusted\":true,\"retrievedAt\":\"2026-11-04T23:33:40.089Z\",\"networkResponses\":166,\"networkBlocked\":6,\"mode\":\"interactive-browser\"}"
+    },
+    "untrusted": true
+  },
+  "typed": {
+    "callId": "type",
+    "status": "succeeded",
+    "code": "ok",
+    "content": {
+      "text": "{\"url\":\"https://www.bing.com/\",\"title\":\"검색 - Microsoft Bing\",\"text\":\" \\n이미지동영상지도뉴스\\n \\nEnglish\\n로그인\\nRewards\\n \\n×\\nmac mini\\nmac mini m4\\nmac mini m5\\nmac mini m5 pro\\nmac mini m3\\nmac mini pro\\nmac mini m5 release date\\nmac mini neo\\nmac mini 2026\\nmac mini m4 pro\\nmac mini m1\\nmac mini m4 pro 64gb\\n12개 제안 가능, 위쪽 및 아래쪽 화살표를 사용하여 검토\\nImage Creator\\n텍스트 작성자\\nPeople rowing among colourful bald cypress, Xuancheng, Anhui, China\\n© Jackal Pan/Getty Images\\nInfo\\n의견\\n© 2026 Microsoft\\n개인정보 보호정책 및 쿠키\\n법적 고지사항\\n광고\\n광고 정보\\n도움말\\n의견\\n \\n \",\"snapshotId\":\"37baaaca-d42d-4557-912d-a12bb07e2dbb\",\"elements\":[{\"tag\":\"A\",\"role\":\"\",\"type\":\"\",\"name\":\"이미지\",\"value\":\"\",\"href\":\"/images?FORM=Z9LH\",\"x\":132,\"y\":33,\"id\":\"1\"},{\"tag\":\"A\",\"role\":\"\",\"type\":\"\",\"name\":\"동영상\",\"value\":\"\",\"href\":\"/videos?FORM=Z9LH1\",\"x\":192,\"y\":33,\"id\":\"2\"},{\"tag\":\"A\",\"role\":\"\",\"type\":\"\",\"name\":\"지도\",\"value\":\"\",\"href\":\"/maps?FORM=Z9LH2\",\"x\":248,\"y\":33,\"id\":\"3\"},{\"tag\":\"A\",\"role\":\"\",\"type\":\"\",\"name\":\"뉴스\",\"value\":\"\",\"href\":\"/news/search?q=%ec%a3%bc%ec%9a%94+%ea%b8%b0%ec%82%ac&nvaug=%5bNewsVertical+Category%3d%22rt_MaxClass%22%5d&FORM=Z9LH3\",\"x\":300,\"y\":33,\"id\":\"4\"},{\"tag\":\"DIV\",\"role\":\"button\",\"type\":\"\",\"name\":\"더 보기\",\"value\":\"\",\"href\":\"\",\"x\":353,\"y\":31,\"id\":\"5\"},{\"tag\":\"A\",\"role\":\"\",\"type\":\"\",\"name\":\"English\",\"value\":\"\",\"href\":\"/?setlang=en&cc=kr&cc=KR\",\"x\":950,\"y\":34,\"id\":\"6\"},{\"tag\":\"A\",\"role\":\"\",\"type\":\"\",\"name\":\"로그인\",\"value\":\"\",\"href\":\"javascript:void(0)\",\"x\":1031,\"y\":34,\"id\":\"7\"},{\"tag\":\"A\",\"role\":\"button\",\"type\":\"\",\"name\":\"Microsoft Rewards\",\"value\":\"\",\"href\":\"javascript:void(0)\",\"x\":1130,\"y\":34,\"id\":\"8\"},{\"tag\":\"A\",\"role\":\"button\",\"type\":\"\",\"name\":\"설정 및 빠른 링크\",\"value\":\"\",\"href\":\"javascript:void(0)\",\"x\":1215,\"y\":34,\"id\":\"9\"},{\"tag\":\"INPUT\",\"role\":\"combobox\",\"type\":\"search\",\"name\":\"검색어를 입력하세요.\",\"value\":\"Mac mini\",\"href\":\"\",\"x\":486,\"y\":206,\"id\":\"10\"},{\"tag\":\"DIV\",\"role\":\"button\",\"type\":\"\",\"name\":\"지우기\",\"value\":\"\",\"href\":\"\",\"x\":1026,\"y\":206,\"id\":\"11\"},{\"tag\":\"A\",\"role\":\"\",\"type\":\"\",\"name\":\"Image Creator\",\"value\":\"\",\"href\":\"/images/create/ai-image-generator?bicsource=hp&FORM=bicbhp\",\"x\":222,\"y\":277,\"id\":\"12\"},{\"tag\":\"A\",\"role\":\"\",\"type\":\"\",\"name\":\"텍스트 작성자\",\"value\":\"\",\"href\":\"/search?q=bing ai 글쓰기&FORM=btcbhp\",\"x\":373,\"y\":277,\"id\":\"13\"},{\"tag\":\"A\",\"role\":\"\",\"type\":\"\",\"name\":\"Info\",\"value\":\"\",\"href\":\"/search?q=bald+cypress&form=hpcapt&filters=HpDate:\\\"20261104_0800\\\"+mgzv3configlist:\\\"BingQA_Encyclopedia_Layout\\\"\",\"x\":1130,\"y\":873,\"id\":\"14\"},{\"tag\":\"A\",\"role\":\"button\",\"type\":\"\",\"name\":\"이전 이미지\",\"value\":\"\",\"href\":\"#\",\"x\":1195,\"y\":873,\"id\":\"15\"},{\"tag\":\"A\",\"role\":\"button\",\"type\":\"\",\"name\":\"다음 이미지\",\"value\":\"\",\"href\":\"#\",\"x\":1239,\"y\":873,\"id\":\"16\"},{\"tag\":\"BUTTON\",\"role\":\"button\",\"type\":\"submit\",\"name\":\"의견\",\"value\":\"\",\"href\":\"\",\"x\":1231,\"y\":880,\"id\":\"17\"}],\"sandboxVerified\":true,\"untrusted\":true,\"retrievedAt\":\"2026-11-04T23:33:40.624Z\",\"networkResponses\":167,\"networkBlocked\":6,\"mode\":\"interactive-browser\"}"
+    },
+    "untrusted": true
+  },
+  "status": "PASS",
+  "cleanup": "confirmed",
+  "stop": {
+    "schemaVersion": 1,
+    "revision": 8,
+    "vaultId": "705388d7-17b9-46d2-92ba-17206e0aa0d6",
+    "environmentId": "3d9042c1-0954-410b-8248-c7b58eb87964",
+    "vmInstanceId": "07427fbd-b8f2-4fde-b206-5eb03896e4d7",
+    "generation": 1,
+    "state": "STOP_CONFIRMED",
+    "policy": {
+      "version": 1,
+      "globalActiveVMs": 1,
+      "vaultActiveVMs": 1,
+      "activeSessionsPerVM": 1,
+      "queue": "host-service-fifo",
+      "idleMs": 300000
+    },
+    "ready": false,
+    "activeSession": null,
+    "queued": 0,
+    "updatedAt": "2026-11-04T23:33:40.709Z",
+    "backend": "apple-virtualization-offline",
+    "network": "disabled",
+    "originalVaultMounted": false,
+    "sessions": [
+      {
+        "id": "ce9b2380-345e-4fa9-aee4-fdfb14f4cc32",
+        "executionId": "live-integration",
+        "callId": "open",
+        "invocationKey": "6b9ff7122010f562569fa8c9ab1d1bcb3d7f34698c23f4b32c18d4bbc72051b2",
+        "commandHash": "69c2dbd903fdb5d01d4d8a24e30c72d2a6999a3a8c71a8258f430050c4293b2a",
+        "vaultId": "705388d7-17b9-46d2-92ba-17206e0aa0d6",
+        "vmInstanceId": "07427fbd-b8f2-4fde-b206-5eb03896e4d7",
+        "generation": 1,
+        "state": "COMPLETED",
+        "createdAt": "2026-11-04T23:33:24.020Z",
+        "completedAt": "2026-11-04T23:33:40.647Z",
+        "cleanupConfirmed": true,
+        "resultHash": "a18b8e479deae3eb2e55b5bdaf6b1e3b11e8a2826c7c28bd3f913217ad50d404"
+      }
+    ]
+  },
+  "shutdown": {
+    "shutdownConfirmed": true
+  }
+}

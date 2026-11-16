@@ -1,0 +1,557 @@
+{
+  "schemaVersion": 1,
+  "phase": "M0-user-recovery",
+  "eligible": false,
+  "generatedAt": "2026-10-31T02:53:10Z",
+  "checks": [
+    {
+      "name": "setsid/ui-cancel",
+      "runID": "82df2d2f-a0c1-4387-9c8f-e44bfb97732e",
+      "directory": "/private/tmp/nidus-manager-omrcmr5a",
+      "status": "PASS",
+      "activeBytes": 7,
+      "framesBeforeStop": 0,
+      "approvedFramesBeforeStop": 0,
+      "processSnapshotBefore": [
+        "73862     1 Sat Oct 31 11:52:56 2026     /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine"
+      ],
+      "recoveryBefore": {
+        "runID": "82df2d2f-a0c1-4387-9c8f-e44bfb97732e",
+        "vaultID": "M0 diagnostic",
+        "detectedAt": "2026-10-31T02:52:56.210073+00:00",
+        "state": "RUNNING",
+        "lastState": "RUNNING",
+        "reason": "live-management-state",
+        "stopConfirmed": false,
+        "canStop": true,
+        "locked": true,
+        "bootChanged": false,
+        "integrityVerified": false,
+        "details": [
+          "manager-ready",
+          "start-request",
+          "start-completed"
+        ],
+        "faultDetectedAt": null,
+        "recoveryAttempts": []
+      },
+      "stopAttempt": {
+        "runID": "82df2d2f-a0c1-4387-9c8f-e44bfb97732e",
+        "vaultID": "M0 diagnostic",
+        "detectedAt": "2026-10-31T02:52:57.041759+00:00",
+        "state": "STOP_REQUESTED",
+        "lastState": "STOP_REQUESTED",
+        "reason": "live-management-state",
+        "stopConfirmed": false,
+        "canStop": false,
+        "locked": true,
+        "bootChanged": false,
+        "integrityVerified": false,
+        "details": [
+          "manager-ready",
+          "start-request",
+          "start-completed",
+          "termination-request",
+          "requestStop"
+        ],
+        "faultDetectedAt": null,
+        "recoveryAttempts": [
+          "2026-10-31T02:52:57.044229+00:00"
+        ]
+      },
+      "duplicateStopAttempt": {
+        "runID": "82df2d2f-a0c1-4387-9c8f-e44bfb97732e",
+        "vaultID": "M0 diagnostic",
+        "detectedAt": null,
+        "state": "STOP_UNCONFIRMED",
+        "lastState": null,
+        "reason": "record-or-control-unavailable",
+        "stopConfirmed": false,
+        "canStop": false,
+        "locked": true,
+        "bootChanged": false,
+        "integrityVerified": false,
+        "details": [],
+        "faultDetectedAt": "2026-10-31T02:52:57.044655+00:00",
+        "recoveryAttempts": [
+          "2026-10-31T02:52:57.044229+00:00",
+          "2026-10-31T02:52:57.044655+00:00"
+        ]
+      },
+      "framesAfterStop": 0,
+      "processSnapshotAfter": [],
+      "stopConfirmed": true,
+      "writesAfterStop": 0,
+      "observationSeconds": 2,
+      "activityStatus": "PASS",
+      "reconciliation": {
+        "state": "STOP_CONFIRMED",
+        "lastManagedState": "STOP_CONFIRMED",
+        "frameworkState": null,
+        "reason": "owner-callback-and-stopped-record",
+        "allowOperations": true,
+        "autoResume": false
+      },
+      "faultInjection": "none",
+      "restartAllowsOperations": true,
+      "recoveryPolicyStatus": "PASS",
+      "events": [
+        {
+          "action": "create",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "cpuCount": 2,
+          "elapsedSeconds": 0.013109583291225135,
+          "memoryBytes": 536870912,
+          "networkDevices": 0,
+          "runID": ""
+        },
+        {
+          "action": "manager-ready",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.015056499978527427,
+          "runID": "82df2d2f-a0c1-4387-9c8f-e44bfb97732e"
+        },
+        {
+          "action": "start-request",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.11555608327034861,
+          "runID": "82df2d2f-a0c1-4387-9c8f-e44bfb97732e"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 4,
+          "actualStateName": "starting",
+          "elapsedSeconds": 0.11588462500367314,
+          "runID": "82df2d2f-a0c1-4387-9c8f-e44bfb97732e"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.2527601666515693,
+          "runID": "82df2d2f-a0c1-4387-9c8f-e44bfb97732e"
+        },
+        {
+          "action": "start-completed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.2530051249777898,
+          "runID": "82df2d2f-a0c1-4387-9c8f-e44bfb97732e"
+        },
+        {
+          "action": "termination-request",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 1.0846282499842346,
+          "reason": "user-recovery-stop",
+          "runID": "82df2d2f-a0c1-4387-9c8f-e44bfb97732e"
+        },
+        {
+          "action": "requestStop",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 1.0847041249508038,
+          "runID": "82df2d2f-a0c1-4387-9c8f-e44bfb97732e"
+        },
+        {
+          "action": "forceStop-request",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 3.183047333266586,
+          "runID": "82df2d2f-a0c1-4387-9c8f-e44bfb97732e"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 7,
+          "actualStateName": "stopping",
+          "elapsedSeconds": 3.183203333290294,
+          "runID": "82df2d2f-a0c1-4387-9c8f-e44bfb97732e"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 3.184684749925509,
+          "runID": "82df2d2f-a0c1-4387-9c8f-e44bfb97732e"
+        },
+        {
+          "action": "forceStop-completed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 3.1847359583480284,
+          "runID": "82df2d2f-a0c1-4387-9c8f-e44bfb97732e"
+        },
+        {
+          "action": "stop-confirmed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 3.1847780833486468,
+          "runID": "82df2d2f-a0c1-4387-9c8f-e44bfb97732e"
+        }
+      ],
+      "recoveryAfter": {
+        "runID": "82df2d2f-a0c1-4387-9c8f-e44bfb97732e",
+        "vaultID": "M0 diagnostic",
+        "detectedAt": "2026-10-31T02:52:59.141826+00:00",
+        "state": "STOP_CONFIRMED",
+        "lastState": "STOP_CONFIRMED",
+        "reason": "owner-callback-and-stopped-record",
+        "stopConfirmed": true,
+        "canStop": false,
+        "locked": false,
+        "bootChanged": false,
+        "integrityVerified": false,
+        "details": [
+          "manager-ready",
+          "start-request",
+          "start-completed",
+          "termination-request",
+          "requestStop",
+          "forceStop-request",
+          "forceStop-completed",
+          "stop-confirmed"
+        ],
+        "faultDetectedAt": "2026-10-31T02:52:57.044655+00:00",
+        "recoveryAttempts": [
+          "2026-10-31T02:52:57.044229+00:00",
+          "2026-10-31T02:52:57.044655+00:00"
+        ]
+      },
+      "defaultNetworkBlocked": true,
+      "registry": "/private/tmp/nidus-ui-recovery-d87lvhx6/registry",
+      "recoveryPolicy": "PASS"
+    },
+    {
+      "name": "setsid/manager-kill",
+      "runID": "773e80f5-9764-47d4-bd9a-22a716197f10",
+      "directory": "/private/tmp/nidus-manager-t5x10b9p",
+      "status": "UNCONFIRMED",
+      "activeBytes": 7,
+      "framesBeforeStop": 0,
+      "approvedFramesBeforeStop": 0,
+      "processSnapshotBefore": [
+        "73951     1 Sat Oct 31 11:53:01 2026     /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine"
+      ],
+      "framesAfterStop": 0,
+      "processSnapshotAfter": [],
+      "stopConfirmed": false,
+      "writesAfterStop": 0,
+      "observationSeconds": 2,
+      "activityStatus": "PASS",
+      "reconciliation": {
+        "state": "STOP_UNCONFIRMED",
+        "lastManagedState": "RUNNING",
+        "frameworkState": null,
+        "reason": "no-authoritative-stop-proof-after-restart",
+        "allowOperations": false,
+        "autoResume": false
+      },
+      "faultInjection": "none",
+      "restartAllowsOperations": false,
+      "recoveryPolicyStatus": "PASS",
+      "newVMAdmissionBlocked": true,
+      "events": [
+        {
+          "action": "create",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "cpuCount": 2,
+          "elapsedSeconds": 0.0009576666634529829,
+          "memoryBytes": 536870912,
+          "networkDevices": 0,
+          "runID": ""
+        },
+        {
+          "action": "manager-ready",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.0026493333280086517,
+          "runID": "773e80f5-9764-47d4-bd9a-22a716197f10"
+        },
+        {
+          "action": "start-request",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.11119208333548158,
+          "runID": "773e80f5-9764-47d4-bd9a-22a716197f10"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 4,
+          "actualStateName": "starting",
+          "elapsedSeconds": 0.11162308335769922,
+          "runID": "773e80f5-9764-47d4-bd9a-22a716197f10"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.2149626666214317,
+          "runID": "773e80f5-9764-47d4-bd9a-22a716197f10"
+        },
+        {
+          "action": "start-completed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.21511287498287857,
+          "runID": "773e80f5-9764-47d4-bd9a-22a716197f10"
+        }
+      ],
+      "recoveryAfter": {
+        "runID": "773e80f5-9764-47d4-bd9a-22a716197f10",
+        "vaultID": "M0 diagnostic",
+        "detectedAt": "2026-10-31T02:53:01.773747+00:00",
+        "state": "STOP_UNCONFIRMED",
+        "lastState": "RUNNING",
+        "reason": "no-authoritative-stop-proof-after-restart",
+        "stopConfirmed": false,
+        "canStop": false,
+        "locked": true,
+        "bootChanged": false,
+        "integrityVerified": false,
+        "details": [
+          "manager-ready",
+          "start-request",
+          "start-completed"
+        ],
+        "faultDetectedAt": "2026-10-31T02:53:05.015096+00:00",
+        "recoveryAttempts": []
+      },
+      "defaultNetworkBlocked": true,
+      "registry": "/private/tmp/nidus-ui-recovery-30r0bp8l/registry",
+      "recoveryPolicy": "PASS"
+    },
+    {
+      "name": "setsid/worker-kill",
+      "runID": "1506d977-5b10-4ca2-9467-16543be953fc",
+      "directory": "/private/tmp/nidus-manager-6jm4czmx",
+      "status": "PASS",
+      "activeBytes": 7,
+      "framesBeforeStop": 0,
+      "approvedFramesBeforeStop": 0,
+      "processSnapshotBefore": [
+        "73978     1 Sat Oct 31 11:53:05 2026     /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine"
+      ],
+      "framesAfterStop": 0,
+      "processSnapshotAfter": [],
+      "stopConfirmed": true,
+      "writesAfterStop": 0,
+      "observationSeconds": 2,
+      "activityStatus": "PASS",
+      "reconciliation": {
+        "state": "STOP_CONFIRMED",
+        "lastManagedState": "STOP_CONFIRMED",
+        "frameworkState": null,
+        "reason": "owner-callback-and-stopped-record",
+        "allowOperations": true,
+        "autoResume": false
+      },
+      "faultInjection": "none",
+      "restartAllowsOperations": true,
+      "recoveryPolicyStatus": "PASS",
+      "events": [
+        {
+          "action": "create",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "cpuCount": 2,
+          "elapsedSeconds": 0.0009285416454076767,
+          "memoryBytes": 536870912,
+          "networkDevices": 0,
+          "runID": ""
+        },
+        {
+          "action": "manager-ready",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.002786291646771133,
+          "runID": "1506d977-5b10-4ca2-9467-16543be953fc"
+        },
+        {
+          "action": "start-request",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 0.10676437499932945,
+          "runID": "1506d977-5b10-4ca2-9467-16543be953fc"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 4,
+          "actualStateName": "starting",
+          "elapsedSeconds": 0.10696429165545851,
+          "runID": "1506d977-5b10-4ca2-9467-16543be953fc"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.19703525002114475,
+          "runID": "1506d977-5b10-4ca2-9467-16543be953fc"
+        },
+        {
+          "action": "start-completed",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 0.19748879165854305,
+          "runID": "1506d977-5b10-4ca2-9467-16543be953fc"
+        },
+        {
+          "action": "termination-request",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 1.0410329999867827,
+          "reason": "worker-disconnected",
+          "runID": "1506d977-5b10-4ca2-9467-16543be953fc"
+        },
+        {
+          "action": "requestStop",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 1.0414434582926333,
+          "runID": "1506d977-5b10-4ca2-9467-16543be953fc"
+        },
+        {
+          "action": "forceStop-request",
+          "actualState": 1,
+          "actualStateName": "running",
+          "elapsedSeconds": 3.1410763749154285,
+          "runID": "1506d977-5b10-4ca2-9467-16543be953fc"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 7,
+          "actualStateName": "stopping",
+          "elapsedSeconds": 3.141251541674137,
+          "runID": "1506d977-5b10-4ca2-9467-16543be953fc"
+        },
+        {
+          "action": "state-observed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 3.1425790833309293,
+          "runID": "1506d977-5b10-4ca2-9467-16543be953fc"
+        },
+        {
+          "action": "forceStop-completed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 3.142654583323747,
+          "runID": "1506d977-5b10-4ca2-9467-16543be953fc"
+        },
+        {
+          "action": "stop-confirmed",
+          "actualState": 0,
+          "actualStateName": "stopped",
+          "elapsedSeconds": 3.1427254165755585,
+          "runID": "1506d977-5b10-4ca2-9467-16543be953fc"
+        }
+      ],
+      "recoveryAfter": {
+        "runID": "1506d977-5b10-4ca2-9467-16543be953fc",
+        "vaultID": "M0 diagnostic",
+        "detectedAt": "2026-10-31T02:53:08.168830+00:00",
+        "state": "STOP_CONFIRMED",
+        "lastState": "STOP_CONFIRMED",
+        "reason": "owner-callback-and-stopped-record",
+        "stopConfirmed": true,
+        "canStop": false,
+        "locked": false,
+        "bootChanged": false,
+        "integrityVerified": false,
+        "details": [
+          "manager-ready",
+          "start-request",
+          "start-completed",
+          "termination-request",
+          "requestStop",
+          "forceStop-request",
+          "forceStop-completed",
+          "stop-confirmed"
+        ],
+        "faultDetectedAt": null,
+        "recoveryAttempts": []
+      },
+      "defaultNetworkBlocked": true,
+      "registry": "/private/tmp/nidus-ui-recovery-cbdy0yfr/registry"
+    }
+  ],
+  "sourceHashes": {
+    "/Users/parkjaehong/Developer/Nidus/scripts/agent-vm/reliability_probe.py": "0366865f0481f6f9cd781f15a99cb9378098b64f3c67a2cfa8857cc8d50c083b",
+    "/Users/parkjaehong/Developer/Nidus/scripts/agent-vm/test_lifecycle.py": "afc884b680e2c7051ea4a3dc997b5835506e1649d4b90fb8188bb3762164d43c",
+    "/Users/parkjaehong/Developer/Nidus/scripts/agent-vm/recovery.py": "8aa816ebd6297b5785e30e60a2f5d9e41d667068f0083ae7a4bbe4438259cb3b",
+    "/Users/parkjaehong/Developer/Nidus/scripts/agent-vm/recovery_probe.py": "598fa9203101df762548eebcc09073f7f036678e7d688572ceac7b33e7c09676",
+    "/Users/parkjaehong/Developer/Nidus/scripts/agent-vm/VMProbe.swift": "d78fad0a7773c3d9f7c346af274fba241d45104adbadabbbea1179e94919cdc3",
+    "/Users/parkjaehong/Developer/Nidus/scripts/agent-vm/test_recovery.py": "ca655d5ff04a20ea9141eedc5e4b517a239e35127808423a4e12fd00a3623470",
+    "/Users/parkjaehong/Developer/Nidus/scripts/agent-vm/test_workspace.py": "84030c05b2d4212f9e233ef887c7d9a42a864d7f899c892f1811af6ce19e1be4",
+    "/Users/parkjaehong/Developer/Nidus/scripts/agent-vm/manager_probe.py": "23b28c6f4cc84fbc5f6a286f6fa2b63f36b0b3c3231c0436b64b486be09d75df",
+    "/Users/parkjaehong/Developer/Nidus/scripts/agent-vm/lifecycle.py": "a3c86c0d591364cf616e51f6701734d6710b45388aa6b3c728c65230c7fefabe",
+    "/Users/parkjaehong/Developer/Nidus/scripts/agent-vm/probe.py": "55c6791b1586c82c03033c685b90f293ded0a25a1fcaaa566f611c46ff257957",
+    "/Users/parkjaehong/Developer/Nidus/scripts/agent-vm/guest-init.sh": "b7052902c007161da9935b7d0588d61d4d586b1a7239d2fb175b042a92b42912",
+    "/Users/parkjaehong/Developer/Nidus/scripts/agent-vm/workspace.py": "154df3613e4d375a53d1305fac23bd2ec979e2bac3d45d830e390bb40e1fda74",
+    "/Users/parkjaehong/Developer/Nidus/scripts/agent-vm/test_manager.py": "08c932b003d4e2aa39e5cbdc608a4583daddb80a736dc9e4295d1ce3fd017d42",
+    "/Users/parkjaehong/Developer/Nidus/scripts/agent-vm/assets.json": "6fbf6f5194b819557c11404e67d99d54244d5589ecc4e2c59441eac5459c0d70",
+    "/Users/parkjaehong/Developer/Nidus/scripts/agent-vm/probe.entitlements": "915e2b39357ecf8d211dc7fac43195c9cdcf55a0a1ecdbf931c116a4eac421f3",
+    "/Users/parkjaehong/Developer/Nidus/scripts/agent-vm/prepare.py": "7cef587a2a5ee32f4caa19c7a41227f58b21ab6ef876b144a983d3e4bb29cc1b",
+    "Sources/NidusNativeApp/App.swift": "92709cde1406deb7a112a84c1108c6283c095e3e908940314a8c4366c53d6730",
+    "Sources/NidusNativeApp/VMRecovery.swift": "c3ceed67522c51e27d1f3793291927180f3801e26c1e9093b04eab4a19eb66f2",
+    "tests/NidusNativeAppTests/VMRecoveryTests.swift": "25f96786a350ed762e82beb0ab4d87bf31cbdb3c2251bb8bc026c9210457a166",
+    "scripts/build-app.mjs": "5e6849603aec9b320438d400de9302e72b01723d61c07c28272bc0458d8b8966"
+  },
+  "actualHostReboot": "NOT_RUN",
+  "actualSwiftUICrash": "NOT_RUN",
+  "tests": {
+    "node": {
+      "status": "PASS",
+      "count": 174
+    },
+    "swift": {
+      "status": "PASS",
+      "count": 46,
+      "recoveryMockCount": 4
+    },
+    "python": {
+      "status": "PASS",
+      "count": 21
+    },
+    "macOSAppBuild": {
+      "status": "PASS",
+      "packageSourcesMatch": true
+    },
+    "visualQA": {
+      "status": "NOT_RUN",
+      "reason": "Headless captures did not show text reliably; not accepted as visual evidence."
+    },
+    "actualHostReboot": {
+      "status": "NOT_RUN",
+      "mockPolicyTests": "PASS"
+    },
+    "actualAppCrash": {
+      "status": "NOT_RUN"
+    }
+  },
+  "host": "ProductName:\t\tmacOS\nProductVersion:\t\t27.0.1\nBuildVersion:\t\t26A434",
+  "guest": "Linux ARM64 6.18.58-0-virt, Alpine v3.24 diagnostic initramfs",
+  "bootEvidence": {
+    "currentBootIDQuery": "PASS on host outside restricted test sandbox",
+    "changedBootAndIntegrity": "Mock tests only; no host reboot performed",
+    "releaseRequirements": [
+      "valid changed boot UUID",
+      "same registry device/inode",
+      "original and workspace approved flat-file inventories match",
+      "no corrupt audit or journal"
+    ],
+    "legacyRegistryWithoutInventory": "remains locked"
+  },
+  "limitations": [
+    "No public reconnect after VM owner death",
+    "Registry must be selected manually in M0 UI; no product Agent VM launch",
+    "Private local control is not protection against malicious same-user host processes",
+    "System Python required; unavailable bridge fails closed",
+    "General recursive merge and other-Vault concurrent isolation unqualified",
+    "No automatic host reboot, Task resume, journal deletion or PID-based VM termination"
+  ],
+  "decision": "M0 remains ineligible. User recovery controls do not turn owner death into a confirmed VM stop. M1-M6 remain disabled."
+}

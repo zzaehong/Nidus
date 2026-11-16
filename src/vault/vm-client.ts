@@ -1,0 +1,44 @@
+import {summarizeVMStatus} from './vm-protocol.js';
+import {connect} from 'node:net';
+import {spawn} from 'node:child_process';
+import {join} from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {lstat} from 'node:fs/promises';
+import {VaultRegistry} from './registry.js';
+import {VMJournal,readVMFile,safeVMDirectory} from './vm-journal.js';
+import {VaultError} from './types.js';
+export class VMClient {
+ readonly directory:string;
+ constructor(private readonly registry=new VaultRegistry()){this.directory=join(registry.directory,'vm-runtime');}
+ async request(method:string,args:Record<string,unknown>={},startService=false,onEvent?:(event:any)=>void):Promise<any>{
+  if(startService){
+   try{await lstat(join(this.registry.directory,'vm-recovery-lock'));throw new VaultError('vm_recovery_busy');}catch(e){if((e as NodeJS.ErrnoException).code!=='ENOENT')throw e;}
+   try{await lstat(join(this.directory,'owner'));}catch(e){if((e as NodeJS.ErrnoException).code!=='ENOENT')throw e;
+    const child=spawn(process.execPath,[fileURLToPath(new URL('./vm-service.js',import.meta.url)),this.registry.directory],{detached:true,stdio:'ignore',env:{PATH:process.env.PATH??'/usr/bin:/bin',HOME:process.env.HOME??'',NIDUS_VM_IDLE_MS:process.env.NIDUS_VM_IDLE_MS??'300000'}});child.unref();
+    await new Promise<void>((resolve,reject)=>{child.once('spawn',resolve);child.once('error',reject);});
+    for(let i=0;i<100;i++){try{await lstat(join(this.directory,'control.sock'));break;}catch{await new Promise(r=>setTimeout(r,20));}}
+   }
+  }
+  await safeVMDirectory(this.directory);
+  const token=await readVMFile(join(this.directory,'owner','token'));
+  const socketPath=join(this.directory,'control.sock'),s=await lstat(socketPath);
+  if(!s.isSocket()||s.isSymbolicLink()||s.uid!==process.getuid!()||(s.mode&0o077))throw new VaultError('vm_unsafe_socket');
+  return new Promise((resolve,reject)=>{
+   const socket=connect(socketPath);socket.setEncoding('utf8');let buffer='',finished=false,total=0;const timer=setTimeout(()=>{socket.destroy();reject(new VaultError('vm_channel_timeout'));},85000);
+   const done=(error:Error|null,value?:unknown)=>{if(finished)return;finished=true;clearTimeout(timer);socket.destroy();error?reject(error):resolve(value);};
+   socket.on('connect',()=>socket.write(JSON.stringify({...args,token,method})+'\n'));
+   socket.on('data',chunk=>{buffer+=chunk.toString('utf8');total+=Buffer.byteLength(chunk);if(Buffer.byteLength(buffer)>262144||total>1048576){done(new VaultError('vm_channel_limit'));return;}
+    let end;while((end=buffer.indexOf('\n'))>=0){const line=buffer.slice(0,end);buffer=buffer.slice(end+1);try{const r=JSON.parse(line);if(r.event){onEvent?.(r);}else done(r.error?new VaultError(r.error):null,r.result);}catch{done(new VaultError('vm_channel_invalid'));}}
+   });socket.on('error',()=>done(new VaultError('vm_manager_unavailable')));socket.on('end',()=>{if(!finished)done(new VaultError('STOP_UNCONFIRMED'));});
+  });
+ }
+ async status(summary=false){try{
+  let state;
+  try{state=await this.request(summary?'summary':'status');}
+  catch(e){if(summary&&e instanceof VaultError&&e.code==='vm_unknown_method')state=await this.request('status');else throw e;}
+  return summary?{...summarizeVMStatus(state),sessionCount:state.sessionCount??state.sessions.length,statusSource:'live-service'}:state;
+ }catch{
+  const s=await new VMJournal(this.directory).read();let owned=false;try{await lstat(join(this.directory,'owner'));owned=true;}catch{}
+  if(owned||!['STOPPED','STOP_CONFIRMED'].includes(s.state)){s.state='STOP_UNCONFIRMED';s.ready=false;}return summary?{...summarizeVMStatus(s),statusSource:'journal-unverified'}:s;
+ }}
+}

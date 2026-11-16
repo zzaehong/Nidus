@@ -1,0 +1,171 @@
+{
+  "scope": "Real VM/Chromium; deterministic synthetic broker responses; not live Internet or Provider",
+  "requests": [
+    {
+      "url": "https://example.com/",
+      "method": "GET",
+      "body": ""
+    },
+    {
+      "url": "https://example.com/app.js",
+      "method": "GET",
+      "body": ""
+    },
+    {
+      "url": "https://example.com/favicon.ico",
+      "method": "GET",
+      "body": ""
+    },
+    {
+      "url": "https://example.com/search?q=Mac+mini",
+      "method": "GET",
+      "body": ""
+    },
+    {
+      "url": "https://example.com/favicon.ico",
+      "method": "GET",
+      "body": ""
+    },
+    {
+      "url": "https://example.com/favicon.ico",
+      "method": "GET",
+      "body": ""
+    },
+    {
+      "url": "https://example.com/submit",
+      "method": "POST",
+      "body": "message=synthetic"
+    },
+    {
+      "url": "https://example.com/favicon.ico",
+      "method": "GET",
+      "body": ""
+    }
+  ],
+  "approvals": [
+    {
+      "scope": "network-sensitive",
+      "hash": "fab4697dcf86ca65bc431d605cf7d2f3a80cfa9c2c8dbffd16633cd3d0af9e0a"
+    },
+    {
+      "scope": "network-sensitive",
+      "hash": "078814d94b128f65d43cb19959549139addad3edd98d7eb443c93f18f6caea34"
+    }
+  ],
+  "initial": {
+    "url": "https://example.com/",
+    "title": "Live fixture",
+    "text": "Search now\nChange\nExternal script loaded",
+    "snapshotId": "0c7ce2fc-4603-464e-b473-af2cd51c991d",
+    "elements": [
+      {
+        "tag": "INPUT",
+        "role": "",
+        "type": "text",
+        "name": "Search",
+        "value": "",
+        "href": "",
+        "x": 100,
+        "y": 20,
+        "id": "1"
+      },
+      {
+        "tag": "BUTTON",
+        "role": "",
+        "type": "submit",
+        "name": "Search now",
+        "value": "",
+        "href": "",
+        "x": 234,
+        "y": 20,
+        "id": "2"
+      },
+      {
+        "tag": "BUTTON",
+        "role": "",
+        "type": "submit",
+        "name": "Change",
+        "value": "",
+        "href": "",
+        "x": 39,
+        "y": 60,
+        "id": "3"
+      }
+    ],
+    "sandboxVerified": true,
+    "untrusted": true,
+    "retrievedAt": "2026-11-04T23:48:10.711Z",
+    "networkResponses": 3,
+    "networkBlocked": 1,
+    "mode": "interactive-browser"
+  },
+  "frame": {
+    "format": "jpeg",
+    "initialBytes": 5619,
+    "changed": true
+  },
+  "search": {
+    "url": "https://example.com/search?q=Mac+mini",
+    "title": "Results",
+    "text": "Mac mini result\nOpen detail\nSubmit",
+    "snapshotId": "00ab24bf-9cc0-43bd-b3c5-9a3cc93da411",
+    "elements": [
+      {
+        "tag": "A",
+        "role": "",
+        "type": "",
+        "name": "Open detail",
+        "value": "",
+        "href": "/detail",
+        "x": 52,
+        "y": 83,
+        "id": "1"
+      },
+      {
+        "tag": "INPUT",
+        "role": "",
+        "type": "text",
+        "name": "Message",
+        "value": "",
+        "href": "",
+        "x": 100,
+        "y": 106,
+        "id": "2"
+      },
+      {
+        "tag": "BUTTON",
+        "role": "",
+        "type": "submit",
+        "name": "Submit",
+        "value": "",
+        "href": "",
+        "x": 221,
+        "y": 106,
+        "id": "3"
+      }
+    ],
+    "sandboxVerified": true,
+    "untrusted": true,
+    "retrievedAt": "2026-11-04T23:48:13.089Z",
+    "networkResponses": 5,
+    "networkBlocked": 1,
+    "mode": "interactive-browser"
+  },
+  "deniedPost": true,
+  "submitted": {
+    "url": "https://example.com/submit",
+    "title": "Submitted",
+    "text": "Submission received",
+    "snapshotId": "42423b99-2b9b-42b6-8386-d96897a332ee",
+    "elements": [],
+    "sandboxVerified": true,
+    "untrusted": true,
+    "retrievedAt": "2026-11-04T23:48:15.496Z",
+    "networkResponses": 8,
+    "networkBlocked": 2,
+    "mode": "interactive-browser"
+  },
+  "status": "PASS",
+  "cleanup": "CONFIRMED",
+  "stop": "STOP_CONFIRMED"
+}

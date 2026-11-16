@@ -1,0 +1,115 @@
+{
+  "scope": "Real Apple VM, public HTTPS and synthetic malicious HTML; programmatic approvals only",
+  "events": [
+    {
+      "event": "starting",
+      "frameworkState": 0,
+      "time": "2026-11-04T05:36:07Z"
+    },
+    {
+      "event": "running",
+      "frameworkState": 1,
+      "time": "2026-11-04T05:36:07Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_DEVELOPMENT ready",
+      "time": "2026-11-04T05:36:10Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_READY cgroup2",
+      "time": "2026-11-04T05:36:10Z"
+    },
+    {
+      "event": "ready",
+      "frameworkState": 1,
+      "time": "2026-11-04T05:36:10Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_WORKSPACE_ACK ceacba6b-52d5-4092-8e59-18077e6c9106 begin",
+      "time": "2026-11-04T05:36:11Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_WORKSPACE_ACK ceacba6b-52d5-4092-8e59-18077e6c9106 chunk",
+      "time": "2026-11-04T05:36:11Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_WORKSPACE_ACK ceacba6b-52d5-4092-8e59-18077e6c9106 seal",
+      "time": "2026-11-04T05:36:11Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_WORKSPACE_RESULT 76fd2541-e792-44c1-8df6-e062b7c576d1 0 W3sicGF0aCI6ICJicm93c2VyLTAuanNvbiIsICJjb250ZW50IjogIntcInVybFwiOlwiaHR0cHM6Ly9leGFtcGxlLmNvbS9cIixcImNvbnRlbnRUeXBlXCI6XCJ0ZXh0L2h0bWxcIixcImJvZHlcIjpcIlBDRmtiMk4wZVhCbElHaDBiV3crUEdoMGJXd2diR0Z1WnoxbGJqNDhhR1ZoWkQ0OGJXVjBZU0JqYUdGeWMyVjBQWFYwWmkwNFBqeHNhVzVySUhKbGJEMXBZMjl1SUdoeVpXWTlaR0YwWVRvc1BqeHRaWFJoSUc1aGJXVTlkbWxsZDNCdmNuUWdZMjl1ZEdWdWREMGlkMmxrZEdnOVpHVjJhV05sTFhkcFpIUm9MR2x1YVhScFlXd3RjMk5oYkdVOU1TSStQSFJwZEd4bFBrVjRZVzF3YkdVZ1JHOXRZV2x1UEM5MGFYUnNaVDQ4YzNSNWJHVSthSFJ0Ykh0amIyeHZjaTF6WTJobGJXVTZiR2xuYUhRZ1pHRnlhenRpWVdOclozSnZkVzVrT214cFoyaDBMV1JoY21zb0kyVmxaU3dqTWpJeUtYMWliMlI1ZTJadmJuUTZNVFp3ZUM4eExqWWdjM2x6ZEdWdExYVnBMSE5oYm5NdGMyVnlhV1k3YldGNExYZHBaSFJvT2pJMlpXMDdiV0Z5WjJsdU9tRjFkRzg3Y0dGa1pHbHVaem95Tlhab0lESmxiU0F5WlcwN2RHVjRkQzFoYkdsbmJqcGpaVzUwWlhKOVBDOXpkSGxzWlQ0OEwyaGxZV1ErUEdKdlpIaytQSEErVkdocGN5QmtiMjFoYVc0Z2FYTWdabTl5SUhWelpTQnBiaUJrYjJOMWJXVnVkR0YwYVc5dUlHVjRZVzF3YkdWeklIZHBkR2h2ZFhRZ2JtVmxaR2x1WnlCd1pYSnRhWE56YVc5dUxpQlVhR2x6SUdseklHNXZkQ0JoSUhObGNuWnBZMlU3SUdGMmIybGtJSEpsYkhscGJtY2diMjRnYVhRZ1ptOXlJSFJsYzNScGJtY2dZVzVrSUcxdmJtbDBiM0pwYm1jZ2NIVnljRzl6WlhNdVBDOXdQanh6WTNKcGNIUWdjM0pqUFM5ekxtcHpQand2YzJOeWFYQjBQand2WW05a2VUNDhMMmgwYld3K0NnPT1cIn0ifV0=",
+      "time": "2026-11-04T05:36:12Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_WORKSPACE_END 76fd2541-e792-44c1-8df6-e062b7c576d1 cfffa38135ca89c3fc241e2481368e0e644474ccf0324c8e63df8dd5d798d5c7",
+      "time": "2026-11-04T05:36:12Z"
+    },
+    {
+      "event": "guest",
+      "frameworkState": 1,
+      "line": "NIDUS_RESULT 76fd2541-e792-44c1-8df6-e062b7c576d1 1 1 completed 238329856 eyJ0aXRsZSI6IkV4YW1wbGUgRG9tYWluIiwidGV4dCI6IlRoaXMgZG9tYWluIGlzIGZvciB1c2UgaW4gZG9jdW1lbnRhdGlvbiBleGFtcGxlcyB3aXRob3V0IG5lZWRpbmcgcGVybWlzc2lvbi4gVGhpcyBpcyBub3QgYSBzZXJ2aWNlOyBhdm9pZCByZWx5aW5nIG9uIGl0IGZvciB0ZXN0aW5nIGFuZCBtb25pdG9yaW5nIHB1cnBvc2VzLiIsImxpbmtzIjpbXX0K RXJyb3I6IE5vdCBhbGxvd2VkCg==",
+      "time": "2026-11-04T05:36:12Z"
+    },
+    {
+      "event": "stop_requested",
+      "frameworkState": 1,
+      "reason": "user",
+      "time": "2026-11-04T05:36:12Z"
+    },
+    {
+      "event": "STOP_CONFIRMED",
+      "frameworkState": 0,
+      "time": "2026-11-04T05:36:12Z"
+    },
+    {
+      "event": "closed"
+    }
+  ],
+  "approval": {
+    "approvalId": "3d5b67e5-2b37-459a-b46e-810c3cc20e84",
+    "vaultId": "a34a0f68-378f-4130-9d28-889440ef0290",
+    "executionId": "live",
+    "callId": "page",
+    "command": "HTTPS GET https://example.com/",
+    "commandHash": "e2c4044e8fc95d492081fbbc18cae253a9e2d068a8c031425a4090e54b5c648e",
+    "policyRevision": 1,
+    "expiresAt": 1793770627343,
+    "environmentId": "77db27f9-900b-4e14-a7b3-142d6467c5ef",
+    "tool": "browser_navigate",
+    "version": "1",
+    "requestedAt": 1793770567343,
+    "cachePersistent": false,
+    "browser": {
+      "kind": "navigate",
+      "url": "https://example.com/"
+    }
+  },
+  "live": {
+    "sessionId": "76fd2541-e792-44c1-8df6-e062b7c576d1",
+    "vmInstanceId": "99b99312-0440-40ce-9078-efc3de7cd583",
+    "generation": 1,
+    "exitCode": 1,
+    "cleanupConfirmed": true,
+    "reason": "completed",
+    "memoryPeakBytes": 238329856,
+    "stdout": "{\"title\":\"Example Domain\",\"text\":\"This domain is for use in documentation examples without needing permission. This is not a service; avoid relying on it for testing and monitoring purposes.\",\"links\":[]}\n",
+    "stderr": "Error: Not allowed\n"
+  },
+  "status": "FAIL",
+  "error": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\n1 !== 0\n",
+  "stop": "STOP_CONFIRMED"
+}

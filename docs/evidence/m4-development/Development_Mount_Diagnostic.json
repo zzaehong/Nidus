@@ -1,0 +1,143 @@
+[
+  {
+    "event": "starting",
+    "frameworkState": 0,
+    "time": "2026-11-03T07:03:14Z"
+  },
+  {
+    "event": "running",
+    "frameworkState": 1,
+    "time": "2026-11-03T07:03:14Z"
+  },
+  {
+    "event": "guest",
+    "frameworkState": 1,
+    "line": "[    0.046652] hv_vmbus: registering driver hyperv_keyboard",
+    "time": "2026-11-03T07:03:14Z"
+  },
+  {
+    "event": "guest",
+    "frameworkState": 1,
+    "line": "[    0.046806] rtc-pl031 20050000.pl031: registered as rtc0",
+    "time": "2026-11-03T07:03:14Z"
+  },
+  {
+    "event": "guest",
+    "frameworkState": 1,
+    "line": "[    0.046849] rtc-pl031 20050000.pl031: setting system clock to 2026-11-03T07:03:14 UTC (1793689394)",
+    "time": "2026-11-03T07:03:14Z"
+  },
+  {
+    "event": "guest",
+    "frameworkState": 1,
+    "line": "[    0.046995] NET: Registered PF_INET6 protocol family",
+    "time": "2026-11-03T07:03:14Z"
+  },
+  {
+    "event": "guest",
+    "frameworkState": 1,
+    "line": "[    0.047806] Segment Routing with IPv6",
+    "time": "2026-11-03T07:03:14Z"
+  },
+  {
+    "event": "guest",
+    "frameworkState": 1,
+    "line": "[    0.047836] In-situ OAM (IOAM) with IPv6",
+    "time": "2026-11-03T07:03:14Z"
+  },
+  {
+    "event": "guest",
+    "frameworkState": 1,
+    "line": "[    0.050367] registered taskstats version 1",
+    "time": "2026-11-03T07:03:14Z"
+  },
+  {
+    "event": "guest",
+    "frameworkState": 1,
+    "line": "[    0.050448] Loading compiled-in X.509 certificates",
+    "time": "2026-11-03T07:03:14Z"
+  },
+  {
+    "event": "guest",
+    "frameworkState": 1,
+    "line": "[    2.811914] Freeing initrd memory: 432644K",
+    "time": "2026-11-03T07:03:17Z"
+  },
+  {
+    "event": "guest",
+    "frameworkState": 1,
+    "line": "[    2.815597] Loaded X.509 cert 'alpinelinux.org: Alpine Linux kernel key: 87fa969a47f3e2a6aa35859eb932a17c95abcd82'",
+    "time": "2026-11-03T07:03:17Z"
+  },
+  {
+    "event": "guest",
+    "frameworkState": 1,
+    "line": "[    2.816465] Demotion targets for Node 0: null",
+    "time": "2026-11-03T07:03:17Z"
+  },
+  {
+    "event": "guest",
+    "frameworkState": 1,
+    "line": "[    2.816565] Key type .fscrypt registered",
+    "time": "2026-11-03T07:03:17Z"
+  },
+  {
+    "event": "guest",
+    "frameworkState": 1,
+    "line": "[    2.816611] Key type fscrypt-provisioning registered",
+    "time": "2026-11-03T07:03:17Z"
+  },
+  {
+    "event": "guest",
+    "frameworkState": 1,
+    "line": "[    2.818164] clk: Disabling unused clocks",
+    "time": "2026-11-03T07:03:17Z"
+  },
+  {
+    "event": "guest",
+    "frameworkState": 1,
+    "line": "[    2.818203] PM: genpd: Disabling unused power domains",
+    "time": "2026-11-03T07:03:17Z"
+  },
+  {
+    "event": "guest",
+    "frameworkState": 1,
+    "line": "[    2.818434] Freeing unused kernel memory: 2048K",
+    "time": "2026-11-03T07:03:17Z"
+  },
+  {
+    "event": "guest",
+    "frameworkState": 1,
+    "line": "[    2.818470] Run /init as init process",
+    "time": "2026-11-03T07:03:17Z"
+  },
+  {
+    "event": "guest",
+    "frameworkState": 1,
+    "line": "NIDUS_DEVELOPMENT ready",
+    "time": "2026-11-03T07:03:17Z"
+  },
+  {
+    "event": "guest",
+    "frameworkState": 1,
+    "line": "NIDUS_READY cgroup2",
+    "time": "2026-11-03T07:03:17Z"
+  },
+  {
+    "event": "ready",
+    "frameworkState": 1,
+    "time": "2026-11-03T07:03:17Z"
+  },
+  {
+    "event": "guest",
+    "frameworkState": 1,
+    "line": "[    3.848780] random: crng init done",
+    "time": "2026-11-03T07:03:18Z"
+  },
+  {
+    "event": "guest",
+    "frameworkState": 1,
+    "line": "NIDUS_RESULT 08cf2d34-7ed2-4832-b26c-1ae2d645bd76 1 1 completed 524288 - dW5zaGFyZTogY2FuJ3QgbW91bnQgbm9uZSBvbiAvIChmbGFnczoweDQ0MDAwKTogSW52YWxpZCBhcmd1bWVudAo=",
+    "time": "2026-11-03T07:03:18Z"
+  }
+]

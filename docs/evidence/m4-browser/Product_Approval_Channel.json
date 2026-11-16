@@ -1,0 +1,105 @@
+{
+  "scope": "Real product direct-browser channel, no Provider, synthetic Vault, programmatic approvals",
+  "denied": [
+    {
+      "event": "tool",
+      "name": "browser_navigate"
+    },
+    {
+      "event": "approval",
+      "proposal": {
+        "approvalId": "ec01fcd5-0f78-4096-8568-c18c2df0fa71",
+        "vaultId": "19f375d1-1935-4d37-aa51-18772c9142f5",
+        "executionId": "f1684052-3a44-4d12-8a0a-a115b824a244",
+        "callId": "5b6337eb-dfd1-48d0-85ef-18484b58aadb",
+        "command": "HTTPS GET https://example.com/",
+        "commandHash": "e2c4044e8fc95d492081fbbc18cae253a9e2d068a8c031425a4090e54b5c648e",
+        "policyRevision": 1,
+        "expiresAt": 1793771129162,
+        "environmentId": "424e9daa-25e2-4bf1-970e-543d3c8f355d",
+        "tool": "browser_navigate",
+        "version": "1",
+        "requestedAt": 1793771069162,
+        "cachePersistent": false,
+        "browser": {
+          "kind": "navigate",
+          "url": "https://example.com/"
+        }
+      }
+    },
+    {
+      "event": "tool-result",
+      "name": "browser_navigate",
+      "result": {
+        "callId": "5b6337eb-dfd1-48d0-85ef-18484b58aadb",
+        "status": "denied",
+        "code": "permission_denied",
+        "content": {
+          "text": ""
+        },
+        "untrusted": true
+      }
+    },
+    {
+      "event": "completed",
+      "task": {
+        "status": "denied",
+        "code": "permission_denied",
+        "text": "직접 도구 검토 — Provider 호출 없음",
+        "webStatus": "not_used"
+      }
+    }
+  ],
+  "approved": [
+    {
+      "event": "tool",
+      "name": "browser_navigate"
+    },
+    {
+      "event": "approval",
+      "proposal": {
+        "approvalId": "cdc8b9c3-34a4-47bf-924f-28b2d00fc6d8",
+        "vaultId": "19f375d1-1935-4d37-aa51-18772c9142f5",
+        "executionId": "02cd9020-cf60-4fc8-88fd-d69a24e431a2",
+        "callId": "60991532-e590-49e4-99b7-46159837c983",
+        "command": "HTTPS GET https://example.com/",
+        "commandHash": "e2c4044e8fc95d492081fbbc18cae253a9e2d068a8c031425a4090e54b5c648e",
+        "policyRevision": 1,
+        "expiresAt": 1793771129215,
+        "environmentId": "424e9daa-25e2-4bf1-970e-543d3c8f355d",
+        "tool": "browser_navigate",
+        "version": "1",
+        "requestedAt": 1793771069215,
+        "cachePersistent": false,
+        "browser": {
+          "kind": "navigate",
+          "url": "https://example.com/"
+        }
+      }
+    },
+    {
+      "event": "tool-result",
+      "name": "browser_navigate",
+      "result": {
+        "callId": "60991532-e590-49e4-99b7-46159837c983",
+        "status": "succeeded",
+        "code": "ok",
+        "content": {
+          "text": "{\"pageId\":\"c9c38848-b168-4867-abea-fd71f087621c\",\"url\":\"https://example.com/\",\"title\":\"Example Domain\",\"text\":\"This domain is for use in documentation examples without needing permission. This is not a service; avoid relying on it for testing and monitoring purposes.\",\"links\":[],\"retrievedAt\":\"2026-11-04T05:44:39.465Z\",\"untrusted\":true,\"mode\":\"read-only-snapshot\"}"
+        },
+        "untrusted": true
+      }
+    },
+    {
+      "event": "completed",
+      "task": {
+        "status": "succeeded",
+        "code": "ok",
+        "text": "직접 도구 검토 — Provider 호출 없음",
+        "webStatus": "used"
+      }
+    }
+  ],
+  "stop": "STOP_CONFIRMED",
+  "status": "PASS"
+}
