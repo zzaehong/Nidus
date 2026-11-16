@@ -1,6 +1,8 @@
 # 사용 가이드
 
-설치와 실행은 [README](../../README.md), 데이터·전달 계층은 [아키텍처](../architecture/API_CONNECTIVITY.md)를 참고하세요. 이 문서는 현재 동작만 설명합니다.
+> 이 문서는 예전 Provider 대시보드(Nidus Base)와 `nidus` CLI의 안내입니다. 둘 다 0.2.0 뒤에 저장소에서 지웠으므로 기록으로만 남깁니다. 현재 앱(Nidus.app)의 사용법은 [README](../../README.md)의 "Nidus 앱" 절을 보세요.
+
+설치와 실행은 [README](../../README.md), 데이터·전달 계층은 [아키텍처](../architecture/API_CONNECTIVITY.md)를 참고하세요.
 
 ## Provider 연결
 

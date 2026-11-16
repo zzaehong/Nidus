@@ -181,14 +181,14 @@ Worker 한 명이 Task 하나를 수행하는 루프다. Manager와 Main, Task B
 
 | 대상 | 처리 |
 |---|---|
-| VM 수명 관리, 저널, 장애 복구 (`native/vault-vm.swift`, `src/vault/vm-*`, `shared-vm`) | 재사용. 소켓 장치를 추가한다 |
+| VM 수명 관리, 저널 (`native/vault-vm.swift`, `src/vault/apple-backend.ts`, `vm-journal`) | 재사용. 소켓 장치를 추가한다. `shared-vm`·`vm-recovery`는 0.2.0 뒤에 지웠다 |
 | 게스트 이미지 빌드 (`scripts/vault-vm/`) | 재사용. 프록시 중계기와 브라우저 설정을 추가한다 |
 | DOM 관찰과 조작 (`scripts/vault-vm/browser-*.mjs`) | 재사용. 승인 결합을 걷어낸다 |
 | 주소 판정 (`src/vault/network-policy.ts`의 `publicIPv4`) | 재사용 |
 | 요청별 중계 (`src/vault/live-network.ts`), 조작별 승인, CAPTCHA 시 실패 | 폐기 |
 | 승인된 파일 복사와 diff 반영 (`src/vault/workspace.ts`) | Git 브랜치 방식으로 대체 |
 | 일회성 Agent 실행기 (`src/agent/runtime.ts`) | Gateway 기반 Worker 루프로 대체 |
-| Vault 등록부 (`src/vault/registry.ts`) | `.nidus/` 기준으로 정리. 2단계 범위에서는 VM 디스크 위치 결정에만 쓴다 |
+| Vault 등록부 (`src/vault/registry.ts`) | 지웠다. VM 디스크 위치는 `.nidus/local/workspace.json`의 vaultId로 정한다 |
 
 ## 구현 순서와 상태
 

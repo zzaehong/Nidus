@@ -1,6 +1,4 @@
-// Builds a local, unsigned development app bundle with Node and the compiled engine inside.
-//   node scripts/build-app.mjs          -> dist/Nidus Base.app (earlier provider dashboard)
-//   node scripts/build-app.mjs nidus    -> dist/Nidus.app      (Vault-based app)
+// Builds dist/Nidus.app: a local, unsigned development bundle with Node and the compiled engine inside.
 import { mkdir, cp, readdir, readFile, access } from 'node:fs/promises';
 import { atomicCopy as copyFile } from './atomic-copy.mjs';
 import { execFileSync } from 'node:child_process';
@@ -9,21 +7,12 @@ import { join, dirname, resolve } from 'node:path';
 
 if (process.platform !== 'darwin') throw new Error('The app requires macOS.');
 
-const variants = {
-  base: {
-    app: 'Nidus Base.app', product: 'NidusNativeApp', plist: 'Info.plist',
-    directories: ['adapters', 'vault', 'tools', 'agent', 'gateway', 'vm-assets'],
-    helpers: ['nidus-keychain', 'nidus-vault-files', 'nidus-vault-vm'],
-  },
-  // The Vault app with the Work tab: the workspace engine, the VM image and the VM helper.
-  nidus: {
-    app: 'Nidus.app', product: 'Nidus', plist: 'Nidus-Info.plist',
-    directories: ['adapters', 'vault', 'tools', 'agent', 'gateway', 'workspace', 'office', 'vm-assets'],
-    helpers: ['nidus-keychain', 'nidus-vault-files', 'nidus-vault-vm'],
-  },
+// The engine, the VM image and the helpers go in beside the app.
+const variant = {
+  app: 'Nidus.app', product: 'Nidus', plist: 'Nidus-Info.plist',
+  directories: ['adapters', 'vault', 'tools', 'agent', 'gateway', 'workspace', 'office', 'vm-assets'],
+  helpers: ['nidus-keychain', 'nidus-vault-files', 'nidus-vault-vm'],
 };
-const variant = variants[process.argv[2] ?? 'base'];
-if (!variant) throw new Error(`Unknown app variant. Use one of: ${Object.keys(variants).join(', ')}.`);
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 execFileSync('swift', ['build', '-c', 'release', '--product', variant.product], { cwd: root, stdio: 'inherit' });

@@ -2,6 +2,20 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/)를 따르고, 버전은 [유의적 버전](https://semver.org/lang/ko/)을 따릅니다. 1.0 전이므로 부(minor) 버전이 올라갈 때 호환이 깨질 수 있습니다.
 
+## [Unreleased]
+
+### 삭제
+
+- **Nidus Base와 CLI**: 예전 Provider 대시보드 앱(`NidusNativeApp`), `nidus` CLI, 그 전용 엔진(`engine`·`ledger`·`router`·`routing-context`·`dashboard`)을 지웠습니다. 키(Keychain)와 모델 캐시는 Nidus.app이 그대로 씁니다.
+- **옛 Vault 런타임(M1~M4)**: 등록소·admission·shared-vm·vm-recovery·tools/agent 런타임과 그 검증 스크립트·테스트를 지웠습니다. 현재 작업장(`workspace/`, `vault/apple-backend`)만 남습니다. 설계 기록은 `docs/vault/`에 그대로 있습니다.
+
+### 수정
+
+- 칸 제외가 Vault 전체 제외를 좁히지 않습니다.
+- 프로젝트 마무리 답: 긴 결과물이 팀 보고를 밀어내지 않고, Main이 새 프로젝트를 돌려주면 팀 보고를 그대로 전합니다.
+- Library 정리(Dream): 합친 문서를 먼저 쓰고 원본을 보관하므로 중간에 멈춰도 교훈이 사라지지 않습니다.
+- 결과 검토의 diff는 200KB까지만 읽습니다. Library 링크에서 ".."이 든 파일 이름이 열립니다.
+
 ## [0.2.0] — 2026-11-16
 
 CONCEPT.md의 AI Office를 향한 첫 큰 판. 모델을 고르는 기반(1단계), AI가 일하는 격리 작업장(2단계), 일을 나누는 조직과 기억(3단계 전반)을 `Nidus.app` 하나에 담았습니다. 설계는 `docs/architecture/`의 STAGE1·STAGE2·STAGE3 문서에 있습니다.

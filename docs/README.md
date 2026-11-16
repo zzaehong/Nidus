@@ -1,6 +1,6 @@
 # 문서 목차
 
-처음 사용하는 경우 [설치와 실행](../README.md) → [사용 가이드](guides/USER_GUIDE.md) 순서로 읽으세요. 개발 작업은 [작업 지침](AGENTS.md)과 [Git Flow](Git_Flow.md)를 따릅니다.
+처음 사용하는 경우 [설치와 실행](../README.md)의 "Nidus 앱" 절을 읽으세요(예전 대시보드의 [사용 가이드](guides/USER_GUIDE.md)는 기록입니다). 개발 작업은 [작업 지침](AGENTS.md)과 [Git Flow](Git_Flow.md)를 따릅니다.
 
 사용 방법은 사용 가이드를 기준으로 확인하고, 아래 단계별 문서는 설계 결정과 당시 검증 범위를 확인할 때 사용합니다. 과거 문서의 PASS 수치나 완료 범위는 현재 전체 제품의 검증 결과를 뜻하지 않습니다. 제품 구상과 개발 계획 역시 구현 완료 목록이 아닙니다.
 
@@ -33,6 +33,8 @@
 - [Phase 4.4 — Routing Decision Context](routing/Phase4_4_Routing_Context.md)
 
 ## Vault와 Agent Runtime
+
+아래 M1~M4 문서의 코드(등록소·admission·shared-vm·tools/agent 런타임, Nidus Base 앱, `nidus` CLI)는 0.2.0 뒤에 저장소에서 지웠습니다. 설계와 당시 검증 기록으로만 읽으세요. 현재 작업장은 [STAGE2](architecture/STAGE2_AGENT_WORKSPACE.md)입니다.
 
 - [Phase 5–6: Agent Runtime · Vault VM · Unified Tools](vault/Phase5_6_Agent_Runtime_Vault_Sandbox.md)
 - [M1a — Vault Registration & Identity Foundation](vault/Vault_M1a_Registration.md)
