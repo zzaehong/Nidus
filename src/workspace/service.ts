@@ -36,13 +36,21 @@ import { describeStaff } from '../office/home.js';
 import { TextTools, gitSource } from '../office/text-work.js';
 import { workerSystem } from '../office/roles.js';
 import { workerBrief } from '../office/plan.js';
-import { snapshot, receive, approve, discard, pending, type Review } from './sync.js';
+import { snapshot, receive, approve, discard, pending, combine, fetchWork, snapshotAt, type Review } from './sync.js';
+import { TaskWorkspaces } from './workspaces.js';
 import { approvalGate, vmTurns } from './turns.js';
 import { ActivityLog, describeModels, describeUsage, elapsed, renderMainDesk } from '../office/progress.js';
 import { loadTable } from '../gateway/assignment.js';
 
 type VMState = 'stopped' | 'starting' | 'running' | 'stopping' | 'failed';
-interface Saved { vaultId: string; task?: string; base?: string }
+interface Saved {
+  vaultId: string;
+  /** The work under review: a single run's workspace, or a project's name for its combined result. */
+  task?: string;
+  base?: string;
+  /** A project's VM Tasks: each its own workspace in the VM, the commit it started from, and its work kept so far. */
+  tasks?: Record<string, { ws: string; start: string; head?: string }>;
+}
 
 const out = (value: object) => process.stdout.write(JSON.stringify(value) + '\n');
 const event = (name: string, data: object = {}) => out({ event: name, ...data });
@@ -85,7 +93,11 @@ let activity = new ActivityLog();
 function note(text: string) { activity.add(text); deskSoon(); }
 /** Per board task, when its Worker last did something: a model answer's wait is the time since. */
 const lastStep = new Map<string, number>();
-const turns = vmTurns();
+/** VM Tasks side by side: each in its own workspace, VM calls and browser actions in turn. */
+const spaces = new TaskWorkspaces({ vm: () => { if (!backend || vm !== 'running') throw new Error('VM이 실행 중이 아닙니다'); return backend; }, browser: () => ensureBrowser(), waitForApprovals: gate.wait });
+/** Making a Task's workspace (and the project's base) one Task at a time. */
+const setupLine = vmTurns();
+let vmStarting: Promise<void> | undefined;
 const services = new Map<string, string>(); // name -> VM session id
 const ENVIRONMENT = '00000000-0000-4000-8000-00000000e2e0';
 
@@ -225,7 +237,8 @@ async function start() {
     backend = new AppleOfflineBackend(undefined, proxy);
     backend.onFailure(() => { if (vm === 'running') { vm = 'failed'; browser = undefined; status('VM 연결이 끊겼습니다'); } });
     await backend.start(disk);
-    if (saved?.task && !await backend.selectWorkspace(saved.task)) {
+    spaces.reset();
+    if (saved?.task && !saved.tasks && !await backend.selectWorkspace(saved.task)) {
       log(`작업 공간 ${saved.task}이(가) VM 디스크에 없습니다. 새 작업으로 시작해야 합니다.`);
       if (!review) { saved = { vaultId: saved.vaultId }; await save(); }
     }
@@ -263,6 +276,7 @@ async function stop() {
   running?.abort();
   vm = 'stopping'; status('VM을 종료합니다');
   services.clear();
+  spaces.reset();
   try { await browser?.close(); await backend.closeBrowser(); } catch {}
   browser = undefined;
   try {
@@ -287,7 +301,7 @@ async function run(instruction: string, difficulty: Difficulty, fresh: boolean) 
   if (!instruction.trim()) throw new Error('지시가 비어 있습니다');
   if (!difficulties.includes(difficulty)) throw new Error('난이도가 올바르지 않습니다');
   if (review) throw new Error('검토를 기다리는 결과가 있습니다. 승인하거나 버린 뒤 새 작업을 시작하세요');
-  if (fresh || !saved?.task) {
+  if (fresh || !saved?.task || saved.tasks) {
     if (saved?.task) await removeWorkspace();
     const snap = await snapshot(paths!.root);
     const task = taskName();
@@ -322,7 +336,9 @@ function clipEvent(e: WorkerEvent): WorkerEvent {
 
 /** Brings the task's work back for review (it is not a branch until the user approves). */
 async function collect() {
-  if (!saved?.task || !saved.base || !backend) return null;
+  if (!saved?.task || !saved.base) return null;
+  if (saved.tasks) return collectProject();
+  if (!backend) return null;
   const result = await backend.exportWorkspace(saved.task, saved.base);
   review = result.bundle ? await receive(paths!.root, saved.task, saved.base, result.bundle) : null;
   event('review', { review });
@@ -330,11 +346,44 @@ async function collect() {
   return review;
 }
 
+/**
+ * A project's result: the work of its finished VM Tasks combined into one commit on the Vault's
+ * hidden ref (no working tree, nothing of the user's touched), then shown for review like a single
+ * workspace's work. A conflict between Tasks is said, with the files; each Task's work stays on
+ * its own hidden ref.
+ */
+async function collectProject() {
+  const project = office?.project;
+  const tasks = saved!.tasks!;
+  const done = new Set(project?.tasks.filter(t => t.status === 'done').map(t => t.id) ?? Object.keys(tasks));
+  const order = project?.tasks.map(t => t.id) ?? Object.keys(tasks);
+  const heads = order.filter(id => done.has(id) && tasks[id]?.head).map(id => tasks[id]!.head!);
+  review = null;
+  if (heads.length) {
+    try {
+      await combine(paths!.root, saved!.task!, saved!.base!, heads);
+      review = await pending(paths!.root, saved!.task!, saved!.base!);
+    } catch (error: any) {
+      const refs = order.filter(id => tasks[id]?.head).map(id => `refs/nidus/incoming/${tasks[id]!.ws}`).join(', ');
+      log(`VM Task들의 결과를 합치지 못했습니다: ${error.message}`);
+      void chat?.note(`VM Task들의 결과가 서로 부딪혀 하나로 합치지 못했습니다 (${String(error.message ?? error).replace(/^workspace_merge_conflict: /, '충돌한 파일: ')}). 각 Task의 결과는 Vault의 숨은 ref에 남아 있습니다: ${refs}`, true).catch(() => {});
+    }
+  }
+  event('review', { review });
+  if (!review && !heads.length) log('바뀐 파일이 없습니다');
+  return review;
+}
+
 async function removeWorkspace() {
   // Background services belong to the task's workspace.
   for (const id of services.values()) await backend?.stopService(id).catch(() => {});
   services.clear();
-  if (saved?.task && backend) await backend.removeWorkspace(saved.task).catch(() => {});
+  if (saved?.tasks) {
+    for (const entry of Object.values(saved.tasks)) {
+      if (backend && vm === 'running') await spaces.remove(entry.ws).catch(() => {});
+      await discard(paths!.root, entry.ws).catch(() => {});
+    }
+  } else if (saved?.task && backend) await backend.removeWorkspace(saved.task).catch(() => {});
   saved = { vaultId: saved!.vaultId };
   worker = undefined;
   await save();
@@ -393,17 +442,12 @@ function workerRuntime(backendNow: AppleOfflineBackend) {
 }
 
 /** A shell command in the workspace whose output the service needs (not a Worker action). */
-async function inspect(command: string): Promise<string> {
-  const result = await backend!.execute(randomUUID(), command, 60, { profile: 'shell' });
-  return result.stdout;
-}
 
 /** Office -> Worker: runs or continues a board task where it runs, returns evidence. */
 async function work(task: BoardTask, instruction: string, difficulty: Difficulty, signal: AbortSignal, revision: boolean) {
   if (placeOf(task) === 'text') return textWork(task, instruction, difficulty, signal, revision);
-  // vm tasks take the shared workspace and browser in turn; Managers and text tasks go on meanwhile.
-  if (turns.holder) log(`${task.id}: ${turns.holder}이(가) VM을 쓰는 중이라 차례를 기다립니다`);
-  return turns.take(task.id, signal, () => vmWork(task, instruction, difficulty, signal, revision));
+  // VM Tasks go on side by side, each in its own workspace (see workspaces.ts).
+  return vmWork(task, instruction, difficulty, signal, revision);
 }
 
 /**
@@ -497,65 +541,119 @@ async function textWork(task: BoardTask, instruction: string, difficulty: Diffic
 }
 
 async function vmWork(task: BoardTask, instruction: string, difficulty: Difficulty, signal: AbortSignal, revision: boolean) {
-  await ensureProjectWorkspace();
+  let place: { ws: string; start: string };
+  try { place = await taskWorkspace(task, signal); }
+  catch (error: any) {
+    if (signal.aborted) throw error;
+    // For example the work of the Tasks it builds on cannot be combined: its Manager sees why.
+    const message = `작업 공간을 준비하지 못했습니다: ${String(error?.message ?? error)}`;
+    log(`${task.id}: ${message}`);
+    return { outcome: { status: 'failed' as const, error: message }, evidence: message };
+  }
+  const { ws } = place;
+  const sh = (command: string) => spaces.exec(ws, command).then(r => r.stdout);
   const desk = deskFor(task);
   const made = await taskConversation(task, instruction, revision, previous => {
     const trail = previous?.trail ?? [];
-    return { run: new WorkerRun(gateway!, desk.wrap(new WorkerTools(workerRuntime(backend!))), { task: saved!.task!, difficulty, system: workerSystem('vm', saved!.task!, whoWorks(task), true, true), onEvent: workerEvents(task, trail), ...desk.options }), trail, ranges: previous?.ranges ?? [] };
+    return { run: new WorkerRun(gateway!, desk.wrap(new WorkerTools(spaces.runtime(ws))), { task: ws, difficulty, system: workerSystem('vm', ws, whoWorks(task), true, true), onEvent: workerEvents(task, trail), ...desk.options }), trail, ranges: previous?.ranges ?? [] };
   }, () => 'Check the workspace for what was already done and continue.');
   const { entry } = made;
-  const before = (await inspect('git rev-parse HEAD')).trim();
+  const before = (await sh('git rev-parse HEAD')).trim();
   const outcome = await entry.run.run(made.instruction, signal);
   entry.last = outcome;
-  // Changes left uncommitted belong to this task: commit them, so the next Worker starts clean
-  // and every task's changes are its own commits.
-  await inspect(`git add -A && (git diff --cached --quiet || git commit -q -m "nidus: ${task.id} 작업 저장")`).catch(() => '');
-  const after = (await inspect('git rev-parse HEAD')).trim();
+  // Changes left uncommitted belong to this task: commit them, so every attempt's changes are its own commits.
+  await sh(`git add -A && (git diff --cached --quiet || git commit -q -m "nidus: ${task.id} 작업 저장")`).catch(() => '');
+  const after = (await sh('git rev-parse HEAD')).trim();
   if (after !== before) entry.ranges.push([before, after]);
+  // The work so far goes to the Vault's hidden ref: Tasks that build on it start from it, and the project's result combines it.
+  await keepWork(task.id).catch(error => log(`${task.id}: 결과를 Vault로 가져오지 못했습니다: ${error.message}`));
   if (signal.aborted) return { outcome, evidence: '' };
   const trail = entry.trail.slice(-40).join('\n');
-  return { outcome, evidence: `Tool calls (latest last):\n${trail}\n\n${await taskChanges(entry.ranges)}${await desk.evidence()}` };
+  return { outcome, evidence: `Tool calls (latest last):\n${trail}\n\n${await taskChanges(ws, entry.ranges)}${await desk.evidence()}` };
 }
 
-/** What a task changed: its own commits only (other tasks commit in the same workspace in between). */
-async function taskChanges(ranges: [string, string][]): Promise<string> {
+/** What a task changed: its own commits, in its own workspace. */
+async function taskChanges(ws: string, ranges: [string, string][]): Promise<string> {
   if (!ranges.length) return 'Commits made for this task: none (nothing changed in /workspace).';
   const latest = ranges.at(-1)!;
   const lines = [
-    'echo "Commits made for this task (other tasks\' commits in between are not shown):"',
+    'echo "Commits made for this task:"',
     ...ranges.map(([a, b]) => `git log --oneline ${a}..${b}`),
     'echo; echo "Changed files:"',
     ...ranges.map(([a, b]) => `git diff --stat ${a} ${b}`),
     `echo; echo "Diff of the latest attempt:"; git diff ${latest[0]} ${latest[1]} | head -c 12000`,
     ...(ranges.length > 1 ? [`echo; echo "Diff of earlier attempts (start):"`, ...ranges.slice(0, -1).map(([a, b]) => `git diff ${a} ${b} | head -c 3000`)] : []),
   ];
-  return inspect(lines.join('; ')).catch(e => `(could not read changes: ${e.message})`);
+  return spaces.exec(ws, lines.join('; ')).then(r => r.stdout, e => `(could not read changes: ${e.message})`);
+}
+
+/** The VM, started once however many Tasks need it at the same moment. */
+async function vmReady() {
+  if (vm === 'running' && backend) return;
+  if (!vmStarting) log('VM이 필요한 Task라 VM을 켭니다');
+  vmStarting ??= start().finally(() => { vmStarting = undefined; });
+  await vmStarting;
+  if ((vm as VMState) !== 'running' || !backend) throw new Error('VM을 시작하지 못했습니다');
 }
 
 /**
- * The project's workspace, made when its first vm task begins: the VM is started if it is off
- * and the Vault's committed state is imported once; every vm task then works in it.
+ * The project's name and base for its VM work: the Vault's committed state when its first VM Task
+ * begins. A different (earlier) project's workspaces are removed first.
  */
-async function ensureProjectWorkspace() {
+async function projectBase(): Promise<{ name: string; base: string }> {
   const project = office!.project!;
-  if (vm !== 'running') {
-    log('VM이 필요한 Task라 VM을 켭니다');
-    await start();
-    if ((vm as VMState) !== 'running' || !backend) throw new Error('VM을 시작하지 못했습니다');
+  if (!(project.workspace && project.workspace === saved?.task && saved.tasks && saved.base)) {
+    if (saved?.task) await removeWorkspace();
+    const { base } = await snapshot(paths!.root);
+    const name = taskName();
+    saved = { vaultId: saved!.vaultId, task: name, base, tasks: {} };
+    await save();
+    proxy!.resetSession();
+    proxy!.setAllowAll(allowAll);
+    project.workspace = name;
+    // VM conversations belonged to the old workspaces; text ones carry on.
+    for (const [id, run] of taskRuns) if (!run.textTools) taskRuns.delete(id);
+    log(`프로젝트 ${name}: Vault의 커밋 ${base.slice(0, 8)}에서 시작합니다. VM Task마다 작업 공간을 따로 둡니다.`);
   }
-  if (project.workspace && project.workspace === saved?.task) return;
-  if (saved?.task) await removeWorkspace();
-  const snap = await snapshot(paths!.root);
-  const task = taskName();
-  await backend!.importWorkspace(task, snap.bundle);
-  saved = { vaultId: saved!.vaultId, task, base: snap.base };
+  return { name: saved!.task!, base: saved!.base! };
+}
+
+/**
+ * A VM Task's own workspace, made when it first runs: from the project's base, or from the
+ * combined work of the VM Tasks it depends on. After a VM restart it comes back from its own work
+ * kept so far. One Task at a time, so two never make the project's base twice.
+ */
+function taskWorkspace(task: BoardTask, signal: AbortSignal): Promise<{ ws: string; start: string }> {
+  return setupLine.take(task.id, signal, async () => {
+    await vmReady();
+    const { name, base } = await projectBase();
+    const tasks = saved!.tasks!;
+    const known = tasks[task.id];
+    if (known && await spaces.inVm(known.ws, signal, async () => true).catch(() => false)) return known;
+    const ws = known?.ws ?? `${name}-${task.id}`;
+    let start = known?.start ?? base;
+    if (!known) {
+      const heads = task.dependsOn.map(d => tasks[d]?.head).filter((h): h is string => !!h);
+      if (heads.length) start = await combine(paths!.root, ws, base, heads);
+    }
+    const from = known?.head ?? start;
+    await spaces.import(ws, await snapshotAt(paths!.root, from), signal);
+    const entry = { ws, start, ...(known?.head ? { head: known.head } : {}) };
+    tasks[task.id] = entry;
+    await save();
+    log(`${task.id}: 작업 공간 ${ws}${from === base ? '' : known?.head ? ' (지난 작업에서 이어감)' : ` (선행 Task의 결과 ${from.slice(0, 8)}에서 시작)`}`);
+    return entry;
+  });
+}
+
+/** A VM Task's work from its workspace into the Vault's hidden ref for it. */
+async function keepWork(taskId: string) {
+  const entry = saved?.tasks?.[taskId];
+  if (!entry) return;
+  const result = await spaces.export(entry.ws, entry.start);
+  if (!result.bundle) return;
+  entry.head = await fetchWork(paths!.root, entry.ws, entry.start, result.bundle);
   await save();
-  proxy!.resetSession();
-  proxy!.setAllowAll(allowAll);
-  project.workspace = task;
-  // VM conversations belonged to the old workspace; text ones carry on.
-  for (const [id, run] of taskRuns) if (!run.textTools) taskRuns.delete(id);
-  log(`프로젝트 작업 공간 ${task}: Vault의 커밋 ${snap.base.slice(0, 8)}을(를) VM으로 가져왔습니다`);
 }
 
 /** Runs the project's tasks; a workspace's changes go to review at the end. VM only if a task needs it. */
@@ -671,7 +769,7 @@ async function chatContext(): Promise<string> {
   return [desk, staff ? `Standing teams:\n${staff}` : '', learned ? `In the Library (the team's notes):\n${learned}` : ''].filter(Boolean).join('\n\n');
 }
 
-const vmHolderNote = () => turns.holder ? `, used by ${turns.holder}` : '';
+const vmHolderNote = () => spaces.holder ? `, used by ${spaces.holder}` : '';
 
 /** Planning runs in the background; the app follows it through project events. */
 function planning(step: (signal: AbortSignal) => Promise<Project>) {

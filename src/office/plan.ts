@@ -172,7 +172,7 @@ function projectContext(project: Project, task: BoardTask): string {
     `Other tasks:\n${others || '(none)'}`,
     '',
     `Task ${task.id}: ${task.title}`,
-    `Runs at: ${placeOf(task) === 'text' ? 'text (no VM: reads the repository, writes a text deliverable)' : 'vm (the shared workspace VM)'}`,
+    `Runs at: ${placeOf(task) === 'text' ? 'text (no VM: reads the repository, writes a text deliverable)' : 'vm (a workspace of its own in the VM)'}`,
     `Goal: ${task.contract.goal}`,
     `Scope: ${task.contract.scope || '-'}`,
     `Constraints: ${task.contract.constraints || '-'}`,

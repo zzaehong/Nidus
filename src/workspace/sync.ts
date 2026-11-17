@@ -90,6 +90,16 @@ export async function snapshot(vault: string): Promise<{ base: string; bundle: B
 
 /** Brings the VM's work into a hidden ref and describes it for the user. Nothing becomes a branch yet. */
 export async function receive(vault: string, task: string, base: string, bundle: Buffer): Promise<Review> {
+  const head = await fetchWork(vault, task, base, bundle);
+  return review(vault, task, base, head);
+}
+
+/**
+ * One workspace's work from the VM into its hidden ref, checked like everything from the VM
+ * (objects verified, must continue from the commit it started at). Returns the head; nothing is
+ * shown to the user yet.
+ */
+export async function fetchWork(vault: string, task: string, base: string, bundle: Buffer): Promise<string> {
   checkTask(task);
   if (!/^[0-9a-f]{40}$/.test(base)) throw new SyncError('workspace_base_invalid');
   if (bundle.length > MAX_EXPORT) throw new SyncError('workspace_too_large');
@@ -105,7 +115,68 @@ export async function receive(vault: string, task: string, base: string, bundle:
     await discard(vault, task);
     throw new SyncError('workspace_history_rewritten', 'the work does not continue from the commit the task started at');
   }
-  return review(vault, task, base, head);
+  return head;
+}
+
+const COMMIT = /^[0-9a-f]{40}$/;
+const isAncestor = (vault: string, a: string, b: string) => git(vault, ['merge-base', '--is-ancestor', a, b]).then(() => true, () => false);
+
+/**
+ * Several workspaces' work as one commit on top of `base`, merged in the Vault's object store
+ * without a working tree (git merge-tree): the user's files and branches are not touched. The
+ * result goes to the hidden ref of `name`, for review like a single workspace's work. A conflict
+ * is an error naming the files; nothing is half merged.
+ */
+export async function combine(vault: string, name: string, base: string, heads: string[]): Promise<string> {
+  checkTask(name);
+  if (!COMMIT.test(base) || !heads.every(h => COMMIT.test(h))) throw new SyncError('workspace_base_invalid');
+  let current = base;
+  for (const head of heads) {
+    if (await isAncestor(vault, head, current)) continue;
+    if (await isAncestor(vault, current, head)) { current = head; continue; }
+    let tree: string;
+    try {
+      const { stdout } = await run('git', ['-C', vault, '-c', 'core.hooksPath=/dev/null', 'merge-tree', '--write-tree', '--name-only', '--no-messages', current, head], { env: { ...process.env, LC_ALL: 'C' }, maxBuffer: 4 * 1024 * 1024 });
+      tree = stdout.split('\n')[0]!.trim();
+    } catch (error: any) {
+      // Exit status 1: the merge has conflicts; the lines after the tree name the files.
+      if (error?.code === 1 && typeof error.stdout === 'string') {
+        const files = error.stdout.split('\n').slice(1).map((l: string) => l.trim()).filter(Boolean);
+        throw new SyncError('workspace_merge_conflict', [...new Set(files)].slice(0, 20).join(', '));
+      }
+      throw new SyncError('git_failed', `merge-tree: ${String(error?.stderr ?? error?.message).trim().slice(0, 300)}`);
+    }
+    if (!COMMIT.test(tree)) throw new SyncError('git_failed', 'merge-tree gave no tree');
+    const { stdout } = await run('git', ['-C', vault, 'commit-tree', tree, '-p', current, '-p', head, '-m', `nidus: ${name} 작업 합치기`], {
+      env: { ...process.env, LC_ALL: 'C', GIT_AUTHOR_NAME: 'Nidus', GIT_AUTHOR_EMAIL: 'nidus@nidus.invalid', GIT_COMMITTER_NAME: 'Nidus', GIT_COMMITTER_EMAIL: 'nidus@nidus.invalid' },
+    });
+    current = stdout.trim();
+  }
+  await git(vault, ['update-ref', '-m', 'nidus: combined workspace results', incoming(name), current]);
+  return current;
+}
+
+/**
+ * A bundle whose HEAD is `commit`, to start a workspace from work that is not the Vault's HEAD
+ * (a task that builds on earlier tasks). Made in a throwaway repository that borrows the Vault's
+ * objects, so the Vault's HEAD, branches and refs are not touched.
+ */
+export async function snapshotAt(vault: string, commit: string): Promise<Buffer> {
+  if (!COMMIT.test(commit)) throw new SyncError('workspace_base_invalid');
+  await git(vault, ['cat-file', '-e', `${commit}^{commit}`]);
+  const objects = (await git(vault, ['rev-parse', '--path-format=absolute', '--git-path', 'objects'])).trim();
+  return withTemp(async dir => {
+    const repo = join(dir, 'start.git');
+    await run('git', ['init', '--quiet', '--bare', repo]);
+    await writeFile(join(repo, 'objects', 'info', 'alternates'), `${objects}\n`);
+    await git(repo, ['update-ref', 'refs/heads/start', commit]);
+    await git(repo, ['symbolic-ref', 'HEAD', 'refs/heads/start']);
+    const file = join(dir, 'in.bundle');
+    await git(repo, ['bundle', 'create', '--quiet', file, 'HEAD', 'refs/heads/start']);
+    const bundle = await readFile(file);
+    if (bundle.length > MAX_IMPORT) throw new SyncError('workspace_too_large', `${bundle.length} bytes`);
+    return bundle;
+  });
 }
 
 async function review(vault: string, task: string, base: string, head: string): Promise<Review> {

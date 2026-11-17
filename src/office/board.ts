@@ -38,7 +38,7 @@ export interface TaskReview { verdict: 'accept' | 'revise' | 'blocked' | 'escala
 
 /**
  * Where a Task runs. text: a Worker without the VM (text work over the Vault's committed files,
- * no shell, internet or file changes); vm: the shared workspace VM. Older boards lack it: vm.
+ * no shell, internet or file changes); vm: a workspace of its own in the VM. Older boards lack it: vm.
  */
 export type TaskPlace = 'text' | 'vm';
 

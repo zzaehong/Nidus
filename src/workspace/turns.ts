@@ -1,5 +1,6 @@
-// Two small schedulers of the Workspace Service: the one VM goes to one Worker at a time, and a
-// tool call can wait until the user has answered every pending network approval.
+// Two small schedulers of the Workspace Service: a line of calls taken one at a time (the VM's
+// sessions, the browser's actions), and a gate a tool call waits at until the user has answered
+// every pending network approval.
 
 /** Who holds the VM now (a board task id), and the queue of those waiting for it. */
 export function vmTurns() {

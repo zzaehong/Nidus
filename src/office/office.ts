@@ -3,8 +3,8 @@
 // to its team's Manager, who briefs a Worker and reviews the result; Main reports at the end.
 // Tasks whose dependencies are done run side by side, each with its own Manager and Worker
 // conversation (up to maxParallel). A text task runs without the VM (text over the Vault's
-// files); vm tasks share one workspace VM, which the work dependency hands to one Worker at a
-// time, so one Worker can use it while another's result is being reviewed.
+// files); vm tasks run side by side in the one workspace VM, each in a workspace and a browser tab
+// of its own (src/workspace/workspaces.ts), their results combined for the user's review.
 // Main and Managers work in text only.
 import type { Message } from '../gateway/contract.js';
 import type { Difficulty } from '../gateway/assignment.js';

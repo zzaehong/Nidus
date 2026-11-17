@@ -9,7 +9,7 @@ export interface ShellResult { exitCode: number; stdout: string; stderr: string;
 export interface ToolRuntime {
   /** Runs a command in a fresh VM session whose working directory is /workspace. */
   shell(command: string, seconds: number, signal?: AbortSignal): Promise<ShellResult>;
-  browser(): Promise<WorkspaceBrowser>;
+  browser(): Promise<Pick<WorkspaceBrowser, 'act'>>;
   /** Background commands (dev servers) by name; they keep running between tool calls. */
   startService?(name: string, command: string): Promise<void>;
   stopService?(name: string): Promise<boolean>;

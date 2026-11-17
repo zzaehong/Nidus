@@ -32,14 +32,14 @@ const TEAM = [
   '- Workers do the work, one task at a time, either as a text task (no VM) or in the workspace VM. They are the only role with tools.',
   '- Each Worker keeps a Desk for its task (progress, findings, next action), so work survives a new session or a restart; Managers see it in the evidence.',
   '- The Library is the user\'s Vault itself: their notes and the team\'s. Workers can search and read it (library_search, library_read). When a project ends, Main writes what it taught (result, decisions, lessons) into the team\'s own folder there, and sees it again when planning the next one.',
-  'Tasks run one after another in dependency order. A task\'s deliverable is handed to the tasks that depend on it.',
+  'Tasks whose dependencies are done run side by side, a few at once. A task\'s deliverable is handed to the tasks that depend on it.',
 ].join('\n');
 
 const PLACES = () => [
   'Where a Worker works:',
   '- text: no VM. Reads the Vault\'s committed files and writes a text deliverable (writing, analysis, summaries, translation, plans, designs, code written out as text). No shell, internet, browser or file changes. Starts at once, needs no approvals. Tools:',
   toolCatalog(TEXT_TOOLS),
-  '- vm: an isolated Linux VM with a copy of the repository at /workspace (committed state), a shell with Python, Node.js and git, background servers, a real Chromium the user watches and can take over, web search, and internet access the user approves per site. All vm tasks of a request share one workspace; the user reviews the combined changes before they become a branch. The VM starts only when the first vm task begins. Tools:',
+  '- vm: an isolated Linux VM with a copy of the repository at /workspace (committed state), a shell with Python, Node.js and git, background servers, a real Chromium the user watches and can take over, web search, and internet access the user approves per site. Each vm task has a workspace of its own (and a browser tab of its own), starting from the committed state plus the work of the vm tasks it depends on; other Workers may be working in the VM at the same time, so a command can wait a moment for its turn. The user reviews the combined changes of all vm tasks before they become a branch. The VM starts only when the first vm task begins. Tools:',
   toolCatalog(WORKER_TOOLS),
 ].join('\n');
 
