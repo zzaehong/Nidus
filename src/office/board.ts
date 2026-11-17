@@ -100,6 +100,15 @@ export class BoardStore {
     await rename(pending, file);
   }
 
+  /** The most recent projects, newest first (unreadable ones left out). */
+  async recent(limit = 10): Promise<Project[]> {
+    let names: string[];
+    try { names = (await readdir(this.directory)).filter(n => /^p-[\d-]+\.json$/.test(n)).sort().reverse().slice(0, limit); } catch { return []; }
+    const out: Project[] = [];
+    for (const name of names) { try { out.push(JSON.parse(await readFile(join(this.directory, name), 'utf8'))); } catch {} }
+    return out;
+  }
+
   /** The most recent project, if any. */
   async latest(): Promise<Project | null> {
     let names: string[];

@@ -39,8 +39,49 @@ test('the activity log keeps the latest entries with their time', () => {
   let at = Date.parse('2026-11-16T15:00:00Z');
   const log = new ActivityLog(3, () => new Date(at += 1000));
   for (const n of [1, 2, 3, 4]) log.add(`일 ${n}\n줄바꿈`);
-  assert.equal(log.render(), '15:00:02 일 2 줄바꿈\n15:00:03 일 3 줄바꿈\n15:00:04 일 4 줄바꿈');
-  assert.equal(log.render(1), '15:00:04 일 4 줄바꿈');
+  assert.equal(log.render(), '11-16 15:00:02 일 2 줄바꿈\n11-16 15:00:03 일 3 줄바꿈\n11-16 15:00:04 일 4 줄바꿈');
+  assert.equal(log.render(1), '11-16 15:00:04 일 4 줄바꿈');
   assert.deepEqual([elapsed(40_000), elapsed(180_000), elapsed(4_320_000)], ['40초', '3분', '1시간 12분']);
   assert.equal(elapsed(104_000), '1분 44초');
+});
+
+test('the activity log survives a restart: kept as JSON lines, trimmed when reopened, a damaged line is skipped', async t => {
+  const { mkdtemp, rm, readFile, appendFile } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const dir = await mkdtemp(join(tmpdir(), 'nidus-activity-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const file = join(dir, 'main-desk', 'activity.jsonl');
+  let at = Date.parse('2026-11-16T15:00:00Z');
+  const clockNow = () => new Date(at += 1000);
+  const first = await ActivityLog.open(file, 3, clockNow);
+  for (const n of [1, 2, 3, 4]) first.add(`일 ${n}`);
+  await first.flushed();
+  await appendFile(file, 'not json\n');
+  const again = await ActivityLog.open(file, 3, clockNow);
+  assert.equal(again.render(), '11-16 15:00:02 일 2\n11-16 15:00:03 일 3\n11-16 15:00:04 일 4');
+  assert.equal((await readFile(file, 'utf8')).trim().split('\n').length, 3, 'the file is trimmed to what is kept');
+});
+
+test('Main Desk: the open project, activity, models, earlier projects and the month, from the records', async () => {
+  const { renderMainDesk, describeHistory, describeUsage } = await import('../dist/office/progress.js');
+  const task = (id, status, extra = {}) => ({ id, team: 'r', title: id, contract: {}, dependsOn: [], attempts: 1, reviews: [], status, ...extra });
+  const old = { id: 'p-old', instruction: '맥미니 가격 비교', createdAt: '2026-11-16T14:04:30Z', status: 'done', summary: '', roadmap: [], teams: [], questions: [], conversation: [],
+    tasks: [task('t1', 'done', { finishedAt: '2026-11-16T17:33:23Z' }), task('t2', 'blocked', { finishedAt: '2026-11-16T18:38:37Z' }), task('t3', 'skipped')] };
+  assert.equal(describeHistory([old]), '- p-old [done, took 4시간 34분] 맥미니 가격 비교 — tasks 1/3 done (t2 blocked, t3 skipped)');
+  const usage = { month: '2026-11', calls: 120, costUSD: '0.00', unknownCostCalls: 0, groups: [
+    { provider: 'cloudflare', model: 'mini', calls: 106, failed: 105 }, { provider: 'nvidia', model: 'flash', calls: 14, failed: 10 }] };
+  assert.equal(describeUsage(usage), '2026-11: 120 calls, 115 failed, $0.00\nMost failures: cloudflare:mini 105/106 failed; nvidia:flash 10/14 failed');
+  const log = new ActivityLog(10, () => new Date('2026-11-17T01:00:00Z'));
+  log.add('t1 Worker 모델 답 nvidia:flash (1분 40초 걸림)');
+  const open = { ...old, id: 'p-new', status: 'running', instruction: '새 일', tasks: [task('t1', 'in_progress', { startedAt: '2026-11-17T00:50:00Z' })] };
+  const page = renderMainDesk({ now: new Date('2026-11-17T01:00:00Z'), state: 'Running: yes. VM: running, used by t1.', project: open, activity: log, models: '- main: a (ok)', history: [open, old], usage: describeUsage(usage) });
+  assert.match(page, /^# Main Desk — 2026-11-17 01:00:00 UTC\n\n## Now\nRunning: yes\. VM: running, used by t1\.\n\n## Open project\n새 일\n/);
+  assert.match(page, /- t1 \[in_progress\] t1 — vm, attempt 1, running for 10분/);
+  assert.match(page, /## Recent activity \(UTC, newest last\)\n11-17 01:00:00 t1 Worker 모델 답 nvidia:flash \(1분 40초 걸림\)/);
+  assert.match(page, /## Earlier projects \(newest first\)\n- p-old \[done, took 4시간 34분\]/);
+  assert.ok(!page.includes('- p-new ['), 'the open project is not repeated among earlier ones');
+  assert.match(page, /## This month\n2026-11: 120 calls, 115 failed/);
+  const idle = renderMainDesk({ now: new Date(), state: 'Running: no.', project: old, activity: new ActivityLog(), models: '', history: [old], usage: '' });
+  assert.match(idle, /## Open project\nNone\./);
 });

@@ -8,7 +8,7 @@ import { createInterface } from 'node:readline';
 import { randomUUID } from 'node:crypto';
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdir, readFile, rmdir, writeFile, chmod, stat } from 'node:fs/promises';
+import { mkdir, readFile, rename, rmdir, writeFile, chmod, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { AppleOfflineBackend } from '../vault/apple-backend.js';
@@ -38,7 +38,7 @@ import { workerSystem } from '../office/roles.js';
 import { workerBrief } from '../office/plan.js';
 import { snapshot, receive, approve, discard, pending, type Review } from './sync.js';
 import { approvalGate, vmTurns } from './turns.js';
-import { ActivityLog, describeModels, describeProgress, elapsed } from '../office/progress.js';
+import { ActivityLog, describeModels, describeUsage, elapsed, renderMainDesk } from '../office/progress.js';
 import { loadTable } from '../gateway/assignment.js';
 
 type VMState = 'stopped' | 'starting' | 'running' | 'stopping' | 'failed';
@@ -79,8 +79,10 @@ const taskRuns = new Map<string, TaskRun>();
 let allowAll = false;
 const approvals = new Map<string, (answer: EgressAnswer) => void>();
 const gate = approvalGate(() => approvals.size);
-/** What happened lately, for Main: it must be able to say where the work stands and why. */
-const activity = new ActivityLog();
+/** What happened lately, for Main: it must be able to say where the work stands and why. Kept on disk once a Vault is open. */
+let activity = new ActivityLog();
+/** Something happened: noted for Main, and Main's Desk is brought up to date soon after. */
+function note(text: string) { activity.add(text); deskSoon(); }
 /** Per board task, when its Worker last did something: a model answer's wait is the time since. */
 const lastStep = new Map<string, number>();
 const turns = vmTurns();
@@ -106,7 +108,7 @@ function keepAwake(on: boolean) {
 
 function status(detail?: string) {
   keepAwake(!!running);
-  if (detail) activity.add(`상태: ${detail}`);
+  if (detail) note(`상태: ${detail}`);
   event('status', { vm, detail, task: saved?.task ?? null, running: !!running, awake: !!awake, browser: !!browser, control: browser?.control ?? 'ai', allowAll });
 }
 
@@ -130,7 +132,7 @@ async function open(vault: string) {
       const id = randomUUID();
       approvals.set(id, resolve);
       signal.addEventListener('abort', () => { if (approvals.delete(id)) { event('approvalDone', { id }); resolve('deny'); gate.settled(); } }, { once: true });
-      activity.add(`네트워크 승인 대기: ${request.target === 'mac' ? `Mac 포트 ${request.port}` : request.site} (사용자가 답할 때까지 Worker가 멈춤)`);
+      note(`네트워크 승인 대기: ${request.target === 'mac' ? `Mac 포트 ${request.port}` : request.site} (사용자가 답할 때까지 Worker가 멈춤)`);
       event('approval', { id, ...request });
     }),
     onEvent: e => event('network', e),
@@ -150,6 +152,8 @@ async function open(vault: string) {
   curator = new Curator({ gateway, library, store: new CurationStore(join(paths.local, 'curation.json')), rules: () => libraryRules(libraryConfig), cards: new CardStore(join(paths.local, 'note-cards.json')),
     onChange: curation => event('curation', { curation, running: !!curating }), onProgress: progress => event('curation', { curation: curator!.current, running: true, progress }) });
   await curator.load();
+  activity = await ActivityLog.open(join(paths.local, 'main-desk', 'activity.jsonl'));
+  note('Vault를 열었습니다 (앱 시작)');
   chat = new MainChat({
     gateway, store: new ChatStore(join(paths.local, 'main-chat.json')),
     context: chatContext,
@@ -340,14 +344,15 @@ async function removeWorkspace() {
 
 /** The project for the app, without Main's raw planning conversation. */
 function publishProject() {
+  deskSoon();
   const project = office?.project;
   event('project', { project: project ? { ...project, conversation: undefined } : null });
 }
 
 function officeEvent(e: OfficeEvent) {
   if (e.type === 'project') { publishProject(); return; }
-  if (e.type === 'retry') { activity.add(`${e.from} 모델 호출 재시도 ${e.attempt}회째: ${e.error}`); event('office', { from: e.from, title: `모델 호출 재시도 (${e.attempt}회째)`, text: e.error, isError: true }); return; }
-  activity.add(`${e.taskId ? `${e.taskId} ` : ''}${e.from}: ${e.title}${e.model ? ` (${e.model})` : ''} — ${e.text.slice(0, 160)}`);
+  if (e.type === 'retry') { note(`${e.from} 모델 호출 재시도 ${e.attempt}회째: ${e.error}`); event('office', { from: e.from, title: `모델 호출 재시도 (${e.attempt}회째)`, text: e.error, isError: true }); return; }
+  note(`${e.taskId ? `${e.taskId} ` : ''}${e.from}: ${e.title}${e.model ? ` (${e.model})` : ''} — ${e.text.slice(0, 160)}`);
   event('office', { from: e.from, taskId: e.taskId, title: e.title, text: e.text, model: e.model, difficulty: e.difficulty });
 
 }
@@ -458,7 +463,7 @@ function workerEvents(task: BoardTask, trail: string[]) {
     if (e.type === 'tool_result' && e.isError && trail.length) trail[trail.length - 1] += ' -> error';
     const now = Date.now(), since = lastStep.get(task.id);
     lastStep.set(task.id, now);
-    const note = e.type === 'model' ? `모델 답 ${e.provider}:${e.model}${since ? ` (${elapsed(now - since)} 걸림)` : ''}, 입력 ${e.inputTokens} 토큰`
+    const line = e.type === 'model' ? `모델 답 ${e.provider}:${e.model}${since ? ` (${elapsed(now - since)} 걸림)` : ''}, 입력 ${e.inputTokens} 토큰`
       : e.type === 'tool_call' ? `도구 ${e.name} ${JSON.stringify(e.input).slice(0, 120)}`
       : e.type === 'tool_result' ? (e.isError || e.ms > 30_000 ? `도구 ${e.name} ${e.isError ? '실패' : '완료'} (${elapsed(e.ms)})${e.isError ? `: ${e.content.slice(0, 120)}` : ''}` : null)
       : e.type === 'retry' ? `모델 호출 실패, ${e.waitMs ? `${elapsed(e.waitMs)} 뒤 재시도` : '다른 후보로'}: ${e.error}`
@@ -466,7 +471,7 @@ function workerEvents(task: BoardTask, trail: string[]) {
       : e.type === 'finished' ? `Worker 끝냄: ${e.summary.slice(0, 160)}`
       : e.type === 'stopped' ? `Worker 멈춤: ${e.detail}`
       : e.type === 'failed' ? `Worker 실패: ${e.error}` : null;
-    if (note) activity.add(`${task.id} Worker ${note}`);
+    if (line) note(`${task.id} Worker ${line}`);
     event('worker', { task: placeOf(task) === 'text' ? undefined : saved?.task, boardTask: task.id, who: workerFor(office!.project!, task)?.name, where: placeOf(task), ...clipEvent(e) });
   };
 }
@@ -618,19 +623,51 @@ function suggestLinks() {
   return {};
 }
 
-/** What Main is told with each chat message: the open project, the staff, what the Library holds. */
-async function chatContext(): Promise<string> {
-  const project = office?.project;
+/**
+ * Main's Desk: the whole picture of the work and of Nidus, from the facts (boards, the call log,
+ * the activity log), never from a model. Main reads it with every message, and it is kept in
+ * .nidus/local/main-desk/desk.md so a restart or another Main model starts from the same page.
+ */
+async function mainDesk(): Promise<string> {
   const now = new Date();
-  const state = project
-    ? `Open project ${project.id}: ${project.instruction.slice(0, 300)}\nPlan: ${project.summary.slice(0, 600)}\n${describeProgress(project, now)}${project.questions.some(q => !q.answer) ? '\nYou asked the user questions in the plan panel that are not answered yet.' : ''}${project.report ? `\nFinal report: ${project.report.slice(0, 800)}` : ''}`
-    : 'No project is open.';
+  const project = office?.project ?? null;
   const limited = await gateway!.rateLimited().catch(() => [] as string[]);
   const models = await loadTable(paths!.modelsFile).then(table => describeModels(table, gateway!.health(), now, limited), () => '');
-  const waiting = [approvals.size ? `${approvals.size} network approval(s) wait for the user in the Work tab; the Worker is paused until then.` : '', browser?.control === 'user' ? 'The user has taken over the browser; the Worker waits for it back.' : ''].filter(Boolean).join(' ');
+  const history = await new BoardStore(join(paths!.local, 'board')).recent(9).catch(() => []);
+  const usage = (() => { try { return describeUsage(gateway!.usageSummary()); } catch { return ''; } })();
+  const state = [
+    `Running: ${running ? 'yes' : 'no'}. VM: ${vm}${vmHolderNote()}.`,
+    approvals.size ? `${approvals.size} network approval(s) wait for the user in the Work tab; the Worker is paused until then.` : '',
+    browser?.control === 'user' ? 'The user has taken over the browser; the Worker waits for it back.' : '',
+    review ? "A result is waiting for the user's review in the Work tab." : '',
+    dreaming ? 'The Library is being tidied (Dream Sequence).' : '',
+    curating ? "The user's notes are being looked over for links and moves." : '',
+    project?.status === 'done' && !project.closed && project.report ? `The last project ended; its final report: ${project.report.slice(0, 800)}` : '',
+  ].filter(Boolean).join('\n');
+  return renderMainDesk({ now, state, project, activity, models, history, usage });
+}
+
+let deskTimer: ReturnType<typeof setTimeout> | undefined;
+/** Writes Main's Desk a moment after things change (many events come in bursts). */
+function deskSoon() {
+  if (!paths || deskTimer) return;
+  deskTimer = setTimeout(() => {
+    deskTimer = undefined;
+    void mainDesk().then(async text => {
+      const file = join(paths!.local, 'main-desk', 'desk.md'), pending = `${file}.${randomUUID()}.pending`;
+      await mkdir(join(paths!.local, 'main-desk'), { recursive: true });
+      await writeFile(pending, text);
+      await rename(pending, file);
+    }).catch(() => {});
+  }, 3000);
+}
+
+/** What Main is told with each chat message: its Desk, the staff, what the Library holds. */
+async function chatContext(): Promise<string> {
+  const desk = await mainDesk();
   const staff = await home!.staff().then(describeStaff, () => '');
   const learned = await library!.digest(2500).catch(() => '');
-  return [state, waiting, `Now: ${now.toISOString().slice(11, 19)} UTC. Running: ${running ? 'yes' : 'no'}. VM: ${vm}${vmHolderNote()}.`, activity.render() ? `Recent activity (UTC, newest last):\n${activity.render()}` : '', models ? `Models by slot (the order is the candidate order):\n${models}` : '', review ? 'A result is waiting for the user\'s review in the Work tab.' : '', staff ? `Standing teams:\n${staff}` : '', learned ? `In the Library (the team's notes):\n${learned}` : ''].filter(Boolean).join('\n\n');
+  return [desk, staff ? `Standing teams:\n${staff}` : '', learned ? `In the Library (the team's notes):\n${learned}` : ''].filter(Boolean).join('\n\n');
 }
 
 const vmHolderNote = () => turns.holder ? `, used by ${turns.holder}` : '';
@@ -712,7 +749,7 @@ const commands: Record<string, (m: any) => Promise<unknown>> = {
   input: async m => { await (await ensureBrowser()).input(m.input); return {}; },
   answer: async m => {
     const resolve = approvals.get(String(m.approval));
-    if (resolve && ['once', 'always', 'deny'].includes(m.answer)) { activity.add(`네트워크 승인 답: ${m.answer}`); approvals.delete(String(m.approval)); resolve(m.answer); event('approvalDone', { id: m.approval }); gate.settled(); }
+    if (resolve && ['once', 'always', 'deny'].includes(m.answer)) { note(`네트워크 승인 답: ${m.answer}`); approvals.delete(String(m.approval)); resolve(m.answer); event('approvalDone', { id: m.approval }); gate.settled(); }
     return {};
   },
   allowAll: async m => { allowAll = !!m.enabled; proxy?.setAllowAll(allowAll); event('allowAll', { enabled: allowAll }); return {}; },
