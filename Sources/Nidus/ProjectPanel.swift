@@ -38,6 +38,9 @@ struct ProjectPanel: View {
                         }
                         .foregroundStyle(.orange)
                     }
+                    ForEach(project.openAgendas) { agenda in
+                        AgendaCard(agenda: agenda, task: project.tasks.first { $0.id == agenda.taskId }?.title)
+                    }
                     if !project.tasks.isEmpty {
                         Label(project.needsVm ? "VM이 필요한 Task가 있어, 그 Task를 시작할 때 VM을 켭니다" : "모든 Task를 VM 없이 처리합니다",
                               systemImage: project.needsVm ? "shippingbox" : "text.page")
@@ -86,7 +89,7 @@ struct ProjectPanel: View {
         switch project.status {
         case "planning": return "Main · 계획 중"
         case "waiting_user": return project.questions.isEmpty ? "Main · 계획 확인" : "Main · 질문이 있습니다"
-        case "running": return "진행 중"
+        case "running": return project.openAgendas.isEmpty ? "진행 중" : "Meeting Room · 결정을 기다립니다"
         case "reviewing": return "Main · 최종 검토 중"
         case "done": return "완료"
         case "stopped": return "중지됨"
@@ -213,6 +216,7 @@ private struct TaskRow: View {
         case "in_progress": return "circle.dotted"
         case "review": return "eye"
         case "blocked": return "exclamationmark.octagon"
+        case "waiting_user": return "hand.raised.fill"
         case "skipped": return "minus.circle"
         default: return "circle"
         }
@@ -223,7 +227,64 @@ private struct TaskRow: View {
         case "done": return .green
         case "in_progress", "review": return .accentColor
         case "blocked": return .red
+        case "waiting_user": return .orange
         default: return .secondary
         }
+    }
+}
+
+/// One matter the team put to the user (Meeting Room): the AI lays out the question; the user decides.
+private struct AgendaCard: View {
+    @EnvironmentObject private var session: WorkspaceSession
+    let agenda: OfficeProject.Agenda
+    let task: String?
+    @State private var choice: Int?
+    @State private var note = ""
+    @State private var remember = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label {
+                Text(agenda.title).font(.callout.weight(.semibold))
+            } icon: { Image(systemName: "hand.raised.fill").foregroundStyle(.orange) }
+            Text("\(agenda.from == "manager" ? "Manager" : agenda.from == "red-team" ? "Red Team" : "Lead Manager")가 결정을 요청했습니다\(task.map { " · \($0) Task는 결정을 기다립니다" } ?? "")")
+                .font(.caption).foregroundStyle(.secondary)
+            if !agenda.background.isEmpty { Text(agenda.background).font(.callout).textSelection(.enabled) }
+            if !agenda.reasoning.isEmpty { Text("판단 근거: \(agenda.reasoning)").font(.caption).foregroundStyle(.secondary).textSelection(.enabled) }
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(Array(agenda.options.enumerated()), id: \.offset) { index, option in
+                    Button { choice = index } label: {
+                        HStack(alignment: .firstTextBaseline) {
+                            Image(systemName: choice == index ? "largecircle.fill.circle" : "circle").foregroundStyle(choice == index ? Color.accentColor : .secondary)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(option.label).font(.callout)
+                                if !option.impact.isEmpty { Text(option.impact).font(.caption).foregroundStyle(.secondary) }
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            if !agenda.recommendation.isEmpty { Text("추천: \(agenda.recommendation)").font(.caption).foregroundStyle(.secondary) }
+            TextField(choice == nil ? "다른 지시 (선택지 대신. 예: 더 알아보고 다시 올려 줘)" : "덧붙일 말 (선택)", text: $note, axis: .vertical)
+                .textFieldStyle(.roundedBorder).lineLimit(1...3)
+            HStack {
+                Toggle("Library에 기록", isOn: $remember).help("오래 기억할 결정이면 Library의 결정 문서로 남깁니다").toggleStyle(.checkbox).font(.caption)
+                Spacer()
+                Button("하지 않음", role: .destructive) { session.decide(agenda.id, kind: "reject", option: nil, note: note, remember: remember) }
+                if choice == nil {
+                    Button("이 지시로 진행") { session.decide(agenda.id, kind: "instruct", option: nil, note: note, remember: remember) }
+                        .buttonStyle(.borderedProminent).disabled(note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                } else {
+                    Button("이 선택으로 진행") { session.decide(agenda.id, kind: "option", option: choice, note: note, remember: remember) }
+                        .buttonStyle(.borderedProminent)
+                }
+            }
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color.orange.opacity(0.08)))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.orange.opacity(0.4)))
     }
 }

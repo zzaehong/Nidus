@@ -642,6 +642,7 @@ async function mainDesk(): Promise<string> {
     review ? "A result is waiting for the user's review in the Work tab." : '',
     dreaming ? 'The Library is being tidied (Dream Sequence).' : '',
     curating ? "The user's notes are being looked over for links and moves." : '',
+    ...(project?.agendas ?? []).filter(a => !a.decision).map(a => `Meeting Room: "${a.title}" waits for the user's decision${a.taskId ? ` (task ${a.taskId} is paused until then)` : ''}, raised by the ${a.from} ${elapsed(now.getTime() - Date.parse(a.at))} ago.`),
     project?.status === 'done' && !project.closed && project.report ? `The last project ended; its final report: ${project.report.slice(0, 800)}` : '',
   ].filter(Boolean).join('\n');
   return renderMainDesk({ now, state, project, activity, models, history, usage });
@@ -700,6 +701,12 @@ const commands: Record<string, (m: any) => Promise<unknown>> = {
   },
   planReply: async m => planning(signal => office!.reply(m.answers ?? {}, String(m.note ?? ''), signal)),
   approvePlan: () => executeProject(),
+  /** The user's decision on a Meeting Room agenda; the Task waiting for it goes on. */
+  decide: async m => {
+    if (!office?.project) throw new Error('열린 프로젝트가 없습니다');
+    await office.decide(String(m.agenda ?? ''), { kind: m.kind, option: m.option, note: m.note, remember: m.remember });
+    return {};
+  },
   chat: async m => {
     chatting = new AbortController();
     const answer = await chat!.send(String(m.text ?? ''), chatting.signal);

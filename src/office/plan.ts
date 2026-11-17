@@ -4,6 +4,7 @@
 import { difficulties, type Difficulty } from '../gateway/assignment.js';
 import { placeOf, workerFor, type BoardTask, type CompletionContract, type Keep, type Project, type ProjectEmployee, type Team } from './board.js';
 import { describeStaff, type Staff } from './home.js';
+import { AGENDA_FORMAT, parseAgenda, type Agenda } from './meeting.js';
 
 export class PlanError extends Error {}
 
@@ -113,10 +114,14 @@ export function parseBrief(answer: string): { difficulty: Difficulty; instructio
   return { difficulty: raw.difficulty, instructions: text(raw.instructions, 'instructions', 12000) };
 }
 
-export function parseReview(answer: string): { verdict: 'accept' | 'revise' | 'blocked'; feedback: string; summary: string; verification: string } {
+export type ReviewVerdict = 'accept' | 'revise' | 'blocked' | 'escalate';
+export type AgendaDraft = Pick<Agenda, 'title' | 'background' | 'reasoning' | 'options' | 'recommendation'>;
+
+export function parseReview(answer: string): { verdict: ReviewVerdict; feedback: string; summary: string; verification: string; agenda?: AgendaDraft } {
   const raw = extractJson(answer);
-  if (!['accept', 'revise', 'blocked'].includes(raw.verdict)) throw new PlanError('verdict must be accept, revise or blocked');
-  return { verdict: raw.verdict, feedback: optionalText(raw.feedback, 4000), summary: text(raw.summary, 'summary', 4000), verification: optionalText(raw.verification, 2000) };
+  if (!['accept', 'revise', 'blocked', 'escalate'].includes(raw.verdict)) throw new PlanError('verdict must be accept, revise, blocked or escalate');
+  const agenda = raw.verdict === 'escalate' ? parseAgenda(raw.agenda) : undefined;
+  return { verdict: raw.verdict, feedback: optionalText(raw.feedback, 4000), summary: optionalText(raw.summary, 4000) || (agenda ? agenda.title : text(raw.summary, 'summary', 4000)), verification: optionalText(raw.verification, 2000), ...(agenda ? { agenda } : {}) };
 }
 
 // --- prompts ---------------------------------------------------------------------
@@ -187,16 +192,19 @@ export function briefRequest(project: Project, task: BoardTask): string {
   return `${projectContext(project, task)}\n\nWrite the Worker's instructions: what to do, where (paths, sites), how to verify each acceptance criterion, and what to report in its summary. For a vm task say what to commit; for a text task say what the deliverable must contain (the deliverables listed above are given to the Worker with your instructions). Be concrete. Answer with one JSON object only:\n{"difficulty": "simple|normal|complex", "instructions": "..."}`;
 }
 
-export function reviewRequest(project: Project, task: BoardTask, evidence: string, attempt: number, maxAttempts: number): string {
+export function reviewRequest(project: Project, task: BoardTask, evidence: string, attempt: number, maxAttempts: number, canEscalate = true): string {
   return [
     projectContext(project, task),
     '',
     `Worker's work (attempt ${attempt} of ${maxAttempts}):`,
     evidence,
     '',
-    'Review it against the acceptance criteria. verdict: "accept" if met and verified; "revise" with concrete feedback if it can be fixed' + (attempt >= maxAttempts ? ' (no attempts are left: choose accept or blocked)' : '') + '; "blocked" if it cannot be done (missing access, a decision only the user can make) and say why.',
+    'Review it against the acceptance criteria. verdict: "accept" if met and verified; "revise" with concrete feedback if it can be fixed' + (attempt >= maxAttempts ? ' (no attempts are left: choose accept, blocked' + (canEscalate ? ' or escalate' : '') + ')' : '') + '; "blocked" if it cannot be done at all (missing access) and say why.',
+    ...(canEscalate ? [
+      '"escalate" (Meeting Room) when the work needs a decision that is not the team\'s to make: the user\'s preference or priorities, spending money, something that cannot be undone, legal or personal matters, requirements that contradict each other, or a choice between results that only the user can judge. Put it to the user as an agenda in the user\'s language, with real options and what each leads to, and your recommendation; the Worker waits for the decision and then goes on. Do not escalate what you can decide from the request and the acceptance criteria.',
+    ] : ['(The user has already decided on a question for this task; do not escalate again: accept, revise or blocked.)']),
     'summary: the task result for the record, in the user\'s language. verification: how the criteria were checked.',
-    'Answer with one JSON object only: {"verdict": "accept|revise|blocked", "feedback": "...", "summary": "...", "verification": "..."}',
+    `Answer with one JSON object only: {"verdict": "accept|revise|blocked${canEscalate ? '|escalate' : ''}", "feedback": "...", "summary": "...", "verification": "..."${canEscalate ? `, ${AGENDA_FORMAT} (only with escalate)` : ''}}`,
   ].join('\n');
 }
 

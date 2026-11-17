@@ -137,8 +137,8 @@ struct VaultView: View {
     /// 작업, a plan or questions and note suggestions in Main, warnings on providers.
     private func attention(_ section: VaultSection) -> Int {
         switch section {
-        case .work: return session.approvals.count + (session.review != nil ? 1 : 0)
-        case .main: return (session.project?.status == "waiting_user" ? 1 : 0) + (session.curation != nil ? 1 : 0)
+        case .work: return session.approvals.count + (session.review != nil ? 1 : 0) + (session.project?.openAgendas.count ?? 0)
+        case .main: return (session.project?.status == "waiting_user" ? 1 : 0) + (session.curation != nil ? 1 : 0) + (session.project?.openAgendas.count ?? 0)
         case .providers: return store.overview?.providers.filter { $0.notice != nil }.count ?? 0
         default: return 0
         }

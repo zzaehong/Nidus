@@ -7,9 +7,11 @@ import { randomUUID } from 'node:crypto';
 import type { Message } from '../gateway/contract.js';
 import type { Difficulty } from '../gateway/assignment.js';
 import type { Employee } from './home.js';
+import type { Agenda } from './meeting.js';
 
 export type ProjectStatus = 'planning' | 'waiting_user' | 'running' | 'reviewing' | 'done' | 'stopped' | 'failed';
-export type TaskStatus = 'pending' | 'in_progress' | 'review' | 'done' | 'blocked' | 'skipped';
+/** waiting_user: the Task's Manager put a question to the user (Meeting Room) and waits for the decision. */
+export type TaskStatus = 'pending' | 'in_progress' | 'review' | 'done' | 'blocked' | 'skipped' | 'waiting_user';
 
 /** A team of the project: a standing Group of the Vault, or one Main proposed for this request. */
 export interface Team { id: string; name: string; focus: string; proposed?: boolean; keep?: Keep; reason?: string }
@@ -29,7 +31,8 @@ export interface CompletionContract {
   verification: string;
 }
 
-export interface TaskReview { verdict: 'accept' | 'revise' | 'blocked'; feedback: string; at: string }
+/** escalate: the Manager put the matter to the user; decided: the user's decision, as the team was given it. */
+export interface TaskReview { verdict: 'accept' | 'revise' | 'blocked' | 'escalate' | 'decided'; feedback: string; at: string }
 
 /**
  * Where a Task runs. text: a Worker without the VM (text work over the Vault's committed files,
@@ -75,6 +78,8 @@ export interface Project {
   /** Main's conversation while planning, so a revision builds on what was said. */
   conversation: Message[];
   report?: string;
+  /** Matters put to the user (Meeting Room), open or decided. */
+  agendas?: Agenda[];
   /** Library documents written when the project ended (paths in the Vault). */
   knowledge?: string[];
   /** The user dismissed it from the Work tab; it stays on the board as history. */

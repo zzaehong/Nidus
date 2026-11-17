@@ -15,6 +15,7 @@ import type { DeskStore } from './desk.js';
 import { knowledgeRequest, parseKnowledge, recordProject, type Library } from './library.js';
 import { PlanError, answersMessage, briefRequest, finalRequest, parseBrief, parsePlan, parseReview, planRequest, reviewRequest, workerBrief } from './plan.js';
 import { mainSystem, managerSystem } from './roles.js';
+import { checkDecision, decisionNote, decisionText, type Agenda } from './meeting.js';
 
 export type OfficeEvent =
   | { type: 'project'; project: Project }
@@ -49,8 +50,13 @@ export const DEFAULT_PARALLEL = 3;
 /** A Worker gets this many tries per task: the first and up to two revisions. */
 export const MAX_ATTEMPTS = 3;
 
+/** Questions a task may put to the user (Meeting Room); a decision does not use up a try. */
+export const MAX_ESCALATIONS = 2;
+
 export class Office {
   project: Project | null = null;
+  /** Tasks waiting for the user's decision, woken by decide(). */
+  private readonly waiting = new Map<string, () => void>();
 
   constructor(private readonly deps: OfficeDeps) {}
 
@@ -84,6 +90,49 @@ export class Office {
         conversation.push({ role: 'assistant', content: [{ type: 'text', text }] }, { role: 'user', content: [{ type: 'text', text: `That answer could not be used: ${(error as Error).message}. Answer again with the JSON object only.` }] });
       }
     }
+  }
+
+  // --- Meeting Room -----------------------------------------------------------------
+
+  /** Puts a matter to the user. The agenda is saved with the project before anyone is told. */
+  private async raise(from: Agenda['from'], taskId: string | null, draft: Pick<Agenda, 'title' | 'background' | 'reasoning' | 'options' | 'recommendation'>, model?: string): Promise<Agenda> {
+    const project = this.project!;
+    const agenda: Agenda = { id: `a${(project.agendas?.length ?? 0) + 1}`, from, taskId, ...draft, at: new Date().toISOString() };
+    (project.agendas ??= []).push(agenda);
+    await this.publish();
+    this.deps.onEvent({ type: 'message', from: from === 'manager' ? 'manager' : 'main', taskId: taskId ?? undefined, title: `Meeting Room · ${agenda.title}`, text: `${agenda.background}\n\n선택지:\n${agenda.options.map((o, i) => `${i + 1}. ${o.label}${o.impact ? ` — ${o.impact}` : ''}`).join('\n')}${agenda.recommendation ? `\n\n추천: ${agenda.recommendation}` : ''}`, ...(model ? { model } : {}) });
+    return agenda;
+  }
+
+  /** Waits until the user decides on the agenda (or the work is stopped). */
+  private decision(agenda: Agenda, signal: AbortSignal): Promise<void> {
+    if (agenda.decision || signal.aborted) return Promise.resolve();
+    return new Promise(resolve => {
+      const done = () => { this.waiting.delete(agenda.id); resolve(); };
+      this.waiting.set(agenda.id, done);
+      signal.addEventListener('abort', done, { once: true });
+    });
+  }
+
+  /**
+   * The user's decision on an agenda. It is kept with the project, noted on the Task's Desk, and
+   * written into the Library when the user marked it as one to keep; the waiting Task goes on.
+   */
+  async decide(agendaId: string, input: { kind: unknown; option?: unknown; note?: unknown; remember?: unknown }): Promise<Agenda> {
+    const project = this.project;
+    const agenda = project?.agendas?.find(a => a.id === agendaId);
+    if (!project || !agenda) throw new Error('그런 안건이 없습니다');
+    agenda.decision = checkDecision(agenda, input);
+    if (agenda.taskId) await this.deps.desk?.checkpoint(project.id, agenda.taskId, workerFor(project, project.tasks.find(t => t.id === agenda.taskId)!)?.id ?? null, 'note', `Meeting Room "${agenda.title}": ${decisionText(agenda)}`).catch(() => {});
+    if (agenda.decision.remember && this.deps.library) {
+      const note = decisionNote(agenda);
+      const date = agenda.decision.at.slice(0, 10);
+      await this.deps.library.write('Decisions', note.title, ['---', 'type: decision', `project: ${project.id}`, `date: ${date}`, 'decided-by: user', 'author: Nidus', '---', `# ${note.title}`, '', note.text].join('\n')).catch(() => {});
+    }
+    await this.publish();
+    this.deps.onEvent({ type: 'message', from: 'main', taskId: agenda.taskId ?? undefined, title: `Meeting Room · 결정: ${agenda.title}`, text: decisionText(agenda) });
+    this.waiting.get(agenda.id)?.();
+    return agenda;
   }
 
   // --- planning -------------------------------------------------------------------
@@ -146,8 +195,8 @@ export class Office {
     }
     project.status = 'running';
     project.error = undefined;
-    // A task interrupted by a stop starts over.
-    for (const t of project.tasks) if (t.status === 'in_progress' || t.status === 'review') t.status = 'pending';
+    // A task interrupted by a stop starts over; one waiting for a decision picks the question up again.
+    for (const t of project.tasks) if (t.status === 'in_progress' || t.status === 'review' || t.status === 'waiting_user') t.status = 'pending';
     await this.publish();
     const limit = Math.max(1, this.deps.maxParallel ?? DEFAULT_PARALLEL);
     const active = new Map<string, Promise<void>>();
@@ -197,6 +246,7 @@ export class Office {
       else { project.status = 'failed'; project.error = String((error as Error).message ?? error); }
       // A task cut short starts over when the project goes on.
       for (const t of project.tasks) if (t.status === 'in_progress' || t.status === 'review') t.status = 'pending';
+      // A task still waiting for the user keeps waiting: its agenda stays open.
     } finally {
       signal.removeEventListener('abort', stopAll);
     }
@@ -215,19 +265,54 @@ export class Office {
       await Promise.all([worker?.id, manager?.id].map(employee => this.deps.home?.setState({ employee: employee ?? '', project: project.id, task: task.id, status })));
     };
     await at('started');
-    const brief = await this.ask('manager', managerPrompt, [{ role: 'user', content: [{ type: 'text', text: briefRequest(project, task) }] }], parseBrief, signal, task.id);
-    task.brief = brief.value.instructions;
-    task.difficulty = brief.value.difficulty;
-    this.deps.onEvent({ type: 'message', from: 'manager', taskId: task.id, title: `${manager ? `${manager.name} → ${worker?.name ?? 'Worker'} · ` : ''}${task.title} · Worker 지시 (난이도 ${brief.value.difficulty})`, text: brief.value.instructions, model: brief.model, difficulty: brief.value.difficulty });
-    await this.publish();
+    const asked = (project.agendas ?? []).filter(a => a.taskId === task.id);
+    // A question to the user still open from before a restart: the task picks up where it stopped.
+    const pending = asked.find(a => !a.applied);
+    let difficulty: Difficulty;
+    if (pending && task.brief && task.difficulty) difficulty = task.difficulty;
+    else {
+      const brief = await this.ask('manager', managerPrompt, [{ role: 'user', content: [{ type: 'text', text: briefRequest(project, task) }] }], parseBrief, signal, task.id);
+      task.brief = brief.value.instructions;
+      task.difficulty = difficulty = brief.value.difficulty;
+      this.deps.onEvent({ type: 'message', from: 'manager', taskId: task.id, title: `${manager ? `${manager.name} → ${worker?.name ?? 'Worker'} · ` : ''}${task.title} · Worker 지시 (난이도 ${difficulty})`, text: brief.value.instructions, model: brief.model, difficulty });
+      await this.publish();
+    }
 
     let instruction = workerBrief(project, task);
+    let escalations = asked.length;
+    // Waits for the user's decision on the agenda; returns the instruction to go on with, or null when the user said not to do it.
+    const awaitDecision = async (agenda: Agenda): Promise<string | null> => {
+      task.status = 'waiting_user';
+      await this.publish();
+      await at('blocked');
+      await this.decision(agenda, signal);
+      if (signal.aborted) throw new Error('stopped');
+      agenda.applied = true;
+      task.reviews.push({ verdict: 'decided', feedback: decisionText(agenda), at: new Date().toISOString() });
+      if (agenda.decision!.kind === 'reject') {
+        task.status = 'blocked';
+        task.result = { summary: `사용자가 진행하지 않기로 했습니다: ${agenda.title}${agenda.decision!.note ? ` (${agenda.decision!.note})` : ''}`, verification: 'Meeting Room 결정' };
+        task.finishedAt = new Date().toISOString();
+        await at('blocked');
+        await this.publish();
+        return null;
+      }
+      await this.publish();
+      return `Your Manager put a question to the user: "${agenda.title}". ${decisionText(agenda)}\nGo on with the task accordingly: do what the decision calls for, verify the acceptance criteria again, and finish with an updated summary.`;
+    };
+    let revision = false;
+    if (pending) {
+      const next = await awaitDecision(pending);
+      if (next === null) return;
+      instruction = next; revision = true;
+    }
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       task.attempts = attempt;
       task.status = 'in_progress';
       await this.publish();
       await at('working');
-      const { outcome, evidence, output } = await this.deps.work(task, instruction, brief.value.difficulty, signal, attempt > 1);
+      const { outcome, evidence, output } = await this.deps.work(task, instruction, difficulty, signal, revision || attempt > 1);
+      revision = false;
       if (signal.aborted) throw new Error('stopped');
       if (output !== undefined) task.output = output.slice(0, 60000);
       task.status = 'review';
@@ -235,8 +320,19 @@ export class Office {
       const history = task.reviews.length ? `\nEarlier reviews:\n${task.reviews.map((r, i) => `${i + 1}. ${r.verdict}: ${r.feedback}`).join('\n')}\n` : '';
       const outcomeText = outcome.status === 'finished' ? `Worker's summary: ${outcome.summary}` : outcome.status === 'stopped' ? `The Worker stopped early: ${outcome.detail}` : `The Worker failed: ${outcome.error}`;
       await at('review');
-      const review = await this.ask('manager', managerPrompt, [{ role: 'user', content: [{ type: 'text', text: reviewRequest(project, task, `${outcomeText}\n${history}\n${evidence}`, attempt, MAX_ATTEMPTS) }] }], parseReview, signal, task.id);
-      let verdict = review.value.verdict;
+      const review = await this.ask('manager', managerPrompt, [{ role: 'user', content: [{ type: 'text', text: reviewRequest(project, task, `${outcomeText}\n${history}\n${evidence}`, attempt, MAX_ATTEMPTS, escalations < MAX_ESCALATIONS) }] }], parseReview, signal, task.id);
+      if (review.value.verdict === 'escalate' && review.value.agenda && escalations < MAX_ESCALATIONS) {
+        escalations++;
+        task.reviews.push({ verdict: 'escalate', feedback: review.value.agenda.title, at: new Date().toISOString() });
+        const agenda = await this.raise('manager', task.id, review.value.agenda, review.model);
+        const next = await awaitDecision(agenda);
+        if (next === null) return;
+        instruction = next; revision = true;
+        // The decision does not use up a try.
+        attempt--;
+        continue;
+      }
+      let verdict = review.value.verdict === 'escalate' ? 'blocked' as const : review.value.verdict;
       // No tries left: a task that still needs work is blocked, not quietly accepted.
       if (verdict === 'revise' && attempt >= MAX_ATTEMPTS) verdict = 'blocked';
       task.reviews.push({ verdict, feedback: review.value.feedback, at: new Date().toISOString() });

@@ -123,7 +123,7 @@ export class DeskStore {
   }
 
   /** A checkpoint made for the Worker: the summary of a compacted session, or the final state of a task. */
-  async checkpoint(project: string, task: string, employee: string | null, kind: 'summary' | 'final', text: string): Promise<Desk> {
+  async checkpoint(project: string, task: string, employee: string | null, kind: 'note' | 'summary' | 'final', text: string): Promise<Desk> {
     const desk = await this.load(project, task) ?? this.blank(project, task, employee);
     this.push(desk, kind, clip(text, 10_000));
     Object.assign(desk, { employee: employee ?? desk.employee, updatedAt: new Date().toISOString(), ...(kind === 'final' ? { status: 'closed' as const } : {}) });

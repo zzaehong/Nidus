@@ -84,6 +84,14 @@ struct OfficeProject: Decodable {
         var isText: Bool { `where` == "text" || `where` == "desk" }
     }
     struct Question: Decodable, Identifiable { let id: String; let text: String; let answer: String? }
+    /// A matter put to the user (Meeting Room): what is to be decided, why, the options and their impact.
+    struct Agenda: Decodable, Identifiable {
+        struct Option: Decodable, Hashable { let label: String; let impact: String }
+        struct Decision: Decodable { let kind: String; let option: Int?; let note: String; let remember: Bool }
+        let id: String; let from: String; let taskId: String?
+        let title: String; let background: String; let reasoning: String; let options: [Option]; let recommendation: String
+        let at: String; let decision: Decision?
+    }
     let id: String
     let instruction: String
     let status: String
@@ -93,6 +101,8 @@ struct OfficeProject: Decodable {
     let staff: [Employee]?
     let tasks: [Task]
     let questions: [Question]
+    let agendas: [Agenda]?
+    var openAgendas: [Agenda] { (agendas ?? []).filter { $0.decision == nil } }
     let report: String?
     let knowledge: [String]?
     let error: String?
@@ -453,6 +463,12 @@ final class WorkspaceSession: ObservableObject {
     func libraryRules() async -> String { ((try? await send("libraryRules"))?["rules"] as? String) ?? "" }
     func setLibraryRules(_ rules: String) { perform("setLibraryRules", ["rules": rules]) }
     func approvePlan() { perform("approvePlan") }
+    /// The user's decision on a Meeting Room agenda: an option (by index), instructions, or not to do it.
+    func decide(_ agenda: String, kind: String, option: Int?, note: String, remember: Bool) {
+        var arguments: [String: Any] = ["agenda": agenda, "kind": kind, "note": note, "remember": remember]
+        if let option { arguments["option"] = option }
+        perform("decide", arguments)
+    }
     func closeProject() { perform("closeProject") }
     func takeOver() { perform("takeOver") }
     func handBack() { perform("handBack") }
