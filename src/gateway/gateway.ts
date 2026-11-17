@@ -235,7 +235,7 @@ export class ModelGateway implements Availability {
   }
 
   /** Models to pass over for now because of their rate limits: blocked by a 429, or at a known limit by this Vault's own count. */
-  private async rateLimited(): Promise<string[]> {
+  async rateLimited(): Promise<string[]> {
     const now = this.now(), out: string[] = [];
     const settings = await this.settings.load(), all = await this.quotas.load();
     for (const provider of geminiProviders) {

@@ -38,6 +38,8 @@ import { workerSystem } from '../office/roles.js';
 import { workerBrief } from '../office/plan.js';
 import { snapshot, receive, approve, discard, pending, type Review } from './sync.js';
 import { approvalGate, vmTurns } from './turns.js';
+import { ActivityLog, describeModels, describeProgress, elapsed } from '../office/progress.js';
+import { loadTable } from '../gateway/assignment.js';
 
 type VMState = 'stopped' | 'starting' | 'running' | 'stopping' | 'failed';
 interface Saved { vaultId: string; task?: string; base?: string }
@@ -77,6 +79,10 @@ const taskRuns = new Map<string, TaskRun>();
 let allowAll = false;
 const approvals = new Map<string, (answer: EgressAnswer) => void>();
 const gate = approvalGate(() => approvals.size);
+/** What happened lately, for Main: it must be able to say where the work stands and why. */
+const activity = new ActivityLog();
+/** Per board task, when its Worker last did something: a model answer's wait is the time since. */
+const lastStep = new Map<string, number>();
 const turns = vmTurns();
 const services = new Map<string, string>(); // name -> VM session id
 const ENVIRONMENT = '00000000-0000-4000-8000-00000000e2e0';
@@ -100,6 +106,7 @@ function keepAwake(on: boolean) {
 
 function status(detail?: string) {
   keepAwake(!!running);
+  if (detail) activity.add(`상태: ${detail}`);
   event('status', { vm, detail, task: saved?.task ?? null, running: !!running, awake: !!awake, browser: !!browser, control: browser?.control ?? 'ai', allowAll });
 }
 
@@ -123,6 +130,7 @@ async function open(vault: string) {
       const id = randomUUID();
       approvals.set(id, resolve);
       signal.addEventListener('abort', () => { if (approvals.delete(id)) { event('approvalDone', { id }); resolve('deny'); gate.settled(); } }, { once: true });
+      activity.add(`네트워크 승인 대기: ${request.target === 'mac' ? `Mac 포트 ${request.port}` : request.site} (사용자가 답할 때까지 Worker가 멈춤)`);
       event('approval', { id, ...request });
     }),
     onEvent: e => event('network', e),
@@ -338,7 +346,8 @@ function publishProject() {
 
 function officeEvent(e: OfficeEvent) {
   if (e.type === 'project') { publishProject(); return; }
-  if (e.type === 'retry') { event('office', { from: e.from, title: `모델 호출 재시도 (${e.attempt}회째)`, text: e.error, isError: true }); return; }
+  if (e.type === 'retry') { activity.add(`${e.from} 모델 호출 재시도 ${e.attempt}회째: ${e.error}`); event('office', { from: e.from, title: `모델 호출 재시도 (${e.attempt}회째)`, text: e.error, isError: true }); return; }
+  activity.add(`${e.taskId ? `${e.taskId} ` : ''}${e.from}: ${e.title}${e.model ? ` (${e.model})` : ''} — ${e.text.slice(0, 160)}`);
   event('office', { from: e.from, taskId: e.taskId, title: e.title, text: e.text, model: e.model, difficulty: e.difficulty });
 
 }
@@ -447,6 +456,17 @@ function workerEvents(task: BoardTask, trail: string[]) {
   return (e: WorkerEvent) => {
     if (e.type === 'tool_call') trail.push(`${e.name} ${JSON.stringify(e.input).slice(0, 160)}`);
     if (e.type === 'tool_result' && e.isError && trail.length) trail[trail.length - 1] += ' -> error';
+    const now = Date.now(), since = lastStep.get(task.id);
+    lastStep.set(task.id, now);
+    const note = e.type === 'model' ? `모델 답 ${e.provider}:${e.model}${since ? ` (${elapsed(now - since)} 걸림)` : ''}, 입력 ${e.inputTokens} 토큰`
+      : e.type === 'tool_call' ? `도구 ${e.name} ${JSON.stringify(e.input).slice(0, 120)}`
+      : e.type === 'tool_result' ? (e.isError || e.ms > 30_000 ? `도구 ${e.name} ${e.isError ? '실패' : '완료'} (${elapsed(e.ms)})${e.isError ? `: ${e.content.slice(0, 120)}` : ''}` : null)
+      : e.type === 'retry' ? `모델 호출 실패, ${e.waitMs ? `${elapsed(e.waitMs)} 뒤 재시도` : '다른 후보로'}: ${e.error}`
+      : e.type === 'compacted' ? `대화 압축 (${e.how})`
+      : e.type === 'finished' ? `Worker 끝냄: ${e.summary.slice(0, 160)}`
+      : e.type === 'stopped' ? `Worker 멈춤: ${e.detail}`
+      : e.type === 'failed' ? `Worker 실패: ${e.error}` : null;
+    if (note) activity.add(`${task.id} Worker ${note}`);
     event('worker', { task: placeOf(task) === 'text' ? undefined : saved?.task, boardTask: task.id, who: workerFor(office!.project!, task)?.name, where: placeOf(task), ...clipEvent(e) });
   };
 }
@@ -601,13 +621,19 @@ function suggestLinks() {
 /** What Main is told with each chat message: the open project, the staff, what the Library holds. */
 async function chatContext(): Promise<string> {
   const project = office?.project;
+  const now = new Date();
   const state = project
-    ? `Open project ${project.id} (${project.status}): ${project.instruction.slice(0, 300)}\nPlan: ${project.summary.slice(0, 600)}\nTasks: ${project.tasks.map(t => `${t.title} [${t.status}]`).join('; ') || '(none yet)'}${project.questions.some(q => !q.answer) ? '\nYou asked the user questions in the plan panel that are not answered yet.' : ''}${project.report ? `\nFinal report: ${project.report.slice(0, 800)}` : ''}`
+    ? `Open project ${project.id}: ${project.instruction.slice(0, 300)}\nPlan: ${project.summary.slice(0, 600)}\n${describeProgress(project, now)}${project.questions.some(q => !q.answer) ? '\nYou asked the user questions in the plan panel that are not answered yet.' : ''}${project.report ? `\nFinal report: ${project.report.slice(0, 800)}` : ''}`
     : 'No project is open.';
+  const limited = await gateway!.rateLimited().catch(() => [] as string[]);
+  const models = await loadTable(paths!.modelsFile).then(table => describeModels(table, gateway!.health(), now, limited), () => '');
+  const waiting = [approvals.size ? `${approvals.size} network approval(s) wait for the user in the Work tab; the Worker is paused until then.` : '', browser?.control === 'user' ? 'The user has taken over the browser; the Worker waits for it back.' : ''].filter(Boolean).join(' ');
   const staff = await home!.staff().then(describeStaff, () => '');
   const learned = await library!.digest(2500).catch(() => '');
-  return [state, review ? 'A result is waiting for the user\'s review in the Work tab.' : '', staff ? `Standing teams:\n${staff}` : '', learned ? `In the Library (the team's notes):\n${learned}` : '', `VM: ${vm}.`].filter(Boolean).join('\n\n');
+  return [state, waiting, `Now: ${now.toISOString().slice(11, 19)} UTC. Running: ${running ? 'yes' : 'no'}. VM: ${vm}${vmHolderNote()}.`, activity.render() ? `Recent activity (UTC, newest last):\n${activity.render()}` : '', models ? `Models by slot (the order is the candidate order):\n${models}` : '', review ? 'A result is waiting for the user\'s review in the Work tab.' : '', staff ? `Standing teams:\n${staff}` : '', learned ? `In the Library (the team's notes):\n${learned}` : ''].filter(Boolean).join('\n\n');
 }
+
+const vmHolderNote = () => turns.holder ? `, used by ${turns.holder}` : '';
 
 /** Planning runs in the background; the app follows it through project events. */
 function planning(step: (signal: AbortSignal) => Promise<Project>) {
@@ -686,7 +712,7 @@ const commands: Record<string, (m: any) => Promise<unknown>> = {
   input: async m => { await (await ensureBrowser()).input(m.input); return {}; },
   answer: async m => {
     const resolve = approvals.get(String(m.approval));
-    if (resolve && ['once', 'always', 'deny'].includes(m.answer)) { approvals.delete(String(m.approval)); resolve(m.answer); event('approvalDone', { id: m.approval }); gate.settled(); }
+    if (resolve && ['once', 'always', 'deny'].includes(m.answer)) { activity.add(`네트워크 승인 답: ${m.answer}`); approvals.delete(String(m.approval)); resolve(m.answer); event('approvalDone', { id: m.approval }); gate.settled(); }
     return {};
   },
   allowAll: async m => { allowAll = !!m.enabled; proxy?.setAllowAll(allowAll); event('allowAll', { enabled: allowAll }); return {}; },
