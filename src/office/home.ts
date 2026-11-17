@@ -28,6 +28,16 @@ export interface Staff { version: 1; groups: Group[]; employees: Employee[] }
 export interface HomeState { employee: string; project: string | null; task: string | null; status: 'idle' | 'started' | 'working' | 'review' | 'done' | 'blocked'; at: string }
 
 const idPattern = /^[a-z0-9][a-z0-9-]{0,31}$/;
+const clip = (v: unknown, max: number) => typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : '';
+/** Latin letters and digits of a name, as an id ("Data Analyst" -> "data-analyst"); '' when there are none. */
+const slug = (v: unknown) => typeof v === 'string' ? v.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 28) : '';
+/** `wanted`, or `wanted-2`, `wanted-3`... whichever is free. */
+function freshId(wanted: string, taken: string[]): string {
+  const base = (/^[a-z0-9]/.test(wanted) ? wanted : `x-${wanted}`).slice(0, 28);
+  let id = base;
+  for (let n = 2; taken.includes(id); n++) id = `${base}-${n}`;
+  return id;
+}
 
 export function defaultStaff(): Staff {
   const group = (id: string, name: string, focus: string, worker: [string, string, string]): { group: Group; employees: Employee[] } => ({
@@ -124,6 +134,69 @@ export class HomeStore {
     employee.principles = principles.map(p => String(p).trim().slice(0, 500)).filter(Boolean).slice(0, 12);
     await writeJson(this.staffFile, staff);
     return staff;
+  }
+
+  /**
+   * A new team, made by the user. It gets its Manager at once (one per team, CONCEPT), named
+   * after the team; Workers are added one by one. The id comes from the given one or is made up.
+   */
+  async addGroup(input: { name: unknown; focus?: unknown; id?: unknown }): Promise<Staff> {
+    const staff = await this.staff();
+    const name = clip(input.name, 80), focus = clip(input.focus, 400);
+    if (!name) throw new Error('팀 이름이 필요합니다');
+    if (staff.groups.some(g => g.name === name)) throw new Error(`"${name}" 팀이 이미 있습니다`);
+    const id = freshId(slug(input.id) || slug(name) || 'team', staff.groups.map(g => g.id));
+    staff.groups.push({ id, name, focus });
+    staff.employees.push({ id: freshId(`${id.slice(0, 24)}-manager`, staff.employees.map(e => e.id)), name: `${name} 팀장`, group: id, kind: 'manager', role: 'Manager', principles: [], createdAt: new Date().toISOString() });
+    await writeJson(this.staffFile, staff);
+    return staff;
+  }
+
+  /** A new Worker in a team, made by the user. */
+  async hire(input: { group: unknown; name: unknown; role: unknown }): Promise<Staff> {
+    const staff = await this.staff();
+    const group = staff.groups.find(g => g.id === input.group);
+    if (!group) throw new Error('그런 팀이 없습니다');
+    const name = clip(input.name, 80), role = clip(input.role, 80) || 'Generalist';
+    if (!name) throw new Error('직원 이름이 필요합니다');
+    const id = freshId(slug(role) || 'worker', staff.employees.map(e => e.id));
+    staff.employees.push({ id, name, group: group.id, kind: 'worker', role, principles: [], createdAt: new Date().toISOString() });
+    await writeJson(this.staffFile, staff);
+    return staff;
+  }
+
+  /** The user renames an employee or changes a Worker's role. The id stays: Desks and history point at it. */
+  async editEmployee(employeeId: unknown, input: { name?: unknown; role?: unknown }): Promise<Staff> {
+    const staff = await this.staff();
+    const employee = staff.employees.find(e => e.id === employeeId);
+    if (!employee) throw new Error('그런 직원이 없습니다');
+    if (input.name !== undefined) { const name = clip(input.name, 80); if (!name) throw new Error('이름이 비어 있습니다'); employee.name = name; }
+    if (input.role !== undefined && employee.kind === 'worker') { const role = clip(input.role, 80); if (!role) throw new Error('역할이 비어 있습니다'); employee.role = role; }
+    await writeJson(this.staffFile, staff);
+    return staff;
+  }
+
+  /** The user renames a team or changes what it is for. The id stays. */
+  async editGroup(groupId: unknown, input: { name?: unknown; focus?: unknown }): Promise<Staff> {
+    const staff = await this.staff();
+    const group = staff.groups.find(g => g.id === groupId);
+    if (!group) throw new Error('그런 팀이 없습니다');
+    if (input.name !== undefined) {
+      const name = clip(input.name, 80);
+      if (!name) throw new Error('이름이 비어 있습니다');
+      if (staff.groups.some(g => g !== group && g.name === name)) throw new Error(`"${name}" 팀이 이미 있습니다`);
+      group.name = name;
+    }
+    if (input.focus !== undefined) group.focus = clip(input.focus, 400);
+    await writeJson(this.staffFile, staff);
+    return staff;
+  }
+
+  /** Where every employee is now (their last state), by id. */
+  async states(): Promise<Record<string, HomeState>> {
+    const out: Record<string, HomeState> = {};
+    for (const e of (await this.staff()).employees) { const s = await this.state(e.id); if (s) out[e.id] = s; }
+    return out;
   }
 
   async setState(state: Omit<HomeState, 'at'>): Promise<void> {

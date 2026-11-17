@@ -118,7 +118,7 @@ export function describeUsage(usage: UsageSummary): string {
   const byModel = new Map<string, { calls: number; failed: number }>();
   for (const g of usage.groups) { const k = `${g.provider}:${g.model}`, x = byModel.get(k) ?? { calls: 0, failed: 0 }; x.calls += g.calls; x.failed += g.failed; byModel.set(k, x); }
   const worst = [...byModel].filter(([, x]) => x.failed).sort((a, b) => b[1].failed - a[1].failed).slice(0, 5).map(([k, x]) => `${k} ${x.failed}/${x.calls} failed`);
-  return `${usage.month}: ${usage.calls} calls, ${failed} failed, $${usage.costUSD}${usage.unknownCostCalls ? ` (+${usage.unknownCostCalls} calls of unknown price)` : ''}${worst.length ? `\nMost failures: ${worst.join('; ')}` : ''}`;
+  return `${usage.month}: ${usage.calls} calls, ${failed} failed, $${Number(usage.costUSD).toFixed(2)}${usage.unknownCostCalls ? ` (+${usage.unknownCostCalls} calls of unknown price)` : ''}${worst.length ? `\nMost failures: ${worst.join('; ')}` : ''}`;
 }
 
 export interface MainDeskInput {

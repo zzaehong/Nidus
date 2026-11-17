@@ -721,7 +721,25 @@ const commands: Record<string, (m: any) => Promise<unknown>> = {
   librarySearch: async m => ({ hits: await library!.search(String(m.query ?? ''), 30) }),
   libraryRules: async () => ({ rules: await libraryRules(join(paths!.nidus, 'office', 'library.json')) }),
   setLibraryRules: async m => ({ rules: await setLibraryRules(join(paths!.nidus, 'office', 'library.json'), String(m.rules ?? '')) }),
-  staff: async () => home!.staff(),
+  staff: async () => ({ ...await home!.staff(), states: await home!.states() }),
+  addGroup: async m => home!.addGroup({ name: m.name, focus: m.focus }),
+  hire: async m => home!.hire({ group: m.group, name: m.name, role: m.role }),
+  editEmployee: async m => home!.editEmployee(m.employee, { name: m.name, role: m.role }),
+  editGroup: async m => home!.editGroup(m.group, { name: m.name, focus: m.focus }),
+  /** The Desks of the open project (or the last one): what each Worker knows of its Task. */
+  desks: async () => {
+    const project = office?.project ?? await new BoardStore(join(paths!.local, 'board')).latest();
+    if (!project) return { project: null, desks: [] };
+    const list = [];
+    for (const t of project.tasks) {
+      const desk = await desks!.load(project.id, t.id).catch(() => null);
+      const worker = workerFor(project, t);
+      list.push({ task: t.id, title: t.title, status: t.status, employee: worker?.id ?? null, employeeName: worker?.name ?? null,
+        desk: desk ? { progress: desk.progress, findings: desk.findings, next: desk.next, references: desk.references, updatedAt: desk.updatedAt, checkpoints: desk.checkpoints.slice(-3) } : null });
+    }
+    return { project: { id: project.id, instruction: project.instruction, status: project.status }, desks: list };
+  },
+  mainDesk: async () => ({ text: await mainDesk() }),
   setPrinciples: async m => home!.setPrinciples(String(m.employee ?? ''), Array.isArray(m.principles) ? m.principles : []),
   closeProject: async () => {
     if (running) throw new Error('진행 중에는 닫을 수 없습니다. 먼저 중지하세요');

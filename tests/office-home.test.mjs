@@ -103,3 +103,31 @@ test('approving a plan adds permanent proposals to the Vault\'s staff; temporary
   assert.equal((await store.state('researcher')).status, 'done');
   assert.equal((await store.state('research-manager')).task, 't1');
 });
+
+test('the user adds a team (with its Manager) and Workers, and renames them; ids stay, so Desks and history still point right', async t => {
+  const { store } = await home(t);
+  let staff = await store.addGroup({ name: '데이터 분석', focus: '숫자와 표', id: 'Data' });
+  assert.deepEqual(staff.groups.at(-1), { id: 'data', name: '데이터 분석', focus: '숫자와 표' });
+  assert.deepEqual(managerOf(staff, 'data') && [managerOf(staff, 'data').id, managerOf(staff, 'data').name], ['data-manager', '데이터 분석 팀장']);
+  staff = await store.addGroup({ name: '마케팅' });
+  assert.equal(staff.groups.at(-1).id, 'team', 'a name without Latin letters gets a made-up id');
+  assert.equal((await store.addGroup({ name: '홍보' })).groups.at(-1).id, 'team-2');
+  await assert.rejects(store.addGroup({ name: '마케팅' }), /이미 있습니다/);
+  await assert.rejects(store.addGroup({ name: '  ' }), /이름이 필요/);
+  staff = await store.hire({ group: 'data', name: '분석가 김', role: 'Data Analyst' });
+  staff = await store.hire({ group: 'data', name: '분석가 이', role: 'Data Analyst' });
+  assert.deepEqual(workersOf(staff, 'data').map(e => [e.id, e.name, e.role]), [['data-analyst', '분석가 김', 'Data Analyst'], ['data-analyst-2', '분석가 이', 'Data Analyst']]);
+  await assert.rejects(store.hire({ group: 'none', name: 'x', role: 'y' }), /그런 팀이 없습니다/);
+  staff = await store.editEmployee('data-analyst', { name: '수석 분석가', role: 'Lead Analyst' });
+  assert.deepEqual(staff.employees.find(e => e.id === 'data-analyst').name, '수석 분석가');
+  staff = await store.editEmployee('data-manager', { role: 'Boss' });
+  assert.equal(managerOf(staff, 'data').role, 'Manager', 'a Manager stays a Manager');
+  await assert.rejects(store.editEmployee('data-analyst', { name: '' }), /비어 있습니다/);
+  staff = await store.editGroup('data', { name: '데이터', focus: '분석' });
+  assert.deepEqual(staff.groups.find(g => g.id === 'data'), { id: 'data', name: '데이터', focus: '분석' });
+  await assert.rejects(store.editGroup('data', { name: '마케팅' }), /이미 있습니다/);
+  // What was written reads back the same (the file is the source of truth).
+  assert.deepEqual(parseStaff(JSON.parse(JSON.stringify(await store.staff()))), await store.staff());
+  await store.setState({ employee: 'data-analyst', project: 'p1', task: 't1', status: 'working' });
+  assert.deepEqual(Object.keys(await store.states()), ['data-analyst']);
+});
