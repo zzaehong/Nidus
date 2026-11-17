@@ -23,6 +23,7 @@ struct Slot: Decodable, Identifiable, Equatable {
         case "roles.main": return "Main"
         case "roles.lead-manager": return "Lead Manager"
         case "roles.manager": return "Manager"
+        case "roles.red-team": return "Red Team"
         case "worker.simple": return "Worker · 단순"
         case "worker.normal": return "Worker · 보통"
         case "worker.complex": return "Worker · 복잡"
@@ -35,6 +36,7 @@ struct Slot: Decodable, Identifiable, Equatable {
         case "roles.main": return "사용자와 직접 소통하고 최종 결과물을 검토합니다."
         case "roles.lead-manager": return "여러 팀 사이의 협업과 작업 인계를 조정합니다."
         case "roles.manager": return "작업을 나눠 Worker에게 맡기고 결과를 검토합니다."
+        case "roles.red-team": return "프로젝트를 마치기 전에 결과를 바깥 시선으로 공격적으로 검토합니다. 일한 모델과 다른 모델이면 더 좋습니다."
         case "worker.simple": return "지시자가 단순하다고 지정한 작업을 수행합니다."
         case "worker.normal": return "지시자가 보통이라고 지정한 작업을 수행합니다."
         case "worker.complex": return "지시자가 복잡하다고 지정한 작업을 수행합니다."
@@ -186,6 +188,7 @@ func roleName(_ role: String) -> String {
     case "main": return "Main"
     case "lead-manager": return "Lead Manager"
     case "manager": return "Manager"
+    case "red-team": return "Red Team"
     case "worker": return "Worker"
     default: return role
     }

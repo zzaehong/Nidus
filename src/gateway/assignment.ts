@@ -73,6 +73,8 @@ export interface Availability {
 }
 
 const rolePattern = /^[a-z][a-z0-9-]{0,63}$/;
+/** The AI Office's roles besides Workers; a table without one of them gets it, empty (the user fills it). */
+export const OFFICE_ROLES = ['main', 'lead-manager', 'manager', 'red-team'] as const;
 
 function invalidTable(message: string): never {
   throw new NidusError('invalid_request', `Invalid .nidus/models.json: ${message}`);
@@ -110,6 +112,7 @@ export function parseTable(value: unknown): AssignmentTable {
     if (!rolePattern.test(role) || role === 'worker') invalidTable(`invalid role name "${role}".`);
     roles[role] = candidates(list, `roles.${role}`);
   }
+  for (const role of OFFICE_ROLES) roles[role] ??= [];
   const worker = raw.worker as Record<string, unknown>;
   const unknown = Object.keys(worker).find(key => !difficulties.includes(key as Difficulty));
   if (unknown) invalidTable(`unknown worker difficulty "${unknown}".`);

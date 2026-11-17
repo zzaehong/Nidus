@@ -47,6 +47,7 @@ struct ProjectPanel: View {
                             .font(.caption).foregroundStyle(.secondary)
                         tasks
                     }
+                    if let red = project.redTeam { RedTeamBox(review: red) }
                     if let report = project.report, !report.isEmpty {
                         Divider()
                         Text("최종 보고").font(.subheadline.bold())
@@ -287,4 +288,52 @@ private struct AgendaCard: View {
         .background(RoundedRectangle(cornerRadius: 8).fill(Color.orange.opacity(0.08)))
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.orange.opacity(0.4)))
     }
+}
+
+/// The Red Team's review: what an outside critic found in the results. Not a decision; the report answers it.
+private struct RedTeamBox: View {
+    let review: OfficeProject.RedTeam
+    @State private var expanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Label(title, systemImage: review.verdict == "sound" ? "checkmark.shield" : review.verdict == "skipped" ? "shield.slash" : "exclamationmark.shield")
+                    .font(.caption.weight(.semibold)).foregroundStyle(review.verdict == "concerns" ? .orange : .secondary)
+                Spacer()
+                if !review.findings.isEmpty {
+                    Button { expanded.toggle() } label: { Image(systemName: expanded ? "chevron.up" : "chevron.down") }.buttonStyle(.plain).foregroundStyle(.secondary)
+                }
+            }
+            if review.verdict == "skipped" {
+                Text("\(review.skipped ?? "") 모델 배정 탭의 Red Team 칸에 모델을 넣으면 검토합니다.").font(.caption).foregroundStyle(.secondary)
+            } else {
+                Text(review.summary).font(.caption).textSelection(.enabled)
+                if expanded {
+                    ForEach(review.findings, id: \.self) { f in
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("[\(severity(f.severity))] \(f.target)").font(.caption.weight(.semibold)).foregroundStyle(f.severity == "minor" ? Color.secondary : .orange)
+                            Text(f.problem).font(.caption)
+                            if !f.scenario.isEmpty { Text("어떻게 틀어지나: \(f.scenario)").font(.caption).foregroundStyle(.secondary) }
+                            if !f.suggestion.isEmpty { Text("제안: \(f.suggestion)").font(.caption).foregroundStyle(.secondary) }
+                        }
+                        .textSelection(.enabled)
+                    }
+                }
+            }
+        }
+        .padding(8).background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 6))
+    }
+
+    private var title: String {
+        switch review.verdict {
+        case "sound": return "Red Team 검토 · 큰 문제 없음"
+        case "skipped": return "Red Team 검토를 건너뜀"
+        default:
+            let serious = review.findings.filter { $0.severity != "minor" }.count
+            return "Red Team 검토 · 우려 \(serious)건"
+        }
+    }
+
+    private func severity(_ s: String) -> String { ["critical": "치명적", "major": "중요", "minor": "사소"][s] ?? s }
 }

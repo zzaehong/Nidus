@@ -49,7 +49,7 @@ export function vaultPaths(root: string): VaultPaths {
 
 const emptyTable = {
   version: 1,
-  roles: { main: [], 'lead-manager': [], manager: [] },
+  roles: { main: [], 'lead-manager': [], manager: [], 'red-team': [] },
   worker: { simple: [], normal: [], complex: [] },
 };
 

@@ -102,6 +102,12 @@ struct OfficeProject: Decodable {
     let tasks: [Task]
     let questions: [Question]
     let agendas: [Agenda]?
+    /// The Red Team's review of the results, before the final report.
+    struct RedTeam: Decodable {
+        struct Finding: Decodable, Hashable { let severity: String; let target: String; let problem: String; let scenario: String; let suggestion: String }
+        let model: String?; let verdict: String; let summary: String; let findings: [Finding]; let skipped: String?
+    }
+    let redTeam: RedTeam?
     var openAgendas: [Agenda] { (agendas ?? []).filter { $0.decision == nil } }
     let report: String?
     let knowledge: [String]?

@@ -8,6 +8,7 @@ import type { Message } from '../gateway/contract.js';
 import type { Difficulty } from '../gateway/assignment.js';
 import type { Employee } from './home.js';
 import type { Agenda } from './meeting.js';
+import type { RedTeamReview } from './redteam.js';
 
 export type ProjectStatus = 'planning' | 'waiting_user' | 'running' | 'reviewing' | 'done' | 'stopped' | 'failed';
 /** waiting_user: the Task's Manager put a question to the user (Meeting Room) and waits for the decision. */
@@ -78,6 +79,8 @@ export interface Project {
   /** Main's conversation while planning, so a revision builds on what was said. */
   conversation: Message[];
   report?: string;
+  /** The Red Team's review of the results, before the final report. */
+  redTeam?: RedTeamReview;
   /** Matters put to the user (Meeting Room), open or decided. */
   agendas?: Agenda[];
   /** Library documents written when the project ended (paths in the Vault). */

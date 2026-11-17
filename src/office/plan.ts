@@ -4,7 +4,8 @@
 import { difficulties, type Difficulty } from '../gateway/assignment.js';
 import { placeOf, workerFor, type BoardTask, type CompletionContract, type Keep, type Project, type ProjectEmployee, type Team } from './board.js';
 import { describeStaff, type Staff } from './home.js';
-import { AGENDA_FORMAT, parseAgenda, type Agenda } from './meeting.js';
+import { AGENDA_FORMAT, decisionText, parseAgenda, type Agenda } from './meeting.js';
+import { describeRedTeam } from './redteam.js';
 
 export class PlanError extends Error {}
 
@@ -235,5 +236,7 @@ export function finalRequest(project: Project): string {
   const changes = project.workspace
     ? 'The combined changes in the repository will be shown to them for approval.'
     : 'No task used the VM, so nothing in their repository changed; the user reads text deliverables in the task list, so point to them rather than repeating them in full.';
-  return `All tasks have ended. Request: ${project.instruction}\nPlan: ${project.summary}\n\nTasks:\n${tasks}\n\nWrite the final report for the user, in their language: what was delivered, how it was checked, what is unfinished or blocked and why, and what they should review or decide next. ${changes} Plain text, concise.`;
+  const red = describeRedTeam(project.redTeam);
+  const decided = (project.agendas ?? []).filter(a => a.decision).map(a => `- "${a.title}": ${decisionText(a)}`).join('\n');
+  return `All tasks have ended. Request: ${project.instruction}\nPlan: ${project.summary}\n\nTasks:\n${tasks}${red ? `\n\n${red}` : ''}${decided ? `\n\nThe user's decisions (Meeting Room):\n${decided}` : ''}\n\nWrite the final report for the user, in their language: what was delivered, how it was checked, what is unfinished or blocked and why, and what they should review or decide next.${red && project.redTeam?.verdict !== 'skipped' ? ' Answer the Red Team: for each critical or major finding say whether it holds and what it means for the result; do not hide one.' : ''} ${changes} Plain text, concise.`;
 }

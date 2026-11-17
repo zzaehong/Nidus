@@ -17,6 +17,7 @@ import type { ToolOutcome } from '../workspace/tools.js';
 import type { WorkerToolSet } from '../workspace/worker.js';
 import { placeOf, type Project } from './board.js';
 import { extractJson, PlanError } from './plan.js';
+import { describeRedTeam } from './redteam.js';
 
 export const DEFAULT_FOLDER = 'Nidus';
 /** Inside the AI's folder: documents a Dream Sequence put away. */
@@ -352,6 +353,7 @@ export function knowledgeRequest(project: Project): string {
     `Plan: ${project.summary}`,
     `Tasks:\n${tasks}`,
     `Your final report:\n${project.report ?? ''}`,
+    ...(project.redTeam && project.redTeam.verdict !== 'skipped' ? [describeRedTeam(project.redTeam)] : []),
     '',
     'Turn this project into knowledge for the Library, so the team does better next time. Keep only what will matter in the long run or again: nothing obvious, nothing that only restates the request.',
     '- title: a short name for the project (a document title, no date).',

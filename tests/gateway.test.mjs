@@ -60,7 +60,7 @@ test('init creates the .nidus layout once and keeps runtime data out of Git', as
   const first = await initVault(root);
   assert.equal(first.created.length, 3);
   assert.equal(await readFile(first.paths.gitignore, 'utf8'), 'local/\n');
-  assert.deepEqual(Object.keys(parseTable(JSON.parse(await readFile(first.paths.modelsFile, 'utf8'))).roles), ['main', 'lead-manager', 'manager']);
+  assert.deepEqual(Object.keys(parseTable(JSON.parse(await readFile(first.paths.modelsFile, 'utf8'))).roles), ['main', 'lead-manager', 'manager', 'red-team']);
 
   await writeFile(first.paths.modelsFile, JSON.stringify(table));
   await writeFile(first.paths.gitignore, '*.tmp');
@@ -258,7 +258,7 @@ test('app bridge: vault status, init, overview, candidate and budget edits, ask'
   assert.deepEqual(await call('check', { provider: 'deepseek', model: 'deepseek-flash' }), { text: 'passed', tools: 'failed', detail: 'The model did not call the tool.' });
 
   let overview = await call('overview');
-  assert.deepEqual(overview.slots.map(slot => slot.id), ['roles.main', 'roles.lead-manager', 'roles.manager', 'worker.simple', 'worker.normal', 'worker.complex']);
+  assert.deepEqual(overview.slots.map(slot => slot.id), ['roles.main', 'roles.lead-manager', 'roles.manager', 'roles.red-team', 'worker.simple', 'worker.normal', 'worker.complex']);
   assert.ok(overview.slots.every(slot => slot.resolved === null && /no candidates listed/.test(slot.problem)));
   assert.deepEqual(overview.providers.filter(p => p.connected).map(p => [p.id, p.models]), [['deepseek', 1]]);
   assert.equal(JSON.stringify(overview).includes('kd'), false, 'keys never appear in responses');

@@ -16,6 +16,7 @@ import { knowledgeRequest, parseKnowledge, recordProject, type Library } from '.
 import { PlanError, answersMessage, briefRequest, finalRequest, parseBrief, parsePlan, parseReview, planRequest, reviewRequest, workerBrief } from './plan.js';
 import { mainSystem, managerSystem } from './roles.js';
 import { checkDecision, decisionNote, decisionText, type Agenda } from './meeting.js';
+import { parseRedTeam, redTeamRequest, redTeamSystem } from './redteam.js';
 
 export type OfficeEvent =
   | { type: 'project'; project: Project }
@@ -77,7 +78,7 @@ export class Office {
   }
 
   /** A model call whose JSON answer is parsed; a malformed answer is asked for once more. */
-  private async ask<T>(role: 'main' | 'manager', system: string, messages: Message[], parse: (text: string) => T, signal: AbortSignal, taskId?: string): Promise<{ value: T; text: string; model: string }> {
+  private async ask<T>(role: 'main' | 'manager' | 'red-team', system: string, messages: Message[], parse: (text: string) => T, signal: AbortSignal, taskId?: string): Promise<{ value: T; text: string; model: string }> {
     const conversation = [...messages];
     for (let attempt = 0; ; attempt++) {
       const result = await sendWithRetry(this.deps.gateway, { role, taskId: taskId ?? this.project?.id }, { system, messages: conversation }, signal,
@@ -86,7 +87,7 @@ export class Office {
       try {
         return { value: parse(text), text, model: `${result.response.provider}:${result.response.model}` };
       } catch (error) {
-        if (!(error instanceof PlanError) || attempt >= 1) throw new Error(`${role === 'main' ? 'Main' : 'Manager'}의 답을 읽지 못했습니다: ${(error as Error).message}`);
+        if (!(error instanceof PlanError) || attempt >= 1) throw new Error(`${role === 'main' ? 'Main' : role === 'red-team' ? 'Red Team' : 'Manager'}의 답을 읽지 못했습니다: ${(error as Error).message}`);
         conversation.push({ role: 'assistant', content: [{ type: 'text', text }] }, { role: 'user', content: [{ type: 'text', text: `That answer could not be used: ${(error as Error).message}. Answer again with the JSON object only.` }] });
       }
     }
@@ -180,6 +181,38 @@ export class Office {
     return this.project;
   }
 
+  // --- Red Team ---------------------------------------------------------------------
+
+  /**
+   * An outside review of the results before the final report. It never stops the project: when
+   * its slot has no model or the call fails, that is recorded and said. A critical matter only the
+   * user can settle goes to the Meeting Room, and the report waits for the decision.
+   */
+  private async redTeamReview(signal: AbortSignal): Promise<void> {
+    const project = this.project!;
+    const at = () => new Date().toISOString();
+    try {
+      const { value, model } = await this.ask('red-team', redTeamSystem(), [{ role: 'user', content: [{ type: 'text', text: redTeamRequest(project) }] }], parseRedTeam, signal, project.id);
+      project.redTeam = { at: at(), model, verdict: value.verdict, summary: value.summary, findings: value.findings };
+      await this.publish();
+      const counts = (['critical', 'major', 'minor'] as const).map(s => [s, value.findings.filter(f => f.severity === s).length] as const).filter(([, n]) => n).map(([s, n]) => `${s} ${n}`).join(', ');
+      this.deps.onEvent({ type: 'message', from: 'main', title: `Red Team 검토 · ${value.verdict === 'sound' ? '문제 없음' : `우려 있음 (${counts})`}`, text: [value.summary, ...value.findings.map(f => `- [${f.severity}] ${f.target}: ${f.problem}`)].join('\n'), model });
+      if (value.agenda) {
+        const agenda = await this.raise('red-team', null, value.agenda, model);
+        await this.decision(agenda, signal);
+        if (signal.aborted) throw new Error('stopped');
+        agenda.applied = true;
+        await this.publish();
+      }
+    } catch (error) {
+      if (signal.aborted) throw error;
+      const reason = String((error as Error).message ?? error);
+      project.redTeam = { at: at(), model: null, verdict: 'skipped', summary: '', findings: [], skipped: reason.slice(0, 500) };
+      await this.publish();
+      this.deps.onEvent({ type: 'message', from: 'main', title: 'Red Team 검토를 건너뛰었습니다', text: `${reason}\n모델 배정 탭의 Red Team 칸에 모델을 넣으면 다음 프로젝트부터 검토합니다.` });
+    }
+  }
+
   // --- execution ------------------------------------------------------------------
 
   /** The user approved the plan: tasks run in order until all have ended, then Main reports. */
@@ -226,6 +259,7 @@ export class Office {
       }
       project.status = 'reviewing';
       await this.publish();
+      if (project.tasks.some(t => t.status === 'done')) await this.redTeamReview(signal);
       const result = await sendWithRetry(this.deps.gateway, { role: 'main', taskId: project.id }, { system: mainSystem(), messages: [{ role: 'user', content: [{ type: 'text', text: finalRequest(project) }] }] }, signal, this.retry);
       project.report = result.response.content.filter(b => b.type === 'text').map(b => (b as { text: string }).text).join('\n').trim();
       this.deps.onEvent({ type: 'message', from: 'main', title: '최종 보고', text: project.report, model: `${result.response.provider}:${result.response.model}`, final: true });
