@@ -28,7 +28,7 @@ async function vault(t) {
 const project = (extra = {}) => ({ id: 'p-20261113-010203', instruction: '메모 정리 글을 써 줘', status: 'reviewing', summary: '글쓰기', teams: [{ id: 'writing', name: '문서', focus: 'f' }],
   tasks: [{ id: 't1', team: 'writing', title: '초안', where: 'text', status: 'done', attempts: 2, reviews: [{ verdict: 'revise', feedback: '예시 부족' }, { verdict: 'accept', feedback: '' }], result: { summary: '초안 완료', verification: '' }, output: '# 글\n본문', contract: {}, dependsOn: [] }],
   questions: [], conversation: [], report: '최종 보고입니다', ...extra });
-const knowledge = { title: '메모 정리 글: 초안/검토', result: '다섯 단락 글을 썼다.', worked: ['구성을 먼저 정함'], failed: ['첫 시도에 예시가 부족'], decisions: [{ title: '독자는 초보자', text: '쉬운 말로 쓴다.' }], lessons: [{ title: '예시를 먼저 모은다', text: '글쓰기 전에 예시를 세 개 모은다.' }] };
+const knowledge = { title: '메모 정리 글: 초안/검토', result: '다섯 단락 글을 썼다.', worked: ['구성을 먼저 정함'], failed: ['첫 시도에 예시가 부족'], decisions: [{ title: '독자는 초보자', text: '쉬운 말로 쓴다.' }], lessons: [{ title: '예시를 먼저 모은다', text: '글쓰기 전에 예시를 세 개 모은다.' }], skills: [{ title: '짧은 글 초안 쓰기', text: '구성이 정해진 짧은 글에 쓴다.\n1. 예시 셋\n2. 단락 개요\n3. 초안' }] };
 
 test('the Library is the Vault as it is now: committed and new notes, not ignored or hidden ones', async t => {
   const library = new Library(await vault(t));
@@ -72,18 +72,22 @@ test('a finished project becomes a project document with its deliverables, and l
   const library = new Library(dir);
   assert.equal(await library.digest(), '');
   const paths = await recordProject(library, project(), knowledge, new Date(2026, 10, 13));
-  assert.deepEqual(paths, ['Nidus/Projects/2026-11-13 메모 정리 글 초안 검토.md', 'Nidus/Projects/2026-11-13 메모 정리 글 초안 검토 — 초안.md', 'Nidus/Decisions/독자는 초보자.md', 'Nidus/Lessons/예시를 먼저 모은다.md'], 'each text deliverable is a file of its own, beside the project record');
+  assert.deepEqual(paths, ['Nidus/Projects/2026-11-13 메모 정리 글 초안 검토.md', 'Nidus/Projects/2026-11-13 메모 정리 글 초안 검토 — 초안.md', 'Nidus/Decisions/독자는 초보자.md', 'Nidus/Lessons/예시를 먼저 모은다.md', 'Nidus/Skills/짧은 글 초안 쓰기.md'], 'each text deliverable is a file of its own, beside the project record');
   const doc = await readFile(join(dir, paths[0]), 'utf8');
   assert.match(doc, /^---\ntype: project\nproject: p-20261113-010203\ndate: 2026-11-13/);
   assert.match(doc, /## 요청\n\n메모 정리 글을 써 줘/);
   assert.match(doc, /## 결정\n\n- \[\[독자는 초보자\]\]/);
   assert.match(doc, /## 교훈\n\n- \[\[예시를 먼저 모은다\]\]/);
+  assert.match(doc, /## Skill\n\n- \[\[짧은 글 초안 쓰기\]\]/);
+  assert.match(await readFile(join(dir, paths[4]), 'utf8'), /^---\ntype: skill\n[\s\S]*# 짧은 글 초안 쓰기\n\n구성이 정해진 짧은 글에 쓴다\.\n1\. 예시 셋/);
   assert.match(doc, /## 결과물\n\n- \[\[2026-11-13 메모 정리 글 초안 검토 — 초안\]\]/);
   assert.match(await readFile(join(dir, paths[1]), 'utf8'), /^---\ntype: deliverable\nproject: p-20261113-010203\ntask: t1\n[\s\S]*# 초안\n\n# 글\n본문\n\n출처: \[\[2026-11-13 메모 정리 글 초안 검토\]\]/);
   assert.match(await readFile(join(dir, paths[3]), 'utf8'), /type: lesson[\s\S]*# 예시를 먼저 모은다\n\n글쓰기 전에 예시를 세 개 모은다\.\n\n출처: \[\[2026-11-13 메모 정리 글 초안 검토\]\]/);
   const digest = await library.digest();
   assert.match(digest, /Lessons from earlier projects:\n- 예시를 먼저 모은다 \(Nidus\/Lessons\/예시를 먼저 모은다\.md\): 글쓰기 전에 예시를 세 개 모은다\./);
   assert.match(digest, /Decisions made:\n- 독자는 초보자/);
+  assert.match(digest, /Skills \(procedures that worked; follow them where they fit\):\n- 짧은 글 초안 쓰기/);
+  assert.equal(parseKnowledge(JSON.stringify({ ...knowledge, skills: [1, ...knowledge.skills, knowledge.skills[0], knowledge.skills[0]] })).skills.length, 2, 'at most two skills');
   assert.deepEqual((await library.search('예시 모은다')).map(h => h.path).slice(0, 1), ['Nidus/Lessons/예시를 먼저 모은다.md'], 'the team\'s notes are searchable at once');
   assert.match(knowledgeRequest(project()), /review revise: 예시 부족/);
   assert.throws(() => parseKnowledge('{"title": ""}'), /title and result/);
@@ -128,7 +132,7 @@ test('Office: a finished project is written into the Library, and the next plan 
   assert.doesNotMatch(calls[0].last, /From the Library/, 'an empty Library adds nothing');
   const done = await office.execute(new AbortController().signal);
   assert.equal(done.status, 'done');
-  assert.equal(done.knowledge.length, 4);
+  assert.equal(done.knowledge.length, 5, "record, deliverable, decision, lesson, skill");
   assert.match(await readFile(join(dir, done.knowledge[1]), 'utf8'), /type: deliverable[\s\S]*결과 글/);
   assert.ok(events.some(e => e.title === 'Library에 기록'));
   const next = make();

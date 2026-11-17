@@ -164,6 +164,21 @@ export class Library {
     return path;
   }
 
+  /**
+   * Rewrites one of the AI's own documents in place (a Wiki page brought up to date). Only a
+   * document of its folder that exists and is not archived; Git keeps the earlier text.
+   */
+  async rewriteOwn(path: string, content: string): Promise<string> {
+    const clean = cleanRelative(path);
+    if (!clean.startsWith(`${this.folder}/`) || !clean.endsWith('.md') || this.archived(clean)) throw new Error(`${path}: not a document of the AI's own folder`);
+    const target = await this.inside(clean, resolve(this.root, this.folder));
+    if (!(await stat(target)).isFile()) throw new Error(`${path}: not a file`);
+    const pending = `${target}.${randomUUID()}.pending`;
+    await writeFile(pending, content.endsWith('\n') ? content : `${content}\n`);
+    await rename(pending, target);
+    return clean;
+  }
+
   /** The AI's own documents of one kind, newest first: path, title, and how they begin. */
   async own(subfolder: string, limit = 30): Promise<{ path: string; title: string; excerpt: string }[]> {
     const directory = resolve(this.root, this.folder, subfolder);
@@ -275,9 +290,10 @@ export class Library {
   /** What earlier projects taught, for Main when it plans the next one. */
   async digest(maxChars = 6_000): Promise<string> {
     const lessons = await this.own('Lessons', 20), decisions = await this.own('Decisions', 12), projects = await this.own('Projects', 8);
-    if (!lessons.length && !decisions.length && !projects.length) return '';
+    const skills = await this.own('Skills', 12), wiki = await this.own('Wiki', 12);
+    if (!lessons.length && !decisions.length && !projects.length && !skills.length && !wiki.length) return '';
     const section = (label: string, items: { path: string; title: string; excerpt: string }[]) => items.length ? `${label}:\n${items.map(i => `- ${i.title} (${i.path}): ${i.excerpt}`).join('\n')}` : '';
-    const text = [section('Lessons from earlier projects', lessons), section('Decisions made', decisions), section('Earlier projects', projects)].filter(Boolean).join('\n\n');
+    const text = [section('Wiki (what the team knows, by topic)', wiki), section('Skills (procedures that worked; follow them where they fit)', skills), section('Lessons from earlier projects', lessons), section('Decisions made', decisions), section('Earlier projects', projects)].filter(Boolean).join('\n\n');
     return text.length > maxChars ? `${text.slice(0, maxChars)}\n…` : text;
   }
 }
@@ -325,6 +341,8 @@ export interface Knowledge {
   failed: string[];
   decisions: { title: string; text: string }[];
   lessons: { title: string; text: string }[];
+  /** Procedures that worked and will be needed again: when to use one, and its steps. */
+  skills: { title: string; text: string }[];
 }
 
 export function knowledgeRequest(project: Project): string {
@@ -341,8 +359,9 @@ export function knowledgeRequest(project: Project): string {
     '- worked / failed: what went well, and what went wrong or took more than one attempt (lists, may be empty).',
     '- decisions: choices that shaped the result and why (title, text). At most 3; none if there were no real choices.',
     '- lessons: what to do differently or again in another project (title, text), each usable without knowing this project. At most 3; none if nothing was learned.',
+    '- skills: a procedure this project worked out that the team will need again (title: what it does; text: when to use it, then numbered steps, with the tools, sources or commands that worked). At most 2; none if the work was one of a kind.',
     'Write in the user\'s language. Answer with one JSON object only:',
-    '{"title": "...", "result": "...", "worked": ["..."], "failed": ["..."], "decisions": [{"title": "...", "text": "..."}], "lessons": [{"title": "...", "text": "..."}]}',
+    '{"title": "...", "result": "...", "worked": ["..."], "failed": ["..."], "decisions": [{"title": "...", "text": "..."}], "lessons": [{"title": "...", "text": "..."}], "skills": [{"title": "...", "text": "..."}]}',
   ].join('\n');
 }
 
@@ -352,7 +371,7 @@ export function parseKnowledge(answer: string): Knowledge {
   if (!text(raw.title, 120) || !text(raw.result, 3000)) throw new PlanError('title and result must be non-empty strings');
   const strings = (v: unknown) => (Array.isArray(v) ? v : []).map(x => text(x, 600)).filter(Boolean).slice(0, 8);
   const pairs = (v: unknown) => (Array.isArray(v) ? v : []).map((x: any) => ({ title: text(x?.title, 120), text: text(x?.text, 2500) })).filter(x => x.title && x.text).slice(0, 3);
-  return { title: text(raw.title, 120), result: text(raw.result, 3000), worked: strings(raw.worked), failed: strings(raw.failed), decisions: pairs(raw.decisions), lessons: pairs(raw.lessons) };
+  return { title: text(raw.title, 120), result: text(raw.result, 3000), worked: strings(raw.worked), failed: strings(raw.failed), decisions: pairs(raw.decisions), lessons: pairs(raw.lessons), skills: pairs(raw.skills).slice(0, 2) };
 }
 
 const link = (path: string) => `[[${path.replace(/\.md$/, '').split('/').pop()}]]`;
@@ -363,9 +382,10 @@ export async function recordProject(library: Library, project: Project, knowledg
   const projectTitle = `${date} ${fileTitle(knowledge.title)}`;
   const projectLink = `[[${projectTitle}]]`;
   const note = (kind: string, item: { title: string; text: string }) => [`---`, `type: ${kind}`, `project: ${project.id}`, `date: ${date}`, `author: Nidus`, `---`, `# ${item.title}`, '', item.text, '', `출처: ${projectLink}`].join('\n');
-  const decisions: string[] = [], lessons: string[] = [];
+  const decisions: string[] = [], lessons: string[] = [], skills: string[] = [];
   for (const d of knowledge.decisions) decisions.push(await library.write('Decisions', d.title, note('decision', d)));
   for (const l of knowledge.lessons) lessons.push(await library.write('Lessons', l.title, note('lesson', l)));
+  for (const k of knowledge.skills ?? []) skills.push(await library.write('Skills', k.title, note('skill', k)));
   const list = (items: string[]) => items.length ? items.map(i => `- ${i}`).join('\n') : '- (없음)';
   // Each text deliverable is a file of its own, so it can be opened and linked by itself; the record links them.
   const deliverables: string[] = [];
@@ -382,10 +402,11 @@ export async function recordProject(library: Library, project: Project, knowledg
     '## 잘 안된 것', '', list(knowledge.failed), '',
     ...(decisions.length ? ['## 결정', '', list(decisions.map(link)), ''] : []),
     ...(lessons.length ? ['## 교훈', '', list(lessons.map(link)), ''] : []),
+    ...(skills.length ? ['## Skill', '', list(skills.map(link)), ''] : []),
     '## Task', '', ...project.tasks.map(t => `- ${t.title} — ${t.status}${t.result ? `: ${t.result.summary.replace(/\s+/g, ' ').slice(0, 400)}` : ''}`), '',
     ...(deliverables.length ? ['## 결과물', '', list(deliverables.map(link)), ''] : []),
     ...(project.report ? ['## 최종 보고', '', project.report, ''] : []),
   ].join('\n');
   const path = await library.write('Projects', projectTitle, body);
-  return [path, ...deliverables, ...decisions, ...lessons];
+  return [path, ...deliverables, ...decisions, ...lessons, ...skills];
 }
