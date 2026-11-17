@@ -48,6 +48,7 @@ struct ProjectPanel: View {
                         tasks
                     }
                     if let red = project.redTeam { RedTeamBox(review: red) }
+                    if let lead = project.lead, !lead.rounds.isEmpty || lead.skipped != nil { LeadBox(lead: lead) }
                     if let report = project.report, !report.isEmpty {
                         Divider()
                         Text("최종 보고").font(.subheadline.bold())
@@ -336,4 +337,28 @@ private struct RedTeamBox: View {
     }
 
     private func severity(_ s: String) -> String { ["critical": "치명적", "major": "중요", "minor": "사소"][s] ?? s }
+}
+
+/// The Lead Manager's judgement of each round: is the request met, and what follows.
+private struct LeadBox: View {
+    let lead: OfficeProject.Lead
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label("Lead Manager", systemImage: "flag.checkered").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            if let skipped = lead.skipped {
+                Text("판단을 건너뛰었습니다: \(skipped) 모델 배정 탭의 Lead Manager 칸에 모델을 넣으면 맡습니다.").font(.caption).foregroundStyle(.secondary)
+            }
+            ForEach(Array(lead.rounds.enumerated()), id: \.offset) { index, round in
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("\(index + 1)차 · \(verdict(round.verdict))\(round.added.isEmpty ? "" : " (\(round.added.joined(separator: ", ")))")").font(.caption.weight(.semibold))
+                    Text(round.assessment).font(.caption).textSelection(.enabled)
+                    ForEach(round.responses, id: \.self) { r in Text("· \(r.target): \(r.answer)").font(.caption).foregroundStyle(.secondary).textSelection(.enabled) }
+                }
+            }
+        }
+        .padding(8).frame(maxWidth: .infinity, alignment: .leading).background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 6))
+    }
+
+    private func verdict(_ v: String) -> String { ["close": "마무리", "follow-up": "후속 Task", "escalate": "사용자 결정 요청"][v] ?? v }
 }

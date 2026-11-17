@@ -17,6 +17,7 @@ import { PlanError, answersMessage, briefRequest, finalRequest, parseBrief, pars
 import { mainSystem, managerSystem } from './roles.js';
 import { checkDecision, decisionNote, decisionText, type Agenda } from './meeting.js';
 import { parseRedTeam, redTeamRequest, redTeamSystem } from './redteam.js';
+import { leadRequest, leadSystem, MAX_FOLLOW_UPS, parseLead } from './lead.js';
 
 export type OfficeEvent =
   | { type: 'project'; project: Project }
@@ -78,7 +79,7 @@ export class Office {
   }
 
   /** A model call whose JSON answer is parsed; a malformed answer is asked for once more. */
-  private async ask<T>(role: 'main' | 'manager' | 'red-team', system: string, messages: Message[], parse: (text: string) => T, signal: AbortSignal, taskId?: string): Promise<{ value: T; text: string; model: string }> {
+  private async ask<T>(role: 'main' | 'manager' | 'red-team' | 'lead-manager', system: string, messages: Message[], parse: (text: string) => T, signal: AbortSignal, taskId?: string): Promise<{ value: T; text: string; model: string }> {
     const conversation = [...messages];
     for (let attempt = 0; ; attempt++) {
       const result = await sendWithRetry(this.deps.gateway, { role, taskId: taskId ?? this.project?.id }, { system, messages: conversation }, signal,
@@ -87,7 +88,7 @@ export class Office {
       try {
         return { value: parse(text), text, model: `${result.response.provider}:${result.response.model}` };
       } catch (error) {
-        if (!(error instanceof PlanError) || attempt >= 1) throw new Error(`${role === 'main' ? 'Main' : role === 'red-team' ? 'Red Team' : 'Manager'}의 답을 읽지 못했습니다: ${(error as Error).message}`);
+        if (!(error instanceof PlanError) || attempt >= 1) throw new Error(`${role === 'main' ? 'Main' : role === 'red-team' ? 'Red Team' : role === 'lead-manager' ? 'Lead Manager' : 'Manager'}의 답을 읽지 못했습니다: ${(error as Error).message}`);
         conversation.push({ role: 'assistant', content: [{ type: 'text', text }] }, { role: 'user', content: [{ type: 'text', text: `That answer could not be used: ${(error as Error).message}. Answer again with the JSON object only.` }] });
       }
     }
@@ -213,6 +214,58 @@ export class Office {
     }
   }
 
+  // --- Lead Manager -----------------------------------------------------------------
+
+  /**
+   * The exit condition: the Lead Manager judges whether the request is met, answers the Red Team,
+   * and may add follow-up tasks (true: run another round). A question only the user can settle
+   * goes to the Meeting Room, and the Lead Manager decides again with the answer. With no model in
+   * its slot, or when the call fails, the project closes as before and the reason is recorded.
+   */
+  private async leadReview(signal: AbortSignal): Promise<boolean> {
+    const project = this.project!;
+    const lead = (project.lead ??= { rounds: [] });
+    const followUpsLeft = MAX_FOLLOW_UPS - lead.rounds.filter(r => r.verdict === 'follow-up').length;
+    let canEscalate = true;
+    for (;;) {
+      let value: ReturnType<typeof parseLead>, model: string;
+      try {
+        ({ value, model } = await this.ask('lead-manager', leadSystem(), [{ role: 'user', content: [{ type: 'text', text: leadRequest(project, followUpsLeft, canEscalate) }] }], answer => parseLead(answer, project, followUpsLeft, canEscalate), signal, project.id));
+      } catch (error) {
+        if (signal.aborted) throw error;
+        lead.skipped = String((error as Error).message ?? error).slice(0, 500);
+        await this.publish();
+        this.deps.onEvent({ type: 'message', from: 'main', title: 'Lead Manager 판단을 건너뛰었습니다', text: `${lead.skipped}\n모델 배정 탭의 Lead Manager 칸에 모델을 넣으면 마무리 판단과 후속 Task를 맡습니다.` });
+        return false;
+      }
+      const round = { at: new Date().toISOString(), model, verdict: value.verdict, assessment: value.assessment, responses: value.responses, added: value.tasks.map(t => t.id) };
+      lead.rounds.push(round);
+      delete lead.skipped;
+      const said = [value.assessment, ...value.responses.map(r => `- ${r.target}: ${r.answer}`), ...value.tasks.map(t => `+ ${t.id} ${t.title}`)].join('\n');
+      this.deps.onEvent({ type: 'message', from: 'manager', title: `Lead Manager · ${value.verdict === 'close' ? '마무리' : value.verdict === 'follow-up' ? `후속 Task ${value.tasks.length}개` : '사용자 결정 요청'}`, text: said, model });
+      if (value.verdict === 'escalate' && value.agenda) {
+        await this.publish();
+        const agenda = await this.raise('lead-manager', null, value.agenda, model);
+        await this.decision(agenda, signal);
+        if (signal.aborted) throw new Error('stopped');
+        agenda.applied = true;
+        // The user said not to go on: the project closes with what it has.
+        if (agenda.decision!.kind === 'reject') { await this.publish(); return false; }
+        canEscalate = false;
+        continue;
+      }
+      if (value.verdict === 'follow-up') {
+        project.tasks.push(...value.tasks.map(t => ({ ...t, status: 'pending' as const, attempts: 0, reviews: [] })));
+        // A new round gets a fresh review once its tasks are done.
+        delete project.redTeam;
+        await this.publish();
+        return true;
+      }
+      await this.publish();
+      return false;
+    }
+  }
+
   // --- execution ------------------------------------------------------------------
 
   /** The user approved the plan: tasks run in order until all have ended, then Main reports. */
@@ -238,6 +291,8 @@ export class Office {
     signal.addEventListener('abort', stopAll, { once: true });
     let failure: unknown;
     try {
+     for (;;) {
+      project.status = 'running';
       for (;;) {
         if (signal.aborted) { await Promise.allSettled(active.values()); throw new Error('stopped'); }
         for (const t of unreachable(project)) {
@@ -260,6 +315,9 @@ export class Office {
       project.status = 'reviewing';
       await this.publish();
       if (project.tasks.some(t => t.status === 'done')) await this.redTeamReview(signal);
+      // The Lead Manager closes the round, or opens another with follow-up tasks.
+      if (!await this.leadReview(signal)) break;
+     }
       const result = await sendWithRetry(this.deps.gateway, { role: 'main', taskId: project.id }, { system: mainSystem(), messages: [{ role: 'user', content: [{ type: 'text', text: finalRequest(project) }] }] }, signal, this.retry);
       project.report = result.response.content.filter(b => b.type === 'text').map(b => (b as { text: string }).text).join('\n').trim();
       this.deps.onEvent({ type: 'message', from: 'main', title: '최종 보고', text: project.report, model: `${result.response.provider}:${result.response.model}`, final: true });

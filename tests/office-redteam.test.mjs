@@ -22,6 +22,7 @@ async function setup(t, redTeam) {
     calls.push({ role: target.role, system: request.system, last });
     let text;
     if (target.role === 'red-team') { const answer = redTeam(last); if (answer instanceof Error) throw answer; text = answer; }
+    else if (target.role === 'lead-manager') text = '{"verdict":"close","assessment":"요청한 비교는 됐습니다.","responses":[{"target":"쿠팡 가격","answer":"rebut: 할인가라고 표에 적혀 있음"}]}';
     else if (target.role === 'main') text = last.includes('All tasks have ended') ? '보고' : plan;
     else if (last.includes("Write the Worker's instructions")) text = '{"difficulty":"normal","instructions":"하라"}';
     else text = reviews++ === 0 ? '{"verdict":"revise","feedback":"쿠팡 가격이 빠짐 (내부 검토)","summary":"x"}' : '{"verdict":"accept","summary":"세 곳 가격 수집","verification":"출처 링크 확인"}';
@@ -54,8 +55,8 @@ test('the Red Team sees the goal, results and evidence (not the team\'s reviews)
   assert.match(final.last, /Answer the Red Team/);
   assert.ok(events.some(e => e.title === 'Red Team 검토 · 우려 있음 (major 1, minor 1)'));
   // Red Team runs after every task and before the report.
-  const order = calls.map(c => c.role === 'red-team' ? 'R' : c.last.includes('All tasks have ended') ? 'F' : '.').join('');
-  assert.match(order, /^\.+RF$/);
+  const order = calls.map(c => c.role === 'red-team' ? 'R' : c.role === 'lead-manager' ? 'L' : c.last.includes('All tasks have ended') ? 'F' : '.').join('');
+  assert.match(order, /^\.+RLF$/, 'Red Team, then the Lead Manager, then the report');
 });
 
 test('a critical matter only the user can settle goes to the Meeting Room; the report waits for the decision and includes it', async t => {

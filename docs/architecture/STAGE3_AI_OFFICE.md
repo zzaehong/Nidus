@@ -26,7 +26,7 @@
 | 팀 구성 | Main이 요청마다 필요한 팀(최대 4)을 정한다. CONCEPT의 상설 Group은 Library·Home과 함께 나중에 붙인다 |
 | 실행 방식 | ~~한 번에 한 Worker~~ → **병렬** (2026-11-13): 서로 의존하지 않는 Task는 각자의 Manager·Worker가 동시에 진행한다(최대 3). Manager가 A를 검토하는 동안 다른 Worker가 B를 한다. VM은 한 작업 공간과 한 브라우저라 VM Task의 Worker는 차례로 쓴다 |
 | 계획 승인 | 질문에 답하고 사용자가 계획을 승인해야 실행한다. 답하지 않은 질문은 Main이 판단한다 |
-| Lead Manager | 지금은 Main이 겸한다(Task 순서와 팀 간 넘겨주기는 계획의 의존성으로 표현). 병렬 실행을 붙일 때 분리한다 |
+| Lead Manager | 2026-11-17에 분리했다(3h). 한 바퀴의 Task가 끝나면 목표 달성을 판단하고, Red Team에 답하고, 후속 Task를 더하거나 마무리한다. 계획과 최종 보고는 Main이 한다 |
 | Manager 지시 생략 | **기각** (2026-11-13): 단순한 Task도 Manager가 지시서를 쓴다. 속도는 병렬 진행과 모델 상태 관리로 얻는다 |
 | VM 없는 Task | VM이 필요 없는 일은 VM 밖에서 텍스트 작업으로 한다. VM은 VM Task가 처음 시작될 때만 켠다 (2026-11-12) |
 | 실행 장소 이름 | **텍스트 작업 · `text`** (2026-11-13). 처음엔 "책상(`desk`)"이었으나 CONCEPT의 Desk(작업 맥락 저장소)와 겹쳐 바꿨다. 이전에 저장된 계획의 `desk`는 `text`로 읽는다 |
@@ -270,7 +270,18 @@ CONCEPT: Red Team은 "내부 의사결정 과정에 깊게 동화되지 않은 �
 - **결과**: 지적 사항(critical·major·minor, 대상, 문제, 어떻게 틀어지나, 제안)과 요약. 판정은 모델의 말이 아니라 지적 사항에서 정한다(critical·major가 있으면 "우려"). 프로젝트 보드(`project.redTeam`)에 저장한다.
 - **반영**: 최종 보고 요청에 Red Team 검토를 넣고 "critical·major마다 맞는지와 결과에 무슨 뜻인지 답하고, 숨기지 말라"고 요구한다. Library 지식 추출에도 넘긴다. 사용자만 정할 수 있는 critical 문제는 Meeting Room 안건(`from: red-team`)이 되고, 최종 보고는 결정을 기다렸다가 그 결정을 담는다.
 - **앱**: 계획 패널에 "Red Team 검토" 상자(펼치면 지적 사항), 모델 배정 탭에 Red Team 칸.
-- 남은 것: 지적 사항을 고칠 Task로 바꾸는 일은 Lead Manager(다음 항목)가 맡는다.
+- 지적 사항을 고칠 Task로 바꾸는 일은 Lead Manager(3h)가 맡는다.
+
+## 3h. Lead Manager 분리 (2026-11-17)
+
+CONCEPT의 Lead Manager Loop: "Exit Condition 판단 → Red Team Review → 다음 Phase / 수정", 핵심 질문은 "현재 Project는 다음 Phase로 넘어갈 준비가 되었는가?", 중대한 Blocker나 방향 변경은 Meeting Room으로 Escalation.
+
+- **역할 나눔**: Main은 사용자와의 대화, 계획, 최종 보고. Lead Manager(`lead-manager` 칸, `src/office/lead.ts`)는 그 사이의 진행 판단. 모든 역할의 팀 설명(TEAM)에 Lead Manager·Red Team·Meeting Room을 넣었다.
+- **바퀴(round)**: 한 바퀴 = Task 실행 → Red Team 검토 → Lead Manager 판단. Lead Manager는 요청·계획·팀·Task별 결과(마지막 검토 포함)·Red Team 검토·이전 바퀴·사용자 결정을 받고, 목표 달성 평가(assessment), Red Team의 critical·major 지적마다 답(fix: Task id / rebut: 이유), 결정을 낸다.
+- **결정**: `close`(마무리 → 최종 보고), `follow-up`(후속 Task 최대 4개, 프로젝트의 기존 팀으로, 새 id, 의존은 이전 Task나 앞서 나온 후속 Task만; 계획과 같은 Task 검사 `parseTask`) → 다음 바퀴, Red Team은 새로 검토, `escalate`(Meeting Room 안건 `from: lead-manager` → 결정을 받아 한 번 더 판단; "하지 않음"이면 마무리).
+- **한도**: 후속 바퀴는 프로젝트당 2번(`MAX_FOLLOW_UPS`). 다 쓰면 마무리만 고를 수 있고, 남은 것을 평가에 적어야 한다.
+- **모델이 없을 때**: 칸이 비었거나 호출이 실패하면 예전처럼 바로 최종 보고로 가고, 이유를 기록·표시한다.
+- **기록**: `project.lead.rounds`(판단·평가·답·추가한 Task). 계획 패널의 "Lead Manager" 상자와 Main Desk의 진행 상황에 보인다.
 
 ## 다음
 

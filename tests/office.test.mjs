@@ -193,6 +193,7 @@ test('every Main and Manager call carries its role\'s full system prompt, the fi
   for (const call of g.calls) {
     if (call.target.role === 'main') assert.equal(call.request.system, mainSystem());
     else if (call.target.role === 'red-team') assert.match(call.request.system, /^You are the Red Team/);
+    else if (call.target.role === 'lead-manager') assert.match(call.request.system, /^You are the Lead Manager/);
     else { assert.ok(call.request.system.endsWith(managerSystem()), 'the role definition'); assert.match(call.request.system, /^You are .+ 팀장 \(id [a-z-]+\), the Manager of the/, 'after who the Manager is'); }
   }
   assert.match(g.calls[0].request.messages[0].content[0].text, /Answer with one JSON object only/, 'the plan format is part of the request');

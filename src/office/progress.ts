@@ -70,6 +70,10 @@ export function describeProgress(project: Project, now: Date): string {
     const waits = t.status === 'pending' && t.dependsOn.length ? ` (waits for ${t.dependsOn.join(', ')})` : '';
     lines.push(`- ${t.id} [${t.status}] ${t.title} — ${t.where ?? 'vm'}${t.difficulty ? `, ${t.difficulty}` : ''}${tries}${time}${waits}${review}`);
   }
+  const red = project.redTeam;
+  if (red) lines.push(red.verdict === 'skipped' ? `Red Team: skipped (${red.skipped})` : `Red Team: ${red.verdict}, ${red.findings.length} finding(s) — ${red.summary.slice(0, 300)}`);
+  for (const [i, r] of (project.lead?.rounds ?? []).entries()) lines.push(`Lead Manager round ${i + 1}: ${r.verdict}${r.added.length ? ` (added ${r.added.join(', ')})` : ''} — ${r.assessment.slice(0, 300)}`);
+  if (project.lead?.skipped) lines.push(`Lead Manager: skipped (${project.lead.skipped})`);
   return lines.join('\n');
 }
 

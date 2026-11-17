@@ -108,6 +108,13 @@ struct OfficeProject: Decodable {
         let model: String?; let verdict: String; let summary: String; let findings: [Finding]; let skipped: String?
     }
     let redTeam: RedTeam?
+    /// The Lead Manager's rounds: is the goal met, the answers to the Red Team, follow-up tasks.
+    struct Lead: Decodable {
+        struct Response: Decodable, Hashable { let target: String; let answer: String }
+        struct Round: Decodable, Hashable { let at: String; let model: String?; let verdict: String; let assessment: String; let responses: [Response]; let added: [String] }
+        let rounds: [Round]; let skipped: String?
+    }
+    let lead: Lead?
     var openAgendas: [Agenda] { (agendas ?? []).filter { $0.decision == nil } }
     let report: String?
     let knowledge: [String]?

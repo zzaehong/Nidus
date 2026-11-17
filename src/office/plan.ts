@@ -37,6 +37,27 @@ const id = (value: unknown, field: string) => {
 export interface Plan { summary: string; roadmap: string[]; teams: Team[]; staff: ProjectEmployee[]; tasks: Omit<BoardTask, 'status' | 'attempts' | 'reviews'>[]; questions: string[] }
 
 const NO_STAFF: Staff = { version: 1, groups: [], employees: [] };
+
+/** How a task is written (the plan's tasks, and the Lead Manager's follow-ups). */
+export const TASK_FORMAT = 'Each task: id, team, assignee (the id of a Worker of that team; leave out to give it to the first Worker of the team), title, where ("text" or "vm"), goal, scope, constraints, acceptance (observable criteria, a list), verification (how to check them), dependsOn (ids of tasks that must finish first).';
+
+/** One task as a model wrote it, checked against the project's teams and their Workers. */
+export function parseTask(value: unknown, teamIds: Set<string>, staff: ProjectEmployee[]): Omit<BoardTask, 'status' | 'attempts' | 'reviews'> {
+  const t = value as any;
+  const contract: CompletionContract = {
+    goal: text(t?.goal, 'task goal', 2000), scope: optionalText(t?.scope, 2000), constraints: optionalText(t?.constraints, 2000),
+    acceptance: list(t?.acceptance ?? [], 'acceptance', 10).map(a => text(a, 'acceptance item', 500)),
+    verification: optionalText(t?.verification, 1000),
+  };
+  if (!contract.acceptance.length) throw new PlanError(`task ${t?.id}: at least one acceptance criterion`);
+  const team = id(t?.team, 'task team');
+  if (!teamIds.has(team)) throw new PlanError(`task ${t?.id}: unknown team ${team}`);
+  // "desk" is what text tasks were called before 2026-11-13.
+  if (t?.where !== undefined && t.where !== 'text' && t.where !== 'vm' && t.where !== 'desk') throw new PlanError(`task ${t?.id}: where must be "text" or "vm"`);
+  const workers = staff.filter(e => e.group === team && e.kind === 'worker');
+  if (t?.assignee !== undefined && t.assignee !== null && !workers.some(w => w.id === t.assignee)) throw new PlanError(`task ${t?.id}: assignee ${t.assignee} is not a worker of team ${team}`);
+  return { id: id(t?.id, 'task id'), team, title: text(t?.title, 'task title', 200), assignee: (t?.assignee as string | undefined) ?? workers[0]?.id, where: t?.where === 'text' || t?.where === 'desk' ? 'text' as const : 'vm' as const, contract, dependsOn: list(t?.dependsOn ?? [], 'dependsOn', 12).map(d => id(d, 'dependency')) };
+}
 const keepOf = (value: unknown): Keep => value === 'permanent' ? 'permanent' : 'temporary';
 
 /**
@@ -75,21 +96,7 @@ export function parsePlan(answer: string, standing: Staff = NO_STAFF): Plan {
     if (!staff.some(e => e.group === team.id && e.kind === 'manager')) staff.push({ id: fresh(`${team.id.slice(0, 24)}-manager`), name: `${team.name} 팀장`, group: team.id, kind: 'manager', role: 'Manager', principles: [], proposed: true, keep });
     if (!staff.some(e => e.group === team.id && e.kind === 'worker')) staff.push({ id: fresh(`${team.id.slice(0, 25)}-worker`), name: `${team.name} 담당`, group: team.id, kind: 'worker', role: 'Generalist', principles: [], proposed: true, keep });
   }
-  const tasks = list(raw.tasks, 'tasks', 12).map((t: any) => {
-    const contract: CompletionContract = {
-      goal: text(t?.goal, 'task goal', 2000), scope: optionalText(t?.scope, 2000), constraints: optionalText(t?.constraints, 2000),
-      acceptance: list(t?.acceptance ?? [], 'acceptance', 10).map(a => text(a, 'acceptance item', 500)),
-      verification: optionalText(t?.verification, 1000),
-    };
-    if (!contract.acceptance.length) throw new PlanError(`task ${t?.id}: at least one acceptance criterion`);
-    const team = id(t?.team, 'task team');
-    if (!teamIds.has(team)) throw new PlanError(`task ${t?.id}: unknown team ${team}`);
-    // "desk" is what text tasks were called before 2026-11-13.
-    if (t?.where !== undefined && t.where !== 'text' && t.where !== 'vm' && t.where !== 'desk') throw new PlanError(`task ${t?.id}: where must be "text" or "vm"`);
-    const workers = staff.filter(e => e.group === team && e.kind === 'worker');
-    if (t?.assignee !== undefined && t.assignee !== null && !workers.some(w => w.id === t.assignee)) throw new PlanError(`task ${t?.id}: assignee ${t.assignee} is not a worker of team ${team}`);
-    return { id: id(t?.id, 'task id'), team, title: text(t?.title, 'task title', 200), assignee: (t?.assignee as string | undefined) ?? workers[0]!.id, where: t?.where === 'text' || t?.where === 'desk' ? 'text' as const : 'vm' as const, contract, dependsOn: list(t?.dependsOn ?? [], 'dependsOn', 12).map(d => id(d, 'dependency')) };
-  });
+  const tasks = list(raw.tasks, 'tasks', 12).map(t => parseTask(t, teamIds, staff));
   if (!tasks.length) throw new PlanError('at least one task');
   const ids = new Set<string>();
   for (const t of tasks) { if (ids.has(t.id)) throw new PlanError(`duplicate task id ${t.id}`); ids.add(t.id); }
